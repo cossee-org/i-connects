@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Delete task{% endblock %}
+
+{% block content %}
+  <div class="max-w-md mx-auto card bg-base-100 shadow-sm">
+    <div class="card-body">
+      <h1 class="card-title">Delete "{{ object.name }}"?</h1>
+      <p class="text-sm text-base-content/70">
+        This will remove the task and all of its task log entries. This cannot be undone.
+      </p>
+      <form method="post" class="flex justify-end gap-2 mt-3">
+        {% csrf_token %}
+        <a href="{% url 'tasks:detail' project_pk=project.pk pk=object.pk %}"
+           class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn btn-error">Delete</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}

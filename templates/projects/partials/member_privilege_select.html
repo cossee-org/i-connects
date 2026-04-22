@@ -1,0 +1,11 @@
+{# Standalone privilege select widget used by the members row. #}
+<form
+  hx-post="{% url 'projects:update_privilege' pk=project.pk member_pk=row.member.pk %}"
+  hx-target="#member-row-{{ row.member.pk }}"
+  hx-swap="outerHTML"
+  class="flex items-center gap-2"
+>
+  {% csrf_token %}
+  {{ row.form.privilege }}
+  <button class="btn btn-xs btn-ghost" type="submit">Save</button>
+</form>

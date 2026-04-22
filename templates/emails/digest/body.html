@@ -1,0 +1,36 @@
+{% extends "emails/base_email.html" %}
+{% block title %}i-connects {{ frequency }} digest{% endblock %}
+{% block content %}
+<p>Hi {{ user.name|default:user.email }},</p>
+
+<p>Here is your {{ frequency }} summary of activity on i-connects.</p>
+
+<h3 style="margin:24px 0 8px;font-size:16px;color:#111827;">Overdue tasks</h3>
+{% if overdue_tasks %}
+  <ul style="padding-left:20px;margin:0 0 16px;">
+    {% for task in overdue_tasks %}
+      <li>
+        <strong>{{ task.name }}</strong>
+        {% if task.project %} &mdash; {{ task.project.name }}{% endif %}
+        {% if task.deadline %} (due {{ task.deadline|date:"M j, Y" }}){% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p style="color:#6b7280;margin:0 0 16px;">No overdue tasks.</p>
+{% endif %}
+
+<h3 style="margin:24px 0 8px;font-size:16px;color:#111827;">Recent project activity</h3>
+{% if notifications %}
+  <ul style="padding-left:20px;margin:0;">
+    {% for note in notifications %}
+      <li>
+        {% if note.project %}<strong>{{ note.project.name }}:</strong> {% endif %}
+        {{ note.message }}
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p style="color:#6b7280;margin:0;">No new notifications in this period.</p>
+{% endif %}
+{% endblock %}

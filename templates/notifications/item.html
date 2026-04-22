@@ -1,0 +1,46 @@
+{% comment %}
+  One notification row. HTMX-swappable: the enclosing element uses
+  id="notification-{{ notification.id }}" so the "mark as read" button
+  can target it for an in-place swap.
+
+  If ``swap_oob_badge`` is true, we also include an out-of-band badge
+  update so the navbar count stays in sync.
+{% endcomment %}
+<li id="notification-{{ notification.id }}"
+    class="p-3 border-b border-base-200 flex justify-between items-start gap-3
+           {% if not notification.read %}bg-base-200/60{% endif %}">
+  <div class="flex-1 min-w-0">
+    {% if notification.announcement %}
+      <div class="badge badge-info badge-sm mb-1">Announcement</div>
+    {% endif %}
+    <div class="text-sm whitespace-pre-wrap break-words">{{ notification.message }}</div>
+    <div class="text-xs opacity-60 mt-1">
+      {{ notification.created_at|date:"Y-m-d H:i" }}
+      {% if notification.project %} &middot; {{ notification.project.name }}{% endif %}
+    </div>
+    {% if notification.route_data and notification.route_data.link %}
+      <a href="{{ notification.route_data.link }}" class="link link-primary text-xs">Open</a>
+    {% endif %}
+  </div>
+  {% if not notification.read %}
+    <form hx-post="{% url 'notifications:mark_read' notification.id %}"
+          hx-target="#notification-{{ notification.id }}"
+          hx-swap="outerHTML">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-xs btn-ghost" title="Mark as read">
+        Mark read
+      </button>
+    </form>
+  {% else %}
+    <span class="badge badge-ghost badge-sm">Read</span>
+  {% endif %}
+</li>
+
+{% if swap_oob_badge %}
+  {# Out-of-band update for the navbar badge. #}
+  <span id="notification-badge" hx-swap-oob="innerHTML">
+    {% if unread_count and unread_count > 0 %}
+      <span class="badge badge-error badge-sm">{{ unread_count }}</span>
+    {% endif %}
+  </span>
+{% endif %}

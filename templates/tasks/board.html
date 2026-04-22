@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Board · {{ project.name }}{% endblock %}
+
+{% block content %}
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-semibold">{{ project.name }}</h1>
+      <p class="text-sm text-base-content/70">Kanban board</p>
+    </div>
+    <div class="flex gap-2">
+      <a href="{% url 'tasks:milestone_list' project_pk=project.pk %}"
+         class="btn btn-ghost btn-sm">Milestones</a>
+      <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
+         class="btn btn-ghost btn-sm">Manage columns</a>
+      <button class="btn btn-primary btn-sm"
+              hx-get="{% url 'tasks:create' project_pk=project.pk %}"
+              hx-target="#task-modal-body"
+              hx-swap="innerHTML"
+              onclick="document.getElementById('task-modal').showModal()">
+        + New task
+      </button>
+    </div>
+  </div>
+
+  <div id="kanban-board" class="flex gap-4 overflow-x-auto pb-4">
+    {% for column in columns %}
+      {% include "tasks/task_column.html" with column=column %}
+    {% empty %}
+      <div class="alert alert-info">
+        No columns yet.
+        <a class="link" href="{% url 'tasks:board_columns' project_pk=project.pk %}">Create one</a>.
+      </div>
+    {% endfor %}
+  </div>
+
+  {# Task create/edit modal #}
+  <dialog id="task-modal" class="modal">
+    <div class="modal-box max-w-2xl">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">&times;</button>
+      </form>
+      <div id="task-modal-body"><!-- filled by HTMX --></div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <script>
+    (function initKanban() {
+      document.querySelectorAll('.kanban-column-list').forEach(function (el) {
+        new Sortable(el, {
+          group: 'kanban',
+          animation: 150,
+          ghostClass: 'opacity-40',
+          onEnd: function (evt) {
+            var taskId = evt.item.dataset.taskId;
+            var newColumnId = evt.to.dataset.columnId;
+            var newIndex = evt.newIndex;
+            htmx.ajax('POST', '/tasks/' + taskId + '/move/', {
+              values: { container_id: newColumnId, order: newIndex },
+              swap: 'none'
+            });
+          }
+        });
+      });
+
+      // Close the modal whenever HTMX swaps a new task card onto the board.
+      document.body.addEventListener('task-created', function () {
+        var modal = document.getElementById('task-modal');
+        if (modal && modal.open) modal.close();
+      });
+    })();
+  </script>
+{% endblock %}

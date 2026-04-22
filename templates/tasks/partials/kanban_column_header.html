@@ -1,0 +1,16 @@
+{# Column row in the management list. Swapped on create / rename. #}
+<li id="column-row-{{ column.pk }}"
+    class="flex items-center justify-between gap-2 p-2 border-b border-base-300">
+  <span class="font-medium">{{ column.name }}</span>
+  <span class="flex gap-1">
+    <button class="btn btn-ghost btn-xs"
+            hx-get="{% url 'tasks:column_update' project_pk=project.pk pk=column.pk %}"
+            hx-target="#column-row-{{ column.pk }}"
+            hx-swap="outerHTML">Rename</button>
+    <button class="btn btn-ghost btn-xs text-error"
+            hx-post="{% url 'tasks:column_delete' project_pk=project.pk pk=column.pk %}"
+            hx-target="#column-row-{{ column.pk }}"
+            hx-swap="outerHTML swap:200ms"
+            hx-confirm="Delete column '{{ column.name }}' and all its tasks?">Delete</button>
+  </span>
+</li>

@@ -1,0 +1,13 @@
+{# Partial: render every field of a dynamic form.
+   Used from version_detail (preview, readonly) and fill_form (live). #}
+{% if form.non_field_errors %}
+  <div class="alert alert-error mb-3">{{ form.non_field_errors }}</div>
+{% endif %}
+
+<div class="space-y-3">
+  {% for field in form %}
+    {% include "forms_builder/partials/field.html" with field=field readonly=readonly %}
+  {% empty %}
+    <p class="opacity-70">This schema has no fields defined.</p>
+  {% endfor %}
+</div>

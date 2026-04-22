@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}My forms &mdash; i-connects{% endblock %}
+
+{% block content %}
+<section class="card bg-base-100 shadow">
+  <div class="card-body">
+    <div class="flex items-center justify-between">
+      <h1 class="card-title text-2xl">My forms</h1>
+      <a href="{% url 'forms_builder:form_create' %}" class="btn btn-primary btn-sm">
+        New form
+      </a>
+    </div>
+
+    {% if rows %}
+      <div class="overflow-x-auto mt-4">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Latest version</th>
+              <th>Updated</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>
+                  <a class="link link-primary"
+                     href="{% url 'forms_builder:version_list' pk=row.form.pk %}">
+                    {{ row.latest.name|default:"Untitled form" }}
+                  </a>
+                </td>
+                <td>
+                  {% if row.latest %}
+                    v{{ row.latest.version }}
+                  {% else %}
+                    <span class="opacity-60">&mdash;</span>
+                  {% endif %}
+                </td>
+                <td>{{ row.form.updated_at|date:"Y-m-d H:i" }}</td>
+                <td class="text-right">
+                  <a class="btn btn-ghost btn-xs"
+                     href="{% url 'forms_builder:form_update' pk=row.form.pk %}">
+                    Edit
+                  </a>
+                  <a class="btn btn-ghost btn-xs text-error"
+                     href="{% url 'forms_builder:form_delete' pk=row.form.pk %}">
+                    Delete
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="opacity-70 mt-4">You don't have any forms yet.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

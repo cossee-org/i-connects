@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Delete note &mdash; {{ project.name }}{% endblock %}
+
+{% block content %}
+<section class="max-w-xl mx-auto">
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h1 class="card-title">Delete this note?</h1>
+      <div class="alert alert-warning">
+        This cannot be undone.
+      </div>
+      <p class="font-semibold">{{ note.title|default:"(untitled note)" }}</p>
+      {% if note.content_markdown %}
+        <p class="text-sm opacity-70 line-clamp-3 whitespace-pre-wrap break-words">
+          {{ note.content_markdown|truncatechars:240 }}
+        </p>
+      {% endif %}
+
+      <form method="post" class="card-actions justify-end mt-4">
+        {% csrf_token %}
+        <a href="{% url 'notes:detail' project_pk=project.pk pk=note.pk %}"
+           class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn btn-error">Delete permanently</button>
+      </form>
+    </div>
+  </div>
+</section>
+{% endblock %}

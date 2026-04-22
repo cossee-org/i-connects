@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if mode == "create" %}New form{% else %}Edit form{% endif %} &mdash; i-connects
+{% endblock %}
+
+{% block content %}
+<section class="card bg-base-100 shadow max-w-xl mx-auto">
+  <div class="card-body">
+    <h1 class="card-title text-2xl">
+      {% if mode == "create" %}Create form{% else %}Edit form{% endif %}
+    </h1>
+
+    <form method="post" class="space-y-4">
+      {% csrf_token %}
+
+      {% if mode == "create" %}
+        <label class="form-control w-full">
+          <span class="label-text">Display name</span>
+          <input type="text" name="display_name" required
+                 placeholder="e.g. Screening form"
+                 class="input input-bordered w-full" />
+        </label>
+      {% else %}
+        {% if form.non_field_errors %}
+          <div class="alert alert-error">{{ form.non_field_errors }}</div>
+        {% endif %}
+        {% for field in form %}
+          <label class="form-control w-full">
+            <span class="label-text">{{ field.label }}</span>
+            {{ field }}
+            {% if field.help_text %}
+              <span class="label-text-alt opacity-70">{{ field.help_text }}</span>
+            {% endif %}
+            {% if field.errors %}
+              <span class="text-error text-sm">{{ field.errors }}</span>
+            {% endif %}
+          </label>
+        {% endfor %}
+      {% endif %}
+
+      <div class="flex justify-end gap-2">
+        <a href="{% url 'forms_builder:form_list' %}" class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+          {% if mode == "create" %}Create{% else %}Save{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

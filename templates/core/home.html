@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}i-connects &mdash; Django MVP{% endblock %}
+
+{% block content %}
+<section class="hero min-h-[60vh] bg-base-100 rounded-box shadow">
+  <div class="hero-content text-center">
+    <div class="max-w-xl">
+      <h1 class="text-5xl font-bold">i-connects</h1>
+      <p class="py-6 text-lg opacity-80">Django MVP rewrite</p>
+      <p class="text-sm opacity-60">
+        Phase 1 scaffolding is live. Models, views, and collaboration
+        features will land in subsequent phases.
+      </p>
+      <div class="mt-6 flex justify-center gap-2">
+        <span class="badge badge-primary">Django 5.2</span>
+        <span class="badge badge-secondary">HTMX</span>
+        <span class="badge badge-accent">Tailwind + DaisyUI</span>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

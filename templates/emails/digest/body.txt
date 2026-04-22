@@ -1,0 +1,16 @@
+{% extends "emails/base_email.txt" %}
+{% block content %}
+Hi {{ user.name|default:user.email }},
+
+Here is your {{ frequency }} summary of activity on i-connects.
+
+Overdue tasks
+-------------
+{% if overdue_tasks %}{% for task in overdue_tasks %}- {{ task.name }}{% if task.project %} ({{ task.project.name }}){% endif %}{% if task.deadline %} -- due {{ task.deadline|date:"M j, Y" }}{% endif %}
+{% endfor %}{% else %}No overdue tasks.
+{% endif %}
+Recent project activity
+-----------------------
+{% if notifications %}{% for note in notifications %}- {% if note.project %}{{ note.project.name }}: {% endif %}{{ note.message }}
+{% endfor %}{% else %}No new notifications in this period.
+{% endif %}{% endblock %}

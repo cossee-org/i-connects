@@ -1,0 +1,27 @@
+{# One kanban column. Used inside board.html and as an HTMX partial. #}
+<div class="card bg-base-100 shadow-sm w-80 shrink-0">
+  <div class="card-body p-3 gap-2">
+    <div class="flex items-center justify-between">
+      <h2 class="card-title text-base">
+        {{ column.name }}
+        <span class="badge badge-ghost badge-sm">{{ column.tasks.count }}</span>
+      </h2>
+      <button class="btn btn-ghost btn-xs"
+              hx-get="{% url 'tasks:create' project_pk=project.pk %}?container={{ column.pk }}"
+              hx-target="#task-modal-body"
+              hx-swap="innerHTML"
+              onclick="document.getElementById('task-modal').showModal()"
+              title="Add task to this column">
+        +
+      </button>
+    </div>
+
+    <ul id="column-{{ column.pk }}"
+        data-column-id="{{ column.pk }}"
+        class="kanban-column-list flex flex-col gap-2 min-h-[4rem]">
+      {% for task in column.tasks.all %}
+        {% include "tasks/task_card.html" with task=task %}
+      {% endfor %}
+    </ul>
+  </div>
+</div>

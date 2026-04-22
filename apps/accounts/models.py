@@ -1,0 +1,167 @@
+"""Accounts app: custom User, Blitz-compatible Session/Token, and dashboard Widgets."""
+
+from __future__ import annotations
+
+from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.db import models
+
+from apps.core.enums import EmailFrequency, UserRole, WidgetSize
+
+
+class UserManager(BaseUserManager):
+    """Manager for the custom User model that uses email as the login field."""
+
+    use_in_migrations = True
+
+    def _create_user(self, email: str, password: str | None, **extra_fields):
+        if not email:
+            raise ValueError("Users must have an email address.")
+        email = self.normalize_email(email)
+        # Derive a username if one isn't provided explicitly.
+        username = extra_fields.pop("username", None) or email
+        user = self.model(email=email, username=username, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_user(self, email: str, password: str | None = None, **extra_fields):
+        extra_fields.setdefault("is_staff", False)
+        extra_fields.setdefault("is_superuser", False)
+        return self._create_user(email, password, **extra_fields)
+
+    def create_superuser(self, email: str, password: str | None = None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("role", UserRole.ADMIN)
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError("Superuser must have is_staff=True.")
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("Superuser must have is_superuser=True.")
+        return self._create_user(email, password, **extra_fields)
+
+
+class User(AbstractUser):
+    """Custom user model ported from Prisma ``User``.
+
+    Django's built-in ``password`` field replaces Prisma's ``hashedPassword``.
+    Email is the login field; ``username`` is retained for admin display and
+    backwards compatibility with the Blitz.js data model.
+    """
+
+    # Override AbstractUser's email to be unique + required.
+    email = models.EmailField(unique=True)
+
+    # Profile
+    name = models.CharField(max_length=255, blank=True)
+    orcid = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    institution = models.CharField(max_length=255, null=True, blank=True)
+    language = models.CharField(max_length=16, default="en-US")
+    gravatar = models.CharField(max_length=255, null=True, blank=True)
+    tooltips = models.BooleanField(default=True)
+    tos = models.BooleanField(null=True, blank=True)
+
+    # Role / permissions (application-level, separate from Django's is_staff).
+    role = models.CharField(
+        max_length=32,
+        choices=UserRole.choices,
+        default=UserRole.USER,
+    )
+
+    # Email notification preferences.
+    email_project_activity_frequency = models.CharField(
+        max_length=16,
+        choices=EmailFrequency.choices,
+        default=EmailFrequency.NEVER,
+    )
+    email_overdue_task_frequency = models.CharField(
+        max_length=16,
+        choices=EmailFrequency.choices,
+        default=EmailFrequency.NEVER,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["name"]
+
+    objects = UserManager()
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return self.email
+
+
+class Session(models.Model):
+    """Blitz.js session table, ported 1:1 for data compatibility.
+
+    Django's native session framework is preferred for new code; this model
+    exists so a future data migration from Blitz can land cleanly.
+    """
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    handle = models.CharField(max_length=255, unique=True)
+    hashed_session_token = models.CharField(max_length=255, null=True, blank=True)
+    anti_csrf_token = models.CharField(max_length=255, null=True, blank=True)
+    public_data = models.TextField(null=True, blank=True)
+    private_data = models.TextField(null=True, blank=True)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="sessions",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["user"])]
+
+    def __str__(self) -> str:
+        return self.handle
+
+
+class Token(models.Model):
+    """Blitz.js token table (password reset, email verification, etc.)."""
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    hashed_token = models.CharField(max_length=255)
+    type = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    sent_to = models.CharField(max_length=254)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tokens")
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = [["hashed_token", "type"]]
+        indexes = [models.Index(fields=["user"])]
+
+    def __str__(self) -> str:
+        return f"{self.type} token for {self.sent_to}"
+
+
+class Widget(models.Model):
+    """User-level dashboard widget configuration."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="widgets")
+    type = models.CharField(max_length=64)  # LastProject, Notifications, OverdueTask, UpcomingTask
+    show = models.BooleanField(default=True)
+    position = models.IntegerField()
+    size = models.CharField(
+        max_length=16,
+        choices=WidgetSize.choices,
+        default=WidgetSize.MEDIUM,
+    )
+
+    class Meta:
+        ordering = ["position"]
+        unique_together = [["user", "type"]]
+        indexes = [models.Index(fields=["user"])]
+
+    def __str__(self) -> str:
+        return f"{self.type} widget for {self.user_id}"

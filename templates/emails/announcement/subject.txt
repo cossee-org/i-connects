@@ -1,0 +1,1 @@
+i-connects announcement{% if project %}: {{ project.name }}{% endif %}

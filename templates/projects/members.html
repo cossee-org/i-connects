@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Members — {{ project.name }}{% endblock %}
+
+{% block content %}
+<section class="mb-6 flex items-end justify-between gap-4">
+  <div>
+    <h1 class="text-2xl font-bold">Members of {{ project.name }}</h1>
+    <a href="{% url 'projects:detail' pk=project.pk %}" class="text-sm link link-hover">
+      « Back to project
+    </a>
+  </div>
+  {% if user_privilege == "PROJECT_MANAGER" %}
+    <a href="{% url 'projects:invite' pk=project.pk %}" class="btn btn-primary btn-sm">Invite member</a>
+  {% endif %}
+</section>
+
+<div class="overflow-x-auto card bg-base-100 shadow">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Privilege</th>
+        <th>Roles</th>
+        <th class="w-8"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        {% include "projects/member_row.html" with row=row project=project user_privilege=user_privilege %}
+      {% empty %}
+        <tr><td colspan="5" class="text-center text-base-content/60 py-4">No members.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

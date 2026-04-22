@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}{{ note.title|default:"Note" }} &mdash; {{ project.name }}{% endblock %}
+
+{% block content %}
+<section class="max-w-3xl mx-auto">
+  <nav class="text-sm opacity-60 mb-2">
+    <a href="{% url 'notes:list' project_pk=project.pk %}" class="link link-hover">
+      &larr; Back to notes
+    </a>
+  </nav>
+
+  <article class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="flex items-start justify-between gap-2">
+        <h1 class="text-2xl font-bold">{{ note.title|default:"(untitled note)" }}</h1>
+        <div class="flex gap-1">
+          {% if note.pinned %}<span class="badge badge-warning">Pinned</span>{% endif %}
+          {% if note.archived %}<span class="badge badge-ghost">Archived</span>{% endif %}
+          <span class="badge badge-outline">{{ note.get_visibility_display }}</span>
+        </div>
+      </div>
+
+      <div class="text-xs opacity-60">
+        Updated {{ note.updated_at|date:"Y-m-d H:i" }}
+        {% if note.author %} &middot; by {{ note.author }}{% endif %}
+      </div>
+
+      <div class="prose max-w-none mt-4">
+        {{ rendered_content }}
+      </div>
+
+      {% if can_edit %}
+        <div class="card-actions justify-end mt-4">
+          <a href="{% url 'notes:update' project_pk=project.pk pk=note.pk %}"
+             class="btn btn-sm">Edit</a>
+          <a href="{% url 'notes:delete' project_pk=project.pk pk=note.pk %}"
+             class="btn btn-sm btn-error btn-outline">Delete</a>
+        </div>
+      {% endif %}
+    </div>
+  </article>
+</section>
+{% endblock %}

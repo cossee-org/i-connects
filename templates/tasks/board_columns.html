@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Columns · {{ project.name }}{% endblock %}
+
+{% block content %}
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-xl font-semibold">Manage board columns</h1>
+    <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-ghost btn-sm">
+      Back to board
+    </a>
+  </div>
+
+  <div class="card bg-base-100 shadow-sm max-w-xl">
+    <div class="card-body p-4">
+      <ul id="column-list" class="flex flex-col">
+        {% for column in columns %}
+          {% include "tasks/partials/kanban_column_header.html" with column=column %}
+        {% empty %}
+          <li class="text-sm text-base-content/60">No columns yet.</li>
+        {% endfor %}
+      </ul>
+
+      <form class="flex gap-2 mt-4"
+            hx-post="{% url 'tasks:column_create' project_pk=project.pk %}"
+            hx-target="#column-list"
+            hx-swap="beforeend"
+            hx-on::after-request="this.reset()">
+        {% csrf_token %}
+        <input type="text" name="name" placeholder="New column name"
+               class="input input-bordered input-sm flex-1" required>
+        <button type="submit" class="btn btn-primary btn-sm">Add</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}

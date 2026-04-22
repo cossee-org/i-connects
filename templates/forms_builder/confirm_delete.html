@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Delete form &mdash; i-connects{% endblock %}
+
+{% block content %}
+<section class="card bg-base-100 shadow max-w-md mx-auto">
+  <div class="card-body">
+    <h1 class="card-title text-2xl">Archive form?</h1>
+    <p class="opacity-80">
+      This will hide the form and its versions from your list. Existing
+      Projects and Tasks that already reference a version will continue
+      to work.
+    </p>
+
+    <form method="post" class="mt-4 flex justify-end gap-2">
+      {% csrf_token %}
+      <a href="{% url 'forms_builder:form_list' %}" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-error">Archive</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

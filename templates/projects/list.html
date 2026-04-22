@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Projects — i-connects{% endblock %}
+
+{% block content %}
+<section class="mb-6 flex items-end justify-between gap-4">
+  <div>
+    <h1 class="text-3xl font-bold">Public projects</h1>
+    <p class="text-base-content/70">Browse public research projects on i-connects.</p>
+  </div>
+  {% if user.is_authenticated %}
+    <div class="flex gap-2">
+      <a href="{% url 'projects:my_list' %}" class="btn btn-ghost btn-sm">My projects</a>
+      <a href="{% url 'projects:create' %}" class="btn btn-primary btn-sm">New project</a>
+    </div>
+  {% endif %}
+</section>
+
+{% if projects %}
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for project in projects %}
+      {% include "projects/partials/project_card.html" with project=project %}
+    {% endfor %}
+  </div>
+
+  {% if is_paginated %}
+    <div class="join mt-6 flex justify-center">
+      {% if page_obj.has_previous %}
+        <a class="join-item btn btn-sm" href="?page={{ page_obj.previous_page_number }}">«</a>
+      {% endif %}
+      <span class="join-item btn btn-sm btn-active">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      </span>
+      {% if page_obj.has_next %}
+        <a class="join-item btn btn-sm" href="?page={{ page_obj.next_page_number }}">»</a>
+      {% endif %}
+    </div>
+  {% endif %}
+{% else %}
+  <div class="alert">
+    <span>No public projects yet.</span>
+  </div>
+{% endif %}
+{% endblock %}

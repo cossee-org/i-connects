@@ -1,0 +1,4 @@
+/* Placeholder — Tailwind compiles `input.css` -> `output.css`.
+   Run `npm install && npm run build:css` (or `npm run watch:css` during dev).
+   This file is committed as a placeholder so the Django template loads
+   without a 404 before the first Tailwind build. Do not edit by hand. */

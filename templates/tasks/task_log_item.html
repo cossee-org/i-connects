@@ -1,0 +1,57 @@
+{# One TaskLog entry with its comment thread. #}
+<article id="task-log-{{ log.pk }}" class="card bg-base-100 shadow-sm">
+  <div class="card-body p-4 gap-2">
+    <header class="flex flex-wrap items-center justify-between gap-2">
+      <div class="text-sm">
+        <span class="font-medium">{{ log.assigned_to }}</span>
+        {% if log.completed_by %}
+          · <span class="text-base-content/70">by {{ log.completed_by }}</span>
+        {% endif %}
+        · <span class="text-base-content/60">{{ log.created_at|date:"M j, Y H:i" }}</span>
+      </div>
+      <div class="flex gap-1 items-center">
+        {% if log.status == "COMPLETED" %}
+          <span class="badge badge-success badge-sm">Completed</span>
+        {% else %}
+          <span class="badge badge-ghost badge-sm">Not completed</span>
+        {% endif %}
+        <span class="badge badge-outline badge-sm">{{ log.completed_as }}</span>
+        {% if log.approved is True %}
+          <span class="badge badge-success badge-sm">Approved</span>
+        {% elif log.approved is False %}
+          <span class="badge badge-error badge-sm">Rejected</span>
+        {% else %}
+          <span class="badge badge-warning badge-sm">Pending</span>
+        {% endif %}
+      </div>
+    </header>
+
+    {% if is_project_manager and log.status == "COMPLETED" %}
+      <div class="flex gap-1">
+        <button class="btn btn-xs btn-success"
+                hx-post="{% url 'tasks:approve_log' pk=task.pk log_pk=log.pk %}"
+                hx-vals='{"approved": "true"}'
+                hx-target="#task-log-{{ log.pk }}"
+                hx-swap="outerHTML">Approve</button>
+        <button class="btn btn-xs btn-error"
+                hx-post="{% url 'tasks:approve_log' pk=task.pk log_pk=log.pk %}"
+                hx-vals='{"approved": "false"}'
+                hx-target="#task-log-{{ log.pk }}"
+                hx-swap="outerHTML">Reject</button>
+        <button class="btn btn-xs btn-ghost"
+                hx-post="{% url 'tasks:approve_log' pk=task.pk log_pk=log.pk %}"
+                hx-vals='{"approved": ""}'
+                hx-target="#task-log-{{ log.pk }}"
+                hx-swap="outerHTML">Clear</button>
+      </div>
+    {% endif %}
+
+    <div id="comments-for-log-{{ log.pk }}" class="flex flex-col gap-2 mt-2">
+      {% for comment in log.comments.all %}
+        {% include "comments/comment_item.html" with comment=comment task=task task_log=log %}
+      {% endfor %}
+    </div>
+
+    {% include "comments/comment_form.html" with task=task task_log=log form=comment_form %}
+  </div>
+</article>

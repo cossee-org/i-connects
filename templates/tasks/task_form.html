@@ -1,0 +1,69 @@
+{# Task create / update form.
+   Designed to be rendered inline inside a modal via HTMX. Non-HTMX
+   requests also receive this snippet wrapped in the base layout by
+   Django's TemplateView fallback. Keeping it a single block keeps the
+   template flow simple. #}
+<h2 class="text-lg font-semibold mb-3">{{ form_title|default:"Task" }}</h2>
+<form method="post"
+      action="{{ form_action }}"
+      hx-post="{{ form_action }}"
+      hx-target="#kanban-board"
+      hx-swap="none">
+  {% csrf_token %}
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <label class="md:col-span-2">
+      <span class="label-text">Name</span>
+      {{ form.name }}
+    </label>
+    <label class="md:col-span-2">
+      <span class="label-text">Description</span>
+      {{ form.description }}
+    </label>
+    <label>
+      <span class="label-text">Column</span>
+      {{ form.container }}
+    </label>
+    <label>
+      <span class="label-text">Milestone</span>
+      {{ form.milestone }}
+    </label>
+    <label>
+      <span class="label-text">Start date</span>
+      {{ form.start_date }}
+    </label>
+    <label>
+      <span class="label-text">Deadline</span>
+      {{ form.deadline }}
+    </label>
+    <label class="md:col-span-2">
+      <span class="label-text">Assignees</span>
+      {{ form.assigned_members }}
+    </label>
+    <label>
+      <span class="label-text">Auto-assign new members</span>
+      {{ form.auto_assign_new }}
+    </label>
+    <label class="flex items-center gap-2">
+      {{ form.anonymous }}
+      <span class="label-text">Anonymous</span>
+    </label>
+  </div>
+
+  {% if form.errors %}
+    <div class="alert alert-error mt-3">
+      <ul class="list-disc pl-4">
+        {% for field, errs in form.errors.items %}
+          {% for e in errs %}<li>{{ field }}: {{ e }}</li>{% endfor %}
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <div class="mt-4 flex justify-end gap-2">
+    <button type="button" class="btn btn-ghost"
+            onclick="document.getElementById('task-modal') && document.getElementById('task-modal').close()">
+      Cancel
+    </button>
+    <button type="submit" class="btn btn-primary">Save</button>
+  </div>
+</form>

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if note %}Edit note{% else %}New note{% endif %} &mdash; {{ project.name }}
+{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+{% endblock %}
+
+{% block content %}
+<section class="max-w-3xl mx-auto">
+  <nav class="text-sm opacity-60 mb-2">
+    <a href="{% url 'notes:list' project_pk=project.pk %}" class="link link-hover">
+      &larr; Back to notes
+    </a>
+  </nav>
+
+  <h1 class="text-2xl font-bold mb-4">
+    {% if note %}Edit note{% else %}New note{% endif %}
+  </h1>
+
+  <form method="post" class="card bg-base-100 shadow p-6 space-y-4">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-error">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="form-control">
+      <label class="label" for="{{ form.title.id_for_label }}">
+        <span class="label-text">Title</span>
+      </label>
+      {{ form.title }}
+      {% if form.title.errors %}
+        <div class="label"><span class="label-text-alt text-error">{{ form.title.errors|join:", " }}</span></div>
+      {% endif %}
+    </div>
+
+    <div class="form-control">
+      <label class="label" for="id_content_markdown">
+        <span class="label-text">Content (Markdown)</span>
+      </label>
+      {{ form.content_markdown }}
+      {% if form.content_markdown.errors %}
+        <div class="label"><span class="label-text-alt text-error">{{ form.content_markdown.errors|join:", " }}</span></div>
+      {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="form-control">
+        <label class="label" for="{{ form.visibility.id_for_label }}">
+          <span class="label-text">Visibility</span>
+        </label>
+        {{ form.visibility }}
+      </div>
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          {{ form.pinned }}
+          <span class="label-text">Pinned</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-2">
+      {% if note %}
+        <a href="{% url 'notes:detail' project_pk=project.pk pk=note.pk %}" class="btn btn-ghost">Cancel</a>
+      {% else %}
+        <a href="{% url 'notes:list' project_pk=project.pk %}" class="btn btn-ghost">Cancel</a>
+      {% endif %}
+      <button type="submit" class="btn btn-primary">
+        {% if note %}Save changes{% else %}Create note{% endif %}
+      </button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block extra_body %}
+  <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+  <script>
+    (function () {
+      var el = document.getElementById('id_content_markdown');
+      if (el && typeof EasyMDE !== 'undefined') {
+        new EasyMDE({element: el});
+      }
+    })();
+  </script>
+{% endblock %}

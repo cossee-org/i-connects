@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}{{ version.name }} v{{ version.version }} &mdash; i-connects{% endblock %}
+
+{% block content %}
+<section class="card bg-base-100 shadow">
+  <div class="card-body">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm opacity-70">Form #{{ form_obj.pk }}</p>
+        <h1 class="card-title text-2xl">
+          {{ version.name }} <span class="badge badge-ghost">v{{ version.version }}</span>
+          {% if version.archived %}
+            <span class="badge badge-warning">archived</span>
+          {% endif %}
+        </h1>
+      </div>
+      <div class="flex gap-2">
+        <a href="{% url 'forms_builder:version_list' pk=form_obj.pk %}"
+           class="btn btn-ghost btn-sm">Back</a>
+        <form action="{% url 'forms_builder:version_clone' pk=form_obj.pk vpk=version.pk %}"
+              method="post">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm">Clone</button>
+        </form>
+        {% if not version.archived %}
+          <form action="{% url 'forms_builder:version_archive' pk=form_obj.pk vpk=version.pk %}"
+                method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-error btn-outline">Archive</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+      <div>
+        <h2 class="font-semibold mb-2">Schema</h2>
+        <pre class="bg-base-200 p-3 rounded-box text-xs overflow-auto max-h-[400px]"><code>{{ pretty_schema }}</code></pre>
+
+        {% if pretty_ui_schema and pretty_ui_schema != "{}" %}
+          <h2 class="font-semibold mt-4 mb-2">UI schema</h2>
+          <pre class="bg-base-200 p-3 rounded-box text-xs overflow-auto max-h-[300px]"><code>{{ pretty_ui_schema }}</code></pre>
+        {% endif %}
+      </div>
+
+      <div>
+        <h2 class="font-semibold mb-2">Preview</h2>
+        {% if render_error %}
+          <div class="alert alert-error text-sm">
+            Could not render form: {{ render_error }}
+          </div>
+        {% elif rendered_form %}
+          {% include "forms_builder/render_form.html" with form=rendered_form readonly=True %}
+        {% else %}
+          <p class="opacity-70">Nothing to render.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

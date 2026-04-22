@@ -1,0 +1,98 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}i-connects{% endblock %}</title>
+
+  {# Tailwind + DaisyUI compiled output #}
+  <link rel="stylesheet" href="{% static 'css/output.css' %}" />
+
+  {# HTMX #}
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+
+  {# Alpine.js #}
+  <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
+
+  {# SortableJS (kanban drag-drop, used from Phase 3 onward) #}
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="min-h-screen flex flex-col bg-base-200 text-base-content">
+
+  <header class="navbar bg-base-100 shadow-sm">
+    <div class="flex-1">
+      <a href="{% url 'core:home' %}" class="btn btn-ghost text-xl normal-case">i-connects</a>
+    </div>
+    <div class="flex-none">
+      <ul class="menu menu-horizontal px-1 gap-1 items-center">
+        {% if user.is_authenticated %}
+          <li><a href="{% url 'projects:my_list' %}">My Projects</a></li>
+          <li><a href="{% url 'projects:list' %}">Browse</a></li>
+          <li><a href="{% url 'projects:my_invitations' %}">Invitations</a></li>
+          <li><a href="{% url 'forms_builder:form_list' %}">My Forms</a></li>
+
+          {# Notification dropdown with HTMX-polled badge #}
+          <li>
+            <div class="dropdown dropdown-end">
+              <label tabindex="0" class="btn btn-ghost btn-circle indicator"
+                     hx-get="{% url 'notifications:dropdown' %}"
+                     hx-trigger="click once"
+                     hx-target="#notification-dropdown-panel"
+                     hx-swap="innerHTML">
+                <span>&#128276;</span>
+                <span id="notification-badge"
+                      class="indicator-item"
+                      hx-get="{% url 'notifications:badge' %}"
+                      hx-trigger="load, every 60s"
+                      hx-swap="innerHTML"></span>
+              </label>
+              <div tabindex="0" id="notification-dropdown-panel"
+                   class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-80">
+                <span class="p-2 text-sm opacity-60">Loading&hellip;</span>
+              </div>
+            </div>
+          </li>
+
+          {# User menu #}
+          <li>
+            <div class="dropdown dropdown-end">
+              <label tabindex="0" class="btn btn-ghost">
+                {{ user.name|default:user.email }}
+              </label>
+              <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+                <li><a href="{% url 'accounts:profile' %}">Profile</a></li>
+                <li>
+                  <form method="post" action="{% url 'accounts:logout' %}" class="p-0">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-ghost btn-sm justify-start w-full">
+                      Sign out
+                    </button>
+                  </form>
+                </li>
+              </ul>
+            </div>
+          </li>
+        {% else %}
+          <li><a href="{% url 'accounts:login' %}">Sign in</a></li>
+          <li><a href="{% url 'accounts:signup' %}" class="btn btn-primary btn-sm">Sign up</a></li>
+        {% endif %}
+      </ul>
+    </div>
+  </header>
+
+  <main class="flex-1 container mx-auto px-4 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer footer-center p-4 bg-base-100 text-base-content/70 border-t border-base-300">
+    <aside>
+      <p>i-connects MVP &middot; Django</p>
+    </aside>
+  </footer>
+
+  {% block extra_body %}{% endblock %}
+</body>
+</html>

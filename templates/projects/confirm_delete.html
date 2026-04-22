@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ object.name }} — i-connects{% endblock %}
+
+{% block content %}
+<div class="max-w-xl mx-auto">
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h1 class="card-title text-error">Delete project</h1>
+      <p>
+        Are you sure you want to delete <strong>{{ object.name }}</strong>? This
+        action removes all associated members, privileges, tasks, and notes.
+      </p>
+      <form method="post" class="card-actions justify-end mt-4">
+        {% csrf_token %}
+        <a href="{% url 'projects:detail' pk=object.pk %}" class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn btn-error">Delete project</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

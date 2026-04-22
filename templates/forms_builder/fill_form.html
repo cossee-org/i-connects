@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Fill form &mdash; i-connects{% endblock %}
+
+{% block content %}
+<section class="card bg-base-100 shadow max-w-2xl mx-auto">
+  <div class="card-body">
+    <div>
+      <p class="text-sm opacity-70">
+        {% if owner_kind == "project" %}
+          Project: {{ owner.name }}
+        {% else %}
+          Task: {{ owner.name }}
+        {% endif %}
+      </p>
+      <h1 class="card-title text-2xl">{{ version.name }} <span class="badge badge-ghost">v{{ version.version }}</span></h1>
+    </div>
+
+    <form method="post" class="mt-4">
+      {% csrf_token %}
+      {% include "forms_builder/render_form.html" with form=dyn_form readonly=False %}
+
+      <div class="flex justify-end gap-2 mt-6">
+        <button type="submit" class="btn btn-primary">Submit</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

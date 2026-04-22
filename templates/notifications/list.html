@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications &mdash; i-connects{% endblock %}
+
+{% block content %}
+<section class="max-w-3xl mx-auto">
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-bold">Notifications</h1>
+    {% if user.is_staff or user.is_superuser or user.role == "ADMIN" %}
+      <a href="{% url 'notifications:announcement_create' %}" class="btn btn-primary btn-sm">
+        New announcement
+      </a>
+    {% endif %}
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-info mb-3">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="card bg-base-100 shadow">
+    <ul class="divide-y divide-base-200">
+      {% for notification in notifications %}
+        {% include "notifications/item.html" with notification=notification %}
+      {% empty %}
+        <li class="p-6 text-center opacity-60">You have no notifications.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {% if page_obj and page_obj.has_other_pages %}
+    <div class="flex justify-center mt-4 gap-2">
+      {% if page_obj.has_previous %}
+        <a class="btn btn-sm" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+      {% endif %}
+      <span class="btn btn-sm btn-ghost no-animation">
+        Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+      </span>
+      {% if page_obj.has_next %}
+        <a class="btn btn-sm" href="?page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

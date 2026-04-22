@@ -1,0 +1,28 @@
+{% comment %}
+  Compact card for a single note; used in list view.
+{% endcomment %}
+<article class="card bg-base-100 shadow-sm hover:shadow-md transition">
+  <div class="card-body">
+    <div class="flex items-start justify-between gap-2">
+      <h2 class="card-title text-base">
+        <a href="{% url 'notes:detail' project_pk=project.pk pk=note.pk %}" class="link link-hover">
+          {{ note.title|default:"(untitled note)" }}
+        </a>
+      </h2>
+      <div class="flex gap-1">
+        {% if note.pinned %}<span class="badge badge-warning badge-sm">Pinned</span>{% endif %}
+        {% if note.archived %}<span class="badge badge-ghost badge-sm">Archived</span>{% endif %}
+        <span class="badge badge-outline badge-sm">{{ note.get_visibility_display }}</span>
+      </div>
+    </div>
+    {% if note.content_markdown %}
+      <p class="text-sm opacity-80 line-clamp-3 whitespace-pre-wrap break-words">
+        {{ note.content_markdown|truncatechars:200 }}
+      </p>
+    {% endif %}
+    <div class="text-xs opacity-60 mt-2">
+      Updated {{ note.updated_at|date:"Y-m-d H:i" }}
+      {% if note.author %} &middot; {{ note.author }}{% endif %}
+    </div>
+  </div>
+</article>

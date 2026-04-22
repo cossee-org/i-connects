@@ -1,0 +1,112 @@
+"""URL routing for the tasks app (namespace ``tasks``)."""
+
+from __future__ import annotations
+
+from django.urls import path
+
+from apps.tasks import views
+
+app_name = "tasks"
+
+urlpatterns = [
+    # Kanban board
+    path(
+        "projects/<int:project_pk>/board/",
+        views.BoardView.as_view(),
+        name="board",
+    ),
+    # Task CRUD (project-scoped)
+    path(
+        "projects/<int:project_pk>/tasks/new/",
+        views.TaskCreateView.as_view(),
+        name="create",
+    ),
+    path(
+        "projects/<int:project_pk>/tasks/<int:pk>/",
+        views.TaskDetailView.as_view(),
+        name="detail",
+    ),
+    path(
+        "projects/<int:project_pk>/tasks/<int:pk>/edit/",
+        views.TaskUpdateView.as_view(),
+        name="update",
+    ),
+    path(
+        "projects/<int:project_pk>/tasks/<int:pk>/delete/",
+        views.TaskDeleteView.as_view(),
+        name="delete",
+    ),
+    # Task HTMX actions (task-scoped; no project_pk in URL)
+    path(
+        "tasks/<int:pk>/move/",
+        views.TaskMoveView.as_view(),
+        name="move",
+    ),
+    path(
+        "tasks/<int:pk>/complete/",
+        views.TaskCompleteView.as_view(),
+        name="complete",
+    ),
+    path(
+        "tasks/<int:pk>/reopen/",
+        views.TaskReopenView.as_view(),
+        name="reopen",
+    ),
+    path(
+        "tasks/<int:pk>/assign/",
+        views.TaskAssignView.as_view(),
+        name="assign",
+    ),
+    path(
+        "tasks/<int:pk>/milestone/",
+        views.TaskMilestoneAssignView.as_view(),
+        name="set_milestone",
+    ),
+    path(
+        "tasks/<int:pk>/logs/<int:log_pk>/approve/",
+        views.TaskLogApproveView.as_view(),
+        name="approve_log",
+    ),
+    # Board columns
+    path(
+        "projects/<int:project_pk>/boards/",
+        views.BoardColumnListView.as_view(),
+        name="board_columns",
+    ),
+    path(
+        "projects/<int:project_pk>/boards/new/",
+        views.BoardColumnCreateView.as_view(),
+        name="column_create",
+    ),
+    path(
+        "projects/<int:project_pk>/boards/<int:pk>/edit/",
+        views.BoardColumnUpdateView.as_view(),
+        name="column_update",
+    ),
+    path(
+        "projects/<int:project_pk>/boards/<int:pk>/delete/",
+        views.BoardColumnDeleteView.as_view(),
+        name="column_delete",
+    ),
+    # Milestones
+    path(
+        "projects/<int:project_pk>/milestones/",
+        views.MilestoneListView.as_view(),
+        name="milestone_list",
+    ),
+    path(
+        "projects/<int:project_pk>/milestones/new/",
+        views.MilestoneCreateView.as_view(),
+        name="milestone_create",
+    ),
+    path(
+        "projects/<int:project_pk>/milestones/<int:pk>/edit/",
+        views.MilestoneUpdateView.as_view(),
+        name="milestone_update",
+    ),
+    path(
+        "projects/<int:project_pk>/milestones/<int:pk>/delete/",
+        views.MilestoneDeleteView.as_view(),
+        name="milestone_delete",
+    ),
+]

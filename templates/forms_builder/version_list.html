@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Versions &mdash; i-connects{% endblock %}
+
+{% block content %}
+<section class="card bg-base-100 shadow">
+  <div class="card-body">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm opacity-70">Form #{{ form_obj.pk }}</p>
+        <h1 class="card-title text-2xl">Versions</h1>
+      </div>
+      <div class="flex gap-2">
+        <a href="{% url 'forms_builder:form_list' %}" class="btn btn-ghost btn-sm">
+          Back
+        </a>
+        <a href="{% url 'forms_builder:version_create' pk=form_obj.pk %}"
+           class="btn btn-primary btn-sm">
+          New version
+        </a>
+      </div>
+    </div>
+
+    {% if versions %}
+      <div class="overflow-x-auto mt-4">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Version</th>
+              <th>Name</th>
+              <th>Created</th>
+              <th>Status</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in versions %}
+              <tr>
+                <td>v{{ v.version }}</td>
+                <td>
+                  <a class="link"
+                     href="{% url 'forms_builder:version_detail' pk=form_obj.pk vpk=v.pk %}">
+                    {{ v.name }}
+                  </a>
+                </td>
+                <td>{{ v.created_at|date:"Y-m-d H:i" }}</td>
+                <td>
+                  {% if v.archived %}
+                    <span class="badge badge-ghost">archived</span>
+                  {% else %}
+                    <span class="badge badge-success">active</span>
+                  {% endif %}
+                </td>
+                <td class="text-right">
+                  <form action="{% url 'forms_builder:version_clone' pk=form_obj.pk vpk=v.pk %}"
+                        method="post" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-ghost btn-xs">Clone</button>
+                  </form>
+                  {% if not v.archived %}
+                    <form action="{% url 'forms_builder:version_archive' pk=form_obj.pk vpk=v.pk %}"
+                          method="post" class="inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-ghost btn-xs text-error">
+                        Archive
+                      </button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="opacity-70 mt-4">No versions yet.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

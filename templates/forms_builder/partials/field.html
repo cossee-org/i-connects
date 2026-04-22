@@ -1,0 +1,27 @@
+{# Render a single Django bound field the DaisyUI way. #}
+<label class="form-control w-full">
+  {% if field.label %}
+    <span class="label-text">
+      {{ field.label }}
+      {% if field.field.required %}<span class="text-error">*</span>{% endif %}
+    </span>
+  {% endif %}
+
+  {% if field.field.widget.input_type == "checkbox" %}
+    <div class="mt-1">
+      <input type="checkbox" name="{{ field.html_name }}"
+             {% if field.value %}checked{% endif %}
+             {% if readonly %}disabled{% endif %}
+             class="toggle toggle-primary" />
+    </div>
+  {% else %}
+    {{ field }}
+  {% endif %}
+
+  {% if field.help_text %}
+    <span class="label-text-alt opacity-70">{{ field.help_text }}</span>
+  {% endif %}
+  {% if field.errors %}
+    <span class="text-error text-sm">{{ field.errors|join:" " }}</span>
+  {% endif %}
+</label>

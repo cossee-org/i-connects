@@ -1,0 +1,8 @@
+{# Assignees summary block — HTMX swap target for the assign form. #}
+<div id="task-assignees-{{ task.pk }}" class="flex flex-wrap gap-2">
+  {% for m in task.assigned_members.all %}
+    <span class="badge badge-outline">{{ m }}</span>
+  {% empty %}
+    <span class="text-sm text-base-content/60">No one assigned yet.</span>
+  {% endfor %}
+</div>

@@ -1,0 +1,43 @@
+{% comment %}
+  HTMX partial: the popover contents shown when the user clicks the
+  notification bell in the navbar. Renders the ten most recent
+  notifications plus a "mark all read" action and a link to the
+  full list.
+{% endcomment %}
+<div class="card card-compact w-80 bg-base-100 shadow-lg">
+  <div class="card-body p-0">
+    <div class="flex items-center justify-between px-3 py-2 border-b border-base-200">
+      <h3 class="font-semibold">Notifications</h3>
+      {% if unread_count and unread_count > 0 %}
+        <form hx-post="{% url 'notifications:mark_all_read' %}"
+              hx-target="#notification-dropdown"
+              hx-swap="innerHTML">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-xs btn-ghost">Mark all read</button>
+        </form>
+      {% endif %}
+    </div>
+
+    <ul class="max-h-96 overflow-y-auto">
+      {% for notification in notifications %}
+        {% include "notifications/item.html" with notification=notification %}
+      {% empty %}
+        <li class="p-4 text-center text-sm opacity-60">No notifications yet.</li>
+      {% endfor %}
+    </ul>
+
+    <div class="px-3 py-2 border-t border-base-200 text-right">
+      <a href="{% url 'notifications:list' %}" class="link link-primary text-sm">
+        View all
+      </a>
+    </div>
+  </div>
+</div>
+
+{% if swap_oob_badge %}
+  <span id="notification-badge" hx-swap-oob="innerHTML">
+    {% if unread_count and unread_count > 0 %}
+      <span class="badge badge-error badge-sm">{{ unread_count }}</span>
+    {% endif %}
+  </span>
+{% endif %}

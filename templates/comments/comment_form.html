@@ -1,0 +1,12 @@
+{# Inline comment form. Submits to the comments:create HTMX endpoint. #}
+<form class="mt-2 flex gap-2 items-end"
+      hx-post="{% url 'comments:create' task_pk=task.pk log_pk=task_log.pk %}"
+      hx-target="#comments-for-log-{{ task_log.pk }}"
+      hx-swap="beforeend"
+      hx-on::after-request="if(event.detail.successful) this.reset()">
+  {% csrf_token %}
+  <div class="flex-1">
+    {{ form.content }}
+  </div>
+  <button type="submit" class="btn btn-primary btn-sm">Comment</button>
+</form>

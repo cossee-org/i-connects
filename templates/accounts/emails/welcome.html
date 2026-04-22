@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #222;">
+  <p>Hi {{ user.name|default:user.email }},</p>
+  <p>Welcome to <strong>i-connects</strong>! Your account has been created successfully.</p>
+  <p>
+    You can sign in any time at
+    <a href="{{ site_url }}">{{ site_url }}</a>.
+  </p>
+  <p>If you have any questions, simply reply to this email.</p>
+  <p>&mdash; The i-connects team</p>
+</body>
+</html>

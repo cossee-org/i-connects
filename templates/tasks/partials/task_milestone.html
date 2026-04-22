@@ -1,0 +1,5 @@
+{% if task.milestone %}
+  <span class="badge badge-outline">{{ task.milestone.name }}</span>
+{% else %}
+  <span class="text-sm text-base-content/60">No milestone.</span>
+{% endif %}

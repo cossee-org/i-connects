@@ -1,0 +1,19 @@
+{% extends "emails/base_email.html" %}
+{% block title %}Overdue task reminder{% endblock %}
+{% block content %}
+<p>Hi {{ user.name|default:user.email }},</p>
+
+<p>The following tasks assigned to you are past their deadline:</p>
+
+<ul style="padding-left:20px;margin:0 0 16px;">
+  {% for task in overdue_tasks %}
+    <li>
+      <strong>{{ task.name }}</strong>
+      {% if task.project %} &mdash; {{ task.project.name }}{% endif %}
+      {% if task.deadline %} (due {{ task.deadline|date:"M j, Y" }}){% endif %}
+    </li>
+  {% endfor %}
+</ul>
+
+<p>Please update their status in i-connects when you get a chance.</p>
+{% endblock %}

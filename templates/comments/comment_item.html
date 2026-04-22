@@ -1,0 +1,21 @@
+{# One comment in a thread. #}
+<div id="comment-{{ comment.pk }}"
+     class="chat chat-start"
+     hx-post="{% url 'comments:mark_read' pk=comment.pk %}"
+     hx-trigger="intersect once"
+     hx-swap="none">
+  <div class="chat-header text-xs opacity-70">
+    {{ comment.author }}
+    <time class="ml-1">{{ comment.created_at|date:"M j, Y H:i" }}</time>
+  </div>
+  <div class="chat-bubble chat-bubble-sm text-sm whitespace-pre-wrap">
+    {{ comment.content }}
+  </div>
+  <div class="chat-footer opacity-60 text-xs">
+    <button class="btn btn-ghost btn-xs text-error"
+            hx-post="{% url 'comments:delete' pk=comment.pk %}"
+            hx-target="#comment-{{ comment.pk }}"
+            hx-swap="outerHTML swap:200ms"
+            hx-confirm="Delete this comment?">Delete</button>
+  </div>
+</div>

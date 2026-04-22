@@ -1,0 +1,6 @@
+{% extends "emails/base_email.txt" %}
+{% block content %}
+{% if project %}{{ project.name }}
+
+{% endif %}{{ announcement.message }}
+{% endblock %}

@@ -1,0 +1,8 @@
+{# Small fragment showing the roles currently attached to a ProjectMember. #}
+<div id="member-roles-{{ member.pk }}" class="flex flex-wrap gap-1 mt-2">
+  {% for r in member.roles.all %}
+    <span class="badge badge-outline badge-sm">{{ r.name }}</span>
+  {% empty %}
+    <span class="text-xs text-base-content/50">No roles assigned</span>
+  {% endfor %}
+</div>

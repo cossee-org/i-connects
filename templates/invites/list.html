@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}My invitations — i-connects{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">My invitations</h1>
+
+{% if invitations %}
+  <div class="overflow-x-auto card bg-base-100 shadow">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>From</th>
+          <th>Privilege</th>
+          <th>Received</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in invitations %}
+          <tr>
+            <td>{{ inv.project.name }}</td>
+            <td class="text-sm">{{ inv.added_by }}</td>
+            <td>
+              <span class="badge {% if inv.privilege == 'PROJECT_MANAGER' %}badge-primary{% else %}badge-ghost{% endif %}">
+                {{ inv.privilege }}
+              </span>
+            </td>
+            <td class="text-sm">{{ inv.created_at|date:"Y-m-d" }}</td>
+            <td>
+              <a class="btn btn-sm btn-primary"
+                 href="{% url 'projects:accept_or_decline' code=inv.invitation_code %}">
+                Review
+              </a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="alert">
+    <span>No pending invitations.</span>
+  </div>
+{% endif %}
+{% endblock %}

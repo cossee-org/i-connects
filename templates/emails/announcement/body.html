@@ -1,0 +1,7 @@
+{% extends "emails/base_email.html" %}
+{% block title %}i-connects announcement{% endblock %}
+{% block content %}
+{% if project %}<p><strong>{{ project.name }}</strong></p>{% endif %}
+
+<p>{{ announcement.message|linebreaksbr }}</p>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}New version &mdash; i-connects{% endblock %}
+
+{% block extra_head %}
+  <link href="https://cdn.jsdelivr.net/npm/jsoneditor@10.1.0/dist/jsoneditor.min.css"
+        rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/jsoneditor@10.1.0/dist/jsoneditor.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<section class="card bg-base-100 shadow">
+  <div class="card-body">
+    <div class="flex items-center justify-between">
+      <h1 class="card-title text-2xl">New version of form #{{ form_obj.pk }}</h1>
+      <a href="{% url 'forms_builder:version_list' pk=form_obj.pk %}"
+         class="btn btn-ghost btn-sm">Cancel</a>
+    </div>
+
+    <form method="post" class="space-y-6 mt-4">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-error">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <label class="form-control w-full max-w-md">
+        <span class="label-text">Version name</span>
+        <input type="text" name="name" value="{{ form.name.value|default_if_none:'' }}"
+               class="input input-bordered w-full" />
+        {% if form.name.errors %}
+          <span class="text-error text-sm">{{ form.name.errors }}</span>
+        {% endif %}
+      </label>
+
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <span class="label-text font-semibold">JSON schema</span>
+          <span class="label-text-alt opacity-70">Edit the schema visually below.</span>
+        </div>
+        <div id="json-schema-editor" style="height: 420px;"></div>
+        {# Hidden textarea that jsoneditor writes into. #}
+        <textarea name="json_schema" id="id_json_schema" class="hidden">{{ form.json_schema.value|default_if_none:'' }}</textarea>
+        {% if form.json_schema.errors %}
+          <div class="text-error text-sm mt-1">{{ form.json_schema.errors }}</div>
+        {% endif %}
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <span class="label-text font-semibold">UI schema (optional)</span>
+        </div>
+        <div id="ui-schema-editor" style="height: 240px;"></div>
+        <textarea name="ui_schema" id="id_ui_schema" class="hidden">{{ form.ui_schema.value|default_if_none:'' }}</textarea>
+        {% if form.ui_schema.errors %}
+          <div class="text-error text-sm mt-1">{{ form.ui_schema.errors }}</div>
+        {% endif %}
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <a href="{% url 'forms_builder:version_list' pk=form_obj.pk %}"
+           class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn btn-primary">Save version</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<script>
+(function () {
+  function mountEditor(containerId, textareaId, fallback) {
+    const container = document.getElementById(containerId);
+    const textarea = document.getElementById(textareaId);
+    let initial = fallback;
+    try {
+      const raw = textarea.value.trim();
+      if (raw) initial = JSON.parse(raw);
+    } catch (e) {
+      console.warn("Could not parse initial JSON for " + textareaId, e);
+    }
+    const editor = new JSONEditor(container, {
+      mode: "code",
+      modes: ["code", "tree"],
+      onChangeText: function (txt) { textarea.value = txt; },
+    });
+    editor.set(initial);
+    textarea.value = JSON.stringify(initial, null, 2);
+    return editor;
+  }
+
+  mountEditor("json-schema-editor", "id_json_schema",
+              { title: "New form", type: "object", properties: {} });
+  mountEditor("ui-schema-editor", "id_ui_schema", {});
+})();
+</script>
+{% endblock %}

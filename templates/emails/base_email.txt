@@ -1,0 +1,8 @@
+i-connects
+==========
+
+{% block content %}{% endblock %}
+
+--
+You are receiving this email because of your i-connects notification settings.
+Manage preferences in your profile.

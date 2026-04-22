@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}My projects — i-connects{% endblock %}
+
+{% block content %}
+<section class="mb-6 flex items-end justify-between gap-4">
+  <div>
+    <h1 class="text-3xl font-bold">My projects</h1>
+    <p class="text-base-content/70">Projects you are a member of.</p>
+  </div>
+  <div class="flex gap-2">
+    <a href="{% url 'projects:list' %}" class="btn btn-ghost btn-sm">Public projects</a>
+    <a href="{% url 'projects:create' %}" class="btn btn-primary btn-sm">New project</a>
+  </div>
+</section>
+
+{% if project_rows %}
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for row in project_rows %}
+      {% include "projects/partials/project_card.html" with project=row.project my_privilege=row.privilege %}
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="alert">
+    <span>You don't belong to any projects yet. <a class="link" href="{% url 'projects:create' %}">Create one</a>?</span>
+  </div>
+{% endif %}
+{% endblock %}

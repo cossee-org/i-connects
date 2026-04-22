@@ -1,0 +1,36 @@
+{# Renders one project as a DaisyUI card.
+   Context: project (Project); optionally my_privilege (str) for badge. #}
+<div class="card bg-base-100 shadow hover:shadow-lg transition">
+  <div class="card-body">
+    <div class="flex items-start justify-between gap-2">
+      <h2 class="card-title leading-tight">
+        <a href="{% url 'projects:detail' pk=project.pk %}" class="link link-hover">
+          {{ project.name }}
+        </a>
+      </h2>
+      <span class="badge badge-outline badge-sm whitespace-nowrap">
+        {{ project.get_status_display }}
+      </span>
+    </div>
+
+    {% if my_privilege %}
+      <div>
+        <span class="badge badge-primary badge-sm">{{ my_privilege }}</span>
+      </div>
+    {% endif %}
+
+    {% if project.abstract %}
+      <p class="text-sm text-base-content/70 line-clamp-3">{{ project.abstract }}</p>
+    {% elif project.description %}
+      <p class="text-sm text-base-content/70 line-clamp-3">{{ project.description }}</p>
+    {% endif %}
+
+    {% if project.keywords %}
+      <p class="text-xs text-base-content/60">{{ project.keywords }}</p>
+    {% endif %}
+
+    <div class="card-actions justify-end mt-2">
+      <a href="{% url 'projects:detail' pk=project.pk %}" class="btn btn-sm btn-ghost">Open</a>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}{{ task.name }} · {{ project.name }}{% endblock %}
+
+{% block content %}
+  <nav class="text-sm breadcrumbs mb-4">
+    <ul>
+      <li><a href="{% url 'tasks:board' project_pk=project.pk %}">{{ project.name }}</a></li>
+      <li>{{ task.name }}</li>
+    </ul>
+  </nav>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <section class="lg:col-span-2 card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h1 class="text-2xl font-semibold">{{ task.name }}</h1>
+            <p class="text-sm text-base-content/60">
+              Column: {{ task.container.name }}
+              {% if task.milestone %} · Milestone: {{ task.milestone.name }}{% endif %}
+            </p>
+          </div>
+          {% include "tasks/partials/task_status_badge.html" with task=task %}
+        </div>
+
+        <div class="prose max-w-none mt-3">
+          {{ task.description|default:"(no description)"|linebreaks }}
+        </div>
+
+        <div class="flex flex-wrap gap-2 mt-4">
+          {% if task.status != "COMPLETED" %}
+            <button class="btn btn-success btn-sm"
+                    hx-post="{% url 'tasks:complete' pk=task.pk %}"
+                    hx-target="#task-status-block"
+                    hx-swap="outerHTML">Mark complete</button>
+          {% else %}
+            <button class="btn btn-ghost btn-sm"
+                    hx-post="{% url 'tasks:reopen' pk=task.pk %}"
+                    hx-target="#task-status-block"
+                    hx-swap="outerHTML">Reopen</button>
+          {% endif %}
+          <a class="btn btn-ghost btn-sm"
+             href="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}">Edit</a>
+          <button class="btn btn-ghost btn-sm text-error"
+                  hx-post="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
+                  hx-confirm="Delete this task? This cannot be undone."
+                  hx-headers='{"HX-Request": "true"}'
+                  hx-on::after-request="window.location='{% url 'tasks:board' project_pk=project.pk %}'">
+            Delete
+          </button>
+        </div>
+
+        <div id="task-status-block" class="hidden"></div>
+      </div>
+    </section>
+
+    <aside class="card bg-base-100 shadow-sm">
+      <div class="card-body gap-4">
+        <div>
+          <h3 class="font-semibold mb-1">Assignees</h3>
+          {% include "tasks/partials/task_assignees.html" with task=task %}
+          <details class="mt-2">
+            <summary class="btn btn-ghost btn-xs">Change assignees</summary>
+            <form class="mt-2"
+                  hx-post="{% url 'tasks:assign' pk=task.pk %}"
+                  hx-target="#task-assignees-{{ task.pk }}"
+                  hx-swap="outerHTML">
+              {% csrf_token %}
+              {{ assign_form.assigned_members }}
+              <button class="btn btn-primary btn-sm mt-2" type="submit">Save</button>
+            </form>
+          </details>
+        </div>
+
+        <div>
+          <h3 class="font-semibold mb-1">Milestone</h3>
+          <div id="task-milestone-{{ task.pk }}">
+            {% include "tasks/partials/task_milestone.html" with task=task %}
+          </div>
+          <details class="mt-2">
+            <summary class="btn btn-ghost btn-xs">Change milestone</summary>
+            <form class="mt-2"
+                  hx-post="{% url 'tasks:set_milestone' pk=task.pk %}"
+                  hx-target="#task-milestone-{{ task.pk }}"
+                  hx-swap="innerHTML">
+              {% csrf_token %}
+              {{ milestone_form.milestone }}
+              <button class="btn btn-primary btn-sm mt-2" type="submit">Save</button>
+            </form>
+          </details>
+        </div>
+
+        <div>
+          <h3 class="font-semibold mb-1">Details</h3>
+          <ul class="text-sm text-base-content/80 space-y-1">
+            <li>Created by: {{ task.created_by }}</li>
+            {% if task.start_date %}<li>Starts: {{ task.start_date|date:"M j, Y" }}</li>{% endif %}
+            {% if task.deadline %}<li>Due: {{ task.deadline|date:"M j, Y" }}</li>{% endif %}
+          </ul>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <section class="mt-6">
+    <h2 class="text-xl font-semibold mb-3">Activity & comments</h2>
+    <div id="task-log-list" class="flex flex-col gap-3">
+      {% for log in task_logs %}
+        {% include "tasks/task_log_item.html" with log=log %}
+      {% empty %}
+        <p class="text-base-content/60 text-sm">No task log entries yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}
