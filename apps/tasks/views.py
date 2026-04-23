@@ -24,6 +24,7 @@ from django.views.generic import (
     View,
 )
 
+from apps.audit.services import AuditAction, log_action
 from apps.comments.forms import CommentForm
 from apps.core.enums import CompletedAs
 from apps.projects.models import ProjectMember
@@ -109,6 +110,13 @@ class TaskCreateView(LoginRequiredMixin, ProjectContextMixin, CreateView):
                     CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL
                 ),
             )
+        log_action(
+            AuditAction.TASK_CREATED,
+            actor=self.request.user,
+            entity=task,
+            project=task.project,
+            metadata={"name": task.name},
+        )
         if self.request.htmx if hasattr(self.request, "htmx") else self.request.headers.get(
             "HX-Request"
         ):
@@ -179,6 +187,13 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
 
     def form_valid(self, form):
         task = form.save()
+        log_action(
+            AuditAction.TASK_UPDATED,
+            actor=self.request.user,
+            entity=task,
+            project=task.project,
+            metadata={"name": task.name},
+        )
         if self.request.headers.get("HX-Request"):
             return render(
                 self.request,
@@ -213,7 +228,20 @@ class TaskDeleteView(LoginRequiredMixin, ProjectContextMixin, DeleteView):
         return reverse("tasks:board", kwargs={"project_pk": self.project.pk})
 
     def form_valid(self, form):
+        task = self.get_object()
+        task_pk = task.pk
+        task_name = task.name
+        project = task.project
+        actor = self.request.user
         response = super().form_valid(form)
+        log_action(
+            AuditAction.TASK_DELETED,
+            actor=actor,
+            entity_type="task",
+            entity_id=task_pk,
+            project=project,
+            metadata={"name": task_name},
+        )
         if self.request.headers.get("HX-Request"):
             return HttpResponse(status=204)
         return response

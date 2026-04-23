@@ -1,0 +1,25 @@
+{# Single AuditLog row rendered as a timeline item. Expects `entry` in context. #}
+{% with action_prefix=entry.action|slice:":4" %}
+<div class="flex gap-3 py-3 px-4">
+  <div class="pt-2 shrink-0">
+    {% if action_prefix == "user" %}
+      <span class="block w-2.5 h-2.5 rounded-full bg-brand-coral" aria-hidden="true"></span>
+    {% else %}
+      <span class="block w-2.5 h-2.5 rounded-full bg-brand-navy" aria-hidden="true"></span>
+    {% endif %}
+  </div>
+  <div class="flex-1 min-w-0">
+    <div><span class="font-medium text-brand-navy">{{ entry.get_action_display }}</span></div>
+    <div>
+      {% if entry.actor %}
+        <span class="text-sm text-brand-text/80">by {{ entry.actor.name|default:entry.actor.email }}</span>
+      {% else %}
+        <span class="text-sm text-brand-text/60 italic">by system</span>
+      {% endif %}
+    </div>
+    <div>
+      <span class="text-xs text-brand-text/50">{{ entry.timestamp|date:"M j, Y H:i" }}{% if entry.metadata %} &middot; <code class="text-xs">{{ entry.metadata }}</code>{% endif %}</span>
+    </div>
+  </div>
+</div>
+{% endwith %}

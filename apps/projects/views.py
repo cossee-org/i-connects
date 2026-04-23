@@ -18,6 +18,7 @@ from django.views.generic import (
     View,
 )
 
+from apps.audit.services import AuditAction, log_action
 from apps.core.enums import MemberPrivileges
 
 from .forms import InvitationForm, MemberPrivilegeForm, ProjectForm
@@ -157,8 +158,16 @@ class ProjectUpdateView(ProjectManagerRequiredMixin, UpdateView):
         return reverse("projects:detail", kwargs={"pk": self.object.pk})
 
     def form_valid(self, form):
+        response = super().form_valid(form)
+        log_action(
+            AuditAction.PROJECT_UPDATED,
+            actor=self.request.user,
+            entity=self.object,
+            project=self.object,
+            metadata={"name": self.object.name},
+        )
         messages.success(self.request, "Project updated.")
-        return super().form_valid(form)
+        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -173,7 +182,16 @@ class ProjectDeleteView(ProjectManagerRequiredMixin, DeleteView):
     success_url = reverse_lazy("projects:my_list")
 
     def form_valid(self, form):
-        messages.success(self.request, f"Project '{self.object.name}' deleted.")
+        project = self.object
+        project_name = project.name
+        log_action(
+            AuditAction.PROJECT_DELETED,
+            actor=self.request.user,
+            entity=project,
+            project=project,
+            metadata={"name": project_name},
+        )
+        messages.success(self.request, f"Project '{project_name}' deleted.")
         return super().form_valid(form)
 
 
@@ -249,6 +267,15 @@ class UpdateMemberPrivilegeView(
         ProjectPrivilege.objects.create(
             user=primary_user, project=self.project, privilege=new_privilege
         )
+        log_action(
+            AuditAction.MEMBER_PRIVILEGE_CHANGED,
+            actor=request.user,
+            project=self.project,
+            metadata={
+                "target_user_id": primary_user.id,
+                "to": new_privilege,
+            },
+        )
 
         row = {
             "member": member,
@@ -285,6 +312,14 @@ class RemoveMemberView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
             ProjectPrivilege.objects.filter(
                 user=primary_user, project=self.project
             ).delete()
+        log_action(
+            AuditAction.MEMBER_REMOVED,
+            actor=request.user,
+            project=self.project,
+            metadata={
+                "target_user_id": primary_user.id if primary_user else None
+            },
+        )
         if request.headers.get("HX-Request"):
             # Empty response removes the row via hx-swap="outerHTML".
             return HttpResponse("")
@@ -328,6 +363,7 @@ class InviteCreateView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
             privilege=form.cleaned_data["privilege"],
             added_by=added_by,
             roles=form.cleaned_data.get("roles"),
+            inviter=request.user,
         )
         messages.success(request, f"Invitation sent to {form.cleaned_data['email']}.")
         return HttpResponseRedirect(
@@ -382,7 +418,7 @@ class AcceptOrDeclineInviteView(View):
             )
 
         if action == "decline":
-            decline_invitation(invitation=invitation)
+            decline_invitation(invitation=invitation, user=request.user)
             messages.info(request, "Invitation declined.")
             return redirect("projects:my_invitations")
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from django.db import transaction
 
+from apps.audit.services import AuditAction, log_action
 from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
 from apps.tasks.models import KanbanBoard, Task, TaskLog
@@ -100,6 +101,15 @@ def complete_task(
     task.status = TaskStatus.COMPLETED
     task.save(update_fields=["status", "updated_at"])
 
+    completer_user = completed_by.users.first()
+    log_action(
+        AuditAction.TASK_COMPLETED,
+        actor=completer_user,
+        entity=task,
+        project=task.project,
+        metadata={"name": task.name},
+    )
+
     _notify_task_completed(task=task, completed_by=completed_by)
 
     # Return the log entry that actually represents the caller, if present.
@@ -163,6 +173,21 @@ def approve_completion(
         from apps.contributions.services import record_contributions_for_approval
 
         record_contributions_for_approval(task_log, verifier_user=verifier_user)
+        log_action(
+            AuditAction.TASK_APPROVED,
+            actor=verifier_user,
+            entity=task_log.task,
+            project=task_log.task.project,
+            metadata={"task_name": task_log.task.name},
+        )
+    elif approved is False:
+        log_action(
+            AuditAction.TASK_REJECTED,
+            actor=verifier_user,
+            entity=task_log.task,
+            project=task_log.task.project,
+            metadata={"task_name": task_log.task.name},
+        )
 
     _notify_task_approval(task_log=task_log, approved=approved)
 

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} activity &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with eyebrow=project.name title="Activity" subtitle="Every change made on this project by any member." %}
+{% endblock %}
+
+{% block content %}
+<div class="brand-card divide-y divide-brand-light">
+  {% for entry in entries %}
+    {% include "audit/_entry.html" %}
+  {% empty %}
+    {% include "_components/empty_state.html" with title="No activity yet" body="Actions on this project will appear here." %}
+  {% endfor %}
+</div>
+
+{% if is_paginated %}
+  <div class="join mt-8 flex justify-center">
+    {% if page_obj.has_previous %}
+      <a class="join-item btn btn-sm" href="?page={{ page_obj.previous_page_number }}">Prev</a>
+    {% endif %}
+    <span class="join-item btn btn-sm btn-active">
+      Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </span>
+    {% if page_obj.has_next %}
+      <a class="join-item btn btn-sm" href="?page={{ page_obj.next_page_number }}">Next</a>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from django.urls import reverse
 
+from apps.audit.models import AuditAction, AuditLog
 from apps.core.enums import MemberPrivileges, ProjectStatus
 from apps.projects.models import (
     Invitation,
@@ -53,6 +54,9 @@ def test_create_project_makes_creator_a_pm(client_logged_in, user):
         user=user,
         privilege=MemberPrivileges.PROJECT_MANAGER,
     ).exists()
+    assert AuditLog.objects.filter(
+        action=AuditAction.PROJECT_CREATED, actor=user, project=project
+    ).exists()
 
 
 @pytest.mark.django_db
@@ -96,6 +100,11 @@ def test_invitation_code_is_unique_urlsafe(user):
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
     )
     assert set(code).issubset(allowed)
+    assert AuditLog.objects.filter(
+        action=AuditAction.INVITATION_SENT,
+        entity_type="invitation",
+        entity_id=invitation.pk,
+    ).exists()
 
 
 @pytest.mark.django_db
@@ -128,3 +137,9 @@ def test_accept_invitation_adds_member(client, user, other_user):
     assert ProjectMember.objects.filter(project=project, users=other_user).exists()
     # Invitation should be consumed.
     assert not Invitation.objects.filter(pk=invitation.pk).exists()
+    assert AuditLog.objects.filter(
+        action=AuditAction.INVITATION_ACCEPTED, actor=other_user, project=project
+    ).exists()
+    assert AuditLog.objects.filter(
+        action=AuditAction.MEMBER_ADDED, actor=other_user, project=project
+    ).exists()

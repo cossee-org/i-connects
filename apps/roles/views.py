@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.generic import View
 
+from apps.audit.services import AuditAction, log_action
 from apps.projects.mixins import (
     ProjectContextMixin,
     ProjectManagerRequiredMixin,
@@ -63,6 +64,13 @@ class RoleCreateView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
         role.user = request.user
         role.project = self.project
         role.save()
+        log_action(
+            AuditAction.ROLE_CREATED,
+            actor=request.user,
+            entity=role,
+            project=self.project,
+            metadata={"name": role.name},
+        )
         # Return a rendered row so the caller can append it to the list.
         return render(
             request,
@@ -133,7 +141,17 @@ class RoleDeleteView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
 
     def _delete(self, request, pk):
         role = get_object_or_404(Role, pk=pk, project=self.project)
+        role_name = role.name
+        role_id = role.pk
         role.delete()
+        log_action(
+            AuditAction.ROLE_DELETED,
+            actor=request.user,
+            entity_type="role",
+            entity_id=role_id,
+            project=self.project,
+            metadata={"name": role_name},
+        )
         if request.headers.get("HX-Request"):
             return HttpResponse("")
         return redirect(reverse("roles:list", kwargs={"project_pk": self.project.pk}))
@@ -152,7 +170,32 @@ class AssignRolesView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
         roles = Role.objects.filter(
             pk__in=role_ids, project=self.project
         )
+        previous_ids = set(member.roles.values_list("id", flat=True))
+        new_ids = set(roles.values_list("id", flat=True))
         member.roles.set(roles)
+
+        target_user = member.users.first()
+        target_user_id = target_user.id if target_user else None
+        for added_id in new_ids - previous_ids:
+            log_action(
+                AuditAction.ROLE_ASSIGNED,
+                actor=request.user,
+                project=self.project,
+                metadata={
+                    "target_user_id": target_user_id,
+                    "role_id": added_id,
+                },
+            )
+        for removed_id in previous_ids - new_ids:
+            log_action(
+                AuditAction.ROLE_UNASSIGNED,
+                actor=request.user,
+                project=self.project,
+                metadata={
+                    "target_user_id": target_user_id,
+                    "role_id": removed_id,
+                },
+            )
         if request.headers.get("HX-Request"):
             return render(
                 request,

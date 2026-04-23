@@ -1,0 +1,109 @@
+"""AuditLog: an append-only record of security- and governance-relevant events.
+
+Per Ultra Plan §7:
+
+    Append-only ``AuditLog`` table: ``(id, actor_id, action, entity_type,
+    entity_id, timestamp, metadata_json)``. Log: login, logout, account
+    creation, role change, project creation/deletion, task lifecycle
+    transitions, member add/remove, admin actions. Admin can read audit
+    log; users can read their own audit entries (GDPR-aligned).
+
+The model therefore:
+- is append-only (``save`` refuses updates, ``delete`` raises);
+- uses ``SET_NULL`` on ``actor`` / ``project`` so the log survives if those
+  rows are ever hard-deleted — an audit log that disappears when an account
+  is removed is useless in exactly the cases it matters most;
+- stores ``entity_type`` / ``entity_id`` as plain fields (not GenericFK) to
+  keep queries cheap; traversal from AuditLog → entity is rare.
+"""
+
+from __future__ import annotations
+
+from django.conf import settings
+from django.db import IntegrityError, models
+
+
+class AuditAction(models.TextChoices):
+    # ---- Auth ---------------------------------------------------------------
+    USER_SIGNUP = "user.signup", "User signed up"
+    USER_LOGIN = "user.login", "User logged in"
+    USER_LOGIN_FAILED = "user.login_failed", "Login failed"
+    USER_LOGOUT = "user.logout", "User logged out"
+    PASSWORD_RESET_REQUESTED = "user.password_reset_requested", "Password reset requested"
+    PASSWORD_RESET_COMPLETED = "user.password_reset_completed", "Password reset completed"
+    PASSWORD_CHANGED = "user.password_changed", "Password changed"
+    PROFILE_UPDATED = "user.profile_updated", "Profile updated"
+
+    # ---- Projects -----------------------------------------------------------
+    PROJECT_CREATED = "project.created", "Project created"
+    PROJECT_UPDATED = "project.updated", "Project updated"
+    PROJECT_DELETED = "project.deleted", "Project deleted"
+
+    # ---- Membership / invitations ------------------------------------------
+    INVITATION_SENT = "invitation.sent", "Invitation sent"
+    INVITATION_ACCEPTED = "invitation.accepted", "Invitation accepted"
+    INVITATION_DECLINED = "invitation.declined", "Invitation declined"
+    MEMBER_ADDED = "member.added", "Member added"
+    MEMBER_REMOVED = "member.removed", "Member removed"
+    MEMBER_PRIVILEGE_CHANGED = "member.privilege_changed", "Member privilege changed"
+
+    # ---- Roles --------------------------------------------------------------
+    ROLE_CREATED = "role.created", "Role created"
+    ROLE_DELETED = "role.deleted", "Role deleted"
+    ROLE_ASSIGNED = "role.assigned", "Role assigned to member"
+    ROLE_UNASSIGNED = "role.unassigned", "Role unassigned from member"
+
+    # ---- Tasks --------------------------------------------------------------
+    TASK_CREATED = "task.created", "Task created"
+    TASK_UPDATED = "task.updated", "Task updated"
+    TASK_DELETED = "task.deleted", "Task deleted"
+    TASK_COMPLETED = "task.completed", "Task marked complete"
+    TASK_APPROVED = "task.approved", "Task completion approved"
+    TASK_REJECTED = "task.rejected", "Task completion rejected"
+
+    # ---- Admin --------------------------------------------------------------
+    ACCOUNT_SUSPENDED = "admin.account_suspended", "Account suspended"
+    ACCOUNT_REACTIVATED = "admin.account_reactivated", "Account reactivated"
+
+
+class AuditLog(models.Model):
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="audit_actions",
+    )
+    action = models.CharField(max_length=64, choices=AuditAction.choices)
+    entity_type = models.CharField(max_length=64, blank=True, default="")
+    entity_id = models.PositiveIntegerField(null=True, blank=True)
+    project = models.ForeignKey(
+        "projects.Project",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="audit_log",
+    )
+    metadata = models.JSONField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-timestamp", "-id"]
+        indexes = [
+            models.Index(fields=["actor"]),
+            models.Index(fields=["action"]),
+            models.Index(fields=["entity_type", "entity_id"]),
+            models.Index(fields=["project"]),
+            models.Index(fields=["-timestamp"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"AuditLog #{self.pk} ({self.action})"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            raise IntegrityError("AuditLog is append-only; existing rows cannot be updated.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise IntegrityError("AuditLog is append-only; rows cannot be deleted.")

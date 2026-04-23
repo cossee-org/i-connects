@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from django.urls import reverse
 
+from apps.audit.models import AuditAction, AuditLog
 from apps.core.enums import MemberPrivileges, ProjectStatus, TaskStatus
 from apps.projects.models import ProjectMember, ProjectPrivilege
 from apps.projects.services import create_project_with_owner
@@ -83,6 +84,7 @@ def test_complete_task_creates_tasklog(user):
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
     assert TaskLog.objects.filter(task=task, status=TaskStatus.COMPLETED).exists()
+    assert AuditLog.objects.filter(action=AuditAction.TASK_COMPLETED).exists()
 
 
 @pytest.mark.django_db
@@ -115,6 +117,7 @@ def test_approve_completion_requires_pm(client, user, other_user):
     assert response.status_code == 403
 
     # PM can approve via the service layer.
-    approve_completion(task_log=log, approved=True)
+    approve_completion(task_log=log, approved=True, verifier_user=user)
     log.refresh_from_db()
     assert log.approved is True
+    assert AuditLog.objects.filter(action=AuditAction.TASK_APPROVED).exists()

@@ -20,6 +20,7 @@ from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.http import require_POST
 from django.views.generic import FormView, UpdateView
 
+from apps.audit.services import AuditAction, log_action
 from apps.contributions.services import (
     get_user_contribution_counts_by_type,
     get_user_contributions,
@@ -55,6 +56,7 @@ class SignupView(FormView):
 
     def form_valid(self, form: SignupForm) -> HttpResponse:
         user = form.save()
+        log_action(AuditAction.USER_SIGNUP, actor=user, entity=user)
         # Auto-login immediately after signup.
         login(self.request, user, backend="django.contrib.auth.backends.ModelBackend")
         # Best-effort welcome email; don't block signup on delivery errors.
@@ -115,6 +117,7 @@ class PasswordResetRequestView(FormView):
         # matches a user, to avoid account enumeration.
         user = User.objects.filter(email__iexact=email).first()
         if user is not None:
+            log_action(AuditAction.PASSWORD_RESET_REQUESTED, actor=user, entity=user)
             try:
                 send_password_reset_email(user, request=self.request)
             except Exception:  # noqa: BLE001 — swallow to avoid leaking info
@@ -163,6 +166,7 @@ class PasswordResetConfirmView(FormView):
         if not self.valid_link:
             return self.render_to_response(self.get_context_data(form=form))
         user = form.save()
+        log_action(AuditAction.PASSWORD_RESET_COMPLETED, actor=user, entity=user)
         login(self.request, user, backend="django.contrib.auth.backends.ModelBackend")
         messages.success(self.request, "Your password has been reset.")
         return super().form_valid(form)
@@ -193,6 +197,7 @@ class PasswordChangeView(FormView):
 
     def form_valid(self, form: ChangePasswordForm) -> HttpResponse:
         user = form.save()
+        log_action(AuditAction.PASSWORD_CHANGED, actor=user, entity=user)
         # Keep the current session alive after the password hash changes.
         update_session_auth_hash(self.request, user)
         messages.success(self.request, "Password updated.")
@@ -221,5 +226,11 @@ class ProfileView(LoginRequiredMixin, UpdateView):
         return context
 
     def form_valid(self, form: ProfileForm) -> HttpResponse:
+        response = super().form_valid(form)
+        log_action(
+            AuditAction.PROFILE_UPDATED,
+            actor=self.request.user,
+            entity=self.request.user,
+        )
         messages.success(self.request, "Profile updated.")
-        return super().form_valid(form)
+        return response

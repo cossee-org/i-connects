@@ -10,6 +10,7 @@ import secrets
 
 from django.db import transaction
 
+from apps.audit.services import AuditAction, log_action
 from apps.core.enums import MemberPrivileges
 
 from .emails import send_invitation_email
@@ -32,6 +33,13 @@ def create_project_with_owner(*, user, form_data: dict) -> Project:
         user=user,
         privilege=MemberPrivileges.PROJECT_MANAGER,
     )
+    log_action(
+        AuditAction.PROJECT_CREATED,
+        actor=user,
+        entity=project,
+        project=project,
+        metadata={"name": project.name},
+    )
     return project
 
 
@@ -43,6 +51,7 @@ def create_invitation(
     privilege: str,
     added_by: str,
     roles=None,
+    inviter=None,
 ) -> Invitation:
     """Create an invitation and fire the email."""
     invitation = Invitation.objects.create(
@@ -55,6 +64,13 @@ def create_invitation(
     if roles:
         invitation.roles.set(roles)
     send_invitation_email(invitation)
+    log_action(
+        AuditAction.INVITATION_SENT,
+        actor=inviter,
+        entity=invitation,
+        project=project,
+        metadata={"email": invitation.email},
+    )
     return invitation
 
 
@@ -62,6 +78,7 @@ def create_invitation(
 def accept_invitation(*, invitation: Invitation, user) -> Project:
     """Consume an invitation and attach ``user`` to the project."""
     project = invitation.project
+    invitation_email = invitation.email
 
     # Re-use an existing ProjectMember if the user already has one on this
     # project (e.g. previously soft-deleted), otherwise create a new row.
@@ -90,6 +107,20 @@ def accept_invitation(*, invitation: Invitation, user) -> Project:
     role_ids = list(invitation.roles.values_list("id", flat=True))
     if role_ids:
         member.roles.add(*role_ids)
+
+    log_action(
+        AuditAction.INVITATION_ACCEPTED,
+        actor=user,
+        entity=invitation,
+        project=project,
+        metadata={"email": invitation_email},
+    )
+    log_action(
+        AuditAction.MEMBER_ADDED,
+        actor=user,
+        project=project,
+        metadata={"target_user_id": user.id},
+    )
 
     invitation.delete()
 
@@ -130,5 +161,14 @@ def _notify_pms_of_new_member(*, project: Project, new_user) -> None:
     )
 
 
-def decline_invitation(*, invitation: Invitation) -> None:
+def decline_invitation(*, invitation: Invitation, user=None) -> None:
+    project = invitation.project
+    invitation_email = invitation.email
+    log_action(
+        AuditAction.INVITATION_DECLINED,
+        actor=user,
+        entity=invitation,
+        project=project,
+        metadata={"email": invitation_email},
+    )
     invitation.delete()

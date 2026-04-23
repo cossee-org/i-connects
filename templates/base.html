@@ -65,6 +65,7 @@
           <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-56 border border-brand-light">
             <li><a href="{% url 'accounts:profile' %}">Profile</a></li>
             <li><a href="{% url 'projects:my_invitations' %}">Invitations</a></li>
+            <li><a href="{% url 'audit:my_activity' %}">My activity</a></li>
             <li>
               <form method="post" action="{% url 'accounts:logout' %}" class="p-0 m-0">
                 {% csrf_token %}
