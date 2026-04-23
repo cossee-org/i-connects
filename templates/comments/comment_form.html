@@ -6,6 +6,7 @@
       hx-on::after-request="if(event.detail.successful) this.reset()">
   {% csrf_token %}
   <div class="w-full">
+    <label for="{{ form.content.id_for_label }}" class="sr-only">Comment</label>
     {{ form.content }}
   </div>
   <div class="flex justify-end">

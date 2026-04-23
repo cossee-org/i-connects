@@ -2,7 +2,7 @@
 <div id="task-assignees-{{ task.pk }}" class="flex flex-wrap items-center gap-2">
   {% for m in task.assigned_members.all %}
     <span class="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-base-100 border border-brand-light text-xs text-brand-text">
-      <span class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
+      <span aria-hidden="true" class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
         {{ m|stringformat:"s"|slice:":1"|upper }}
       </span>
       {{ m }}

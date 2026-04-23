@@ -60,8 +60,11 @@
             class="space-y-2"
           >
             {% csrf_token %}
+            <label for="{{ new_form.name.id_for_label }}" class="sr-only">Role name</label>
             {{ new_form.name }}
+            <label for="{{ new_form.description.id_for_label }}" class="sr-only">Role description</label>
             {{ new_form.description }}
+            <label for="{{ new_form.taxonomy.id_for_label }}" class="sr-only">Role taxonomy</label>
             {{ new_form.taxonomy }}
             <button type="submit" class="btn btn-primary btn-sm">Add role</button>
           </form>
@@ -85,8 +88,8 @@
       <table class="table">
         <thead class="bg-brand-lighter text-brand-navy">
           <tr>
-            <th>Member</th>
-            <th>Roles</th>
+            <th scope="col">Member</th>
+            <th scope="col">Roles</th>
           </tr>
         </thead>
         <tbody>

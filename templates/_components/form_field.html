@@ -3,7 +3,7 @@
 <div class="form-control w-full mb-4">
   {% if field.label %}
     <label for="{{ field.id_for_label }}" class="label pb-1">
-      <span class="label-text text-brand-navy font-medium">{{ field.label }}{% if field.field.required %} <span class="text-brand-coral">*</span>{% endif %}</span>
+      <span class="label-text text-brand-navy font-medium">{{ field.label }}{% if field.field.required %} <span class="text-brand-coral" aria-hidden="true">*</span><span class="sr-only"> (required)</span>{% endif %}</span>
     </label>
   {% endif %}
   {{ field }}

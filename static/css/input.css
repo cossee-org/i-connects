@@ -20,6 +20,29 @@
   a:hover {
     color: #f03d30;
   }
+
+  /* WCAG 2.1 AA: a visible focus indicator on every interactive element.
+     DaisyUI + Tailwind Preflight strip the default outline; we restore
+     a coral ring that's visible against both white and lavender surfaces. */
+  :focus-visible {
+    outline: 2px solid #f03d30;
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  /* Keyboard-only "skip to main content" link, per WCAG 2.4.1. */
+  .skip-link {
+    @apply absolute left-2 top-2 -translate-y-20 focus:translate-y-0
+           bg-brand-navy text-white px-4 py-2 rounded-md font-medium
+           z-50 transition-transform;
+  }
+  /* Screen-reader-only helper (in addition to Tailwind's sr-only, which we
+     already use for logo/label text). */
+  .visually-hidden {
+    @apply sr-only;
+  }
 }
 
 @layer components {

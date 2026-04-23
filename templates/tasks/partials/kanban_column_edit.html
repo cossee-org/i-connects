@@ -6,7 +6,8 @@
         hx-target="#column-row-{{ column.pk }}"
         hx-swap="outerHTML">
     {% csrf_token %}
-    <input type="text" name="name" value="{{ column.name }}"
+    <label for="column-name-{{ column.pk }}" class="sr-only">Column name</label>
+    <input type="text" id="column-name-{{ column.pk }}" name="name" value="{{ column.name }}"
            class="input input-bordered input-sm flex-1" required>
     <button type="submit" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Save</button>
     <button type="button" class="btn btn-ghost btn-sm"

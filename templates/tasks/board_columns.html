@@ -28,7 +28,8 @@
           hx-swap="beforeend"
           hx-on::after-request="this.reset()">
       {% csrf_token %}
-      <input type="text" name="name" placeholder="New column name"
+      <label for="new-column-name" class="sr-only">New column name</label>
+      <input type="text" id="new-column-name" name="name" placeholder="New column name"
              class="input input-bordered input-sm flex-1" required>
       <button type="submit" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Add</button>
     </form>

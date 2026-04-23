@@ -13,11 +13,11 @@
       <table class="table">
         <thead class="bg-brand-lighter text-brand-navy">
           <tr>
-            <th>Project</th>
-            <th>From</th>
-            <th>Privilege</th>
-            <th>Received</th>
-            <th class="text-right">Action</th>
+            <th scope="col">Project</th>
+            <th scope="col">From</th>
+            <th scope="col">Privilege</th>
+            <th scope="col">Received</th>
+            <th scope="col" class="text-right">Action</th>
           </tr>
         </thead>
         <tbody>
@@ -34,7 +34,8 @@
               <td class="text-sm text-brand-text/70">{{ inv.created_at|date:"Y-m-d" }}</td>
               <td class="text-right">
                 <a class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                   href="{% url 'projects:accept_or_decline' code=inv.invitation_code %}">
+                   href="{% url 'projects:accept_or_decline' code=inv.invitation_code %}"
+                   aria-label="Review invitation to {{ inv.project.name }}">
                   Review
                 </a>
               </td>

@@ -9,11 +9,14 @@
       class="space-y-2"
     >
       {% csrf_token %}
-      <input type="text" name="{{ form.name.name }}" value="{{ form.name.value|default:'' }}"
+      <label for="role-name-{{ role.pk }}" class="sr-only">Role name</label>
+      <input type="text" id="role-name-{{ role.pk }}" name="{{ form.name.name }}" value="{{ form.name.value|default:'' }}"
              class="input input-sm input-bordered w-full max-w-xs" placeholder="Role name" />
-      <input type="text" name="{{ form.description.name }}" value="{{ form.description.value|default:'' }}"
+      <label for="role-description-{{ role.pk }}" class="sr-only">Role description</label>
+      <input type="text" id="role-description-{{ role.pk }}" name="{{ form.description.name }}" value="{{ form.description.value|default:'' }}"
              class="input input-sm input-bordered w-full" placeholder="Description" />
-      <input type="text" name="{{ form.taxonomy.name }}" value="{{ form.taxonomy.value|default:'' }}"
+      <label for="role-taxonomy-{{ role.pk }}" class="sr-only">Role taxonomy</label>
+      <input type="text" id="role-taxonomy-{{ role.pk }}" name="{{ form.taxonomy.name }}" value="{{ form.taxonomy.value|default:'' }}"
              class="input input-sm input-bordered w-full max-w-xs" placeholder="Taxonomy" />
       <div class="flex gap-2">
         <button type="submit" class="btn btn-primary btn-sm">Save</button>

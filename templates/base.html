@@ -17,13 +17,16 @@
 </head>
 <body class="min-h-screen flex flex-col bg-brand-lighter text-brand-text font-sans">
 
-  <div class="brand-stripe"></div>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
 
-  <header class="navbar bg-brand-light border-b border-brand-light sticky top-0 z-30 px-4 sm:px-6 lg:px-8">
+  <div class="brand-stripe" aria-hidden="true"></div>
+
+  <header class="navbar bg-brand-light border-b border-brand-light sticky top-0 z-30 px-4 sm:px-6 lg:px-8" role="banner">
     <div class="flex-1 flex items-center gap-6 overflow-hidden">
       <a href="{% if user.is_authenticated %}{% url 'projects:my_list' %}{% else %}{% url 'core:home' %}{% endif %}"
-         class="flex items-center gap-2 shrink-0">
-        <img src="{% static 'img/iconnects-logo.png' %}" alt="i&bull;CONNECTS" class="h-9 w-auto" />
+         class="flex items-center gap-2 shrink-0"
+         aria-label="i-CONNECTS home">
+        <img src="{% static 'img/iconnects-logo.png' %}" alt="" class="h-9 w-auto" />
         <span class="sr-only">i&bull;CONNECTS</span>
       </a>
       {% block breadcrumbs %}{% endblock %}
@@ -87,26 +90,31 @@
 
   {% if user.is_authenticated %}
     {% block brand_tabs %}
-      <nav class="bg-brand-lighter border-b border-brand-light px-4 sm:px-6 lg:px-8">
+      <nav class="bg-brand-lighter border-b border-brand-light px-4 sm:px-6 lg:px-8"
+           aria-label="Primary">
         <div class="flex gap-6 overflow-x-auto">
           {% url 'projects:my_list' as my_projects_url %}
           {% url 'projects:list' as browse_url %}
           {% url 'forms_builder:form_list' as forms_url %}
           {% url 'notifications:list' as notifs_url %}
           <a href="{{ my_projects_url }}"
-             class="brand-tab {% if request.path == my_projects_url %}brand-tab-active{% endif %}">
+             class="brand-tab {% if request.path == my_projects_url %}brand-tab-active{% endif %}"
+             {% if request.path == my_projects_url %}aria-current="page"{% endif %}>
             My Projects
           </a>
           <a href="{{ browse_url }}"
-             class="brand-tab {% if request.path == browse_url %}brand-tab-active{% endif %}">
+             class="brand-tab {% if request.path == browse_url %}brand-tab-active{% endif %}"
+             {% if request.path == browse_url %}aria-current="page"{% endif %}>
             Browse
           </a>
           <a href="{{ forms_url }}"
-             class="brand-tab {% if request.path == forms_url %}brand-tab-active{% endif %}">
+             class="brand-tab {% if request.path == forms_url %}brand-tab-active{% endif %}"
+             {% if request.path == forms_url %}aria-current="page"{% endif %}>
             Forms
           </a>
           <a href="{{ notifs_url }}"
-             class="brand-tab {% if request.path == notifs_url %}brand-tab-active{% endif %}">
+             class="brand-tab {% if request.path == notifs_url %}brand-tab-active{% endif %}"
+             {% if request.path == notifs_url %}aria-current="page"{% endif %}>
             Notifications
           </a>
         </div>
@@ -117,11 +125,13 @@
   <div class="flex flex-1">
     {% block sidebar %}{% endblock %}
 
-    <main class="flex-1 min-w-0">
+    <main id="main-content" tabindex="-1" class="flex-1 min-w-0" role="main">
       {% if messages %}
-        <div class="px-4 sm:px-6 lg:px-8 pt-4 space-y-2">
+        <div class="px-4 sm:px-6 lg:px-8 pt-4 space-y-2"
+             role="status" aria-live="polite">
           {% for message in messages %}
-            <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %} shadow-sm">
+            <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %} shadow-sm"
+                 {% if message.tags == 'error' %}role="alert"{% endif %}>
               <span>{{ message }}</span>
             </div>
           {% endfor %}
@@ -135,7 +145,7 @@
     </main>
   </div>
 
-  <footer class="border-t border-brand-light bg-base-100 mt-auto">
+  <footer class="border-t border-brand-light bg-base-100 mt-auto" role="contentinfo">
     <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-brand-text/70">
       <div class="flex items-center gap-2">
         <span class="font-semibold text-brand-navy">i&bull;CONNECTS</span>

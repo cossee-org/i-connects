@@ -15,24 +15,24 @@
       <table class="table">
         <thead class="bg-brand-lighter text-brand-navy">
           <tr>
-            <th>Member</th>
+            <th scope="col">Member</th>
             {% for value, label in matrix.types %}
-              <th class="text-right">{{ label }}</th>
+              <th scope="col" class="text-right">{{ label }}</th>
             {% endfor %}
-            <th class="text-right">Total</th>
+            <th scope="col" class="text-right">Total</th>
           </tr>
         </thead>
         <tbody>
           {% for row in matrix.rows %}
             <tr>
-              <td>
+              <th scope="row" class="font-normal text-left">
                 <div class="flex items-center gap-2">
-                  <span class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                  <span class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0" aria-hidden="true">
                     {{ row.user.name|default:row.user.email|slice:":1"|upper }}
                   </span>
                   <span class="truncate">{{ row.user.name|default:row.user.email }}</span>
                 </div>
-              </td>
+              </th>
               {% for value, label in matrix.types %}
                 <td class="text-right">{{ row.counts|get_item:value|default:0 }}</td>
               {% endfor %}
@@ -57,7 +57,7 @@
       <div class="brand-card divide-y divide-brand-light">
         {% for record in recent %}
           <div class="flex items-start gap-3 px-6 py-3 text-sm text-brand-text">
-            <span class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">
+            <span class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0" aria-hidden="true">
               {{ record.user.name|default:record.user.email|slice:":1"|upper }}
             </span>
             <div class="min-w-0 flex-1">

@@ -17,7 +17,7 @@
       {% if task.deadline %}
         <span class="inline-flex items-center gap-1 text-xs text-brand-text/60">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-               stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
+               stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round"
                   d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
           </svg>
@@ -28,7 +28,7 @@
       {% endif %}
 
       {% if task.assigned_members.all %}
-        <div class="flex -space-x-1.5">
+        <div class="flex -space-x-1.5" aria-hidden="true">
           {% for m in task.assigned_members.all|slice:":4" %}
             <div class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold ring-1 ring-white"
                  title="{{ m }}">

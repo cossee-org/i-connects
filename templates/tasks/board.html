@@ -35,10 +35,10 @@
   {% endif %}
 
   {# Task create/edit modal #}
-  <dialog id="task-modal" class="modal">
+  <dialog id="task-modal" class="modal" aria-label="Task editor">
     <div class="modal-box max-w-2xl bg-base-100 border border-brand-light/60">
       <form method="dialog">
-        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">&times;</button>
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close task editor">&times;</button>
       </form>
       <div id="task-modal-body"><!-- filled by HTMX --></div>
     </div>

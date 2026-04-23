@@ -4,12 +4,12 @@
   <td>
     <div class="flex items-center gap-2">
       {% if row.user %}
-        <span class="w-8 h-8 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">
+        <span aria-hidden="true" class="w-8 h-8 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">
           {{ row.user.name|default:row.user.email|slice:":1"|upper }}
         </span>
         <span class="text-brand-text font-medium">{{ row.user.name|default:row.user.email }}</span>
       {% else %}
-        <span class="w-8 h-8 rounded-full bg-brand-light text-brand-navy flex items-center justify-center text-xs font-semibold shrink-0">
+        <span aria-hidden="true" class="w-8 h-8 rounded-full bg-brand-light text-brand-navy flex items-center justify-center text-xs font-semibold shrink-0">
           {{ row.member.name|default:"?"|slice:":1"|upper }}
         </span>
         <span class="text-brand-text/60">{{ row.member.name|default:"Unnamed" }}</span>

@@ -12,7 +12,7 @@
 
   <div class="brand-card p-6">
     <div class="flex items-center gap-4 mb-6">
-      <div class="w-14 h-14 rounded-full bg-brand-navy text-white flex items-center justify-center text-xl font-semibold shrink-0">
+      <div class="w-14 h-14 rounded-full bg-brand-navy text-white flex items-center justify-center text-xl font-semibold shrink-0" aria-hidden="true">
         {{ user.name|default:user.email|slice:":1"|upper }}
       </div>
       <div class="min-w-0">
@@ -92,7 +92,7 @@
         <ul class="divide-y divide-brand-light">
           {% for rec in recent_contributions %}
             <li class="py-3 flex items-start gap-3">
-              <span class="mt-1.5 w-2 h-2 rounded-full bg-brand-coral shrink-0"></span>
+              <span class="mt-1.5 w-2 h-2 rounded-full bg-brand-coral shrink-0" aria-hidden="true"></span>
               <div class="min-w-0">
                 <div>
                   <a href="{% url 'projects:detail' pk=rec.project_id %}" class="text-brand-navy font-medium hover:text-brand-coral">{{ rec.project.name }}</a>
