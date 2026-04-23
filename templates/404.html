@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Page not found &mdash; i&bull;CONNECTS{% endblock %}
+{% block brand_tabs %}{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto text-center py-12">
+  <div class="mx-auto w-14 h-14 rounded-full bg-brand-coral/10 flex items-center justify-center mb-6">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+         stroke-width="1.5" stroke="currentColor" class="w-7 h-7 text-brand-coral" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round"
+            d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+    </svg>
+  </div>
+  <h1 class="text-2xl font-semibold text-brand-navy">Page not found</h1>
+  <p class="mt-2 text-sm text-brand-text/80">
+    We couldn't find the page you were looking for. It may have moved, been
+    deleted, or the link you followed might be broken.
+  </p>
+  <div class="mt-6 flex gap-3 justify-center">
+    {% if user.is_authenticated %}
+      <a href="{% url 'projects:my_list' %}"
+         class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0 btn-sm">
+        Back to my projects
+      </a>
+    {% else %}
+      <a href="{% url 'core:home' %}"
+         class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0 btn-sm">
+        Back to home
+      </a>
+    {% endif %}
+    <a href="{% url 'projects:list' %}" class="btn btn-ghost btn-sm">
+      Browse projects
+    </a>
+  </div>
+</div>
+{% endblock %}
