@@ -73,6 +73,18 @@ user_name, user_email, user_orcid, contribution_type, task, closed_at
 thousands of rows. Designed to be paste-ready into an authorship /
 CRediT statement spreadsheet.
 
+### 7. Role-differentiated dashboard widgets
+The "My Projects" landing page (`/projects/mine/`) now surfaces two
+attention-oriented widgets above the project grid:
+- **My active tasks** — your 5 most-due open assignments across all
+  projects.
+- **Pending your approval** — for project managers only: completion
+  events awaiting your sign-off. Clicking jumps straight to the task
+  detail where you approve or reject.
+
+Widgets only appear when they have content, so users with nothing
+pending see the familiar pure project grid.
+
 ---
 
 ## Golden-path test checklist
@@ -81,6 +93,8 @@ CRediT statement spreadsheet.
    - Visit `/` as a logged-out user — landing page renders.
    - Sign up at `/accounts/signup/` — you're auto-logged in; welcome email in console.
    - Log out via user menu; log back in.
+   - After login, the "My Projects" page now shows **My active tasks** and
+     **Pending your approval** widgets when you have anything in flight.
 2. **Project + tasks**
    - Create a project; add a kanban column.
    - Create a task — note the new "Contribution type" select (Investigation / Data curation / Validation / Writing / Project administration / Other).

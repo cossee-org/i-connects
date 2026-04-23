@@ -1,120 +1,148 @@
-# i-connects Django MVP
+# i-CONNECTS Django
 
-Phase 1 scaffold of the i-connects Django 5.2 rewrite. This phase delivers a
-runnable project skeleton only: one landing page at `/`, a minimal custom
-`User` stub, and all infra wired up (Postgres, Redis, Celery, Tailwind +
-DaisyUI, HTMX, Alpine.js). Models, views, and business logic are introduced
-in later phases.
+A free, scientist-focused collaboration platform for tracking who does what
+in distributed research projects. This repo is the Django/HTMX rewrite of
+the original Blitz.js prototype, built to run on University of Alberta
+infrastructure for the Nakagawa/Lagisz lab.
+
+See [FOR_JIM.md](FOR_JIM.md) for the current status report and golden-path
+test checklist.
+
+---
+
+## Features
+
+- **Projects, tasks, kanban boards** — create, invite, assign, complete,
+  peer-verify, and approve.
+- **ContributionRecord ledger** — immutable, append-only log of who
+  completed what, with CRediT-aligned types. Append-only guards at the
+  model layer (save refuses updates, delete raises).
+- **Audit log** — append-only record of auth, project, member, role, and
+  task lifecycle events. Per-user and per-project activity views plus
+  Django admin read-only surface.
+- **Account lockout** — 10 failed sign-ins in 15 minutes locks the
+  account; one-time email link unlocks. Auth signals ensure every
+  failure is recorded, including ORCID flows.
+- **CSV export of contributions** — streams to a spreadsheet for
+  authorship / CRediT statements.
+- **Role-differentiated dashboard** — "My active tasks" + "Pending your
+  approval" widgets for authenticated users.
+- **Forms builder** — JSON-schema-driven per-project custom forms
+  (jsoneditor).
+- **Notes** — per-project markdown notes (EasyMDE).
+- **Notifications** — HTMX-polled badge + dropdown + list page; email
+  channel wired via Django's `EMAIL_BACKEND`.
+- **Accessibility** — WCAG 2.1 AA baseline (skip-link, focus rings,
+  landmarks, aria-labels on icon buttons, scope attrs on data tables).
 
 ## Stack
 
 - Django 5.2, Django REST Framework
 - HTMX 2.x + Alpine.js 3.x + SortableJS (via CDN)
-- Tailwind CSS 3.x + DaisyUI 4.x (compiled to `static/css/output.css`)
+- Tailwind CSS 3.x + DaisyUI 4.x with the `iconnects` brand theme
 - PostgreSQL 16, Redis 7
-- Celery 5 + `django-celery-beat`
-- `django-allauth` (ORCID OAuth wired in later)
-- `django-crispy-forms` + `crispy-bootstrap5`
+- Celery 5 + django-celery-beat
+- django-allauth (ORCID OAuth — requires external credentials to activate)
 - Python 3.12, gunicorn
 
 ## Run with Docker (recommended)
 
 ```bash
 cp .env.example .env
-docker compose build
-docker compose up
+docker compose up --build
 ```
 
-Then visit <http://localhost:8000/>.
+Visit <http://localhost:8000/>.
 
-The first `docker compose up` will:
-1. Start Postgres and Redis.
-2. Run `python manage.py migrate` inside the `web` container.
-3. Serve gunicorn on port 8000 with `--reload`.
-4. Start `celery` and `celery-beat` workers.
-
-To create a superuser:
+Create a superuser:
 ```bash
 docker compose exec web python manage.py createsuperuser
 ```
 
 ## Run locally without Docker
 
-Prerequisites: Python 3.12, Node 20+, a running Postgres 16, a running Redis 7.
+Prerequisites: Python 3.12, Node 20+, Postgres 16, Redis 7.
 
 ```bash
-# 1. Python env
+# Python env
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# 2. Environment
+# Environment
 cp .env.example .env
-# Edit .env: change DATABASE_URL and REDIS_URL hostnames from "db"/"redis"
-# to "localhost".
+# Edit .env — change DATABASE_URL and REDIS_URL hosts from "db"/"redis" to "localhost".
 
-# 3. Tailwind CSS
+# Tailwind
 npm install
-npm run build:css        # one-off
-# or: npm run watch:css  # rebuild on change
+npm run build:css          # one-off
+# or: npm run watch:css    # live rebuild
 
-# 4. Django
+# Django
 python manage.py migrate
 python manage.py runserver
 ```
 
-Then visit <http://localhost:8000/>.
-
-In a separate shell, start Celery if you need it:
+In a second shell if Celery is needed:
 ```bash
 celery -A config worker -l info
 celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
 ```
 
+## Tests
+
+```bash
+pytest -q
+```
+
+67+ tests covering auth flows, the task lifecycle, the contribution
+ledger (with immutability guards), the audit log, account lockout, and
+CSV export.
+
 ## Project layout
 
 ```
 iconnects-django/
-  config/              Django settings, URL, WSGI/ASGI, Celery
-    settings/
-      base.py          Common settings
-      dev.py           DEBUG=True, console email
-      prod.py          DEBUG=False, whitenoise, SECRET_KEY from env
-  apps/                All Django apps, namespaced as `apps.<name>`
-    accounts/          Custom User stub (Phase 1 placeholder)
-    core/              Landing page at `/`
-    projects/ tasks/ roles/ comments/ notifications/
-    notes/ forms_builder/
-  templates/           Project-level templates (base.html, core/home.html)
+  config/
+    settings/{base,dev,prod,test}.py
+    urls.py / celery.py / wsgi.py
+  apps/
+    accounts/       Custom User, auth views, lockout, email helpers
+    core/           Public landing page
+    projects/       Project, ProjectMember, Invitation, ProjectPrivilege
+    tasks/          Task, KanbanBoard, Milestone, TaskLog
+    roles/          Role definitions and member-role assignments
+    comments/       Comment threads on TaskLogs
+    notifications/  In-app notification centre
+    notes/          Markdown notes per project
+    forms_builder/  Dynamic JSON-schema forms
+    contributions/  Immutable ContributionRecord ledger + CSV export
+    audit/          Immutable AuditLog with viewer
+  templates/
+    base.html
+    _components/    page_header, empty_state, form_field, status_badge
+    <per-app templates>
   static/
-    css/input.css      Tailwind directives (source)
-    css/output.css     Compiled CSS (checked-in placeholder)
-    js/                Empty, populated in later phases
-  cron/                Empty, populated in Phase 4 (Celery tasks)
-  tailwind.config.js   Tailwind + DaisyUI config
-  postcss.config.js
-  package.json         Tailwind + DaisyUI only
-  Dockerfile           Two-stage: Node (CSS build) -> Python 3.12 runtime
-  docker-compose.yml   web, db, redis, celery, celery-beat
-  requirements.txt
-  .env.example
-  manage.py
+    css/input.css / output.css
+    img/iconnects-logo.{png,jpg}
+  STYLE_GUIDE.md    brand tokens, components, dos/don'ts
+  AUDIT_GUIDE.md    audit action enum + wire-up conventions
+  A11Y_GUIDE.md     the 10-check WCAG 2.1 AA protocol
+  FOR_JIM.md        current status report + golden-path test checklist
 ```
 
-## Verification
+## Open dependencies blocking production
 
-```bash
-python manage.py check
-python manage.py makemigrations
-```
+- **ORCID OAuth credentials** — routes and provider are wired;
+  provisioning a `SocialApp` row with UA-issued client id/secret turns
+  the flow on. No code change needed.
+- **UA server access** — Docker boots locally; production needs a
+  subdomain, TLS, and backup policy from UA IT.
+- **Designer confirmation of the accent coral hex** — currently
+  `#f03d30` (resolved from the logo). A different hex is a one-line
+  change in `tailwind.config.js` + `npm run build:css`.
 
-Both commands should complete without errors. `makemigrations` creates the
-initial `accounts` migration for the custom `User` model.
+---
 
-## What's next
-
-- Phase 2: flesh out `accounts.User`, add ORCID via allauth.
-- Phase 3A-E: data models + views for projects, tasks, roles, comments,
-  notifications, notes, forms_builder.
-- Phase 4: Celery task definitions under `cron/` (email digests, overdue
-  reminders).
+Ultra Plan design document is upstream; this implementation follows its
+§1–§15 scope for v1 with explicit deferrals for v2 features.
