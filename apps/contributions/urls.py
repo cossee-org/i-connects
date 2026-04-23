@@ -14,4 +14,14 @@ urlpatterns = [
         views.ProjectContributionsView.as_view(),
         name="project_contributions",
     ),
+    path(
+        "projects/<int:project_pk>/contributions.csv",
+        views.ProjectContributionsCSVView.as_view(),
+        name="project_contributions_csv",
+    ),
+    path(
+        "my/contributions.csv",
+        views.MyContributionsCSVView.as_view(),
+        name="my_contributions_csv",
+    ),
 ]

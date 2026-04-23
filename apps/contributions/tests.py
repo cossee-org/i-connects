@@ -208,3 +208,66 @@ def test_get_user_contributions_scoped_to_project(user):
 
     assert get_user_contributions(user).count() == 2
     assert get_user_contributions(user, project=project_a).count() == 1
+
+
+# ---------------------------------------------------------------------------
+# CSV export
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_my_contributions_csv_returns_rows(client, user):
+    project, col, pm_member = _make_project(user)
+    task = _make_task(
+        project, col, pm_member,
+        assignees=[pm_member],
+        ctype=ContributionType.WRITING,
+    )
+    log = complete_task(task=task, completed_by=pm_member)
+    approve_completion(task_log=log, approved=True, verifier_user=user)
+
+    client.force_login(user)
+    resp = client.get("/my/contributions.csv")
+    assert resp.status_code == 200
+    assert resp["Content-Type"].startswith("text/csv")
+    assert "attachment;" in resp["Content-Disposition"]
+    body = b"".join(resp.streaming_content).decode("utf-8")
+    lines = [line for line in body.splitlines() if line]
+    # header + one data row
+    assert lines[0].split(",")[0] == "project"
+    assert len(lines) == 2
+    assert user.email in lines[1]
+    assert "Writing" in lines[1]
+
+
+@pytest.mark.django_db
+def test_project_contributions_csv_requires_pm(client, user, other_user):
+    """Ordinary members get the matrix page but NOT the raw CSV."""
+    project, col, pm_member = _make_project(user)
+    # Add other_user as a non-PM member.
+    from apps.projects.models import ProjectMember
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    task = _make_task(project, col, pm_member, assignees=[pm_member])
+    log = complete_task(task=task, completed_by=pm_member)
+    approve_completion(task_log=log, approved=True, verifier_user=user)
+
+    # PM can download.
+    client.force_login(user)
+    resp = client.get(f"/projects/{project.pk}/contributions.csv")
+    assert resp.status_code == 200
+
+    # Non-PM cannot.
+    client.force_login(other_user)
+    resp = client.get(f"/projects/{project.pk}/contributions.csv")
+    assert resp.status_code == 403
+
+
+@pytest.mark.django_db
+def test_my_contributions_csv_empty_only_header(client, user):
+    client.force_login(user)
+    resp = client.get("/my/contributions.csv")
+    assert resp.status_code == 200
+    body = b"".join(resp.streaming_content).decode("utf-8")
+    lines = [line for line in body.splitlines() if line]
+    assert len(lines) == 1  # header only
