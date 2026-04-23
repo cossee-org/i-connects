@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load contribution_tags %}
 
 {% block title %}Profile &mdash; i&bull;CONNECTS{% endblock %}
 
@@ -67,6 +68,45 @@
       </form>
     </div>
   </div>
+
+  <section class="mt-8">
+    <h2 class="text-lg font-semibold text-brand-navy mb-3">My contributions</h2>
+    <p class="text-sm text-brand-text/70 mb-4">Tasks you've completed across all projects, recorded as they're approved.</p>
+
+    {% if contribution_total == 0 %}
+      {% include "_components/empty_state.html" with title="No contributions yet" body="Complete a task and have it approved — it will appear here." %}
+    {% else %}
+      <div class="brand-card p-6">
+        <div class="flex flex-wrap gap-3">
+          {% for value, label in contribution_types %}
+            <div class="flex-1 min-w-[8rem] bg-brand-lighter rounded-md p-3 text-center">
+              <div class="text-2xl font-semibold text-brand-navy">{{ contribution_counts|get_item:value|default:0 }}</div>
+              <div class="text-xs text-brand-text/70 mt-1">{{ label }}</div>
+            </div>
+          {% endfor %}
+        </div>
+
+        <hr class="my-6 border-brand-light">
+
+        <h3 class="font-semibold text-brand-navy mb-3">Recent</h3>
+        <ul class="divide-y divide-brand-light">
+          {% for rec in recent_contributions %}
+            <li class="py-3 flex items-start gap-3">
+              <span class="mt-1.5 w-2 h-2 rounded-full bg-brand-coral shrink-0"></span>
+              <div class="min-w-0">
+                <div>
+                  <a href="{% url 'projects:detail' pk=rec.project_id %}" class="text-brand-navy font-medium hover:text-brand-coral">{{ rec.project.name }}</a>
+                  · {{ rec.get_contribution_type_display }}
+                </div>
+                <div class="text-sm text-brand-text/80">{{ rec.task.name }}</div>
+                <div class="text-xs text-brand-text/50">Closed {{ rec.closed_at|date:"M j, Y" }}{% if rec.verified_by %} · verified by {{ rec.verified_by.name|default:rec.verified_by.email }}{% endif %}</div>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </section>
 
 </div>
 {% endblock %}

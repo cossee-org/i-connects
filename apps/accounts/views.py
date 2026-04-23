@@ -20,6 +20,12 @@ from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.http import require_POST
 from django.views.generic import FormView, UpdateView
 
+from apps.contributions.services import (
+    get_user_contribution_counts_by_type,
+    get_user_contributions,
+)
+from apps.core.enums import ContributionType
+
 from .emails import send_password_reset_email, send_welcome_email
 from .forms import (
     ChangePasswordForm,
@@ -203,6 +209,16 @@ class ProfileView(LoginRequiredMixin, UpdateView):
 
     def get_object(self, queryset=None):  # noqa: D401
         return self.request.user
+
+    def get_context_data(self, **kwargs) -> dict:
+        context = super().get_context_data(**kwargs)
+        context["contribution_counts"] = get_user_contribution_counts_by_type(
+            self.request.user
+        )
+        context["contribution_types"] = ContributionType.choices
+        context["recent_contributions"] = get_user_contributions(self.request.user)[:10]
+        context["contribution_total"] = sum(context["contribution_counts"].values())
+        return context
 
     def form_valid(self, form: ProfileForm) -> HttpResponse:
         messages.success(self.request, "Profile updated.")

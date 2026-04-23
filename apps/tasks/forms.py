@@ -46,6 +46,7 @@ class TaskForm(forms.ModelForm):
             "assigned_members",
             "start_date",
             "deadline",
+            "contribution_type",
             "auto_assign_new",
             "anonymous",
         ]
@@ -57,6 +58,7 @@ class TaskForm(forms.ModelForm):
             "assigned_members": forms.SelectMultiple(
                 attrs={"class": "select select-bordered w-full h-32"}
             ),
+            "contribution_type": forms.Select(attrs={"class": _daisy_select}),
             "auto_assign_new": forms.Select(attrs={"class": _daisy_select}),
             "anonymous": forms.CheckboxInput(attrs={"class": "checkbox"}),
         }

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% load contribution_tags %}
+
+{% block title %}Contributions &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with eyebrow=project.name title="Contributions" subtitle="Who did what on this project, by CRediT-aligned type." %}
+{% endblock %}
+
+{% block content %}
+  {% if matrix.totals.grand_total == 0 %}
+    {% include "_components/empty_state.html" with title="No contributions yet" body="Contributions appear here when a project manager approves a completed task." %}
+  {% else %}
+    <div class="brand-card overflow-hidden mb-8">
+      <table class="table">
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th>Member</th>
+            {% for value, label in matrix.types %}
+              <th class="text-right">{{ label }}</th>
+            {% endfor %}
+            <th class="text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in matrix.rows %}
+            <tr>
+              <td>
+                <div class="flex items-center gap-2">
+                  <span class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                    {{ row.user.name|default:row.user.email|slice:":1"|upper }}
+                  </span>
+                  <span class="truncate">{{ row.user.name|default:row.user.email }}</span>
+                </div>
+              </td>
+              {% for value, label in matrix.types %}
+                <td class="text-right">{{ row.counts|get_item:value|default:0 }}</td>
+              {% endfor %}
+              <td class="text-right font-semibold text-brand-navy">{{ row.total }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="font-semibold bg-brand-lighter/60 text-brand-navy">
+            <td>Total</td>
+            {% for value, label in matrix.types %}
+              <td class="text-right">{{ matrix.totals|get_item:value|default:0 }}</td>
+            {% endfor %}
+            <td class="text-right">{{ matrix.totals.grand_total }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    {% if recent %}
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">Recent activity</h2>
+      <div class="brand-card divide-y divide-brand-light">
+        {% for record in recent %}
+          <div class="flex items-start gap-3 px-6 py-3 text-sm text-brand-text">
+            <span class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">
+              {{ record.user.name|default:record.user.email|slice:":1"|upper }}
+            </span>
+            <div class="min-w-0 flex-1">
+              <span class="font-medium text-brand-navy">{{ record.user.name|default:record.user.email }}</span>
+              completed
+              <span class="font-medium">{{ record.task.name }}</span>
+              ({{ record.get_contribution_type_display }}){% if record.verified_by %} &mdash; verified by {{ record.verified_by.name|default:record.verified_by.email }}{% endif %}
+              <span class="text-brand-text/60">&middot; {{ record.closed_at|date:"M j, Y" }}</span>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}

@@ -56,3 +56,17 @@ class NoteVisibility(models.TextChoices):
 class UserRole(models.TextChoices):
     USER = "USER", "User"
     ADMIN = "ADMIN", "Admin"
+
+
+class ContributionType(models.TextChoices):
+    """CRediT-aligned contribution types.
+
+    Simplified v1 subset per Ultra Plan §8 (full 15-item CRediT taxonomy is v2).
+    """
+
+    INVESTIGATION = "INVESTIGATION", "Investigation"
+    DATA_CURATION = "DATA_CURATION", "Data curation"
+    VALIDATION = "VALIDATION", "Validation"
+    WRITING = "WRITING", "Writing"
+    PROJECT_ADMINISTRATION = "PROJECT_ADMINISTRATION", "Project administration"
+    OTHER = "OTHER", "Other"

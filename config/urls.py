@@ -20,6 +20,7 @@ urlpatterns = [
     path("", include("apps.notifications.urls")),
     path("", include("apps.notes.urls")),
     path("", include("apps.forms_builder.urls")),
+    path("", include("apps.contributions.urls")),
 ]
 
 if settings.DEBUG:

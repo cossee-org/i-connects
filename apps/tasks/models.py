@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.db import models
 
-from apps.core.enums import AutoAssignNew, CompletedAs, TaskStatus
+from apps.core.enums import AutoAssignNew, CompletedAs, ContributionType, TaskStatus
 
 
 class KanbanBoard(models.Model):
@@ -134,6 +134,16 @@ class Task(models.Model):
         default=AutoAssignNew.NONE,
     )
     anonymous = models.BooleanField(default=False)
+
+    contribution_type = models.CharField(
+        max_length=32,
+        choices=ContributionType.choices,
+        default=ContributionType.OTHER,
+        help_text=(
+            "CRediT-aligned contribution type used when a ContributionRecord "
+            "is created on task approval."
+        ),
+    )
 
     class Meta:
         ordering = ["container_task_order", "id"]

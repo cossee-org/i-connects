@@ -296,7 +296,7 @@ class TaskLogApproveView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             approved = False
         else:
             approved = None
-        approve_completion(task_log=log, approved=approved)
+        approve_completion(task_log=log, approved=approved, verifier_user=request.user)
         return render(
             request,
             "tasks/task_log_item.html",

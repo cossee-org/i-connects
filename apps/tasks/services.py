@@ -142,10 +142,27 @@ def reopen_task(
 
 
 @transaction.atomic
-def approve_completion(*, task_log: TaskLog, approved: bool | None) -> TaskLog:
-    """Set approval state on a TaskLog."""
+def approve_completion(
+    *,
+    task_log: TaskLog,
+    approved: bool | None,
+    verifier_user=None,
+) -> TaskLog:
+    """Set approval state on a TaskLog.
+
+    When ``approved is True`` this is the *closure* event for the task per
+    Ultra Plan §8, and a ``ContributionRecord`` is written for each user
+    behind ``task_log.assigned_to``. The ledger call is idempotent, so
+    toggling approval back and forth will not produce duplicates.
+    """
     task_log.approved = approved
     task_log.save(update_fields=["approved"])
+
+    if approved is True:
+        # Late import to avoid circular imports with apps.contributions.
+        from apps.contributions.services import record_contributions_for_approval
+
+        record_contributions_for_approval(task_log, verifier_user=verifier_user)
 
     _notify_task_approval(task_log=task_log, approved=approved)
 
