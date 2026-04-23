@@ -50,3 +50,12 @@ def _on_user_login_failed(sender, credentials, request=None, **kwargs):
         actor=None,
         metadata={"ip": _ip(request), **safe_credentials},
     )
+    # If this push puts the account over the threshold, lock it.
+    # Late import so the audit app has no hard dependency on accounts.
+    identifier = safe_credentials.get("identifier")
+    if identifier:
+        try:
+            from apps.accounts.lockout import _maybe_trigger_lockout
+        except Exception:  # pragma: no cover — accounts not installed, shouldn't happen
+            return
+        _maybe_trigger_lockout(identifier, request=request)

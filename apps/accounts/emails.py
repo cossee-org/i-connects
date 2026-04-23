@@ -48,6 +48,17 @@ def send_welcome_email(user, *, request=None) -> None:
     _send(subject, text_body, html_body, user.email)
 
 
+def send_lockout_email(user, *, raw_token: str, request=None) -> None:
+    """Send a one-time unlock link to a locked-out account."""
+    path = reverse("accounts:lockout_unlock", kwargs={"token": raw_token})
+    unlock_url = request.build_absolute_uri(path) if request is not None else path
+    ctx = {"user": user, "unlock_url": unlock_url}
+    subject = _render_subject("accounts/emails/lockout_subject.txt", ctx)
+    text_body = render_to_string("accounts/emails/lockout.txt", ctx)
+    html_body = render_to_string("accounts/emails/lockout.html", ctx)
+    _send(subject, text_body, html_body, user.email)
+
+
 def send_password_reset_email(
     user,
     *,

@@ -28,6 +28,7 @@ from apps.contributions.services import (
 from apps.core.enums import ContributionType
 
 from .emails import send_password_reset_email, send_welcome_email
+from .lockout import unlock_with_token
 from .forms import (
     ChangePasswordForm,
     LoginForm,
@@ -179,6 +180,24 @@ class PasswordResetConfirmView(FormView):
 
 def password_reset_done(request: HttpRequest) -> HttpResponse:
     return render(request, "accounts/password_reset_done.html")
+
+
+# ---------------------------------------------------------------------------
+# Lockout unlock (email-link landing)
+# ---------------------------------------------------------------------------
+def lockout_unlock(request: HttpRequest, token: str) -> HttpResponse:
+    """Consume a lockout unlock token and re-enable the account.
+
+    On success the user is NOT auto-logged-in (the lockout was triggered
+    because someone was guessing their password; forcing a fresh sign-in
+    is the safer default).
+    """
+    user = unlock_with_token(token)
+    return render(
+        request,
+        "accounts/lockout_unlock.html",
+        {"user": user, "success": user is not None},
+    )
 
 
 # ---------------------------------------------------------------------------

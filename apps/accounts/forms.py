@@ -100,6 +100,17 @@ class LoginForm(forms.Form):
         email = cleaned.get("email")
         password = cleaned.get("password")
         if email and password:
+            # Short-circuit BEFORE authenticate() so a locked-out account
+            # cannot be distinguished from "invalid credentials" by timing.
+            # Look up the user by email — ``authenticate`` with a locked
+            # account would succeed (is_active is still True) but we want
+            # to refuse before issuing a session.
+            existing = User.objects.filter(email__iexact=email).first()
+            if existing is not None and existing.locked_at is not None:
+                raise ValidationError(
+                    "This account is locked after too many failed sign-in "
+                    "attempts. Check your email for an unlock link."
+                )
             user = authenticate(self.request, username=email, password=password)
             if user is None:
                 raise ValidationError("Invalid email or password.")

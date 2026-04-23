@@ -82,6 +82,11 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Account lockout (Ultra Plan §7): set when the user has exceeded the
+    # failed-login threshold. While non-null, login is rejected until the
+    # user consumes a ``LockoutToken`` via the email-unlock flow.
+    locked_at = models.DateTimeField(null=True, blank=True)
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["name"]
 
@@ -92,6 +97,10 @@ class User(AbstractUser):
 
     def __str__(self) -> str:
         return self.email
+
+    @property
+    def is_locked_out(self) -> bool:
+        return self.locked_at is not None
 
 
 class Session(models.Model):
@@ -143,6 +152,33 @@ class Token(models.Model):
 
     def __str__(self) -> str:
         return f"{self.type} token for {self.sent_to}"
+
+
+class LockoutToken(models.Model):
+    """One-time unlock token mailed to a user whose account got locked.
+
+    Per Ultra Plan §7: after 10 failed login attempts, the account is locked
+    and the user must confirm an email link before they can log in again.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="lockout_tokens")
+    token_hash = models.CharField(max_length=128, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["user"])]
+
+    def __str__(self) -> str:
+        return f"LockoutToken for {self.user_id}"
+
+    @property
+    def is_usable(self) -> bool:
+        from django.utils import timezone
+
+        return self.used_at is None and self.expires_at > timezone.now()
 
 
 class Widget(models.Model):

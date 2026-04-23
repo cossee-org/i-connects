@@ -65,6 +65,10 @@ class AuditAction(models.TextChoices):
     ACCOUNT_SUSPENDED = "admin.account_suspended", "Account suspended"
     ACCOUNT_REACTIVATED = "admin.account_reactivated", "Account reactivated"
 
+    # ---- Automated lockout --------------------------------------------------
+    ACCOUNT_LOCKED_OUT = "security.account_locked_out", "Account locked out (too many failed logins)"
+    ACCOUNT_UNLOCKED = "security.account_unlocked", "Account unlocked (email confirmation)"
+
 
 class AuditLog(models.Model):
     actor = models.ForeignKey(
