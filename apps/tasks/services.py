@@ -180,6 +180,12 @@ def approve_completion(
             project=task_log.task.project,
             metadata={"task_name": task_log.task.name},
         )
+        try:
+            from apps.integrations.discord import announce_task_approved
+
+            announce_task_approved(task_log.task, verifier=verifier_user)
+        except Exception:  # noqa: BLE001 — never let webhook failure break approval
+            pass
     elif approved is False:
         log_action(
             AuditAction.TASK_REJECTED,

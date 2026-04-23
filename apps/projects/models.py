@@ -40,6 +40,13 @@ class Project(models.Model):
     is_public = models.BooleanField(default=True)
     public_summary = models.TextField(null=True, blank=True)
 
+    discord_webhook_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Optional Discord webhook URL. Task approvals will post to this channel.",
+    )
+
     class Meta:
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["status"])]

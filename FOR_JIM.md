@@ -173,6 +173,23 @@ has a permalink at `/projects/<id>/mailing-list/<msg_id>/` that future
 members can read. Recipients can hit reply — the `Reply-To` header is
 the sender's email. Audit-logged as `MAILING_LIST_MESSAGE_SENT`.
 
+### 17. Discord webhook on task approval
+Each project has an optional `discord_webhook_url` field in the project
+settings (PM edits it on the project edit form). When a task completion
+is approved, an embed is POSTed to the Discord channel:
+`{title: "Task approved: <name>", project, type, approved_by}` in
+navy. SSRF-safe: scheme must be https, host must be `discord.com` or
+`discordapp.com`. Failures are swallowed so Discord downtime can never
+block task approval. Webhook URL is never leaked to the API, CSV export,
+or audit-log metadata.
+
+### 18. GitHub issue / PR linking on tasks
+Task form now has a `github_url` field. When set to a github.com issue
+or pull-request URL, the task detail sidebar shows a clickable
+`owner/repo#N` link with the GitHub octocat icon and an "issue" /
+"pull request" label. Kanban cards also get a small GitHub icon when a
+link is set. Pattern-based (regex); no API calls, no rate-limit risk.
+
 ---
 
 ## Golden-path test checklist
@@ -220,8 +237,9 @@ the sender's email. Audit-logged as `MAILING_LIST_MESSAGE_SENT`.
 - Auto-formatted prose CRediT author contribution statement generator.
 - Cross-project merit profile / public contributor directory.
 - Trust / reliability scoring (v3 — requires careful anti-gaming design).
-- Discord / Slack webhook outbound notifications.
-- GitHub / OSF / LimeSurvey integrations.
+- Slack webhook (Discord is shipped; Slack is the same pattern).
+- OSF / LimeSurvey integrations.
+- Bidirectional GitHub sync (currently links are display-only, no API calls).
 
 ### Open design question
 - **Accent coral `#f03d30`** is the working value (resolved from the logo since the brand sheet's `#231f20` is clearly a typo). If your designer confirms a different exact hex, it's a one-line change in `tailwind.config.js`.

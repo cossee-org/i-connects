@@ -145,6 +145,13 @@ class Task(models.Model):
         ),
     )
 
+    github_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Optional link to a GitHub issue or pull request for this task.",
+    )
+
     class Meta:
         ordering = ["container_task_order", "id"]
         indexes = [

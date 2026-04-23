@@ -108,6 +108,27 @@ def test_invitation_code_is_unique_urlsafe(user):
 
 
 @pytest.mark.django_db
+def test_project_form_saves_discord_webhook_url(client_logged_in, user):
+    webhook = "https://discord.com/api/webhooks/1/abc"
+    response = client_logged_in.post(
+        reverse("projects:create"),
+        {
+            "name": "Webhook Project",
+            "description": "",
+            "abstract": "",
+            "keywords": "",
+            "status": ProjectStatus.PLANNING,
+            "is_public": "on",
+            "public_summary": "",
+            "discord_webhook_url": webhook,
+        },
+    )
+    assert response.status_code in (301, 302)
+    project = Project.objects.get(name="Webhook Project")
+    assert project.discord_webhook_url == webhook
+
+
+@pytest.mark.django_db
 def test_accept_invitation_adds_member(client, user, other_user):
     project = create_project_with_owner(
         user=user,

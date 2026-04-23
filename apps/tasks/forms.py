@@ -49,6 +49,7 @@ class TaskForm(forms.ModelForm):
             "contribution_type",
             "auto_assign_new",
             "anonymous",
+            "github_url",
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": _daisy_input}),
@@ -61,6 +62,10 @@ class TaskForm(forms.ModelForm):
             "contribution_type": forms.Select(attrs={"class": _daisy_select}),
             "auto_assign_new": forms.Select(attrs={"class": _daisy_select}),
             "anonymous": forms.CheckboxInput(attrs={"class": "checkbox"}),
+            "github_url": forms.URLInput(attrs={
+                "class": "input input-bordered w-full",
+                "placeholder": "https://github.com/org/repo/issues/123",
+            }),
         }
 
     def __init__(self, *args, project=None, **kwargs):
