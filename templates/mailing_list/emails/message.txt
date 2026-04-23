@@ -1,0 +1,13 @@
+Hi {{ recipient.name|default:recipient.email }},
+
+{{ sender.name|default:sender.email }} sent a message to members of {{ project.name }}.
+
+--- {{ subject }} ---
+
+{{ body }}
+
+---
+
+Reply directly to {{ sender.email }} to respond.
+
+— i-connects

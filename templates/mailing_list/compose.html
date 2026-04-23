@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Compose message &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block breadcrumbs %}
+  <nav aria-label="Breadcrumb" class="min-w-0 hidden md:block">
+    <ol class="flex items-center gap-2 text-sm text-brand-navy/80 overflow-hidden whitespace-nowrap">
+      <li class="truncate min-w-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
+      <li aria-hidden="true" class="text-brand-navy/40">/</li>
+      <li class="truncate min-w-0"><a href="{% url 'projects:detail' pk=project.pk %}" class="hover:text-brand-coral truncate">{{ project.name }}</a></li>
+      <li aria-hidden="true" class="text-brand-navy/40">/</li>
+      <li class="truncate min-w-0"><a href="{% url 'mailing_list:archive' project_pk=project.pk %}" class="hover:text-brand-coral">Mailing list</a></li>
+      <li aria-hidden="true" class="text-brand-navy/40">/</li>
+      <li class="truncate min-w-0"><span aria-current="page" class="font-medium text-brand-navy">Compose</span></li>
+    </ol>
+  </nav>
+{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with eyebrow=project.name title="Compose message" subtitle="Send an announcement by email to every member of this project." %}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+  <div class="brand-panel p-4 mb-4 text-sm text-brand-text">
+    This message will be emailed to all <strong>{{ recipient_count }}</strong> other member{{ recipient_count|pluralize }} of
+    <strong>{{ project.name }}</strong> and archived so future members can read it.
+  </div>
+
+  <div class="brand-card p-6">
+    <form method="post">
+      {% csrf_token %}
+      {% include "_components/form_field.html" with field=form.subject %}
+      {% include "_components/form_field.html" with field=form.body %}
+      <div class="flex gap-2 justify-end mt-6">
+        <a href="{% url 'mailing_list:archive' project_pk=project.pk %}" class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+          Send message
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

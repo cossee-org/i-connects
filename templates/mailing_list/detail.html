@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}{{ ml_message.subject }} &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block breadcrumbs %}
+  <nav aria-label="Breadcrumb" class="min-w-0 hidden md:block">
+    <ol class="flex items-center gap-2 text-sm text-brand-navy/80 overflow-hidden whitespace-nowrap">
+      <li class="truncate min-w-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
+      <li aria-hidden="true" class="text-brand-navy/40">/</li>
+      <li class="truncate min-w-0"><a href="{% url 'projects:detail' pk=project.pk %}" class="hover:text-brand-coral truncate">{{ project.name }}</a></li>
+      <li aria-hidden="true" class="text-brand-navy/40">/</li>
+      <li class="truncate min-w-0"><a href="{% url 'mailing_list:archive' project_pk=project.pk %}" class="hover:text-brand-coral">Mailing list</a></li>
+      <li aria-hidden="true" class="text-brand-navy/40">/</li>
+      <li class="truncate min-w-0"><span aria-current="page" class="font-medium text-brand-navy truncate">{{ ml_message.subject }}</span></li>
+    </ol>
+  </nav>
+{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with eyebrow=project.name title=ml_message.subject %}
+{% endblock %}
+
+{% block content %}
+<div class="brand-card p-6 max-w-3xl">
+  <div class="text-xs text-brand-text/70 mb-4">
+    Sent by
+    <span class="font-medium text-brand-navy">{{ ml_message.sender.name|default:ml_message.sender.email|default:"(deleted user)" }}</span>
+    on {{ ml_message.sent_at|date:"M j, Y H:i" }},
+    to {{ ml_message.recipient_count }} member{{ ml_message.recipient_count|pluralize }}.
+  </div>
+  <div class="whitespace-pre-line text-brand-text leading-relaxed">{{ ml_message.body }}</div>
+  <div class="mt-8 pt-4 border-t border-brand-light/60">
+    <a href="{% url 'mailing_list:archive' project_pk=project.pk %}"
+       class="text-sm text-brand-navy hover:text-brand-coral font-medium">
+      &larr; Back to archive
+    </a>
+  </div>
+</div>
+{% endblock %}

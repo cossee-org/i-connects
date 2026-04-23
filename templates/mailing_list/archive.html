@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Mailing list &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block breadcrumbs %}
+  <nav aria-label="Breadcrumb" class="min-w-0 hidden md:block">
+    <ol class="flex items-center gap-2 text-sm text-brand-navy/80 overflow-hidden whitespace-nowrap">
+      <li class="truncate min-w-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
+      <li aria-hidden="true" class="text-brand-navy/40">/</li>
+      <li class="truncate min-w-0"><a href="{% url 'projects:detail' pk=project.pk %}" class="hover:text-brand-coral truncate">{{ project.name }}</a></li>
+      <li aria-hidden="true" class="text-brand-navy/40">/</li>
+      <li class="truncate min-w-0"><span aria-current="page" class="font-medium text-brand-navy">Mailing list</span></li>
+    </ol>
+  </nav>
+{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div>
+      <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-1">{{ project.name }}</div>
+      <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight">Mailing list</h1>
+      <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">
+        Announcements sent to every project member. New members can read the full history here.
+      </p>
+    </div>
+    {% if is_project_manager %}
+      <div class="shrink-0">
+        <a href="{% url 'mailing_list:compose' project_pk=project.pk %}"
+           class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+          Compose message
+        </a>
+      </div>
+    {% endif %}
+  </header>
+{% endblock %}
+
+{% block content %}
+  {% if messages_page %}
+    <div class="brand-card divide-y divide-brand-light">
+      {% for m in messages_page %}
+        <div class="px-6 py-4">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0 flex-1">
+              <a href="{% url 'mailing_list:detail' project_pk=project.pk pk=m.pk %}"
+                 class="font-semibold text-brand-navy hover:text-brand-coral">
+                {{ m.subject }}
+              </a>
+              <div class="text-xs text-brand-text/70 mt-1">
+                Sent by
+                <span class="font-medium text-brand-navy/80">{{ m.sender.name|default:m.sender.email|default:"(deleted user)" }}</span>
+                on {{ m.sent_at|date:"M j, Y H:i" }}
+                &middot; {{ m.recipient_count }} recipient{{ m.recipient_count|pluralize }}
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    {% if is_paginated %}
+      <div class="join mt-8 flex justify-center">
+        {% if page_obj.has_previous %}
+          <a class="join-item btn btn-sm" href="?page={{ page_obj.previous_page_number }}">Prev</a>
+        {% endif %}
+        <span class="join-item btn btn-sm btn-active">
+          Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </span>
+        {% if page_obj.has_next %}
+          <a class="join-item btn btn-sm" href="?page={{ page_obj.next_page_number }}">Next</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% else %}
+    {% if is_project_manager %}
+      {% url 'mailing_list:compose' project_pk=project.pk as compose_url %}
+      {% include "_components/empty_state.html" with title="No messages yet" body="Send the first mailing-list message to everyone on the project." cta_href=compose_url cta_label="Compose message" %}
+    {% else %}
+      {% include "_components/empty_state.html" with title="No messages yet" body="Announcements from project managers will appear here." %}
+    {% endif %}
+  {% endif %}
+{% endblock %}

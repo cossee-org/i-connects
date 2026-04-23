@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #333; max-width: 640px; margin: 0 auto; padding: 20px;">
+  <p style="margin: 0 0 12px 0;">Hi {{ recipient.name|default:recipient.email }},</p>
+  <p style="margin: 0 0 16px 0;">
+    <strong>{{ sender.name|default:sender.email }}</strong> sent a message to members of
+    <strong>{{ project.name }}</strong>.
+  </p>
+  <h2 style="color: #323895; font-size: 18px; margin: 24px 0 8px 0; padding-bottom: 6px; border-bottom: 1px solid #bdcbe8;">
+    {{ subject }}
+  </h2>
+  <div style="white-space: pre-line; line-height: 1.5; margin: 0 0 24px 0;">{{ body }}</div>
+  <hr style="border: 0; border-top: 1px solid #bdcbe8; margin: 24px 0;" />
+  <p style="margin: 0 0 8px 0; font-size: 13px; color: #555;">
+    Reply directly to
+    <a href="mailto:{{ sender.email }}" style="color: #323895;">{{ sender.email }}</a>
+    to respond.
+  </p>
+  <p style="margin: 0; font-size: 13px; color: #888;">&mdash; i-connects</p>
+</body>
+</html>

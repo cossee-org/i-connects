@@ -32,6 +32,7 @@ urlpatterns = [
     path("", include("apps.forms_builder.urls")),
     path("", include("apps.contributions.urls")),
     path("", include("apps.audit.urls")),
+    path("", include("apps.mailing_list.urls")),
 ]
 
 if settings.DEBUG:

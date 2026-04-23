@@ -165,6 +165,14 @@ the whole import runs in one transaction. Each imported task is
 audit-logged. "Import CSV" button added to the kanban board toolbar
 for PMs.
 
+### 16. Per-project mailing list + archive
+PMs can compose an announcement at `/projects/<id>/mailing-list/compose/`
+that emails every project member (excluding the sender). Each send is
+archived at `/projects/<id>/mailing-list/` (paginated) and each message
+has a permalink at `/projects/<id>/mailing-list/<msg_id>/` that future
+members can read. Recipients can hit reply — the `Reply-To` header is
+the sender's email. Audit-logged as `MAILING_LIST_MESSAGE_SENT`.
+
 ---
 
 ## Golden-path test checklist
@@ -207,12 +215,13 @@ for PMs.
 1. **ORCID OAuth** — routes exist, but login 500s without an ORCID client id/secret and a `SocialApp` DB row. Needs the UA to obtain ORCID developer credentials.
 2. **Production deployment** — local Docker boots clean, but no staging server exists yet. Needs UA IT to provision a subdomain, TLS cert, and backup policy.
 
-### v2 work explicitly deferred in the Ultra Plan
+### v2 / v3 work still deferred
 - XLSX / ZIP export (CSV is shipped; XLSX adds `openpyxl` dep for little gain).
 - Auto-formatted prose CRediT author contribution statement generator.
 - Cross-project merit profile / public contributor directory.
-- Trust/reliability scoring (v3; requires careful anti-gaming design).
-- Mailing list archive per project.
+- Trust / reliability scoring (v3 — requires careful anti-gaming design).
+- Discord / Slack webhook outbound notifications.
+- GitHub / OSF / LimeSurvey integrations.
 
 ### Open design question
 - **Accent coral `#f03d30`** is the working value (resolved from the logo since the brand sheet's `#231f20` is clearly a typo). If your designer confirms a different exact hex, it's a one-line change in `tailwind.config.js`.

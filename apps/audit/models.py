@@ -40,6 +40,10 @@ class AuditAction(models.TextChoices):
     PROJECT_CREATED = "project.created", "Project created"
     PROJECT_UPDATED = "project.updated", "Project updated"
     PROJECT_DELETED = "project.deleted", "Project deleted"
+    MAILING_LIST_MESSAGE_SENT = (
+        "project.mailing_list_message_sent",
+        "Mailing-list message sent",
+    )
 
     # ---- Membership / invitations ------------------------------------------
     INVITATION_SENT = "invitation.sent", "Invitation sent"
