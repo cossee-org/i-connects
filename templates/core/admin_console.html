@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Admin console &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block brand_tabs %}{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with eyebrow="Platform admin" title="Console" subtitle="System health and recent governance events." %}
+{% endblock %}
+
+{% block content %}
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    <div class="brand-card p-4">
+      <div class="text-xs text-brand-text/60 uppercase tracking-wider">Users</div>
+      <div class="text-3xl font-semibold text-brand-navy mt-1">{{ user_count }}</div>
+      <div class="text-xs text-brand-text/50 mt-1">{{ new_user_count_7d }} new this week</div>
+    </div>
+
+    <div class="brand-card p-4">
+      <div class="text-xs text-brand-text/60 uppercase tracking-wider">Active users</div>
+      <div class="text-3xl font-semibold text-brand-navy mt-1">{{ active_user_count }}</div>
+      <div class="text-xs text-brand-text/50 mt-1">is_active = true</div>
+    </div>
+
+    <div class="brand-card p-4">
+      <div class="text-xs text-brand-text/60 uppercase tracking-wider">Locked accounts</div>
+      <div class="text-3xl font-semibold {% if locked_user_count > 0 %}text-brand-coral{% else %}text-brand-navy{% endif %} mt-1">
+        {{ locked_user_count }}
+      </div>
+      <div class="text-xs text-brand-text/50 mt-1">Awaiting email unlock</div>
+    </div>
+
+    <div class="brand-card p-4">
+      <div class="text-xs text-brand-text/60 uppercase tracking-wider">Projects</div>
+      <div class="text-3xl font-semibold text-brand-navy mt-1">{{ project_count }}</div>
+      <div class="text-xs text-brand-text/50 mt-1">All statuses</div>
+    </div>
+
+    <div class="brand-card p-4">
+      <div class="text-xs text-brand-text/60 uppercase tracking-wider">Public projects</div>
+      <div class="text-3xl font-semibold text-brand-navy mt-1">{{ public_project_count }}</div>
+      <div class="text-xs text-brand-text/50 mt-1">Visible in Browse</div>
+    </div>
+
+    <div class="brand-card p-4">
+      <div class="text-xs text-brand-text/60 uppercase tracking-wider">Tasks (open)</div>
+      <div class="text-3xl font-semibold text-brand-navy mt-1">{{ open_task_count }}</div>
+      <div class="text-xs text-brand-text/50 mt-1">{{ task_count }} total</div>
+    </div>
+
+    <div class="brand-card p-4">
+      <div class="text-xs text-brand-text/60 uppercase tracking-wider">Overdue tasks</div>
+      <div class="text-3xl font-semibold {% if overdue_task_count > 0 %}text-brand-coral{% else %}text-brand-navy{% endif %} mt-1">
+        {{ overdue_task_count }}
+      </div>
+      <div class="text-xs text-brand-text/50 mt-1">Deadline passed</div>
+    </div>
+
+    <div class="brand-card p-4">
+      <div class="text-xs text-brand-text/60 uppercase tracking-wider">Contributions recorded</div>
+      <div class="text-3xl font-semibold text-brand-navy mt-1">{{ contribution_count }}</div>
+      <div class="text-xs text-brand-text/50 mt-1">Append-only ledger</div>
+    </div>
+  </div>
+
+  <div class="grid md:grid-cols-3 gap-5">
+    <div class="brand-card p-5">
+      <h2 class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">Recent signups</h2>
+      {% if recent_signups %}
+        <ul class="divide-y divide-brand-light">
+          {% for event in recent_signups %}
+            <li class="py-2">
+              <div class="text-sm text-brand-navy font-medium">
+                {{ event.actor.name|default:event.actor.email|default:"&mdash;" }}
+              </div>
+              <div class="text-xs text-brand-text/60">{{ event.timestamp }}</div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="italic text-sm text-brand-text/50">No signups recorded yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="brand-card p-5">
+      <h2 class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">Recent failed logins</h2>
+      {% if recent_failed_logins %}
+        <ul class="divide-y divide-brand-light">
+          {% for event in recent_failed_logins %}
+            <li class="py-2">
+              <div class="text-sm text-brand-navy font-medium">
+                {% if event.metadata.identifier %}
+                  {{ event.metadata.identifier }}
+                {% elif event.actor %}
+                  {{ event.actor.name|default:event.actor.email }}
+                {% else %}
+                  &mdash;
+                {% endif %}
+              </div>
+              <div class="text-xs text-brand-text/60">{{ event.timestamp }}</div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="italic text-sm text-brand-text/50">No failed logins in the window.</p>
+      {% endif %}
+    </div>
+
+    <div class="brand-card p-5">
+      <h2 class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">Recent lockouts</h2>
+      {% if recent_lockouts %}
+        <ul class="divide-y divide-brand-light">
+          {% for event in recent_lockouts %}
+            <li class="py-2">
+              <div class="text-sm text-brand-navy font-medium">
+                {{ event.actor.name|default:event.actor.email|default:"&mdash;" }}
+              </div>
+              <div class="text-xs text-brand-text/60">{{ event.timestamp }}</div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="italic text-sm text-brand-text/50">No lockouts recorded.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mt-6 text-sm">
+    <a href="/admin/audit/auditlog/" class="text-brand-navy hover:text-brand-coral font-medium">
+      View full audit log &rarr;
+    </a>
+  </div>
+{% endblock %}

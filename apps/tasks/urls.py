@@ -43,6 +43,11 @@ urlpatterns = [
         name="move",
     ),
     path(
+        "tasks/<int:pk>/change-column/",
+        views.TaskChangeColumnView.as_view(),
+        name="change_column",
+    ),
+    path(
         "tasks/<int:pk>/complete/",
         views.TaskCompleteView.as_view(),
         name="complete",

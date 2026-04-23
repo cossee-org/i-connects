@@ -69,6 +69,7 @@
             <li><a href="{% url 'accounts:profile' %}">Profile</a></li>
             <li><a href="{% url 'projects:my_invitations' %}">Invitations</a></li>
             <li><a href="{% url 'audit:my_activity' %}">My activity</a></li>
+            {% if user.role == 'ADMIN' %}<li><a href="{% url 'core:admin_console' %}">Admin console</a></li>{% endif %}
             <li>
               <form method="post" action="{% url 'accounts:logout' %}" class="p-0 m-0">
                 {% csrf_token %}

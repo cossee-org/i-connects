@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load contribution_tags %}
+
+{% block title %}{{ profile_user.name|default:profile_user.email }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block brand_tabs %}{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with eyebrow="Researcher profile" title=profile_user.name|default:profile_user.email subtitle=profile_user.institution|default:"" %}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+
+  {# ---- Identity card ------------------------------------------------- #}
+  <div class="brand-card p-6">
+    <div class="flex items-start gap-4">
+      <div class="w-20 h-20 rounded-full bg-brand-navy text-white flex items-center justify-center text-2xl font-semibold shrink-0" aria-hidden="true">
+        {{ profile_user.name|default:profile_user.email|slice:":1"|upper }}
+      </div>
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 flex-wrap">
+          <h2 class="text-xl font-semibold text-brand-navy truncate">
+            {{ profile_user.name|default:profile_user.email }}
+          </h2>
+          {% if is_self %}
+            <span class="inline-flex items-center rounded-full bg-brand-lighter text-brand-navy text-xs font-semibold px-2 py-0.5">You</span>
+          {% endif %}
+        </div>
+        {% if profile_user.institution %}
+          <div class="text-sm text-brand-text/80 mt-1">{{ profile_user.institution }}</div>
+        {% endif %}
+        {% if profile_user.orcid %}
+          <div class="mt-2">
+            <a href="https://orcid.org/{{ profile_user.orcid }}"
+               target="_blank"
+               rel="noopener"
+               class="inline-flex items-center gap-1.5 text-sm text-brand-navy hover:text-brand-coral">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" class="w-4 h-4" aria-hidden="true">
+                <circle cx="128" cy="128" r="128" fill="#A6CE39"/>
+                <path fill="#FFFFFF" d="M86.3 186.2H70.9V79.1h15.4v107.1zM108.9 79.1h41.6c39.6 0 57 28.3 57 53.6 0 27.5-21.5 53.6-56.8 53.6h-41.8V79.1zm15.4 93.3h24.5c34.9 0 42.9-26.5 42.9-39.7 0-21.5-13.7-39.7-43.7-39.7h-23.7v79.4zM88.7 56.8c0 5.5-4.5 10.1-10.1 10.1s-10.1-4.6-10.1-10.1c0-5.6 4.5-10.1 10.1-10.1s10.1 4.6 10.1 10.1z"/>
+              </svg>
+              <span>{{ profile_user.orcid }}</span>
+            </a>
+          </div>
+        {% endif %}
+        {% if is_self %}
+          <div class="text-sm text-brand-text/70 mt-2">{{ profile_user.email }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ---- Contribution summary + recent -------------------------------- #}
+  {% if contribution_total == 0 %}
+    {% include "_components/empty_state.html" with title="No contributions yet" body="This researcher doesn't have any recorded contributions yet." %}
+  {% else %}
+    <div class="brand-card p-6">
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">Contributions</h2>
+      <div class="flex flex-wrap gap-3">
+        {% for value, label in contribution_types %}
+          <div class="flex-1 min-w-[8rem] bg-brand-lighter rounded-md p-3 text-center">
+            <div class="text-2xl font-semibold text-brand-navy">{{ contribution_counts|get_item:value|default:0 }}</div>
+            <div class="text-xs text-brand-text/70 mt-1">{{ label }}</div>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="mt-4 text-sm text-brand-text/80">Total: {{ contribution_total }}</div>
+    </div>
+
+    <div class="brand-card p-6">
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">Recent contributions</h2>
+      <ul class="divide-y divide-brand-light">
+        {% for rec in recent_contributions %}
+          <li class="py-3">
+            <div>
+              <a href="{% url 'projects:detail' pk=rec.project_id %}" class="text-brand-navy font-medium hover:text-brand-coral">{{ rec.project.name }}</a>
+              &rarr; <span class="text-brand-text">{{ rec.task.name }}</span>
+              <span class="text-brand-text/70">({{ rec.get_contribution_type_display }})</span>
+            </div>
+            <div class="text-xs text-brand-text/60 mt-0.5">
+              {{ rec.closed_at|date:"M j, Y" }}{% if rec.verified_by %} &middot; verified{% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -95,7 +95,7 @@
               {{ record.user.name|default:record.user.email|slice:":1"|upper }}
             </span>
             <div class="min-w-0 flex-1">
-              <span class="font-medium text-brand-navy">{{ record.user.name|default:record.user.email }}</span>
+              <a href="{% url 'public_profile' pk=record.user_id %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ record.user.name|default:record.user.email }}</a>
               completed
               <span class="font-medium">{{ record.task.name }}</span>
               ({{ record.get_contribution_type_display }}){% if record.verified_by %} &mdash; verified by {{ record.verified_by.name|default:record.verified_by.email }}{% endif %}

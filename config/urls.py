@@ -3,10 +3,20 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from apps.accounts.views import PublicProfileView
+
 urlpatterns = [
-    path("admin/", admin.site.urls),
-    # Landing page at /
+    # ``apps.core.urls`` is mounted before Django's admin so the custom
+    # platform-admin console at ``/admin/console/`` wins over ``/admin/*``.
     path("", include("apps.core.urls")),
+    path("admin/", admin.site.urls),
+    # Public researcher profile lives at the top level so the URL stays
+    # ``/people/<id>/`` rather than ``/accounts/people/<id>/``.
+    path(
+        "people/<int:pk>/",
+        PublicProfileView.as_view(),
+        name="public_profile",
+    ),
     # Our accounts URLs take precedence over allauth. Allauth's ORCID OAuth
     # routes (/accounts/orcid/login/, /accounts/orcid/callback/) remain
     # reachable because they don't collide with any path we define.

@@ -106,6 +106,40 @@ attention-oriented widgets above the project grid:
 Widgets only appear when they have content, so users with nothing
 pending see the familiar pure project grid.
 
+### 8. Public researcher profile page (`/people/<id>/`)
+Any signed-in member can view any other researcher's public profile —
+identity, ORCID iD (linked out), institution, and their contribution
+counts by CRediT type + recent contributions. Email is only shown when
+viewing your own profile. Auto-linked from the project contributions
+"Recent activity" list so you can click any name to see the researcher's
+full record.
+
+### 9. Admin console (`/admin/console/`)
+For platform admins (`User.role == ADMIN`) only: an 8-tile dashboard
+of system health (users total / active / locked, projects, tasks
+open / overdue, contributions recorded) plus three activity columns —
+recent signups, recent failed logins, recent lockouts. Links through to
+the Django admin audit-log view for full forensic detail.
+
+### 10. Rate limiting on signup + password reset
+5 submissions per IP per 10 minutes on each of `/accounts/signup/` and
+`/accounts/password/forgot/`. The 6th attempt returns HTTP 429 with a
+"Too many requests" message. Counters use the existing audit log —
+visible in `/my/activity/` for operators investigating abuse. Does NOT
+affect the login flow (which has per-email lockout already).
+
+### 11. Kanban keyboard alternative
+The task detail page now has a "Move to column" select in the sidebar
+under a "Move to column" disclosure. Keyboard users can tab to any task
+card's title link → reach the detail page → change column from the
+dropdown. Closes the last WCAG 2.1 AA gap flagged in the accessibility
+audit.
+
+### 12. GitHub Actions CI + Dependabot
+On every push / PR to `main`: pytest runs with Python 3.12, and
+Tailwind CSS is rebuilt. Dependabot opens weekly PRs for pip, npm,
+and GitHub Actions updates.
+
 ---
 
 ## Golden-path test checklist
@@ -152,9 +186,11 @@ pending see the familiar pure project grid.
 - Full 15-item CRediT taxonomy (we ship the simplified 6-item subset).
 - XLSX / ZIP export (CSV is shipped).
 - Auto-formatted prose CRediT author contribution statement.
-- Cross-project merit profiles / public contributor pages.
+- Cross-project merit profile / public contributor directory.
 - Trust/reliability scoring (v3; requires careful anti-gaming design).
-- Keyboard-only alternative to the kanban drag-drop.
+- Mailing list archive per project.
+- Bulk CSV task import.
+- ICS calendar export.
 
 ### Open design question
 - **Accent coral `#f03d30`** is the working value (resolved from the logo since the brand sheet's `#231f20` is clearly a typo). If your designer confirms a different exact hex, it's a one-line change in `tailwind.config.js`.

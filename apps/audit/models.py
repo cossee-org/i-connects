@@ -26,10 +26,12 @@ from django.db import IntegrityError, models
 class AuditAction(models.TextChoices):
     # ---- Auth ---------------------------------------------------------------
     USER_SIGNUP = "user.signup", "User signed up"
+    SIGNUP_ATTEMPTED = "user.signup_attempted", "Signup attempted"
     USER_LOGIN = "user.login", "User logged in"
     USER_LOGIN_FAILED = "user.login_failed", "Login failed"
     USER_LOGOUT = "user.logout", "User logged out"
     PASSWORD_RESET_REQUESTED = "user.password_reset_requested", "Password reset requested"
+    PASSWORD_RESET_ATTEMPTED = "user.password_reset_attempted", "Password reset attempted"
     PASSWORD_RESET_COMPLETED = "user.password_reset_completed", "Password reset completed"
     PASSWORD_CHANGED = "user.password_changed", "Password changed"
     PROFILE_UPDATED = "user.profile_updated", "Profile updated"

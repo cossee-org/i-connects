@@ -268,6 +268,40 @@ class TaskMoveView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         return HttpResponse(status=204)
 
 
+class TaskChangeColumnView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """Keyboard-accessible alternative to SortableJS drag-drop.
+
+    Accepts a form POST with ``container_id`` and appends the task to the
+    end of the target column. This closes the a11y gap flagged during the
+    WCAG pass: users who can't use a mouse can reach the task detail page
+    (which is just a link) and move the task via the same endpoint the
+    drag-drop uses, without needing pointer coordination.
+    """
+
+    def post(self, request, *args, **kwargs):
+        try:
+            container_id = int(request.POST.get("container_id", ""))
+        except (TypeError, ValueError):
+            return HttpResponseBadRequest("container_id is required")
+
+        # Place at the end of the destination column.
+        try:
+            dest = KanbanBoard.objects.get(
+                pk=container_id, project=self.task.project
+            )
+        except KanbanBoard.DoesNotExist:
+            raise Http404("Destination column not found for this project.")
+
+        end_of_col = (
+            Task.objects.filter(container=dest).aggregate(m=Max("container_task_order"))["m"] or -1
+        ) + 1
+        move_task(self.task, container_id=dest.pk, order=end_of_col)
+        messages.success(request, f"Moved to '{dest.name}'.")
+        return redirect(
+            "tasks:detail", project_pk=self.task.project_id, pk=self.task.pk
+        )
+
+
 class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     def post(self, request, *args, **kwargs):
         if self.project_member is None:

@@ -18,7 +18,7 @@ from django.utils.decorators import method_decorator
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.http import require_POST
-from django.views.generic import FormView, UpdateView
+from django.views.generic import DetailView, FormView, UpdateView
 
 from apps.audit.services import AuditAction, log_action
 from apps.contributions.services import (
@@ -37,6 +37,7 @@ from .forms import (
     SetPasswordForm,
     SignupForm,
 )
+from .throttle import is_throttled, record_attempt
 from .tokens import password_reset_token
 
 User = get_user_model()
@@ -54,6 +55,23 @@ class SignupView(FormView):
         if request.user.is_authenticated:
             return redirect(self.success_url)
         return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        # Record first so the current attempt counts, then check.
+        # ``is_throttled`` uses strict ``>`` so THRESHOLD submissions pass
+        # and the (THRESHOLD+1)-th is rejected.
+        record_attempt(request, AuditAction.SIGNUP_ATTEMPTED)
+        if is_throttled(request, AuditAction.SIGNUP_ATTEMPTED):
+            form = self.get_form()
+            form.add_error(
+                None,
+                "Too many signup attempts from this network. "
+                "Please try again in a few minutes.",
+            )
+            return self.render_to_response(
+                self.get_context_data(form=form), status=429
+            )
+        return super().post(request, *args, **kwargs)
 
     def form_valid(self, form: SignupForm) -> HttpResponse:
         user = form.save()
@@ -111,6 +129,23 @@ class PasswordResetRequestView(FormView):
     template_name = "accounts/password_reset_request.html"
     form_class = PasswordResetRequestForm
     success_url = reverse_lazy("accounts:password_reset_sent")
+
+    def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        # Record first so the current attempt counts, then check.
+        # ``is_throttled`` uses strict ``>`` so THRESHOLD submissions pass
+        # and the (THRESHOLD+1)-th is rejected.
+        record_attempt(request, AuditAction.PASSWORD_RESET_ATTEMPTED)
+        if is_throttled(request, AuditAction.PASSWORD_RESET_ATTEMPTED):
+            form = self.get_form()
+            form.add_error(
+                None,
+                "Too many password reset attempts from this network. "
+                "Please try again in a few minutes.",
+            )
+            return self.render_to_response(
+                self.get_context_data(form=form), status=429
+            )
+        return super().post(request, *args, **kwargs)
 
     def form_valid(self, form: PasswordResetRequestForm) -> HttpResponse:
         email = form.cleaned_data["email"]
@@ -253,3 +288,33 @@ class ProfileView(LoginRequiredMixin, UpdateView):
         )
         messages.success(self.request, "Profile updated.")
         return response
+
+
+# ---------------------------------------------------------------------------
+# Public profile (read-only view of another researcher)
+# ---------------------------------------------------------------------------
+class PublicProfileView(LoginRequiredMixin, DetailView):
+    """Read-only researcher profile at ``/people/<pk>/``.
+
+    Login-gated so contribution data isn't scraped anonymously. A per-user
+    ``is_public_profile`` toggle is v2.
+    """
+
+    model = User
+    pk_url_kwarg = "pk"
+    context_object_name = "profile_user"
+    template_name = "accounts/public_profile.html"
+
+    def get_context_data(self, **kwargs) -> dict:
+        context = super().get_context_data(**kwargs)
+        profile_user = self.object
+        counts = get_user_contribution_counts_by_type(profile_user)
+        context["contribution_counts"] = counts
+        context["contribution_types"] = ContributionType.choices
+        context["contribution_total"] = sum(counts.values())
+        context["recent_contributions"] = get_user_contributions(profile_user)[:15]
+        context["is_self"] = (
+            self.request.user.is_authenticated
+            and self.request.user.pk == profile_user.pk
+        )
+        return context
