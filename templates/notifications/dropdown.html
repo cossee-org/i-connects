@@ -1,43 +1,50 @@
 {% comment %}
-  HTMX partial: the popover contents shown when the user clicks the
-  notification bell in the navbar. Renders the ten most recent
-  notifications plus a "mark all read" action and a link to the
-  full list.
+  HTMX partial: inner content of the navbar notification dropdown panel.
+  Rendered into #notification-dropdown-panel (defined in base.html), so
+  this fragment must NOT re-create the outer dropdown-content wrapper.
 {% endcomment %}
-<div class="card card-compact w-80 bg-base-100 shadow-lg">
-  <div class="card-body p-0">
-    <div class="flex items-center justify-between px-3 py-2 border-b border-base-200">
-      <h3 class="font-semibold">Notifications</h3>
-      {% if unread_count and unread_count > 0 %}
-        <form hx-post="{% url 'notifications:mark_all_read' %}"
-              hx-target="#notification-dropdown"
-              hx-swap="innerHTML">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-xs btn-ghost">Mark all read</button>
-        </form>
-      {% endif %}
-    </div>
+<div class="flex items-center justify-between px-3 py-2 border-b border-brand-light">
+  <h3 class="font-semibold text-brand-navy text-sm">Notifications</h3>
+  {% if unread_count and unread_count > 0 %}
+    <form hx-post="{% url 'notifications:mark_all_read' %}"
+          hx-target="#notification-dropdown-panel"
+          hx-swap="innerHTML">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-ghost btn-xs text-brand-navy">Mark all read</button>
+    </form>
+  {% endif %}
+</div>
 
-    <ul class="max-h-96 overflow-y-auto">
-      {% for notification in notifications %}
-        {% include "notifications/item.html" with notification=notification %}
-      {% empty %}
-        <li class="p-4 text-center text-sm opacity-60">No notifications yet.</li>
-      {% endfor %}
-    </ul>
+<ul class="max-h-96 overflow-y-auto divide-y divide-brand-light">
+  {% for notification in notifications %}
+    <li id="notification-{{ notification.id }}"
+        class="px-3 py-2 hover:bg-brand-lighter/60 transition-colors
+               {% if not notification.read %}bg-brand-lighter/40{% endif %}">
+      <div class="flex items-start gap-2">
+        <span class="inline-block w-2 h-2 rounded-full mt-1.5 shrink-0
+                     {% if not notification.read %}bg-brand-coral{% else %}bg-brand-light{% endif %}"></span>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm text-brand-navy font-medium truncate">{{ notification.message }}</div>
+          <div class="text-xs text-brand-text/50 mt-0.5">{{ notification.created_at|date:"M j, H:i" }}</div>
+        </div>
+      </div>
+    </li>
+  {% empty %}
+    <li class="p-4 text-center text-sm text-brand-text/60">No notifications yet.</li>
+  {% endfor %}
+</ul>
 
-    <div class="px-3 py-2 border-t border-base-200 text-right">
-      <a href="{% url 'notifications:list' %}" class="link link-primary text-sm">
-        View all
-      </a>
-    </div>
-  </div>
+<div class="p-2 border-t border-brand-light text-center">
+  <a href="{% url 'notifications:list' %}"
+     class="text-sm text-brand-navy hover:text-brand-coral font-medium">
+    View all
+  </a>
 </div>
 
 {% if swap_oob_badge %}
   <span id="notification-badge" hx-swap-oob="innerHTML">
     {% if unread_count and unread_count > 0 %}
-      <span class="badge badge-error badge-sm">{{ unread_count }}</span>
+      <span class="badge badge-sm bg-brand-coral border-brand-coral text-white">{{ unread_count }}</span>
     {% endif %}
   </span>
 {% endif %}

@@ -1,28 +1,61 @@
 {% extends "base.html" %}
 
-{% block title %}My projects — i-connects{% endblock %}
+{% block title %}My projects &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with title="My projects" subtitle="Projects you own or belong to." %}
+{% endblock %}
 
 {% block content %}
-<section class="mb-6 flex items-end justify-between gap-4">
-  <div>
-    <h1 class="text-3xl font-bold">My projects</h1>
-    <p class="text-base-content/70">Projects you are a member of.</p>
-  </div>
-  <div class="flex gap-2">
-    <a href="{% url 'projects:list' %}" class="btn btn-ghost btn-sm">Public projects</a>
-    <a href="{% url 'projects:create' %}" class="btn btn-primary btn-sm">New project</a>
-  </div>
-</section>
+<div class="flex flex-wrap items-center justify-end gap-2 mb-5">
+  <a href="{% url 'projects:list' %}" class="btn btn-sm btn-ghost">Browse public</a>
+  <a href="{% url 'projects:my_invitations' %}" class="btn btn-sm btn-ghost">Invitations</a>
+  <a href="{% url 'projects:create' %}"
+     class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+    New project
+  </a>
+</div>
 
 {% if project_rows %}
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
     {% for row in project_rows %}
-      {% include "projects/partials/project_card.html" with project=row.project my_privilege=row.privilege %}
+      <a href="{% url 'projects:detail' pk=row.project.pk %}"
+         class="brand-card p-5 hover:shadow-md transition flex flex-col">
+        <div class="flex items-start justify-between gap-3">
+          <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
+          {% include "_components/status_badge.html" with status=row.project.status %}
+        </div>
+
+        {% if row.privilege %}
+          <div class="mt-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">
+              {{ row.privilege }}
+            </span>
+          </div>
+        {% endif %}
+
+        {% if row.project.abstract %}
+          <p class="text-sm text-brand-text/70 mt-3 line-clamp-2">{{ row.project.abstract }}</p>
+        {% elif row.project.description %}
+          <p class="text-sm text-brand-text/70 mt-3 line-clamp-2">{{ row.project.description }}</p>
+        {% endif %}
+
+        <div class="flex items-center justify-between mt-auto pt-4 text-xs text-brand-text/60">
+          <span class="inline-flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                 stroke-width="1.6" stroke="currentColor" class="w-4 h-4">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+            </svg>
+            {{ row.project.members.count }} member{{ row.project.members.count|pluralize }}
+          </span>
+          <span class="text-brand-text/50">Updated {{ row.project.updated_at|date:"M j" }}</span>
+        </div>
+      </a>
     {% endfor %}
   </div>
 {% else %}
-  <div class="alert">
-    <span>You don't belong to any projects yet. <a class="link" href="{% url 'projects:create' %}">Create one</a>?</span>
-  </div>
+  {% url 'projects:create' as create_url %}
+  {% include "_components/empty_state.html" with title="No projects yet" body="Create your first project or accept an invitation to join one." cta_href=create_url cta_label="Create project" %}
 {% endif %}
 {% endblock %}

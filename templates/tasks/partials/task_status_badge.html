@@ -1,5 +1,1 @@
-{% if task.status == "COMPLETED" %}
-  <span class="badge badge-success badge-sm">Done</span>
-{% else %}
-  <span class="badge badge-ghost badge-sm">Open</span>
-{% endif %}
+{% include "_components/status_badge.html" with status=task.status %}

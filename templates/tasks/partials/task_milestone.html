@@ -1,5 +1,7 @@
 {% if task.milestone %}
-  <span class="badge badge-outline">{{ task.milestone.name }}</span>
+  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-lighter text-brand-navy border border-brand-light">
+    {{ task.milestone.name }}
+  </span>
 {% else %}
-  <span class="text-sm text-base-content/60">No milestone.</span>
+  <span class="text-sm text-brand-text/60">No milestone.</span>
 {% endif %}

@@ -1,21 +1,28 @@
 {# One comment in a thread. #}
 <div id="comment-{{ comment.pk }}"
-     class="chat chat-start"
+     class="flex items-start gap-3"
      hx-post="{% url 'comments:mark_read' pk=comment.pk %}"
      hx-trigger="intersect once"
      hx-swap="none">
-  <div class="chat-header text-xs opacity-70">
-    {{ comment.author }}
-    <time class="ml-1">{{ comment.created_at|date:"M j, Y H:i" }}</time>
+  <div class="w-8 h-8 rounded-full bg-brand-navy text-white flex items-center justify-center text-sm font-semibold shrink-0">
+    {{ comment.author.name|default:comment.author.email|default:comment.author|slice:":1"|upper }}
   </div>
-  <div class="chat-bubble chat-bubble-sm text-sm whitespace-pre-wrap">
-    {{ comment.content }}
-  </div>
-  <div class="chat-footer opacity-60 text-xs">
-    <button class="btn btn-ghost btn-xs text-error"
-            hx-post="{% url 'comments:delete' pk=comment.pk %}"
-            hx-target="#comment-{{ comment.pk }}"
-            hx-swap="outerHTML swap:200ms"
-            hx-confirm="Delete this comment?">Delete</button>
+  <div class="flex-1 min-w-0">
+    <div class="flex items-baseline justify-between gap-2">
+      <div class="min-w-0">
+        <span class="font-medium text-brand-navy text-sm">{{ comment.author }}</span>
+        <time class="text-xs text-brand-text/50 ml-2">{{ comment.created_at|date:"M j, Y H:i" }}</time>
+      </div>
+      {% if user.is_authenticated and comment.author_id == user.id %}
+        <button class="text-xs text-error hover:underline shrink-0"
+                hx-post="{% url 'comments:delete' pk=comment.pk %}"
+                hx-target="#comment-{{ comment.pk }}"
+                hx-swap="outerHTML swap:200ms"
+                hx-confirm="Delete this comment?">Delete</button>
+      {% endif %}
+    </div>
+    <div class="text-sm text-brand-text mt-1 whitespace-pre-line break-words">
+      {{ comment.content }}
+    </div>
   </div>
 </div>

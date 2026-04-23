@@ -1,38 +1,54 @@
 {% extends "base.html" %}
 
-{% block title %}Members — {{ project.name }}{% endblock %}
+{% block title %}Members &mdash; {{ project.name }}{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div>
+      <a href="{% url 'projects:detail' pk=project.pk %}"
+         class="text-sm text-brand-navy/70 hover:text-brand-coral font-medium">
+        &laquo; Back to {{ project.name }}
+      </a>
+      <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight mt-1">Members</h1>
+      <p class="text-sm text-brand-text/70 mt-1">Manage who belongs to this project and what they can do.</p>
+    </div>
+    {% if user_privilege == "PROJECT_MANAGER" %}
+      <a href="{% url 'projects:invite' pk=project.pk %}"
+         class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+        Invite member
+      </a>
+    {% endif %}
+  </header>
+{% endblock %}
 
 {% block content %}
-<section class="mb-6 flex items-end justify-between gap-4">
-  <div>
-    <h1 class="text-2xl font-bold">Members of {{ project.name }}</h1>
-    <a href="{% url 'projects:detail' pk=project.pk %}" class="text-sm link link-hover">
-      « Back to project
-    </a>
+{% if rows %}
+  <div class="brand-card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Privilege</th>
+            <th>Roles</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            {% include "projects/member_row.html" with row=row project=project user_privilege=user_privilege %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
+{% else %}
   {% if user_privilege == "PROJECT_MANAGER" %}
-    <a href="{% url 'projects:invite' pk=project.pk %}" class="btn btn-primary btn-sm">Invite member</a>
+    {% url 'projects:invite' pk=project.pk as invite_url %}
+    {% include "_components/empty_state.html" with title="No members yet" body="Invite collaborators to start working on this project together." cta_href=invite_url cta_label="Invite member" %}
+  {% else %}
+    {% include "_components/empty_state.html" with title="No members yet" body="This project does not have any members." %}
   {% endif %}
-</section>
-
-<div class="overflow-x-auto card bg-base-100 shadow">
-  <table class="table">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Privilege</th>
-        <th>Roles</th>
-        <th class="w-8"></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in rows %}
-        {% include "projects/member_row.html" with row=row project=project user_privilege=user_privilege %}
-      {% empty %}
-        <tr><td colspan="5" class="text-center text-base-content/60 py-4">No members.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+{% endif %}
 {% endblock %}

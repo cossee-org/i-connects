@@ -1,29 +1,60 @@
 {% extends "base.html" %}
 
-{% block title %}Fill form &mdash; i-connects{% endblock %}
+{% block title %}Fill form &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with title=version.name subtitle="Complete and submit this form." eyebrow="Fill form" %}
+{% endblock %}
 
 {% block content %}
-<section class="card bg-base-100 shadow max-w-2xl mx-auto">
-  <div class="card-body">
-    <div>
-      <p class="text-sm opacity-70">
-        {% if owner_kind == "project" %}
-          Project: {{ owner.name }}
-        {% else %}
-          Task: {{ owner.name }}
-        {% endif %}
-      </p>
-      <h1 class="card-title text-2xl">{{ version.name }} <span class="badge badge-ghost">v{{ version.version }}</span></h1>
+<div class="flex items-center gap-2 mb-5 text-sm text-brand-text/70">
+  <span>
+    {% if owner_kind == "project" %}
+      Project: {{ owner.name }}
+    {% else %}
+      Task: {{ owner.name }}
+    {% endif %}
+  </span>
+  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">
+    v{{ version.version }}
+  </span>
+</div>
+
+<div class="flex flex-col lg:flex-row gap-6">
+  <div class="flex-1 min-w-0">
+    <div class="brand-card p-6">
+      <form method="post">
+        {% csrf_token %}
+        {% include "forms_builder/render_form.html" with form=dyn_form readonly=False %}
+
+        <div class="flex justify-end gap-2 mt-6">
+          <button type="submit"
+                  class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+            Submit
+          </button>
+        </div>
+      </form>
     </div>
-
-    <form method="post" class="mt-4">
-      {% csrf_token %}
-      {% include "forms_builder/render_form.html" with form=dyn_form readonly=False %}
-
-      <div class="flex justify-end gap-2 mt-6">
-        <button type="submit" class="btn btn-primary">Submit</button>
-      </div>
-    </form>
   </div>
-</section>
+
+  <aside class="w-full lg:w-72 shrink-0">
+    <div class="brand-panel p-4">
+      <h2 class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-2">About</h2>
+      <dl class="text-sm space-y-2">
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-brand-text/60">Form</dt>
+          <dd class="text-brand-text">{{ version.name }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-brand-text/60">Version</dt>
+          <dd class="text-brand-text">v{{ version.version }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-brand-text/60">{% if owner_kind == "project" %}Project{% else %}Task{% endif %}</dt>
+          <dd class="text-brand-text">{{ owner.name }}</dd>
+        </div>
+      </dl>
+    </div>
+  </aside>
+</div>
 {% endblock %}

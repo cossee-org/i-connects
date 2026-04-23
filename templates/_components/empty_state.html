@@ -1,0 +1,17 @@
+{# Empty-state panel — {% include "_components/empty_state.html" with title=".." body=".." cta_href=".." cta_label=".." %} #}
+<div class="brand-panel px-6 py-10 text-center">
+  <div class="mx-auto w-12 h-12 rounded-full bg-brand-light/80 flex items-center justify-center mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+         stroke-width="1.6" stroke="currentColor" class="w-6 h-6 text-brand-navy">
+      <path stroke-linecap="round" stroke-linejoin="round"
+            d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+  </div>
+  <h3 class="text-lg font-semibold text-brand-navy">{{ title }}</h3>
+  {% if body %}<p class="text-sm text-brand-text/70 mt-1 max-w-md mx-auto">{{ body }}</p>{% endif %}
+  {% if cta_href and cta_label %}
+    <a href="{{ cta_href }}" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 mt-4">
+      {{ cta_label }}
+    </a>
+  {% endif %}
+</div>

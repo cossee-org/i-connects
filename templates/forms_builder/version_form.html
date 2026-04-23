@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}New version &mdash; i-connects{% endblock %}
+{% block title %}New version &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block extra_head %}
   <link href="https://cdn.jsdelivr.net/npm/jsoneditor@10.1.0/dist/jsoneditor.min.css"
@@ -8,62 +8,74 @@
   <script src="https://cdn.jsdelivr.net/npm/jsoneditor@10.1.0/dist/jsoneditor.min.js"></script>
 {% endblock %}
 
+{% block page_header %}
+  {% include "_components/page_header.html" with title="New version" subtitle="Define the schema for a new version of this form." eyebrow="Form" %}
+{% endblock %}
+
 {% block content %}
-<section class="card bg-base-100 shadow">
-  <div class="card-body">
-    <div class="flex items-center justify-between">
-      <h1 class="card-title text-2xl">New version of form #{{ form_obj.pk }}</h1>
-      <a href="{% url 'forms_builder:version_list' pk=form_obj.pk %}"
-         class="btn btn-ghost btn-sm">Cancel</a>
+<div class="flex items-center justify-between mb-5">
+  <p class="text-sm text-brand-text/70">Form #{{ form_obj.pk }}</p>
+  <a href="{% url 'forms_builder:version_list' pk=form_obj.pk %}"
+     class="btn btn-sm btn-ghost">Back to versions</a>
+</div>
+
+<section class="brand-card p-6">
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-error">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="form-control w-full max-w-md">
+      <label class="label pb-1" for="id_name">
+        <span class="label-text text-brand-navy font-medium">Version name</span>
+      </label>
+      <input type="text" name="name" id="id_name"
+             value="{{ form.name.value|default_if_none:'' }}"
+             class="input input-bordered w-full" />
+      {% if form.name.errors %}
+        <label class="label pt-1">
+          <span class="label-text-alt text-error">{{ form.name.errors|join:" " }}</span>
+        </label>
+      {% endif %}
     </div>
 
-    <form method="post" class="space-y-6 mt-4">
-      {% csrf_token %}
-
-      {% if form.non_field_errors %}
-        <div class="alert alert-error">{{ form.non_field_errors }}</div>
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-semibold text-brand-navy uppercase tracking-wide">JSON schema</span>
+        <span class="text-xs text-brand-text/60">Edit the schema visually below.</span>
+      </div>
+      <div id="json-schema-editor" class="rounded-lg overflow-hidden border border-brand-light/60" style="height: 420px;"></div>
+      {# Hidden textarea that jsoneditor writes into. #}
+      <textarea name="json_schema" id="id_json_schema"
+                class="textarea textarea-bordered w-full font-mono text-sm min-h-[16rem] hidden">{{ form.json_schema.value|default_if_none:'' }}</textarea>
+      {% if form.json_schema.errors %}
+        <div class="text-error text-sm mt-1">{{ form.json_schema.errors }}</div>
       {% endif %}
+    </div>
 
-      <label class="form-control w-full max-w-md">
-        <span class="label-text">Version name</span>
-        <input type="text" name="name" value="{{ form.name.value|default_if_none:'' }}"
-               class="input input-bordered w-full" />
-        {% if form.name.errors %}
-          <span class="text-error text-sm">{{ form.name.errors }}</span>
-        {% endif %}
-      </label>
-
-      <div>
-        <div class="flex items-center justify-between mb-1">
-          <span class="label-text font-semibold">JSON schema</span>
-          <span class="label-text-alt opacity-70">Edit the schema visually below.</span>
-        </div>
-        <div id="json-schema-editor" style="height: 420px;"></div>
-        {# Hidden textarea that jsoneditor writes into. #}
-        <textarea name="json_schema" id="id_json_schema" class="hidden">{{ form.json_schema.value|default_if_none:'' }}</textarea>
-        {% if form.json_schema.errors %}
-          <div class="text-error text-sm mt-1">{{ form.json_schema.errors }}</div>
-        {% endif %}
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-semibold text-brand-navy uppercase tracking-wide">UI schema <span class="text-brand-text/60 normal-case font-normal">(optional)</span></span>
       </div>
+      <div id="ui-schema-editor" class="rounded-lg overflow-hidden border border-brand-light/60" style="height: 240px;"></div>
+      <textarea name="ui_schema" id="id_ui_schema"
+                class="textarea textarea-bordered w-full font-mono text-sm min-h-[16rem] hidden">{{ form.ui_schema.value|default_if_none:'' }}</textarea>
+      {% if form.ui_schema.errors %}
+        <div class="text-error text-sm mt-1">{{ form.ui_schema.errors }}</div>
+      {% endif %}
+    </div>
 
-      <div>
-        <div class="flex items-center justify-between mb-1">
-          <span class="label-text font-semibold">UI schema (optional)</span>
-        </div>
-        <div id="ui-schema-editor" style="height: 240px;"></div>
-        <textarea name="ui_schema" id="id_ui_schema" class="hidden">{{ form.ui_schema.value|default_if_none:'' }}</textarea>
-        {% if form.ui_schema.errors %}
-          <div class="text-error text-sm mt-1">{{ form.ui_schema.errors }}</div>
-        {% endif %}
-      </div>
-
-      <div class="flex justify-end gap-2">
-        <a href="{% url 'forms_builder:version_list' pk=form_obj.pk %}"
-           class="btn btn-ghost">Cancel</a>
-        <button type="submit" class="btn btn-primary">Save version</button>
-      </div>
-    </form>
-  </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <a href="{% url 'forms_builder:version_list' pk=form_obj.pk %}"
+         class="btn btn-ghost">Cancel</a>
+      <button type="submit"
+              class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+        Save version
+      </button>
+    </div>
+  </form>
 </section>
 
 <script>

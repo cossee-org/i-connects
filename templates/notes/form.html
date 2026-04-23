@@ -8,67 +8,70 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
 {% endblock %}
 
+{% block page_header %}
+  {% if note %}
+    {% include "_components/page_header.html" with title="Edit note" subtitle="Update this note's content or metadata." eyebrow=project.name %}
+  {% else %}
+    {% include "_components/page_header.html" with title="New note" subtitle="Create a markdown note in this project." eyebrow=project.name %}
+  {% endif %}
+{% endblock %}
+
 {% block content %}
-<section class="max-w-3xl mx-auto">
-  <nav class="text-sm opacity-60 mb-2">
-    <a href="{% url 'notes:list' project_pk=project.pk %}" class="link link-hover">
-      &larr; Back to notes
-    </a>
-  </nav>
+<div class="mb-5">
+  <a href="{% url 'notes:list' project_pk=project.pk %}"
+     class="btn btn-sm btn-ghost text-brand-navy">
+    &larr; Back to notes
+  </a>
+</div>
 
-  <h1 class="text-2xl font-bold mb-4">
-    {% if note %}Edit note{% else %}New note{% endif %}
-  </h1>
-
-  <form method="post" class="card bg-base-100 shadow p-6 space-y-4">
+<section class="brand-card p-6 max-w-3xl mx-auto">
+  <form method="post" class="space-y-2">
     {% csrf_token %}
 
     {% if form.non_field_errors %}
-      <div class="alert alert-error">{{ form.non_field_errors }}</div>
+      <div class="alert alert-error mb-4">{{ form.non_field_errors }}</div>
     {% endif %}
 
-    <div class="form-control">
-      <label class="label" for="{{ form.title.id_for_label }}">
-        <span class="label-text">Title</span>
-      </label>
-      {{ form.title }}
-      {% if form.title.errors %}
-        <div class="label"><span class="label-text-alt text-error">{{ form.title.errors|join:", " }}</span></div>
-      {% endif %}
-    </div>
+    {% include "_components/form_field.html" with field=form.title %}
 
-    <div class="form-control">
-      <label class="label" for="id_content_markdown">
-        <span class="label-text">Content (Markdown)</span>
+    <div class="form-control w-full mb-4">
+      <label class="label pb-1" for="id_content_markdown">
+        <span class="label-text text-brand-navy font-medium">Content (Markdown){% if form.content_markdown.field.required %} <span class="text-brand-coral">*</span>{% endif %}</span>
       </label>
       {{ form.content_markdown }}
+      {% if form.content_markdown.help_text %}
+        <label class="label pt-1"><span class="label-text-alt text-brand-text/60">{{ form.content_markdown.help_text }}</span></label>
+      {% endif %}
       {% if form.content_markdown.errors %}
-        <div class="label"><span class="label-text-alt text-error">{{ form.content_markdown.errors|join:", " }}</span></div>
+        <label class="label pt-1">
+          <span class="label-text-alt text-error">{{ form.content_markdown.errors|join:" " }}</span>
+        </label>
       {% endif %}
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="form-control">
-        <label class="label" for="{{ form.visibility.id_for_label }}">
-          <span class="label-text">Visibility</span>
-        </label>
-        {{ form.visibility }}
-      </div>
-      <div class="form-control">
-        <label class="label cursor-pointer justify-start gap-2">
+      {% include "_components/form_field.html" with field=form.visibility %}
+      <div class="form-control w-full mb-4">
+        <label class="label cursor-pointer justify-start gap-2 pb-1" for="{{ form.pinned.id_for_label }}">
           {{ form.pinned }}
-          <span class="label-text">Pinned</span>
+          <span class="label-text text-brand-navy font-medium">Pinned</span>
         </label>
+        {% if form.pinned.errors %}
+          <label class="label pt-1">
+            <span class="label-text-alt text-error">{{ form.pinned.errors|join:" " }}</span>
+          </label>
+        {% endif %}
       </div>
     </div>
 
-    <div class="flex justify-end gap-2">
+    <div class="flex justify-end gap-2 mt-6">
       {% if note %}
         <a href="{% url 'notes:detail' project_pk=project.pk pk=note.pk %}" class="btn btn-ghost">Cancel</a>
       {% else %}
         <a href="{% url 'notes:list' project_pk=project.pk %}" class="btn btn-ghost">Cancel</a>
       {% endif %}
-      <button type="submit" class="btn btn-primary">
+      <button type="submit"
+              class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
         {% if note %}Save changes{% else %}Create note{% endif %}
       </button>
     </div>

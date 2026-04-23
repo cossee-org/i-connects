@@ -1,96 +1,151 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="iconnects">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}i-connects{% endblock %}</title>
+  <title>{% block title %}i&bull;CONNECTS{% endblock %}</title>
 
-  {# Tailwind + DaisyUI compiled output #}
   <link rel="stylesheet" href="{% static 'css/output.css' %}" />
+  <link rel="icon" type="image/png" href="{% static 'img/iconnects-logo.png' %}" />
 
-  {# HTMX #}
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-
-  {# Alpine.js #}
   <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
-
-  {# SortableJS (kanban drag-drop, used from Phase 3 onward) #}
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
   {% block extra_head %}{% endblock %}
 </head>
-<body class="min-h-screen flex flex-col bg-base-200 text-base-content">
+<body class="min-h-screen flex flex-col bg-brand-lighter text-brand-text font-sans">
 
-  <header class="navbar bg-base-100 shadow-sm">
-    <div class="flex-1">
-      <a href="{% url 'core:home' %}" class="btn btn-ghost text-xl normal-case">i-connects</a>
+  <div class="brand-stripe"></div>
+
+  <header class="navbar bg-brand-light border-b border-brand-light sticky top-0 z-30 px-4 sm:px-6 lg:px-8">
+    <div class="flex-1 flex items-center gap-6 overflow-hidden">
+      <a href="{% if user.is_authenticated %}{% url 'projects:my_list' %}{% else %}{% url 'core:home' %}{% endif %}"
+         class="flex items-center gap-2 shrink-0">
+        <img src="{% static 'img/iconnects-logo.png' %}" alt="i&bull;CONNECTS" class="h-9 w-auto" />
+        <span class="sr-only">i&bull;CONNECTS</span>
+      </a>
+      {% block breadcrumbs %}{% endblock %}
     </div>
-    <div class="flex-none">
-      <ul class="menu menu-horizontal px-1 gap-1 items-center">
-        {% if user.is_authenticated %}
-          <li><a href="{% url 'projects:my_list' %}">My Projects</a></li>
-          <li><a href="{% url 'projects:list' %}">Browse</a></li>
-          <li><a href="{% url 'projects:my_invitations' %}">Invitations</a></li>
-          <li><a href="{% url 'forms_builder:form_list' %}">My Forms</a></li>
 
-          {# Notification dropdown with HTMX-polled badge #}
-          <li>
-            <div class="dropdown dropdown-end">
-              <label tabindex="0" class="btn btn-ghost btn-circle indicator"
-                     hx-get="{% url 'notifications:dropdown' %}"
-                     hx-trigger="click once"
-                     hx-target="#notification-dropdown-panel"
-                     hx-swap="innerHTML">
-                <span>&#128276;</span>
-                <span id="notification-badge"
-                      class="indicator-item"
-                      hx-get="{% url 'notifications:badge' %}"
-                      hx-trigger="load, every 60s"
-                      hx-swap="innerHTML"></span>
-              </label>
-              <div tabindex="0" id="notification-dropdown-panel"
-                   class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-80">
-                <span class="p-2 text-sm opacity-60">Loading&hellip;</span>
-              </div>
-            </div>
-          </li>
+    <div class="flex-none flex items-center gap-2">
+      {% if user.is_authenticated %}
+        <div class="dropdown dropdown-end">
+          <label tabindex="0" class="btn btn-ghost btn-circle text-brand-navy hover:bg-brand-lighter indicator"
+                 hx-get="{% url 'notifications:dropdown' %}"
+                 hx-trigger="click once"
+                 hx-target="#notification-dropdown-panel"
+                 hx-swap="innerHTML"
+                 aria-label="Notifications">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                 stroke-width="1.8" stroke="currentColor" class="w-5 h-5">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9a6 6 0 1 0-12 0v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+            </svg>
+            <span id="notification-badge"
+                  class="indicator-item"
+                  hx-get="{% url 'notifications:badge' %}"
+                  hx-trigger="load, every 60s"
+                  hx-swap="innerHTML"></span>
+          </label>
+          <div tabindex="0" id="notification-dropdown-panel"
+               class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-80 border border-brand-light">
+            <span class="p-2 text-sm opacity-60">Loading&hellip;</span>
+          </div>
+        </div>
 
-          {# User menu #}
-          <li>
-            <div class="dropdown dropdown-end">
-              <label tabindex="0" class="btn btn-ghost">
-                {{ user.name|default:user.email }}
-              </label>
-              <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-                <li><a href="{% url 'accounts:profile' %}">Profile</a></li>
-                <li>
-                  <form method="post" action="{% url 'accounts:logout' %}" class="p-0">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-ghost btn-sm justify-start w-full">
-                      Sign out
-                    </button>
-                  </form>
-                </li>
-              </ul>
+        <div class="dropdown dropdown-end">
+          <label tabindex="0" class="btn btn-ghost flex items-center gap-2 text-brand-navy hover:bg-brand-lighter">
+            <div class="w-8 h-8 rounded-full bg-brand-navy text-white flex items-center justify-center text-sm font-semibold">
+              {{ user.name|default:user.email|slice:":1"|upper }}
             </div>
-          </li>
-        {% else %}
-          <li><a href="{% url 'accounts:login' %}">Sign in</a></li>
-          <li><a href="{% url 'accounts:signup' %}" class="btn btn-primary btn-sm">Sign up</a></li>
-        {% endif %}
-      </ul>
+            <span class="hidden sm:inline text-sm font-medium">{{ user.name|default:user.email }}</span>
+          </label>
+          <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-56 border border-brand-light">
+            <li><a href="{% url 'accounts:profile' %}">Profile</a></li>
+            <li><a href="{% url 'projects:my_invitations' %}">Invitations</a></li>
+            <li>
+              <form method="post" action="{% url 'accounts:logout' %}" class="p-0 m-0">
+                {% csrf_token %}
+                <button type="submit" class="w-full text-left">Sign out</button>
+              </form>
+            </li>
+          </ul>
+        </div>
+      {% else %}
+        <a href="{% url 'accounts:login' %}" class="btn btn-ghost btn-sm text-brand-navy hover:bg-brand-lighter">
+          Sign in
+        </a>
+        <a href="{% url 'accounts:signup' %}" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+          Sign up
+        </a>
+      {% endif %}
     </div>
   </header>
 
-  <main class="flex-1 container mx-auto px-4 py-8">
-    {% block content %}{% endblock %}
-  </main>
+  {% if user.is_authenticated %}
+    {% block brand_tabs %}
+      <nav class="bg-brand-lighter border-b border-brand-light px-4 sm:px-6 lg:px-8">
+        <div class="flex gap-6 overflow-x-auto">
+          {% url 'projects:my_list' as my_projects_url %}
+          {% url 'projects:list' as browse_url %}
+          {% url 'forms_builder:form_list' as forms_url %}
+          {% url 'notifications:list' as notifs_url %}
+          <a href="{{ my_projects_url }}"
+             class="brand-tab {% if request.path == my_projects_url %}brand-tab-active{% endif %}">
+            My Projects
+          </a>
+          <a href="{{ browse_url }}"
+             class="brand-tab {% if request.path == browse_url %}brand-tab-active{% endif %}">
+            Browse
+          </a>
+          <a href="{{ forms_url }}"
+             class="brand-tab {% if request.path == forms_url %}brand-tab-active{% endif %}">
+            Forms
+          </a>
+          <a href="{{ notifs_url }}"
+             class="brand-tab {% if request.path == notifs_url %}brand-tab-active{% endif %}">
+            Notifications
+          </a>
+        </div>
+      </nav>
+    {% endblock %}
+  {% endif %}
 
-  <footer class="footer footer-center p-4 bg-base-100 text-base-content/70 border-t border-base-300">
-    <aside>
-      <p>i-connects MVP &middot; Django</p>
-    </aside>
+  <div class="flex flex-1">
+    {% block sidebar %}{% endblock %}
+
+    <main class="flex-1 min-w-0">
+      {% if messages %}
+        <div class="px-4 sm:px-6 lg:px-8 pt-4 space-y-2">
+          {% for message in messages %}
+            <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %} shadow-sm">
+              <span>{{ message }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="{% block main_wrapper %}container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl{% endblock %}">
+        {% block page_header %}{% endblock %}
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  <footer class="border-t border-brand-light bg-base-100 mt-auto">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-brand-text/70">
+      <div class="flex items-center gap-2">
+        <span class="font-semibold text-brand-navy">i&bull;CONNECTS</span>
+        <span>&middot;</span>
+        <span>Collaborative research platform</span>
+      </div>
+      <div class="flex gap-4">
+        <a href="{% url 'core:home' %}" class="hover:text-brand-coral">Home</a>
+        <a href="{% url 'projects:list' %}" class="hover:text-brand-coral">Browse projects</a>
+      </div>
+    </div>
   </footer>
 
   {% block extra_body %}{% endblock %}

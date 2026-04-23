@@ -1,51 +1,47 @@
 {% extends "base.html" %}
 
 {% block title %}
-  {% if mode == "create" %}New form{% else %}Edit form{% endif %} &mdash; i-connects
+  {% if mode == "create" %}New form{% else %}Edit form{% endif %} &mdash; i&bull;CONNECTS
+{% endblock %}
+
+{% block page_header %}
+  {% if mode == "create" %}
+    {% include "_components/page_header.html" with title="Create form" subtitle="Define a reusable form you can attach to projects or tasks." %}
+  {% else %}
+    {% include "_components/page_header.html" with title="Edit form" subtitle="Update the form metadata." %}
+  {% endif %}
 {% endblock %}
 
 {% block content %}
-<section class="card bg-base-100 shadow max-w-xl mx-auto">
-  <div class="card-body">
-    <h1 class="card-title text-2xl">
-      {% if mode == "create" %}Create form{% else %}Edit form{% endif %}
-    </h1>
+<section class="brand-card p-6 max-w-xl mx-auto">
+  <form method="post" class="space-y-2">
+    {% csrf_token %}
 
-    <form method="post" class="space-y-4">
-      {% csrf_token %}
-
-      {% if mode == "create" %}
-        <label class="form-control w-full">
-          <span class="label-text">Display name</span>
-          <input type="text" name="display_name" required
-                 placeholder="e.g. Screening form"
-                 class="input input-bordered w-full" />
+    {% if mode == "create" %}
+      <div class="form-control w-full mb-4">
+        <label class="label pb-1" for="id_display_name">
+          <span class="label-text text-brand-navy font-medium">Display name <span class="text-brand-coral">*</span></span>
         </label>
-      {% else %}
-        {% if form.non_field_errors %}
-          <div class="alert alert-error">{{ form.non_field_errors }}</div>
-        {% endif %}
-        {% for field in form %}
-          <label class="form-control w-full">
-            <span class="label-text">{{ field.label }}</span>
-            {{ field }}
-            {% if field.help_text %}
-              <span class="label-text-alt opacity-70">{{ field.help_text }}</span>
-            {% endif %}
-            {% if field.errors %}
-              <span class="text-error text-sm">{{ field.errors }}</span>
-            {% endif %}
-          </label>
-        {% endfor %}
-      {% endif %}
-
-      <div class="flex justify-end gap-2">
-        <a href="{% url 'forms_builder:form_list' %}" class="btn btn-ghost">Cancel</a>
-        <button type="submit" class="btn btn-primary">
-          {% if mode == "create" %}Create{% else %}Save{% endif %}
-        </button>
+        <input type="text" name="display_name" id="id_display_name" required
+               placeholder="e.g. Screening form"
+               class="input input-bordered w-full" />
       </div>
-    </form>
-  </div>
+    {% else %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-error mb-4">{{ form.non_field_errors }}</div>
+      {% endif %}
+      {% for field in form %}
+        {% include "_components/form_field.html" with field=field %}
+      {% endfor %}
+    {% endif %}
+
+    <div class="flex justify-end gap-2 mt-6">
+      <a href="{% url 'forms_builder:form_list' %}" class="btn btn-ghost">Cancel</a>
+      <button type="submit"
+              class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+        {% if mode == "create" %}Create{% else %}Save{% endif %}
+      </button>
+    </div>
+  </form>
 </section>
 {% endblock %}

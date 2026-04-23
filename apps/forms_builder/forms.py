@@ -28,6 +28,7 @@ class FormMetaForm(forms.ModelForm):
         max_length=255,
         required=False,
         help_text="Shown in lists. Saved to the most recent version's name.",
+        widget=forms.TextInput(attrs={"class": "input input-bordered w-full"}),
     )
 
     class Meta:
@@ -50,12 +51,22 @@ class FormVersionForm(forms.ModelForm):
     """
 
     json_schema = forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 20, "class": "font-mono"}),
+        widget=forms.Textarea(
+            attrs={
+                "rows": 20,
+                "class": "textarea textarea-bordered w-full font-mono text-sm",
+            }
+        ),
         required=False,
         help_text="JSON Schema describing the form's fields.",
     )
     ui_schema = forms.CharField(
-        widget=forms.Textarea(attrs={"rows": 10, "class": "font-mono"}),
+        widget=forms.Textarea(
+            attrs={
+                "rows": 10,
+                "class": "textarea textarea-bordered w-full font-mono text-sm",
+            }
+        ),
         required=False,
         help_text="Optional UI schema (rjsf-style).",
     )
@@ -63,6 +74,9 @@ class FormVersionForm(forms.ModelForm):
     class Meta:
         model = FormVersion
         fields: list[str] = ["name"]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+        }
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -109,6 +123,7 @@ class AttachFormForm(forms.Form):
     form_version = forms.ModelChoiceField(
         queryset=FormVersion.objects.none(),
         label="Form version",
+        widget=forms.Select(attrs={"class": "select select-bordered w-full"}),
     )
 
     def __init__(self, *args: Any, user=None, **kwargs: Any) -> None:

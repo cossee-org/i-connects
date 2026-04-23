@@ -1,79 +1,107 @@
 {% extends "base.html" %}
 
-{% block title %}{{ project.name }} — i-connects{% endblock %}
+{% block title %}{{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
-{% block content %}
-<section class="mb-6">
-  <div class="flex items-start justify-between gap-4">
+{% block page_header %}
+  <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
     <div>
-      <h1 class="text-3xl font-bold">{{ project.name }}</h1>
-      <div class="flex flex-wrap gap-2 mt-2">
-        <span class="badge badge-outline">{{ project.get_status_display }}</span>
+      <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-1">Project</div>
+      <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
+      <div class="flex flex-wrap gap-2 mt-3">
+        {% include "_components/status_badge.html" with status=project.status %}
         {% if project.is_public %}
-          <span class="badge badge-success">Public</span>
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">Public</span>
         {% else %}
-          <span class="badge badge-ghost">Private</span>
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-light/60 text-brand-text">Private</span>
         {% endif %}
         {% if user_privilege %}
-          <span class="badge badge-primary">{{ user_privilege }}</span>
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">{{ user_privilege }}</span>
         {% endif %}
       </div>
     </div>
-    <div class="flex gap-2 flex-wrap justify-end">
-      {% if user_privilege %}
-        <a href="{% url 'projects:members' pk=project.pk %}" class="btn btn-sm btn-ghost">Members</a>
-        <a href="{% url 'roles:list' project_pk=project.pk %}" class="btn btn-sm btn-ghost">Roles</a>
-      {% endif %}
+    <div class="flex flex-wrap gap-2 justify-end">
       {% if user_privilege == "PROJECT_MANAGER" %}
-        <a href="{% url 'projects:invite' pk=project.pk %}" class="btn btn-sm btn-secondary">Invite</a>
+        <a href="{% url 'projects:invite' pk=project.pk %}"
+           class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+          Invite member
+        </a>
         <a href="{% url 'projects:update' pk=project.pk %}" class="btn btn-sm btn-primary">Edit</a>
-        <a href="{% url 'projects:delete' pk=project.pk %}" class="btn btn-sm btn-error btn-outline">Delete</a>
+        <a href="{% url 'projects:delete' pk=project.pk %}" class="btn btn-sm btn-outline btn-error">Delete</a>
       {% endif %}
     </div>
-  </div>
-</section>
+  </header>
+{% endblock %}
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-  <section class="lg:col-span-2 card bg-base-100 shadow">
-    <div class="card-body">
-      <h2 class="card-title">Overview</h2>
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+  <section class="lg:col-span-2 space-y-5">
+    <div class="brand-card p-6">
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">Overview</h2>
       {% if project.abstract %}
-        <h3 class="font-semibold mt-2">Abstract</h3>
-        <p class="whitespace-pre-line">{{ project.abstract }}</p>
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-2">Abstract</h3>
+        <p class="whitespace-pre-line text-brand-text mt-1">{{ project.abstract }}</p>
       {% endif %}
       {% if project.description %}
-        <h3 class="font-semibold mt-3">Description</h3>
-        <p class="whitespace-pre-line">{{ project.description }}</p>
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Description</h3>
+        <p class="whitespace-pre-line text-brand-text mt-1">{{ project.description }}</p>
       {% endif %}
       {% if project.keywords %}
-        <h3 class="font-semibold mt-3">Keywords</h3>
-        <p class="text-sm">{{ project.keywords }}</p>
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Keywords</h3>
+        <p class="text-sm text-brand-text/80 mt-1">{{ project.keywords }}</p>
       {% endif %}
       {% if project.is_public and project.public_summary %}
-        <h3 class="font-semibold mt-3">Public summary</h3>
-        <p class="whitespace-pre-line">{{ project.public_summary }}</p>
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Public summary</h3>
+        <p class="whitespace-pre-line text-brand-text mt-1">{{ project.public_summary }}</p>
       {% endif %}
+      {% if not project.abstract and not project.description and not project.keywords %}
+        <p class="text-sm text-brand-text/60">No description yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="brand-card p-6">
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">Recent activity</h2>
+      <p class="text-sm text-brand-text/60">Activity feed coming soon.</p>
+      <div class="text-xs text-brand-text/50 mt-3">
+        Created {{ project.created_at|date:"Y-m-d" }} &middot; Updated {{ project.updated_at|date:"Y-m-d H:i" }}
+      </div>
     </div>
   </section>
 
-  <aside class="card bg-base-100 shadow">
-    <div class="card-body">
-      <h2 class="card-title">Members</h2>
+  <aside class="space-y-5">
+    <div class="brand-card p-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold text-brand-navy">Members</h2>
+        {% if user_privilege %}
+          <a href="{% url 'projects:members' pk=project.pk %}" class="text-xs font-medium text-brand-navy hover:text-brand-coral">
+            View all
+          </a>
+        {% endif %}
+      </div>
       {% if members %}
-        <ul class="divide-y divide-base-300">
+        <ul class="divide-y divide-brand-light/60">
           {% for m in members %}
             <li class="py-2">
               {% if m.users.all %}
                 {% for u in m.users.all %}
-                  <div class="text-sm">{{ u.name|default:u.email }}</div>
+                  <div class="flex items-center gap-2 text-sm text-brand-text">
+                    <span class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                      {{ u.name|default:u.email|slice:":1"|upper }}
+                    </span>
+                    <span class="truncate">{{ u.name|default:u.email }}</span>
+                  </div>
                 {% endfor %}
               {% else %}
-                <div class="text-sm text-base-content/60">{{ m.name|default:"Unnamed member" }}</div>
+                <div class="flex items-center gap-2 text-sm text-brand-text/60">
+                  <span class="w-7 h-7 rounded-full bg-brand-light text-brand-navy flex items-center justify-center text-xs font-semibold shrink-0">
+                    {{ m.name|default:"?"|slice:":1"|upper }}
+                  </span>
+                  <span class="truncate">{{ m.name|default:"Unnamed member" }}</span>
+                </div>
               {% endif %}
               {% if m.roles.all %}
-                <div class="flex flex-wrap gap-1 mt-1">
+                <div class="flex flex-wrap gap-1 mt-1 pl-9">
                   {% for r in m.roles.all %}
-                    <span class="badge badge-ghost badge-sm">{{ r.name }}</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-brand-lighter text-brand-navy">{{ r.name }}</span>
                   {% endfor %}
                 </div>
               {% endif %}
@@ -81,19 +109,34 @@
           {% endfor %}
         </ul>
       {% else %}
-        <p class="text-sm text-base-content/60">No members yet.</p>
+        <p class="text-sm text-brand-text/60">No members yet.</p>
       {% endif %}
     </div>
+
+    {% if user_privilege %}
+      <div class="brand-panel p-6">
+        <h2 class="text-lg font-semibold text-brand-navy mb-3">Quick actions</h2>
+        <ul class="space-y-2 text-sm">
+          <li>
+            <a href="{% url 'projects:members' pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
+              Manage members &rarr;
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'roles:list' project_pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
+              Manage roles &rarr;
+            </a>
+          </li>
+          {% if user_privilege == "PROJECT_MANAGER" %}
+            <li>
+              <a href="{% url 'projects:invite' pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
+                Invite collaborator &rarr;
+              </a>
+            </li>
+          {% endif %}
+        </ul>
+      </div>
+    {% endif %}
   </aside>
 </div>
-
-<section class="card bg-base-100 shadow mt-4">
-  <div class="card-body">
-    <h2 class="card-title">Recent activity</h2>
-    <p class="text-sm text-base-content/60">Activity feed coming soon.</p>
-    <div class="text-xs text-base-content/50">
-      Created {{ project.created_at|date:"Y-m-d" }} · Updated {{ project.updated_at|date:"Y-m-d H:i" }}
-    </div>
-  </div>
-</section>
 {% endblock %}

@@ -1,20 +1,25 @@
 {% extends "base.html" %}
 
-{% block title %}Delete task{% endblock %}
+{% block title %}Delete task &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block content %}
-  <div class="max-w-md mx-auto card bg-base-100 shadow-sm">
-    <div class="card-body">
-      <h1 class="card-title">Delete "{{ object.name }}"?</h1>
-      <p class="text-sm text-base-content/70">
-        This will remove the task and all of its task log entries. This cannot be undone.
-      </p>
-      <form method="post" class="flex justify-end gap-2 mt-3">
-        {% csrf_token %}
-        <a href="{% url 'tasks:detail' project_pk=project.pk pk=object.pk %}"
-           class="btn btn-ghost">Cancel</a>
-        <button type="submit" class="btn btn-error">Delete</button>
-      </form>
+  <div class="brand-card max-w-md mx-auto p-6 text-center">
+    <div class="mx-auto w-12 h-12 rounded-full bg-error/10 flex items-center justify-center mb-4">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.8" stroke="currentColor" class="w-6 h-6 text-error">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M12 9v3.75m0 3.75h.008v.008H12v-.008Zm9 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+      </svg>
     </div>
+    <h1 class="text-xl font-semibold text-brand-navy">Delete &ldquo;{{ object.name }}&rdquo;?</h1>
+    <p class="text-sm text-brand-text/70 mt-2">
+      This will remove the task and all of its task log entries. This cannot be undone.
+    </p>
+    <form method="post" class="flex justify-center gap-2 mt-6">
+      {% csrf_token %}
+      <a href="{% url 'tasks:detail' project_pk=project.pk pk=object.pk %}"
+         class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-error">Delete task</button>
+    </form>
   </div>
 {% endblock %}

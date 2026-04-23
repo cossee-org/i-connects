@@ -8,6 +8,6 @@
   {% for field in form %}
     {% include "forms_builder/partials/field.html" with field=field readonly=readonly %}
   {% empty %}
-    <p class="opacity-70">This schema has no fields defined.</p>
+    <p class="text-brand-text/70">This schema has no fields defined.</p>
   {% endfor %}
 </div>

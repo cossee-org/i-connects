@@ -1,41 +1,36 @@
 {% extends "base.html" %}
 
-{% block title %}Milestones · {{ project.name }}{% endblock %}
+{% block title %}Milestones &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with eyebrow=project.name title="Milestones" subtitle="Group tasks into delivery milestones for this project." %}
+{% endblock %}
 
 {% block content %}
-  <div class="flex items-center justify-between mb-4">
-    <div>
-      <h1 class="text-2xl font-semibold">Milestones</h1>
-      <p class="text-sm text-base-content/70">{{ project.name }}</p>
-    </div>
+  <div class="flex items-center justify-end mb-4">
     <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-ghost btn-sm">
       Back to board
     </a>
   </div>
 
-  {# Gantt-lite: horizontal timeline of milestones. #}
-  <div class="card bg-base-100 shadow-sm mb-4">
-    <div class="card-body p-4">
-      <ul id="milestone-list" class="flex flex-col gap-2">
-        {% for milestone in milestones %}
-          {% include "tasks/partials/milestone_item.html" with milestone=milestone %}
-        {% empty %}
-          <li class="text-sm text-base-content/60">No milestones yet.</li>
-        {% endfor %}
-      </ul>
-    </div>
-  </div>
+  <ul id="milestone-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 list-none p-0">
+    {% for milestone in milestones %}
+      {% include "tasks/partials/milestone_item.html" with milestone=milestone %}
+    {% empty %}
+      <li class="md:col-span-2 lg:col-span-3">
+        {% include "_components/empty_state.html" with title="No milestones yet" body="Use the form below to create your first milestone." %}
+      </li>
+    {% endfor %}
+  </ul>
 
-  <div class="card bg-base-100 shadow-sm max-w-2xl">
-    <div class="card-body p-4">
-      <h2 class="card-title text-lg">New milestone</h2>
-      <form hx-post="{% url 'tasks:milestone_create' project_pk=project.pk %}"
-            hx-target="#milestone-list"
-            hx-swap="beforeend"
-            hx-on::after-request="if(event.detail.successful) this.reset()">
-        {% csrf_token %}
-        {% include "tasks/milestone_form.html" with form=form form_title="" %}
-      </form>
-    </div>
+  <div class="brand-card p-6 max-w-2xl">
+    <h2 class="text-lg font-semibold text-brand-navy mb-3">New milestone</h2>
+    <form hx-post="{% url 'tasks:milestone_create' project_pk=project.pk %}"
+          hx-target="#milestone-list"
+          hx-swap="beforeend"
+          hx-on::after-request="if(event.detail.successful) this.reset()">
+      {% csrf_token %}
+      {% include "tasks/milestone_form.html" with form=form form_title="" %}
+    </form>
   </div>
 {% endblock %}

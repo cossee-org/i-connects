@@ -1,45 +1,61 @@
 {% extends "base.html" %}
 
-{% block title %}Invitation — {{ project.name }}{% endblock %}
+{% block title %}Invitation to {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}{% endblock %}
 
 {% block content %}
-<div class="max-w-xl mx-auto">
-  <div class="card bg-base-100 shadow">
-    <div class="card-body">
-      <h1 class="card-title">You're invited to join {{ project.name }}</h1>
-      <p>
-        <strong>{{ invitation.added_by }}</strong> invited you to join
-        <strong>{{ project.name }}</strong> as
-        <span class="badge {% if invitation.privilege == 'PROJECT_MANAGER' %}badge-primary{% else %}badge-ghost{% endif %}">
-          {{ invitation.privilege }}
-        </span>.
-      </p>
-
-      {% if invitation.roles.all %}
-        <div>
-          <span class="text-sm text-base-content/70">Roles you'll receive:</span>
-          <div class="flex flex-wrap gap-1 mt-1">
-            {% for r in invitation.roles.all %}
-              <span class="badge badge-outline badge-sm">{{ r.name }}</span>
-            {% endfor %}
-          </div>
-        </div>
-      {% endif %}
-
-      {% if project.abstract %}
-        <p class="mt-3 text-sm text-base-content/80">{{ project.abstract }}</p>
-      {% endif %}
-
-      <form method="post" class="card-actions justify-end mt-4">
-        {% csrf_token %}
-        <button type="submit" name="action" value="decline" class="btn btn-ghost">
-          Decline
-        </button>
-        <button type="submit" name="action" value="accept" class="btn btn-primary">
-          Accept invitation
-        </button>
-      </form>
+<div class="max-w-md mx-auto">
+  <div class="brand-card p-6 sm:p-8 text-center">
+    <div class="mx-auto w-12 h-12 rounded-full bg-brand-coral/10 flex items-center justify-center mb-4">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.6" stroke="currentColor" class="w-6 h-6 text-brand-coral">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+      </svg>
     </div>
+
+    <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold">You&rsquo;re invited</div>
+    <h1 class="text-2xl font-semibold text-brand-navy mt-1">{{ project.name }}</h1>
+
+    <p class="mt-4 text-brand-text">
+      <strong>{{ invitation.added_by }}</strong> invited you to join this project as
+    </p>
+    <div class="mt-2">
+      <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+        {% if invitation.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-navy/10 text-brand-navy{% endif %}">
+        {{ invitation.privilege }}
+      </span>
+    </div>
+
+    {% if invitation.roles.all %}
+      <div class="mt-4 text-left">
+        <div class="text-xs uppercase tracking-wider text-brand-text/60 font-semibold mb-2">Roles you&rsquo;ll receive</div>
+        <div class="flex flex-wrap gap-1">
+          {% for r in invitation.roles.all %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-brand-lighter text-brand-navy">{{ r.name }}</span>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    {% if project.abstract %}
+      <div class="mt-5 text-left brand-panel p-4">
+        <div class="text-xs uppercase tracking-wider text-brand-navy font-semibold mb-1">About the project</div>
+        <p class="text-sm text-brand-text/80 whitespace-pre-line">{{ project.abstract }}</p>
+      </div>
+    {% endif %}
+
+    <form method="post" class="flex gap-2 justify-center mt-6">
+      {% csrf_token %}
+      <button type="submit" name="action" value="decline" class="btn btn-ghost">
+        Decline
+      </button>
+      <button type="submit" name="action" value="accept"
+              class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+        Accept invitation
+      </button>
+    </form>
   </div>
 </div>
 {% endblock %}

@@ -1,31 +1,57 @@
 {% extends "base.html" %}
 
-{% block title %}Roles — {{ project.name }}{% endblock %}
+{% block title %}Roles &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block breadcrumbs %}
+  <nav class="hidden sm:flex items-center gap-2 text-sm text-brand-navy/80 truncate">
+    <a href="{% url 'projects:detail' pk=project.pk %}" class="hover:text-brand-coral truncate">
+      {{ project.name }}
+    </a>
+    <span class="text-brand-navy/40">/</span>
+    <span class="text-brand-navy font-medium">Roles</span>
+  </nav>
+{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div>
+      <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight">
+        Roles for {{ project.name }}
+      </h1>
+      <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">
+        Define project roles and assign them to members.
+      </p>
+    </div>
+    {% if user_privilege == "PROJECT_MANAGER" %}
+      <div class="shrink-0">
+        <a href="#add-role"
+           class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+          Add role
+        </a>
+      </div>
+    {% endif %}
+  </header>
+{% endblock %}
 
 {% block content %}
-<section class="mb-6">
-  <h1 class="text-2xl font-bold">Roles for {{ project.name }}</h1>
-  <a href="{% url 'projects:detail' pk=project.pk %}" class="text-sm link link-hover">
-    « Back to project
-  </a>
-</section>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+  <section class="brand-card overflow-hidden">
+    <div class="px-5 py-4 bg-brand-lighter border-b border-brand-light">
+      <h2 class="text-lg font-semibold text-brand-navy">Project roles</h2>
+    </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-  <section class="card bg-base-100 shadow">
-    <div class="card-body">
-      <h2 class="card-title">Project roles</h2>
-
-      <div id="roles-list" class="divide-y divide-base-300">
+    <div class="p-5">
+      <div id="roles-list" class="divide-y divide-brand-light">
         {% for role in roles %}
           {% include "roles/form_row.html" with role=role form=new_form editing=False %}
         {% empty %}
-          <p id="no-roles" class="text-sm text-base-content/60">No roles yet.</p>
+          <p id="no-roles" class="text-sm text-brand-text/60 py-2">No roles yet.</p>
         {% endfor %}
       </div>
 
       {% if user_privilege == "PROJECT_MANAGER" %}
-        <div class="mt-4 border-t border-base-300 pt-3">
-          <h3 class="font-semibold mb-2">Add a new role</h3>
+        <div id="add-role" class="mt-5 border-t border-brand-light pt-4">
+          <h3 class="text-sm font-semibold text-brand-navy mb-2">Add a new role</h3>
           <form
             hx-post="{% url 'roles:create' project_pk=project.pk %}"
             hx-target="#roles-list"
@@ -44,52 +70,69 @@
     </div>
   </section>
 
-  <section class="card bg-base-100 shadow">
-    <div class="card-body">
-      <h2 class="card-title">Assign roles to members</h2>
+  <section class="brand-card overflow-hidden">
+    <div class="px-5 py-4 bg-brand-lighter border-b border-brand-light">
+      <h2 class="text-lg font-semibold text-brand-navy">Assign roles to members</h2>
+    </div>
+
+    <div class="p-5">
       {% if not roles %}
-        <p class="text-sm text-base-content/60">
+        <p class="text-sm text-brand-text/60 mb-3">
           Create at least one role before assigning them to members.
         </p>
       {% endif %}
 
-      <ul class="divide-y divide-base-300">
-        {% for member in members %}
-          <li class="py-3">
-            <div class="font-semibold">
-              {% for u in member.users.all %}{{ u.name|default:u.email }}{% if not forloop.last %}, {% endif %}{% empty %}
-                {{ member.name|default:"Unnamed member" }}
-              {% endfor %}
-            </div>
-            {% if user_privilege == "PROJECT_MANAGER" and roles %}
-              <form
-                hx-post="{% url 'roles:assign_to_member' project_pk=project.pk member_pk=member.pk %}"
-                hx-target="#member-roles-{{ member.pk }}"
-                hx-swap="outerHTML"
-                class="mt-2 space-y-1"
-              >
-                {% csrf_token %}
-                {% for role in roles %}
-                  <label class="label cursor-pointer justify-start gap-2 py-0.5">
-                    <input
-                      type="checkbox"
-                      name="roles"
-                      value="{{ role.pk }}"
-                      class="checkbox checkbox-sm"
-                      {% if role in member.roles.all %}checked{% endif %}
-                    />
-                    <span class="label-text">{{ role.name }}</span>
-                  </label>
-                {% endfor %}
-                <button type="submit" class="btn btn-xs btn-primary mt-1">Save roles</button>
-              </form>
-            {% endif %}
-            {% include "roles/_member_roles.html" with member=member project=project %}
-          </li>
-        {% empty %}
-          <li class="py-3 text-sm text-base-content/60">No members yet.</li>
-        {% endfor %}
-      </ul>
+      <table class="table">
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th>Member</th>
+            <th>Roles</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for member in members %}
+            <tr>
+              <td class="align-top">
+                <div class="font-medium text-brand-navy">
+                  {% for u in member.users.all %}{{ u.name|default:u.email }}{% if not forloop.last %}, {% endif %}{% empty %}
+                    {{ member.name|default:"Unnamed member" }}
+                  {% endfor %}
+                </div>
+              </td>
+              <td class="align-top">
+                {% if user_privilege == "PROJECT_MANAGER" and roles %}
+                  <form
+                    hx-post="{% url 'roles:assign_to_member' project_pk=project.pk member_pk=member.pk %}"
+                    hx-target="#member-roles-{{ member.pk }}"
+                    hx-swap="outerHTML"
+                    class="space-y-1"
+                  >
+                    {% csrf_token %}
+                    {% for role in roles %}
+                      <label class="label cursor-pointer justify-start gap-2 py-0.5">
+                        <input
+                          type="checkbox"
+                          name="roles"
+                          value="{{ role.pk }}"
+                          class="checkbox checkbox-sm checkbox-primary"
+                          {% if role in member.roles.all %}checked{% endif %}
+                        />
+                        <span class="label-text text-brand-text">{{ role.name }}</span>
+                      </label>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-primary btn-sm mt-1">Save roles</button>
+                  </form>
+                {% endif %}
+                {% include "roles/_member_roles.html" with member=member project=project %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="2" class="text-sm text-brand-text/60">No members yet.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </section>
 </div>

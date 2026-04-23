@@ -2,28 +2,40 @@
 
 {% block title %}Delete note &mdash; {{ project.name }}{% endblock %}
 
-{% block content %}
-<section class="max-w-xl mx-auto">
-  <div class="card bg-base-100 shadow">
-    <div class="card-body">
-      <h1 class="card-title">Delete this note?</h1>
-      <div class="alert alert-warning">
-        This cannot be undone.
-      </div>
-      <p class="font-semibold">{{ note.title|default:"(untitled note)" }}</p>
-      {% if note.content_markdown %}
-        <p class="text-sm opacity-70 line-clamp-3 whitespace-pre-wrap break-words">
-          {{ note.content_markdown|truncatechars:240 }}
-        </p>
-      {% endif %}
+{% block page_header %}
+  {% include "_components/page_header.html" with title="Delete note" subtitle="Confirm you want to permanently delete this note." eyebrow=project.name %}
+{% endblock %}
 
-      <form method="post" class="card-actions justify-end mt-4">
-        {% csrf_token %}
-        <a href="{% url 'notes:detail' project_pk=project.pk pk=note.pk %}"
-           class="btn btn-ghost">Cancel</a>
-        <button type="submit" class="btn btn-error">Delete permanently</button>
-      </form>
+{% block content %}
+<section class="brand-card max-w-md mx-auto p-6">
+  <div class="flex items-start gap-3">
+    <div class="shrink-0 w-10 h-10 rounded-full bg-error/10 flex items-center justify-center">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.8" stroke="currentColor" class="w-5 h-5 text-error">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M12 9v3.75m0 3.75h.008v.008H12v-.008ZM10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+      </svg>
+    </div>
+    <div class="min-w-0">
+      <h2 class="text-lg font-semibold text-brand-navy">Delete this note?</h2>
+      <p class="text-sm text-brand-text/70 mt-1">This cannot be undone.</p>
     </div>
   </div>
+
+  <div class="brand-panel p-4 mt-5">
+    <p class="font-semibold text-brand-navy">{{ note.title|default:"(untitled note)" }}</p>
+    {% if note.content_markdown %}
+      <p class="text-sm text-brand-text/70 mt-1 line-clamp-3 whitespace-pre-wrap break-words">
+        {{ note.content_markdown|truncatechars:240 }}
+      </p>
+    {% endif %}
+  </div>
+
+  <form method="post" class="flex justify-end gap-2 mt-6">
+    {% csrf_token %}
+    <a href="{% url 'notes:detail' project_pk=project.pk pk=note.pk %}"
+       class="btn btn-ghost">Cancel</a>
+    <button type="submit" class="btn btn-error">Delete permanently</button>
+  </form>
 </section>
 {% endblock %}

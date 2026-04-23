@@ -1,0 +1,16 @@
+{# Page header — use with {% include "_components/page_header.html" with title=".." subtitle=".." %} #}
+{# For an action button on the right, pass `action_html` (pre-rendered) OR override the actions block via a wrapper template. #}
+<header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+  <div>
+    {% if eyebrow %}
+      <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-1">{{ eyebrow }}</div>
+    {% endif %}
+    <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight">{{ title }}</h1>
+    {% if subtitle %}
+      <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">{{ subtitle }}</p>
+    {% endif %}
+  </div>
+  {% if action_html %}
+    <div class="shrink-0">{{ action_html|safe }}</div>
+  {% endif %}
+</header>

@@ -6,41 +6,54 @@
   If ``swap_oob_badge`` is true, we also include an out-of-band badge
   update so the navbar count stays in sync.
 {% endcomment %}
-<li id="notification-{{ notification.id }}"
-    class="p-3 border-b border-base-200 flex justify-between items-start gap-3
-           {% if not notification.read %}bg-base-200/60{% endif %}">
+<div id="notification-{{ notification.id }}"
+     class="flex items-start gap-3 p-4 hover:bg-brand-lighter/60 transition-colors
+            {% if not notification.read %}bg-brand-lighter/40 border-l-4 border-brand-coral{% endif %}">
+  <div class="pt-1.5 shrink-0">
+    <span class="inline-block w-2 h-2 rounded-full
+                 {% if not notification.read %}bg-brand-coral{% else %}bg-brand-light{% endif %}"></span>
+  </div>
+
   <div class="flex-1 min-w-0">
     {% if notification.announcement %}
-      <div class="badge badge-info badge-sm mb-1">Announcement</div>
+      <div class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy mb-1">
+        Announcement
+      </div>
     {% endif %}
-    <div class="text-sm whitespace-pre-wrap break-words">{{ notification.message }}</div>
-    <div class="text-xs opacity-60 mt-1">
+    <div class="font-medium text-brand-navy whitespace-pre-wrap break-words">{{ notification.message }}</div>
+    <div class="text-xs text-brand-text/50 mt-1">
       {{ notification.created_at|date:"Y-m-d H:i" }}
       {% if notification.project %} &middot; {{ notification.project.name }}{% endif %}
     </div>
     {% if notification.route_data and notification.route_data.link %}
-      <a href="{{ notification.route_data.link }}" class="link link-primary text-xs">Open</a>
+      <a href="{{ notification.route_data.link }}"
+         class="text-xs text-brand-navy hover:text-brand-coral font-medium mt-1 inline-block">
+        Open
+      </a>
     {% endif %}
   </div>
-  {% if not notification.read %}
-    <form hx-post="{% url 'notifications:mark_read' notification.id %}"
-          hx-target="#notification-{{ notification.id }}"
-          hx-swap="outerHTML">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-xs btn-ghost" title="Mark as read">
-        Mark read
-      </button>
-    </form>
-  {% else %}
-    <span class="badge badge-ghost badge-sm">Read</span>
-  {% endif %}
-</li>
+
+  <div class="shrink-0">
+    {% if not notification.read %}
+      <form hx-post="{% url 'notifications:mark_read' notification.id %}"
+            hx-target="#notification-{{ notification.id }}"
+            hx-swap="outerHTML">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-ghost btn-xs text-brand-navy" title="Mark as read">
+          Mark read
+        </button>
+      </form>
+    {% else %}
+      <span class="text-xs text-brand-text/50">Read</span>
+    {% endif %}
+  </div>
+</div>
 
 {% if swap_oob_badge %}
   {# Out-of-band update for the navbar badge. #}
   <span id="notification-badge" hx-swap-oob="innerHTML">
     {% if unread_count and unread_count > 0 %}
-      <span class="badge badge-error badge-sm">{{ unread_count }}</span>
+      <span class="badge badge-sm bg-brand-coral border-brand-coral text-white">{{ unread_count }}</span>
     {% endif %}
   </span>
 {% endif %}

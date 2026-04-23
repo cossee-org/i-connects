@@ -3,67 +3,49 @@
    requests also receive this snippet wrapped in the base layout by
    Django's TemplateView fallback. Keeping it a single block keeps the
    template flow simple. #}
-<h2 class="text-lg font-semibold mb-3">{{ form_title|default:"Task" }}</h2>
+<h2 class="text-lg font-semibold text-brand-navy mb-4">{{ form_title|default:"Task" }}</h2>
 <form method="post"
       action="{{ form_action }}"
       hx-post="{{ form_action }}"
       hx-target="#kanban-board"
       hx-swap="none">
   {% csrf_token %}
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-    <label class="md:col-span-2">
-      <span class="label-text">Name</span>
-      {{ form.name }}
-    </label>
-    <label class="md:col-span-2">
-      <span class="label-text">Description</span>
-      {{ form.description }}
-    </label>
-    <label>
-      <span class="label-text">Column</span>
-      {{ form.container }}
-    </label>
-    <label>
-      <span class="label-text">Milestone</span>
-      {{ form.milestone }}
-    </label>
-    <label>
-      <span class="label-text">Start date</span>
-      {{ form.start_date }}
-    </label>
-    <label>
-      <span class="label-text">Deadline</span>
-      {{ form.deadline }}
-    </label>
-    <label class="md:col-span-2">
-      <span class="label-text">Assignees</span>
-      {{ form.assigned_members }}
-    </label>
-    <label>
-      <span class="label-text">Auto-assign new members</span>
-      {{ form.auto_assign_new }}
-    </label>
-    <label class="flex items-center gap-2">
-      {{ form.anonymous }}
-      <span class="label-text">Anonymous</span>
-    </label>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+    <div class="md:col-span-2">
+      {% include "_components/form_field.html" with field=form.name %}
+    </div>
+    <div class="md:col-span-2">
+      {% include "_components/form_field.html" with field=form.description %}
+    </div>
+    {% include "_components/form_field.html" with field=form.container %}
+    {% include "_components/form_field.html" with field=form.milestone %}
+    {% include "_components/form_field.html" with field=form.start_date %}
+    {% include "_components/form_field.html" with field=form.deadline %}
+    <div class="md:col-span-2">
+      {% include "_components/form_field.html" with field=form.assigned_members %}
+    </div>
+    {% include "_components/form_field.html" with field=form.auto_assign_new %}
+    <div class="form-control w-full mb-4">
+      <label class="label cursor-pointer justify-start gap-2">
+        {{ form.anonymous }}
+        <span class="label-text text-brand-navy font-medium">Anonymous</span>
+      </label>
+    </div>
   </div>
 
-  {% if form.errors %}
+  {% if form.non_field_errors %}
     <div class="alert alert-error mt-3">
       <ul class="list-disc pl-4">
-        {% for field, errs in form.errors.items %}
-          {% for e in errs %}<li>{{ field }}: {{ e }}</li>{% endfor %}
-        {% endfor %}
+        {% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}
       </ul>
     </div>
   {% endif %}
 
-  <div class="mt-4 flex justify-end gap-2">
+  <div class="flex gap-2 justify-end mt-6">
     <button type="button" class="btn btn-ghost"
             onclick="document.getElementById('task-modal') && document.getElementById('task-modal').close()">
       Cancel
     </button>
-    <button type="submit" class="btn btn-primary">Save</button>
+    <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Save</button>
   </div>
 </form>

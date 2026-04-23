@@ -1,39 +1,46 @@
-{# One TaskLog entry with its comment thread. #}
-<article id="task-log-{{ log.pk }}" class="card bg-base-100 shadow-sm">
-  <div class="card-body p-4 gap-2">
+{# One TaskLog entry with its comment thread — rendered as a compact timeline row. #}
+<article id="task-log-{{ log.pk }}" class="relative flex gap-3 pl-4">
+  {# Coloured dot + timeline connector #}
+  <div class="absolute left-0 top-1.5 w-2 h-2 rounded-full
+    {% if log.status == 'COMPLETED' and log.approved is True %}bg-success
+    {% elif log.status == 'COMPLETED' and log.approved is False %}bg-error
+    {% elif log.status == 'COMPLETED' %}bg-brand-coral
+    {% else %}bg-brand-light{% endif %}"></div>
+
+  <div class="flex-1 brand-card p-3">
     <header class="flex flex-wrap items-center justify-between gap-2">
-      <div class="text-sm">
-        <span class="font-medium">{{ log.assigned_to }}</span>
+      <div class="text-sm text-brand-text">
+        <span class="font-medium text-brand-navy">{{ log.assigned_to }}</span>
         {% if log.completed_by %}
-          · <span class="text-base-content/70">by {{ log.completed_by }}</span>
+          <span class="text-brand-text/70">&middot; by {{ log.completed_by }}</span>
         {% endif %}
-        · <span class="text-base-content/60">{{ log.created_at|date:"M j, Y H:i" }}</span>
+        <span class="text-xs text-brand-text/60 ml-1">&middot; {{ log.created_at|date:"M j, Y H:i" }}</span>
       </div>
-      <div class="flex gap-1 items-center">
+      <div class="flex gap-1 items-center flex-wrap">
         {% if log.status == "COMPLETED" %}
-          <span class="badge badge-success badge-sm">Completed</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success">Completed</span>
         {% else %}
-          <span class="badge badge-ghost badge-sm">Not completed</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-light/50 text-brand-text">Not completed</span>
         {% endif %}
-        <span class="badge badge-outline badge-sm">{{ log.completed_as }}</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-lighter text-brand-navy border border-brand-light">{{ log.completed_as }}</span>
         {% if log.approved is True %}
-          <span class="badge badge-success badge-sm">Approved</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success">Approved</span>
         {% elif log.approved is False %}
-          <span class="badge badge-error badge-sm">Rejected</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-error/10 text-error">Rejected</span>
         {% else %}
-          <span class="badge badge-warning badge-sm">Pending</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning/10 text-warning">Pending</span>
         {% endif %}
       </div>
     </header>
 
     {% if is_project_manager and log.status == "COMPLETED" %}
-      <div class="flex gap-1">
-        <button class="btn btn-xs btn-success"
+      <div class="flex gap-1 mt-2">
+        <button class="btn btn-xs bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
                 hx-post="{% url 'tasks:approve_log' pk=task.pk log_pk=log.pk %}"
                 hx-vals='{"approved": "true"}'
                 hx-target="#task-log-{{ log.pk }}"
                 hx-swap="outerHTML">Approve</button>
-        <button class="btn btn-xs btn-error"
+        <button class="btn btn-xs btn-outline btn-error"
                 hx-post="{% url 'tasks:approve_log' pk=task.pk log_pk=log.pk %}"
                 hx-vals='{"approved": "false"}'
                 hx-target="#task-log-{{ log.pk }}"
@@ -46,7 +53,7 @@
       </div>
     {% endif %}
 
-    <div id="comments-for-log-{{ log.pk }}" class="flex flex-col gap-2 mt-2">
+    <div id="comments-for-log-{{ log.pk }}" class="flex flex-col gap-2 mt-3">
       {% for comment in log.comments.all %}
         {% include "comments/comment_item.html" with comment=comment task=task task_log=log %}
       {% endfor %}

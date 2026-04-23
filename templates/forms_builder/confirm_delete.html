@@ -1,22 +1,35 @@
 {% extends "base.html" %}
 
-{% block title %}Delete form &mdash; i-connects{% endblock %}
+{% block title %}Delete form &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with title="Archive form" subtitle="Confirm you want to archive this form." %}
+{% endblock %}
 
 {% block content %}
-<section class="card bg-base-100 shadow max-w-md mx-auto">
-  <div class="card-body">
-    <h1 class="card-title text-2xl">Archive form?</h1>
-    <p class="opacity-80">
-      This will hide the form and its versions from your list. Existing
-      Projects and Tasks that already reference a version will continue
-      to work.
-    </p>
-
-    <form method="post" class="mt-4 flex justify-end gap-2">
-      {% csrf_token %}
-      <a href="{% url 'forms_builder:form_list' %}" class="btn btn-ghost">Cancel</a>
-      <button type="submit" class="btn btn-error">Archive</button>
-    </form>
+<section class="brand-card max-w-md mx-auto p-6">
+  <div class="flex items-start gap-3">
+    <div class="shrink-0 w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.8" stroke="currentColor" class="w-5 h-5 text-warning">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M12 9v3.75m0 3.75h.008v.008H12v-.008ZM10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+      </svg>
+    </div>
+    <div>
+      <h2 class="text-lg font-semibold text-brand-navy">Archive this form?</h2>
+      <p class="text-sm text-brand-text/70 mt-1">
+        This will hide the form and its versions from your list. Existing
+        projects and tasks that already reference a version will continue
+        to work.
+      </p>
+    </div>
   </div>
+
+  <form method="post" class="flex justify-end gap-2 mt-6">
+    {% csrf_token %}
+    <a href="{% url 'forms_builder:form_list' %}" class="btn btn-ghost">Cancel</a>
+    <button type="submit" class="btn btn-error">Archive</button>
+  </form>
 </section>
 {% endblock %}

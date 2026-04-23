@@ -1,6 +1,6 @@
 {# Inline rename form for a column. Swapped in by BoardColumnUpdateView.get. #}
 <li id="column-row-{{ column.pk }}"
-    class="flex items-center gap-2 p-2 border-b border-base-300">
+    class="flex items-center gap-2 px-1 py-2 border-b border-brand-light/60 last:border-b-0">
   <form class="flex gap-2 flex-1"
         hx-post="{% url 'tasks:column_update' project_pk=project.pk pk=column.pk %}"
         hx-target="#column-row-{{ column.pk }}"
@@ -8,7 +8,7 @@
     {% csrf_token %}
     <input type="text" name="name" value="{{ column.name }}"
            class="input input-bordered input-sm flex-1" required>
-    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+    <button type="submit" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Save</button>
     <button type="button" class="btn btn-ghost btn-sm"
             hx-get="{% url 'tasks:board_columns' project_pk=project.pk %}"
             hx-target="#column-row-{{ column.pk }}"

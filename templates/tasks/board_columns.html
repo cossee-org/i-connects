@@ -1,35 +1,36 @@
 {% extends "base.html" %}
 
-{% block title %}Columns · {{ project.name }}{% endblock %}
+{% block title %}Manage columns &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with eyebrow=project.name title="Manage board columns" subtitle="Add, rename, or remove columns that group tasks on the Kanban board." %}
+{% endblock %}
 
 {% block content %}
-  <div class="flex items-center justify-between mb-4">
-    <h1 class="text-xl font-semibold">Manage board columns</h1>
+  <div class="flex items-center justify-end mb-4">
     <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-ghost btn-sm">
       Back to board
     </a>
   </div>
 
-  <div class="card bg-base-100 shadow-sm max-w-xl">
-    <div class="card-body p-4">
-      <ul id="column-list" class="flex flex-col">
-        {% for column in columns %}
-          {% include "tasks/partials/kanban_column_header.html" with column=column %}
-        {% empty %}
-          <li class="text-sm text-base-content/60">No columns yet.</li>
-        {% endfor %}
-      </ul>
+  <div class="brand-card p-4 max-w-xl">
+    <ul id="column-list" class="flex flex-col">
+      {% for column in columns %}
+        {% include "tasks/partials/kanban_column_header.html" with column=column %}
+      {% empty %}
+        <li class="text-sm text-brand-text/60 py-2">No columns yet.</li>
+      {% endfor %}
+    </ul>
 
-      <form class="flex gap-2 mt-4"
-            hx-post="{% url 'tasks:column_create' project_pk=project.pk %}"
-            hx-target="#column-list"
-            hx-swap="beforeend"
-            hx-on::after-request="this.reset()">
-        {% csrf_token %}
-        <input type="text" name="name" placeholder="New column name"
-               class="input input-bordered input-sm flex-1" required>
-        <button type="submit" class="btn btn-primary btn-sm">Add</button>
-      </form>
-    </div>
+    <form class="flex gap-2 mt-4 pt-4 border-t border-brand-light/60"
+          hx-post="{% url 'tasks:column_create' project_pk=project.pk %}"
+          hx-target="#column-list"
+          hx-swap="beforeend"
+          hx-on::after-request="this.reset()">
+      {% csrf_token %}
+      <input type="text" name="name" placeholder="New column name"
+             class="input input-bordered input-sm flex-1" required>
+      <button type="submit" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Add</button>
+    </form>
   </div>
 {% endblock %}

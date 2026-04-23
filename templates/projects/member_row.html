@@ -1,14 +1,22 @@
-{# One row in the project members table.
+{# One row in the project members table. HTMX fragment — do NOT wrap in {% extends %}.
    Context: row {member, user, privilege, form}, project, user_privilege. #}
-<tr id="member-row-{{ row.member.pk }}">
+<tr id="member-row-{{ row.member.pk }}" class="hover:bg-brand-lighter/40">
   <td>
-    {% if row.user %}
-      {{ row.user.name|default:row.user.email }}
-    {% else %}
-      <span class="text-base-content/60">{{ row.member.name|default:"Unnamed" }}</span>
-    {% endif %}
+    <div class="flex items-center gap-2">
+      {% if row.user %}
+        <span class="w-8 h-8 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">
+          {{ row.user.name|default:row.user.email|slice:":1"|upper }}
+        </span>
+        <span class="text-brand-text font-medium">{{ row.user.name|default:row.user.email }}</span>
+      {% else %}
+        <span class="w-8 h-8 rounded-full bg-brand-light text-brand-navy flex items-center justify-center text-xs font-semibold shrink-0">
+          {{ row.member.name|default:"?"|slice:":1"|upper }}
+        </span>
+        <span class="text-brand-text/60">{{ row.member.name|default:"Unnamed" }}</span>
+      {% endif %}
+    </div>
   </td>
-  <td class="text-sm">{{ row.user.email|default:"—" }}</td>
+  <td class="text-sm text-brand-text/80">{{ row.user.email|default:"&mdash;" }}</td>
   <td>
     {% if user_privilege == "PROJECT_MANAGER" and row.user %}
       <form
@@ -22,24 +30,25 @@
         <button class="btn btn-xs btn-ghost" type="submit">Save</button>
       </form>
     {% else %}
-      <span class="badge {% if row.privilege == 'PROJECT_MANAGER' %}badge-primary{% else %}badge-ghost{% endif %}">
-        {{ row.privilege|default:"—" }}
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+        {% if row.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+        {{ row.privilege|default:"&mdash;" }}
       </span>
     {% endif %}
   </td>
   <td>
     <div class="flex flex-wrap gap-1">
       {% for r in row.member.roles.all %}
-        <span class="badge badge-outline badge-sm">{{ r.name }}</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-brand-lighter text-brand-navy">{{ r.name }}</span>
       {% empty %}
-        <span class="text-xs text-base-content/50">—</span>
+        <span class="text-xs text-brand-text/50">&mdash;</span>
       {% endfor %}
     </div>
   </td>
-  <td>
+  <td class="text-right">
     {% if user_privilege == "PROJECT_MANAGER" %}
       <button
-        class="btn btn-xs btn-error btn-ghost"
+        class="btn btn-xs btn-ghost text-error hover:bg-error/10"
         hx-post="{% url 'projects:remove_member' pk=project.pk member_pk=row.member.pk %}"
         hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
         hx-target="#member-row-{{ row.member.pk }}"

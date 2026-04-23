@@ -1,22 +1,25 @@
 {% extends "base.html" %}
 
-{% block title %}Delete {{ object.name }} — i-connects{% endblock %}
+{% block title %}Delete {{ object.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with eyebrow="Danger zone" title="Delete project" subtitle="This action cannot be undone." %}
+{% endblock %}
 
 {% block content %}
 <div class="max-w-xl mx-auto">
-  <div class="card bg-base-100 shadow">
-    <div class="card-body">
-      <h1 class="card-title text-error">Delete project</h1>
-      <p>
-        Are you sure you want to delete <strong>{{ object.name }}</strong>? This
-        action removes all associated members, privileges, tasks, and notes.
-      </p>
-      <form method="post" class="card-actions justify-end mt-4">
-        {% csrf_token %}
-        <a href="{% url 'projects:detail' pk=object.pk %}" class="btn btn-ghost">Cancel</a>
-        <button type="submit" class="btn btn-error">Delete project</button>
-      </form>
-    </div>
+  <div class="brand-card p-6 border-error/40">
+    <h2 class="text-lg font-semibold text-error">Delete &ldquo;{{ object.name }}&rdquo;?</h2>
+    <p class="mt-3 text-brand-text">
+      Are you sure you want to delete <strong>{{ object.name }}</strong>? This
+      removes all associated members, privileges, tasks, and notes. This action
+      cannot be undone.
+    </p>
+    <form method="post" class="flex gap-2 justify-end mt-6">
+      {% csrf_token %}
+      <a href="{% url 'projects:detail' pk=object.pk %}" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-outline btn-error">Delete project</button>
+    </form>
   </div>
 </div>
 {% endblock %}

@@ -1,47 +1,50 @@
 {% extends "base.html" %}
 
-{% block title %}My invitations — i-connects{% endblock %}
+{% block title %}My invitations &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with title="My invitations" subtitle="Invitations to join research projects." %}
+{% endblock %}
 
 {% block content %}
-<h1 class="text-2xl font-bold mb-4">My invitations</h1>
-
 {% if invitations %}
-  <div class="overflow-x-auto card bg-base-100 shadow">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Project</th>
-          <th>From</th>
-          <th>Privilege</th>
-          <th>Received</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for inv in invitations %}
+  <div class="brand-card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead class="bg-brand-lighter text-brand-navy">
           <tr>
-            <td>{{ inv.project.name }}</td>
-            <td class="text-sm">{{ inv.added_by }}</td>
-            <td>
-              <span class="badge {% if inv.privilege == 'PROJECT_MANAGER' %}badge-primary{% else %}badge-ghost{% endif %}">
-                {{ inv.privilege }}
-              </span>
-            </td>
-            <td class="text-sm">{{ inv.created_at|date:"Y-m-d" }}</td>
-            <td>
-              <a class="btn btn-sm btn-primary"
-                 href="{% url 'projects:accept_or_decline' code=inv.invitation_code %}">
-                Review
-              </a>
-            </td>
+            <th>Project</th>
+            <th>From</th>
+            <th>Privilege</th>
+            <th>Received</th>
+            <th class="text-right">Action</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for inv in invitations %}
+            <tr class="hover:bg-brand-lighter/40">
+              <td class="font-medium text-brand-navy">{{ inv.project.name }}</td>
+              <td class="text-sm text-brand-text/80">{{ inv.added_by }}</td>
+              <td>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                  {% if inv.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                  {{ inv.privilege }}
+                </span>
+              </td>
+              <td class="text-sm text-brand-text/70">{{ inv.created_at|date:"Y-m-d" }}</td>
+              <td class="text-right">
+                <a class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                   href="{% url 'projects:accept_or_decline' code=inv.invitation_code %}">
+                  Review
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 {% else %}
-  <div class="alert">
-    <span>No pending invitations.</span>
-  </div>
+  {% include "_components/empty_state.html" with title="No pending invitations" body="When someone invites you to a project, it will appear here." %}
 {% endif %}
 {% endblock %}

@@ -1,4 +1,5 @@
 {# Minimal swap target after an HTMX edit — used as a fallback. #}
-<div class="alert alert-success" id="task-summary-{{ task.pk }}">
-  Saved changes to "{{ task.name }}".
+<div id="task-summary-{{ task.pk }}"
+     class="alert bg-success/10 text-success border border-success/20">
+  <span>Saved changes to &ldquo;{{ task.name }}&rdquo;.</span>
 </div>

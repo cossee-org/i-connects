@@ -1,62 +1,70 @@
 {% extends "base.html" %}
 
-{% block title %}{{ version.name }} v{{ version.version }} &mdash; i-connects{% endblock %}
+{% block title %}{{ version.name }} v{{ version.version }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with title=version.name subtitle="Preview the rendered form and inspect its JSON schema." eyebrow="Form version" %}
+{% endblock %}
 
 {% block content %}
-<section class="card bg-base-100 shadow">
-  <div class="card-body">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-sm opacity-70">Form #{{ form_obj.pk }}</p>
-        <h1 class="card-title text-2xl">
-          {{ version.name }} <span class="badge badge-ghost">v{{ version.version }}</span>
-          {% if version.archived %}
-            <span class="badge badge-warning">archived</span>
-          {% endif %}
-        </h1>
-      </div>
-      <div class="flex gap-2">
-        <a href="{% url 'forms_builder:version_list' pk=form_obj.pk %}"
-           class="btn btn-ghost btn-sm">Back</a>
-        <form action="{% url 'forms_builder:version_clone' pk=form_obj.pk vpk=version.pk %}"
-              method="post">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-sm">Clone</button>
-        </form>
-        {% if not version.archived %}
-          <form action="{% url 'forms_builder:version_archive' pk=form_obj.pk vpk=version.pk %}"
-                method="post">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-sm btn-error btn-outline">Archive</button>
-          </form>
-        {% endif %}
-      </div>
-    </div>
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="flex items-center gap-2 text-sm text-brand-text/70">
+    <span>Form #{{ form_obj.pk }}</span>
+    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">
+      v{{ version.version }}
+    </span>
+    {% if version.archived %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning/10 text-warning">
+        Archived
+      </span>
+    {% endif %}
+  </div>
+  <div class="flex gap-2">
+    <a href="{% url 'forms_builder:version_list' pk=form_obj.pk %}"
+       class="btn btn-sm btn-ghost">Back</a>
+    <form action="{% url 'forms_builder:version_clone' pk=form_obj.pk vpk=version.pk %}"
+          method="post" class="inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-sm btn-primary">Clone</button>
+    </form>
+    {% if not version.archived %}
+      <form action="{% url 'forms_builder:version_archive' pk=form_obj.pk vpk=version.pk %}"
+            method="post" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline btn-error">Archive</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-      <div>
-        <h2 class="font-semibold mb-2">Schema</h2>
-        <pre class="bg-base-200 p-3 rounded-box text-xs overflow-auto max-h-[400px]"><code>{{ pretty_schema }}</code></pre>
-
-        {% if pretty_ui_schema and pretty_ui_schema != "{}" %}
-          <h2 class="font-semibold mt-4 mb-2">UI schema</h2>
-          <pre class="bg-base-200 p-3 rounded-box text-xs overflow-auto max-h-[300px]"><code>{{ pretty_ui_schema }}</code></pre>
-        {% endif %}
-      </div>
-
-      <div>
-        <h2 class="font-semibold mb-2">Preview</h2>
-        {% if render_error %}
-          <div class="alert alert-error text-sm">
-            Could not render form: {{ render_error }}
-          </div>
-        {% elif rendered_form %}
-          {% include "forms_builder/render_form.html" with form=rendered_form readonly=True %}
-        {% else %}
-          <p class="opacity-70">Nothing to render.</p>
-        {% endif %}
-      </div>
+<div class="flex flex-col lg:flex-row gap-6">
+  <div class="flex-1 min-w-0">
+    <div class="brand-card p-6">
+      <h2 class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">Preview</h2>
+      {% if render_error %}
+        <div class="alert alert-error text-sm">
+          Could not render form: {{ render_error }}
+        </div>
+      {% elif rendered_form %}
+        {% include "forms_builder/render_form.html" with form=rendered_form readonly=True %}
+      {% else %}
+        <p class="text-brand-text/70">Nothing to render.</p>
+      {% endif %}
     </div>
   </div>
-</section>
+
+  <aside class="w-full lg:w-72 shrink-0 space-y-4">
+    <div class="brand-panel p-4">
+      <h2 class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-2">JSON schema</h2>
+      <pre class="bg-base-100 border border-brand-light/60 p-3 rounded-lg text-xs overflow-auto max-h-[400px]"><code>{{ pretty_schema }}</code></pre>
+    </div>
+
+    {% if pretty_ui_schema and pretty_ui_schema != "{}" %}
+      <div class="brand-panel p-4">
+        <h2 class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-2">UI schema</h2>
+        <pre class="bg-base-100 border border-brand-light/60 p-3 rounded-lg text-xs overflow-auto max-h-[300px]"><code>{{ pretty_ui_schema }}</code></pre>
+      </div>
+    {% endif %}
+  </aside>
+</div>
 {% endblock %}

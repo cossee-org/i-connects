@@ -1,96 +1,72 @@
 {% extends "base.html" %}
 
-{% block title %}Profile &mdash; i-connects{% endblock %}
+{% block title %}Profile &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with title="Your profile" subtitle="Manage your account details and notification preferences." %}
+{% endblock %}
 
 {% block content %}
-<div class="flex justify-center">
-  <div class="card w-full max-w-lg bg-base-100 shadow-xl">
-    <div class="card-body">
-      <h1 class="card-title text-2xl">Your profile</h1>
+<div class="max-w-2xl mx-auto space-y-6">
 
-      {% if messages %}
-        {% for message in messages %}
-          <div class="alert alert-success"><span>{{ message }}</span></div>
-        {% endfor %}
-      {% endif %}
-
-      {% if form.non_field_errors %}
-        <div class="alert alert-error">
-          {{ form.non_field_errors }}
-        </div>
-      {% endif %}
-
-      <form method="post"
-            hx-post="{% url 'accounts:profile' %}"
-            hx-target="closest .card-body"
-            hx-swap="outerHTML">
-        {% csrf_token %}
-
-        <div class="form-control">
-          <label class="label" for="{{ form.name.id_for_label }}">
-            <span class="label-text">Name</span>
-          </label>
-          {{ form.name }}
-          {% if form.name.errors %}
-            <label class="label"><span class="label-text-alt text-error">{{ form.name.errors.0 }}</span></label>
-          {% endif %}
-        </div>
-
-        <div class="form-control">
-          <label class="label" for="{{ form.email.id_for_label }}">
-            <span class="label-text">Email</span>
-          </label>
-          {{ form.email }}
-          {% if form.email.errors %}
-            <label class="label"><span class="label-text-alt text-error">{{ form.email.errors.0 }}</span></label>
-          {% endif %}
-        </div>
-
-        <div class="form-control">
-          <label class="label" for="{{ form.orcid.id_for_label }}">
-            <span class="label-text">ORCID iD</span>
-          </label>
-          {{ form.orcid }}
-          {% if form.orcid.errors %}
-            <label class="label"><span class="label-text-alt text-error">{{ form.orcid.errors.0 }}</span></label>
-          {% endif %}
-        </div>
-
-        <div class="form-control">
-          <label class="label" for="{{ form.email_project_activity_frequency.id_for_label }}">
-            <span class="label-text">Project activity emails</span>
-          </label>
-          {{ form.email_project_activity_frequency }}
-          {% if form.email_project_activity_frequency.errors %}
-            <label class="label"><span class="label-text-alt text-error">{{ form.email_project_activity_frequency.errors.0 }}</span></label>
-          {% endif %}
-        </div>
-
-        <div class="form-control">
-          <label class="label" for="{{ form.email_overdue_task_frequency.id_for_label }}">
-            <span class="label-text">Overdue task emails</span>
-          </label>
-          {{ form.email_overdue_task_frequency }}
-          {% if form.email_overdue_task_frequency.errors %}
-            <label class="label"><span class="label-text-alt text-error">{{ form.email_overdue_task_frequency.errors.0 }}</span></label>
-          {% endif %}
-        </div>
-
-        <div class="card-actions mt-4">
-          <button type="submit" class="btn btn-primary w-full">Save changes</button>
-        </div>
-      </form>
-
-      <div class="divider"></div>
-
-      <div class="flex flex-col gap-2">
-        <a href="{% url 'accounts:password_change' %}" class="btn btn-outline w-full">Change password</a>
-        <form method="post" action="{% url 'accounts:logout' %}">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-ghost w-full">Sign out</button>
-        </form>
+  <div class="brand-card p-6">
+    <div class="flex items-center gap-4 mb-6">
+      <div class="w-14 h-14 rounded-full bg-brand-navy text-white flex items-center justify-center text-xl font-semibold shrink-0">
+        {{ user.name|default:user.email|slice:":1"|upper }}
+      </div>
+      <div class="min-w-0">
+        <div class="text-lg font-semibold text-brand-navy truncate">{{ user.name|default:user.email }}</div>
+        {% if user.name %}
+          <div class="text-sm text-brand-text/70 truncate">{{ user.email }}</div>
+        {% endif %}
       </div>
     </div>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-error mb-4">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
+
+    <form method="post"
+          hx-post="{% url 'accounts:profile' %}"
+          hx-target="closest .brand-card"
+          hx-swap="outerHTML">
+      {% csrf_token %}
+
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">Account details</h2>
+      {% include "_components/form_field.html" with field=form.name %}
+      {% include "_components/form_field.html" with field=form.email %}
+      {% include "_components/form_field.html" with field=form.orcid %}
+
+      <h2 class="text-lg font-semibold text-brand-navy mb-3 mt-6">Email notifications</h2>
+      {% include "_components/form_field.html" with field=form.email_project_activity_frequency %}
+      {% include "_components/form_field.html" with field=form.email_overdue_task_frequency %}
+
+      <div class="flex justify-end mt-6">
+        <button type="submit"
+                class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+          Save changes
+        </button>
+      </div>
+    </form>
   </div>
+
+  <div class="brand-card p-6">
+    <h2 class="text-lg font-semibold text-brand-navy mb-3">Security</h2>
+    <p class="text-sm text-brand-text/70 mb-4">
+      Update your password or sign out of this session.
+    </p>
+    <div class="flex flex-col sm:flex-row gap-2">
+      <a href="{% url 'accounts:password_change' %}" class="btn btn-ghost border border-brand-light">
+        Change password
+      </a>
+      <form method="post" action="{% url 'accounts:logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-ghost">Sign out</button>
+      </form>
+    </div>
+  </div>
+
 </div>
 {% endblock %}

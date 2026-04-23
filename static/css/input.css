@@ -1,3 +1,48 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+      Roboto, "Helvetica Neue", sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    color: #323895;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  a {
+    color: #323895;
+  }
+  a:hover {
+    color: #f03d30;
+  }
+}
+
+@layer components {
+  .brand-stripe {
+    @apply h-[3px] w-full bg-brand-coral;
+  }
+  .brand-card {
+    @apply bg-base-100 border border-brand-light/60 rounded-lg shadow-sm;
+  }
+  .brand-panel {
+    @apply bg-brand-lighter border border-brand-light/60 rounded-lg;
+  }
+  .brand-tab {
+    @apply py-3 text-sm font-medium text-brand-navy hover:text-brand-coral
+           transition-colors border-b-2 border-transparent;
+  }
+  .brand-tab-active {
+    @apply border-brand-coral text-brand-coral;
+  }
+  .brand-heading {
+    @apply text-brand-navy font-semibold;
+  }
+  .form-field label {
+    @apply label-text font-medium text-brand-navy;
+  }
+}
