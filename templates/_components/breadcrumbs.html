@@ -1,0 +1,23 @@
+{# Breadcrumb trail inside the top navbar. #}
+{# Usage: {% include "_components/breadcrumbs.html" with crumbs=crumbs %}          #}
+{#        crumbs = [("My projects", "/projects/mine/"),                              #}
+{#                  ("Meta-analysis", "/projects/12/"),                              #}
+{#                  ("Tasks", None)]  # last item has no href => current page.       #}
+{% if crumbs %}
+  <nav aria-label="Breadcrumb" class="min-w-0 hidden md:block">
+    <ol class="flex items-center gap-2 text-sm text-brand-navy/80 overflow-hidden whitespace-nowrap">
+      {% for label, href in crumbs %}
+        {% if not forloop.first %}
+          <li aria-hidden="true" class="text-brand-navy/40">/</li>
+        {% endif %}
+        <li class="truncate min-w-0">
+          {% if href %}
+            <a href="{{ href }}" class="hover:text-brand-coral">{{ label }}</a>
+          {% else %}
+            <span aria-current="page" class="font-medium text-brand-navy truncate">{{ label }}</span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  </nav>
+{% endif %}
