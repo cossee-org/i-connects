@@ -71,15 +71,50 @@ class MyProjectListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        privs = {
+        user = self.request.user
+        privs_map = {
             p.project_id: p.privilege
-            for p in ProjectPrivilege.objects.filter(user=self.request.user)
+            for p in ProjectPrivilege.objects.filter(user=user)
         }
         # Templates can't do dict lookups by variable key, so pre-zip here.
         context["project_rows"] = [
-            {"project": p, "privilege": privs.get(p.id)}
+            {"project": p, "privilege": privs_map.get(p.id)}
             for p in context["projects"]
         ]
+
+        # --- Dashboard widgets (Ultra Plan §A3) ---------------------------
+        # Late-import to keep the projects app free of a hard task dep.
+        from apps.core.enums import TaskStatus
+        from apps.tasks.models import Task, TaskLog
+
+        context["my_active_tasks"] = (
+            Task.objects.filter(
+                assigned_members__users=user,
+                status=TaskStatus.NOT_COMPLETED,
+            )
+            .select_related("project", "container")
+            .order_by("deadline", "id")
+            .distinct()[:5]
+        )
+
+        # Pending approvals — only meaningful if the user is a PM somewhere.
+        pm_project_ids = [
+            pid for pid, priv in privs_map.items()
+            if priv == MemberPrivileges.PROJECT_MANAGER
+        ]
+        if pm_project_ids:
+            context["pending_approvals"] = (
+                TaskLog.objects.filter(
+                    status=TaskStatus.COMPLETED,
+                    approved__isnull=True,
+                    task__project_id__in=pm_project_ids,
+                )
+                .select_related("task", "task__project", "assigned_to")
+                .order_by("-created_at")[:5]
+            )
+        else:
+            context["pending_approvals"] = []
+
         return context
 
 

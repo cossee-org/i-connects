@@ -65,6 +65,14 @@ images, `aria-label` on icon-only buttons, `scope="col"` on data tables,
 One known gap: the SortableJS kanban has no keyboard alternative — a
 known issue flagged for v2.
 
+### 6. CSV export of contributions
+"Export CSV" buttons on the project contributions page (PM-only) and on
+the "My contributions" section of the profile. Columns: project,
+user_name, user_email, user_orcid, contribution_type, task, closed_at
+(ISO-8601), verified_by. Streams server-side so exports scale to
+thousands of rows. Designed to be paste-ready into an authorship /
+CRediT statement spreadsheet.
+
 ---
 
 ## Golden-path test checklist
@@ -78,9 +86,11 @@ known issue flagged for v2.
    - Create a task — note the new "Contribution type" select (Investigation / Data curation / Validation / Writing / Project administration / Other).
    - Mark the task done (the assignee or you).
    - Approve the completion from the task detail view.
-3. **Contribution ledger**
+3. **Contribution ledger + CSV export**
    - Open `/projects/<id>/contributions/` — the matrix shows 1 in the column matching the task's contribution type.
+   - As the PM, click "Export CSV" on the same page — downloads a spreadsheet of every contribution on this project.
    - Open `/accounts/profile/` — the "My contributions" section shows the pill + recent entry.
+   - Click "Export CSV" next to "My contributions" — downloads your own contribution sheet across all projects.
 4. **Audit log**
    - Open `/my/activity/` — see your login, signup, project-created, task-created, task-completed, task-approved.
    - As the PM, open `/projects/<id>/activity/` — project-scoped view.
@@ -105,7 +115,8 @@ known issue flagged for v2.
 
 ### v2 work explicitly deferred in the Ultra Plan
 - Full 15-item CRediT taxonomy (we ship the simplified 6-item subset).
-- CSV / XLSX export of contributions for authorship statements.
+- XLSX / ZIP export (CSV is shipped).
+- Auto-formatted prose CRediT author contribution statement.
 - Cross-project merit profiles / public contributor pages.
 - Trust/reliability scoring (v3; requires careful anti-gaming design).
 - Keyboard-only alternative to the kanban drag-drop.

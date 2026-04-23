@@ -16,6 +16,60 @@
   </a>
 </div>
 
+{% if my_active_tasks or pending_approvals %}
+  <div class="grid md:grid-cols-2 gap-5 mb-8">
+    {# My active tasks #}
+    <section class="brand-card p-5" aria-labelledby="active-tasks-heading">
+      <h2 id="active-tasks-heading" class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">
+        My active tasks
+      </h2>
+      {% if my_active_tasks %}
+        <ul class="divide-y divide-brand-light">
+          {% for task in my_active_tasks %}
+            <li class="py-3 text-sm">
+              <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
+                 class="font-medium text-brand-navy hover:text-brand-coral">
+                {{ task.name }}
+              </a>
+              <div class="text-xs text-brand-text/60 mt-0.5">
+                {{ task.project.name }}{% if task.deadline %} &middot; due {{ task.deadline|date:"M j" }}{% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-sm text-brand-text/60 italic">No open tasks assigned to you.</p>
+      {% endif %}
+    </section>
+
+    {# Pending approvals (PM-only) #}
+    {% if pending_approvals %}
+      <section class="brand-card p-5" aria-labelledby="pending-approvals-heading">
+        <h2 id="pending-approvals-heading" class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">
+          Pending your approval
+        </h2>
+        <ul class="divide-y divide-brand-light">
+          {% for log in pending_approvals %}
+            <li class="py-3 text-sm">
+              <a href="{% url 'tasks:detail' project_pk=log.task.project_id pk=log.task_id %}"
+                 class="font-medium text-brand-navy hover:text-brand-coral">
+                {{ log.task.name }}
+              </a>
+              <div class="text-xs text-brand-text/60 mt-0.5">
+                {{ log.task.project.name }} &middot; completed by {{ log.assigned_to.name|default:"—" }} {{ log.created_at|date:"M j" }}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% if project_rows %}
+  <h2 class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">Projects</h2>
+{% endif %}
+
 {% if project_rows %}
   <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
     {% for row in project_rows %}
