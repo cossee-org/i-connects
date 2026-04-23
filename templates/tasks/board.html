@@ -25,6 +25,10 @@
        class="btn btn-ghost btn-sm">Milestones</a>
     <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
        class="btn btn-ghost btn-sm">Manage columns</a>
+    {% if is_project_manager %}
+      <a href="{% url 'tasks:import' project_pk=project.pk %}"
+         class="btn btn-ghost btn-sm">Import CSV</a>
+    {% endif %}
     <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
             hx-get="{% url 'tasks:create' project_pk=project.pk %}"
             hx-target="#task-modal-body"

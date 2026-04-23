@@ -59,14 +59,29 @@ class UserRole(models.TextChoices):
 
 
 class ContributionType(models.TextChoices):
-    """CRediT-aligned contribution types.
+    """CRediT-aligned contribution types — full NISO CRediT 1.0 taxonomy.
 
-    Simplified v1 subset per Ultra Plan §8 (full 15-item CRediT taxonomy is v2).
+    See https://credit.niso.org/. The values are legacy-compatible: existing
+    rows with ``WRITING`` map to "Writing – original draft" conceptually but
+    are preserved verbatim (migrations do not rewrite user data).
     """
 
+    # ---- v1 simplified subset (kept verbatim for backward compatibility) --
     INVESTIGATION = "INVESTIGATION", "Investigation"
     DATA_CURATION = "DATA_CURATION", "Data curation"
     VALIDATION = "VALIDATION", "Validation"
-    WRITING = "WRITING", "Writing"
+    WRITING = "WRITING", "Writing (legacy)"
     PROJECT_ADMINISTRATION = "PROJECT_ADMINISTRATION", "Project administration"
     OTHER = "OTHER", "Other"
+
+    # ---- Full CRediT taxonomy (v2) ----------------------------------------
+    CONCEPTUALIZATION = "CONCEPTUALIZATION", "Conceptualization"
+    FORMAL_ANALYSIS = "FORMAL_ANALYSIS", "Formal analysis"
+    FUNDING_ACQUISITION = "FUNDING_ACQUISITION", "Funding acquisition"
+    METHODOLOGY = "METHODOLOGY", "Methodology"
+    RESOURCES = "RESOURCES", "Resources"
+    SOFTWARE = "SOFTWARE", "Software"
+    SUPERVISION = "SUPERVISION", "Supervision"
+    VISUALIZATION = "VISUALIZATION", "Visualization"
+    WRITING_ORIGINAL_DRAFT = "WRITING_ORIGINAL_DRAFT", "Writing – original draft"
+    WRITING_REVIEW_EDITING = "WRITING_REVIEW_EDITING", "Writing – review & editing"

@@ -7,17 +7,25 @@ project membership (or PROJECT_MANAGER privilege) via ``ProjectContextMixin``
 
 from __future__ import annotations
 
+import io
 import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Max
-from django.http import Http404, HttpResponse, HttpResponseBadRequest
+from django.http import (
+    Http404,
+    HttpResponse,
+    HttpResponseBadRequest,
+    HttpResponseForbidden,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.text import slugify
 from django.views.generic import (
     CreateView,
     DeleteView,
+    FormView,
     ListView,
     TemplateView,
     UpdateView,
@@ -35,6 +43,9 @@ from apps.tasks.forms import (
     TaskForm,
     TaskMilestoneForm,
 )
+from apps.tasks.ics import build_ics
+from apps.tasks.import_csv import import_rows, parse_csv
+from apps.tasks.import_form import TaskImportForm
 from apps.tasks.mixins import ProjectContextMixin, TaskMemberAccessMixin
 from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
 from apps.tasks.services import (
@@ -215,6 +226,49 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
         )
         context["form_title"] = "Edit task"
         return context
+
+
+class TaskImportView(LoginRequiredMixin, ProjectContextMixin, FormView):
+    """Bulk-create tasks from a CSV upload. PM only."""
+
+    template_name = "tasks/task_import.html"
+    form_class = TaskImportForm
+
+    def dispatch(self, request, *args, **kwargs):
+        response = super().dispatch(request, *args, **kwargs)
+        # ``super().dispatch`` already resolved ``self.is_project_manager``
+        # via ProjectContextMixin. We re-check here so non-PM members see a
+        # clean 403 rather than reaching the import logic.
+        if not getattr(self, "is_project_manager", False):
+            return HttpResponseForbidden(
+                "Bulk task import is restricted to project managers."
+            )
+        return response
+
+    def form_valid(self, form):
+        upload = form.cleaned_data["csv_file"]
+        wrapped = io.TextIOWrapper(upload, encoding="utf-8", newline="")
+        rows, parse_errors = parse_csv(wrapped)
+
+        if parse_errors:
+            for err in parse_errors:
+                form.add_error(None, err)
+            return self.form_invalid(form)
+
+        created, row_errors = import_rows(
+            self.project, rows, user=self.request.user
+        )
+
+        if created == 0 and row_errors and row_errors[0].startswith("import failed"):
+            # A hard rollback — surface it as a form error and re-render.
+            for err in row_errors:
+                form.add_error(None, err)
+            return self.form_invalid(form)
+
+        messages.success(self.request, f"{created} tasks imported.")
+        for warning in row_errors:
+            messages.warning(self.request, warning)
+        return redirect("tasks:board", project_pk=self.project.pk)
 
 
 class TaskDeleteView(LoginRequiredMixin, ProjectContextMixin, DeleteView):
@@ -533,6 +587,28 @@ class MilestoneDeleteView(LoginRequiredMixin, ProjectContextMixin, View):
         )
         milestone.delete()
         return HttpResponse(status=204)
+
+
+class MilestoneCalendarView(LoginRequiredMixin, ProjectContextMixin, View):
+    """Serve project milestones as an ICS (iCalendar) feed.
+
+    Researchers can subscribe to this URL from Google Calendar / Apple
+    Calendar / Outlook to see milestone deadlines alongside their own
+    events. Access is gated by project membership (via ``ProjectContextMixin``).
+    """
+
+    def get(self, request, *args, **kwargs):
+        milestones = Milestone.objects.filter(project=self.project)
+        ics_text = build_ics(
+            milestones,
+            calendar_name=f"{self.project.name} — milestones",
+        )
+        response = HttpResponse(
+            ics_text, content_type="text/calendar; charset=utf-8"
+        )
+        filename = f"milestones-{slugify(self.project.name) or self.project.pk}.ics"
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
 
 class TaskMilestoneAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):

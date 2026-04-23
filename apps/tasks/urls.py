@@ -22,6 +22,11 @@ urlpatterns = [
         name="create",
     ),
     path(
+        "projects/<int:project_pk>/tasks/import/",
+        views.TaskImportView.as_view(),
+        name="import",
+    ),
+    path(
         "projects/<int:project_pk>/tasks/<int:pk>/",
         views.TaskDetailView.as_view(),
         name="detail",
@@ -98,6 +103,11 @@ urlpatterns = [
         "projects/<int:project_pk>/milestones/",
         views.MilestoneListView.as_view(),
         name="milestone_list",
+    ),
+    path(
+        "projects/<int:project_pk>/milestones.ics",
+        views.MilestoneCalendarView.as_view(),
+        name="milestone_calendar",
     ),
     path(
         "projects/<int:project_pk>/milestones/new/",

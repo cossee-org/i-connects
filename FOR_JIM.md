@@ -140,6 +140,31 @@ On every push / PR to `main`: pytest runs with Python 3.12, and
 Tailwind CSS is rebuilt. Dependabot opens weekly PRs for pip, npm,
 and GitHub Actions updates.
 
+### 13. Full 15-item CRediT taxonomy
+The "Contribution type" select on the task form now offers the complete
+NISO CRediT 1.0 taxonomy: Conceptualization, Data curation, Formal
+analysis, Funding acquisition, Investigation, Methodology, Project
+administration, Resources, Software, Supervision, Validation,
+Visualization, Writing – original draft, Writing – review & editing,
+Other. Existing rows keep their v1 values verbatim (no data migration).
+
+### 14. ICS calendar export for milestones
+`/projects/<id>/milestones.ics` returns an iCalendar feed of every
+milestone with a date. Researchers subscribe from Google/Apple/Outlook
+and get deadlines in their calendar. A "Subscribe to calendar" button
+lives on the milestone list page. Hand-rolled RFC 5545 builder — no
+new dependency.
+
+### 15. Bulk CSV task import
+PMs can upload a CSV at `/projects/<id>/tasks/import/` with columns:
+`name` (required), `description`, `deadline` (YYYY-MM-DD),
+`contribution_type`, `column` (kanban column name; auto-created if
+missing), `assignee_emails` (comma-separated existing member emails).
+Unknown assignee emails produce per-row warnings rather than failure;
+the whole import runs in one transaction. Each imported task is
+audit-logged. "Import CSV" button added to the kanban board toolbar
+for PMs.
+
 ---
 
 ## Golden-path test checklist
@@ -183,14 +208,11 @@ and GitHub Actions updates.
 2. **Production deployment** — local Docker boots clean, but no staging server exists yet. Needs UA IT to provision a subdomain, TLS cert, and backup policy.
 
 ### v2 work explicitly deferred in the Ultra Plan
-- Full 15-item CRediT taxonomy (we ship the simplified 6-item subset).
-- XLSX / ZIP export (CSV is shipped).
-- Auto-formatted prose CRediT author contribution statement.
+- XLSX / ZIP export (CSV is shipped; XLSX adds `openpyxl` dep for little gain).
+- Auto-formatted prose CRediT author contribution statement generator.
 - Cross-project merit profile / public contributor directory.
 - Trust/reliability scoring (v3; requires careful anti-gaming design).
 - Mailing list archive per project.
-- Bulk CSV task import.
-- ICS calendar export.
 
 ### Open design question
 - **Accent coral `#f03d30`** is the working value (resolved from the logo since the brand sheet's `#231f20` is clearly a typo). If your designer confirms a different exact hex, it's a one-line change in `tailwind.config.js`.
