@@ -10,7 +10,28 @@ git pull origin main
 cp .env.example .env   # if you haven't already
 docker compose up --build
 # open http://localhost:8000
-# create a superuser in another terminal:
+```
+
+### Quick way: load demo data (recommended first)
+
+One command creates three demo users, a seeded project, and a mix of
+approved / pending / open tasks so the app looks real when you sign in:
+
+```bash
+docker compose exec web python manage.py seed_demo
+```
+
+Sign in with any of:
+- `alice@iconnects.test` (project manager — sees "Pending your approval")
+- `bob@iconnects.test` (contributor — has open tasks + approved contributions)
+- `cara@iconnects.test` (contributor — same)
+
+All three use password `demopass`. The command is idempotent — running
+twice is safe.
+
+### Or: start fresh with your own superuser
+
+```bash
 docker compose exec web python manage.py createsuperuser
 ```
 
