@@ -17,10 +17,7 @@
       </div>
     {% endif %}
 
-    <form method="post"
-          hx-post="{% url 'accounts:login' %}"
-          hx-target="closest .brand-card"
-          hx-swap="outerHTML">
+    <form method="post">
       {% csrf_token %}
       {% if request.GET.next %}
         <input type="hidden" name="next" value="{{ request.GET.next }}">

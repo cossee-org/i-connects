@@ -71,9 +71,9 @@
             <li><a href="{% url 'audit:my_activity' %}">My activity</a></li>
             {% if user.role == 'ADMIN' %}<li><a href="{% url 'core:admin_console' %}">Admin console</a></li>{% endif %}
             <li>
-              <form method="post" action="{% url 'accounts:logout' %}" class="p-0 m-0">
+              <form method="post" action="{% url 'accounts:logout' %}" class="contents">
                 {% csrf_token %}
-                <button type="submit" class="w-full text-left">Sign out</button>
+                <button type="submit">Sign out</button>
               </form>
             </li>
           </ul>
