@@ -1,5 +1,7 @@
-{# One row in the project members table. HTMX fragment — do NOT wrap in {% extends %}.
-   Context: row {member, user, privilege, form}, project, user_privilege. #}
+{% comment %}
+One row in the project members table. HTMX fragment — do NOT wrap in an extends tag.
+Context: row {member, user, privilege, form}, project, user_privilege.
+{% endcomment %}
 <tr id="member-row-{{ row.member.pk }}" class="hover:bg-brand-lighter/40">
   <td>
     <div class="flex items-center gap-2">
