@@ -12,7 +12,7 @@
       Invite someone to {{ project.name }}
     </h1>
     <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">
-      Send an invitation by email. The recipient will be able to accept or decline.
+      Pick an existing i-connects user, or invite someone new by email. The recipient will be able to accept or decline.
     </p>
   </header>
 {% endblock %}
@@ -26,6 +26,8 @@
       <div class="alert alert-error mb-4">{{ form.non_field_errors }}</div>
     {% endif %}
 
+    {% include "_components/form_field.html" with field=form.invited_user %}
+    <div class="text-xs text-brand-text/60 mb-4 -mt-2">— or —</div>
     {% include "_components/form_field.html" with field=form.email %}
     {% include "_components/form_field.html" with field=form.privilege %}
 
