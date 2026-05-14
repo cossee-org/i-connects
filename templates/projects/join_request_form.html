@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Request to join {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6">
+    <a href="{% url 'projects:detail' pk=project.pk %}"
+       class="text-sm text-brand-navy/70 hover:text-brand-coral font-medium">
+      &laquo; Back to {{ project.name }}
+    </a>
+    <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight mt-1">
+      Request to join {{ project.name }}
+    </h1>
+    <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">
+      Your request will be sent to the project managers. They can approve or decline it.
+    </p>
+  </header>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-xl mx-auto">
+  <form method="post" class="brand-card p-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-error mb-4">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    {% include "_components/form_field.html" with field=form.requested_privilege %}
+    {% include "_components/form_field.html" with field=form.message %}
+
+    <div class="flex gap-2 justify-end mt-6">
+      <a href="{% url 'projects:detail' pk=project.pk %}" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+        Send request
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

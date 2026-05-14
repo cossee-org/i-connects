@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     Element,
     Invitation,
+    JoinRequest,
     Project,
     ProjectMember,
     ProjectPrivilege,
@@ -36,6 +37,21 @@ class InvitationAdmin(admin.ModelAdmin):
     list_display = ("id", "email", "project", "privilege", "added_by", "created_at")
     search_fields = ("email", "project__name", "invitation_code", "added_by")
     list_filter = ("privilege",)
+
+
+@admin.register(JoinRequest)
+class JoinRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "project",
+        "user",
+        "requested_privilege",
+        "status",
+        "created_at",
+        "decided_at",
+    )
+    search_fields = ("project__name", "user__email", "user__name")
+    list_filter = ("status", "requested_privilege")
 
 
 @admin.register(Element)

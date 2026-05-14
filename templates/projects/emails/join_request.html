@@ -1,0 +1,15 @@
+{% autoescape on %}
+<p>Hi,</p>
+<p>
+  <strong>{{ requester.name|default:requester.email }}</strong> has requested to join
+  <strong>{{ project.name }}</strong> as
+  <em>{{ join_request.get_requested_privilege_display }}</em>.
+</p>
+{% if join_request.message %}
+<p style="border-left:3px solid #eee;padding-left:10px;color:#555">
+  {{ join_request.message|linebreaksbr }}
+</p>
+{% endif %}
+<p><a href="{{ url }}">Review pending requests</a></p>
+<p>— i-connects</p>
+{% endautoescape %}

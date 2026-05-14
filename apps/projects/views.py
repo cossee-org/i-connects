@@ -21,18 +21,37 @@ from django.views.generic import (
 from apps.audit.services import AuditAction, log_action
 from apps.core.enums import MemberPrivileges
 
-from .forms import InvitationForm, MemberPrivilegeForm, ProjectForm
+from apps.core.enums import JoinRequestStatus
+
+from .forms import (
+    InvitationForm,
+    JoinRequestDeclineForm,
+    JoinRequestForm,
+    MemberPrivilegeForm,
+    ProjectForm,
+)
 from .mixins import (
     ProjectContextMixin,
     ProjectManagerRequiredMixin,
     ProjectMemberRequiredMixin,
 )
-from .models import Invitation, Project, ProjectMember, ProjectPrivilege
+from .models import (
+    Invitation,
+    JoinRequest,
+    Project,
+    ProjectMember,
+    ProjectPrivilege,
+)
 from .services import (
+    JoinRequestError,
     accept_invitation,
+    approve_join_request,
+    cancel_join_request,
     create_invitation,
+    create_join_request,
     create_project_with_owner,
     decline_invitation,
+    decline_join_request,
 )
 
 
@@ -158,8 +177,20 @@ class ProjectDetailView(DetailView):
                 .first()
             )
             context["user_privilege"] = user_priv.privilege if user_priv else None
+            context["pending_join_request"] = (
+                JoinRequest.objects.filter(
+                    project=project,
+                    user=self.request.user,
+                    status=JoinRequestStatus.PENDING,
+                ).first()
+            )
+            if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
+                context["pending_join_request_count"] = JoinRequest.objects.filter(
+                    project=project, status=JoinRequestStatus.PENDING
+                ).count()
         else:
             context["user_privilege"] = None
+            context["pending_join_request"] = None
         return context
 
 
@@ -399,8 +430,13 @@ class InviteCreateView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
             added_by=added_by,
             roles=form.cleaned_data.get("roles"),
             inviter=request.user,
+            invited_user=form.cleaned_data.get("invited_user"),
         )
-        messages.success(request, f"Invitation sent to {form.cleaned_data['email']}.")
+        recipient_label = (
+            getattr(form.cleaned_data.get("invited_user"), "email", None)
+            or form.cleaned_data["email"]
+        )
+        messages.success(request, f"Invitation sent to {recipient_label}.")
         return HttpResponseRedirect(
             reverse("projects:members", kwargs={"pk": self.project.pk})
         )
@@ -460,3 +496,193 @@ class AcceptOrDeclineInviteView(View):
         project = accept_invitation(invitation=invitation, user=request.user)
         messages.success(request, f"Joined '{project.name}'.")
         return redirect("projects:detail", pk=project.pk)
+
+
+# ---------------------------------------------------------------------------
+# Join requests
+# ---------------------------------------------------------------------------
+
+
+def _normalize_requested_privilege(raw: str | None) -> str:
+    if raw == MemberPrivileges.PROJECT_MANAGER:
+        return MemberPrivileges.PROJECT_MANAGER
+    return MemberPrivileges.CONTRIBUTOR
+
+
+class RequestToJoinView(LoginRequiredMixin, View):
+    """Show the join-request form (GET) and submit it (POST).
+
+    Accessible to any logged-in non-member. For private projects, the user
+    must have somehow reached the URL — they cannot view detail without
+    membership, so this endpoint can only be hit if they already had the
+    link or the project is public.
+    """
+
+    template_name = "projects/join_request_form.html"
+
+    def _get_project(self, pk: int) -> Project:
+        project = get_object_or_404(Project, pk=pk)
+        if not project.is_public and not ProjectPrivilege.objects.filter(
+            user=self.request.user, project=project
+        ).exists():
+            # Private projects: only members can interact at all. The
+            # detail view would already block this, but be explicit.
+            raise PermissionDenied("This project is private.")
+        return project
+
+    def _already_member(self, project: Project) -> bool:
+        return ProjectPrivilege.objects.filter(
+            user=self.request.user, project=project
+        ).exists()
+
+    def get(self, request, pk):
+        project = self._get_project(pk)
+        if self._already_member(project):
+            messages.info(request, "You are already a member of this project.")
+            return redirect("projects:detail", pk=project.pk)
+
+        pending = JoinRequest.objects.filter(
+            project=project,
+            user=request.user,
+            status=JoinRequestStatus.PENDING,
+        ).first()
+        if pending is not None:
+            messages.info(request, "You already have a pending request for this project.")
+            return redirect("projects:detail", pk=project.pk)
+
+        initial_privilege = _normalize_requested_privilege(
+            request.GET.get("privilege")
+        )
+        form = JoinRequestForm(initial_privilege=initial_privilege)
+        return render(
+            request,
+            self.template_name,
+            {"form": form, "project": project},
+        )
+
+    def post(self, request, pk):
+        project = self._get_project(pk)
+        form = JoinRequestForm(request.POST)
+        if not form.is_valid():
+            return render(
+                request,
+                self.template_name,
+                {"form": form, "project": project},
+            )
+
+        try:
+            create_join_request(
+                project=project,
+                user=request.user,
+                requested_privilege=form.cleaned_data["requested_privilege"],
+                message=form.cleaned_data.get("message", ""),
+            )
+        except JoinRequestError as exc:
+            messages.error(request, str(exc))
+            return redirect("projects:detail", pk=project.pk)
+
+        messages.success(
+            request,
+            f"Your request to join '{project.name}' was sent to the project managers.",
+        )
+        return redirect("projects:detail", pk=project.pk)
+
+
+class ProjectJoinRequestListView(
+    ProjectManagerRequiredMixin, ProjectContextMixin, ListView
+):
+    """PM-facing list of pending join requests for a project."""
+
+    template_name = "projects/join_requests.html"
+    context_object_name = "join_requests"
+
+    def get_queryset(self):
+        return (
+            JoinRequest.objects.filter(
+                project=self.project, status=JoinRequestStatus.PENDING
+            )
+            .select_related("user")
+            .order_by("created_at")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["decline_form"] = JoinRequestDeclineForm()
+        return context
+
+
+class ApproveJoinRequestView(
+    ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
+    http_method_names = ["post"]
+
+    def post(self, request, pk, join_request_pk):
+        join_request = get_object_or_404(
+            JoinRequest, pk=join_request_pk, project=self.project
+        )
+        try:
+            approve_join_request(join_request=join_request, approver=request.user)
+        except JoinRequestError as exc:
+            messages.error(request, str(exc))
+            return redirect("projects:join_requests", pk=self.project.pk)
+
+        messages.success(request, "Join request approved.")
+        if request.headers.get("HX-Request"):
+            return HttpResponse("")
+        return redirect("projects:join_requests", pk=self.project.pk)
+
+
+class DeclineJoinRequestView(
+    ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
+    http_method_names = ["post"]
+
+    def post(self, request, pk, join_request_pk):
+        join_request = get_object_or_404(
+            JoinRequest, pk=join_request_pk, project=self.project
+        )
+        form = JoinRequestDeclineForm(request.POST)
+        reason = form.cleaned_data.get("reason", "") if form.is_valid() else ""
+        try:
+            decline_join_request(
+                join_request=join_request,
+                approver=request.user,
+                reason=reason,
+            )
+        except JoinRequestError as exc:
+            messages.error(request, str(exc))
+            return redirect("projects:join_requests", pk=self.project.pk)
+
+        messages.info(request, "Join request declined.")
+        if request.headers.get("HX-Request"):
+            return HttpResponse("")
+        return redirect("projects:join_requests", pk=self.project.pk)
+
+
+class CancelJoinRequestView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, join_request_pk):
+        join_request = get_object_or_404(
+            JoinRequest, pk=join_request_pk, user=request.user
+        )
+        try:
+            cancel_join_request(join_request=join_request, user=request.user)
+        except JoinRequestError as exc:
+            messages.error(request, str(exc))
+            return redirect("projects:my_join_requests")
+
+        messages.info(request, "Join request cancelled.")
+        return redirect("projects:my_join_requests")
+
+
+class MyJoinRequestsView(LoginRequiredMixin, ListView):
+    template_name = "projects/my_join_requests.html"
+    context_object_name = "join_requests"
+
+    def get_queryset(self):
+        return (
+            JoinRequest.objects.filter(user=self.request.user)
+            .select_related("project")
+            .order_by("-created_at")
+        )

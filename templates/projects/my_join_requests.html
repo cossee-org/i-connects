@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}My join requests &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with title="My join requests" subtitle="Requests you've sent to join projects." %}
+{% endblock %}
+
+{% block content %}
+{% if join_requests %}
+  <div class="brand-card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th scope="col">Project</th>
+            <th scope="col">Requested as</th>
+            <th scope="col">Status</th>
+            <th scope="col">Sent</th>
+            <th scope="col" class="text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for jr in join_requests %}
+            <tr class="hover:bg-brand-lighter/40">
+              <td class="font-medium text-brand-navy">
+                <a href="{% url 'projects:detail' pk=jr.project.pk %}" class="hover:text-brand-coral">
+                  {{ jr.project.name }}
+                </a>
+              </td>
+              <td>{{ jr.get_requested_privilege_display }}</td>
+              <td>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                  {% if jr.status == 'PENDING' %}bg-brand-coral/10 text-brand-coral
+                  {% elif jr.status == 'APPROVED' %}bg-green-100 text-green-700
+                  {% elif jr.status == 'DECLINED' %}bg-red-100 text-red-700
+                  {% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                  {{ jr.get_status_display }}
+                </span>
+              </td>
+              <td class="text-sm text-brand-text/70">{{ jr.created_at|date:"Y-m-d" }}</td>
+              <td class="text-right">
+                {% if jr.status == 'PENDING' %}
+                  <form method="post"
+                        action="{% url 'projects:cancel_join_request' join_request_pk=jr.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-ghost">Cancel</button>
+                  </form>
+                {% else %}
+                  &mdash;
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% else %}
+  {% include "_components/empty_state.html" with title="No join requests" body="When you ask to join a project, it will appear here." %}
+{% endif %}
+{% endblock %}
