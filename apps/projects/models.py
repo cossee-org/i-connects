@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.db import models
 
-from apps.core.enums import MemberPrivileges, ProjectStatus, WidgetSize
+from apps.core.enums import JoinRequestStatus, MemberPrivileges, ProjectStatus, WidgetSize
 
 
 class Project(models.Model):
@@ -132,6 +132,16 @@ class Invitation(models.Model):
         related_name="invitations",
     )
     email = models.EmailField(max_length=254)
+    # Pre-resolved invitee, when a PM picks an existing user rather than
+    # typing a free-text address. ``email`` is still populated (from the
+    # user's account) so the accept/decline flow keeps working unchanged.
+    invited_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="received_invitations",
+    )
     privilege = models.CharField(
         max_length=32,
         choices=MemberPrivileges.choices,
@@ -227,3 +237,58 @@ class ProjectWidget(models.Model):
 
     def __str__(self) -> str:
         return f"{self.type} widget (u={self.user_id}, p={self.project_id})"
+
+
+class JoinRequest(models.Model):
+    """A user's request to join a project at a specific privilege level."""
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="join_requests",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="project_join_requests",
+    )
+    requested_privilege = models.CharField(
+        max_length=32,
+        choices=MemberPrivileges.choices,
+        default=MemberPrivileges.CONTRIBUTOR,
+    )
+    message = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=16,
+        choices=JoinRequestStatus.choices,
+        default=JoinRequestStatus.PENDING,
+    )
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decided_join_requests",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project", "user"],
+                condition=models.Q(status="PENDING"),
+                name="uniq_pending_join_request_per_user_project",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["project", "status"]),
+            models.Index(fields=["user", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"JoinRequest #{self.pk} ({self.user_id} → {self.project_id}, {self.status})"

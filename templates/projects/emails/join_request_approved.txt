@@ -1,0 +1,9 @@
+Hi,
+
+Your request to join "{{ project.name }}" as
+{{ join_request.get_requested_privilege_display }} was approved.
+
+Open the project here:
+{{ url }}
+
+— i-connects

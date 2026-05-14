@@ -1,0 +1,13 @@
+Hi,
+
+{{ requester.name|default:requester.email }} has requested to join
+"{{ project.name }}" as {{ join_request.get_requested_privilege_display }}.
+
+{% if join_request.message %}They wrote:
+
+{{ join_request.message }}
+
+{% endif %}Review pending requests here:
+{{ url }}
+
+— i-connects

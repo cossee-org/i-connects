@@ -48,4 +48,35 @@ urlpatterns = [
         views.AcceptOrDeclineInviteView.as_view(),
         name="accept_or_decline",
     ),
+    # Join requests
+    path(
+        "projects/<int:pk>/join/",
+        views.RequestToJoinView.as_view(),
+        name="request_to_join",
+    ),
+    path(
+        "projects/<int:pk>/join-requests/",
+        views.ProjectJoinRequestListView.as_view(),
+        name="join_requests",
+    ),
+    path(
+        "projects/<int:pk>/join-requests/<int:join_request_pk>/approve/",
+        views.ApproveJoinRequestView.as_view(),
+        name="approve_join_request",
+    ),
+    path(
+        "projects/<int:pk>/join-requests/<int:join_request_pk>/decline/",
+        views.DeclineJoinRequestView.as_view(),
+        name="decline_join_request",
+    ),
+    path(
+        "joins/<int:join_request_pk>/cancel/",
+        views.CancelJoinRequestView.as_view(),
+        name="cancel_join_request",
+    ),
+    path(
+        "joins/",
+        views.MyJoinRequestsView.as_view(),
+        name="my_join_requests",
+    ),
 ]

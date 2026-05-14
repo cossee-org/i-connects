@@ -33,12 +33,40 @@
     </div>
     <div class="flex flex-wrap gap-2 justify-end">
       {% if user_privilege == "PROJECT_MANAGER" %}
+        <a href="{% url 'projects:join_requests' pk=project.pk %}"
+           class="btn btn-sm btn-ghost relative">
+          Join requests
+          {% if pending_join_request_count %}
+            <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
+              {{ pending_join_request_count }}
+            </span>
+          {% endif %}
+        </a>
         <a href="{% url 'projects:invite' pk=project.pk %}"
            class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
           Invite member
         </a>
         <a href="{% url 'projects:update' pk=project.pk %}" class="btn btn-sm btn-primary">Edit</a>
         <a href="{% url 'projects:delete' pk=project.pk %}" class="btn btn-sm btn-outline btn-error">Delete</a>
+      {% elif user.is_authenticated and not user_privilege %}
+        {% if pending_join_request %}
+          <span class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-brand-light/60 text-brand-text">
+            Request pending ({{ pending_join_request.get_requested_privilege_display }})
+          </span>
+          <form method="post" action="{% url 'projects:cancel_join_request' join_request_pk=pending_join_request.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-ghost">Cancel request</button>
+          </form>
+        {% else %}
+          <a href="{% url 'projects:request_to_join' pk=project.pk %}?privilege=CONTRIBUTOR"
+             class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+            Request to join as member
+          </a>
+          <a href="{% url 'projects:request_to_join' pk=project.pk %}?privilege=PROJECT_MANAGER"
+             class="btn btn-sm btn-outline">
+            Request to join as lead
+          </a>
+        {% endif %}
       {% endif %}
     </div>
   </header>

@@ -10,6 +10,13 @@ class MemberPrivileges(models.TextChoices):
     CONTRIBUTOR = "CONTRIBUTOR", "Contributor"
 
 
+class JoinRequestStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    APPROVED = "APPROVED", "Approved"
+    DECLINED = "DECLINED", "Declined"
+    CANCELLED = "CANCELLED", "Cancelled"
+
+
 class ProjectStatus(models.TextChoices):
     PLANNING = "PLANNING", "Planning"
     LOOKING_FOR_COLLABORATORS = "LOOKING_FOR_COLLABORATORS", "Looking for collaborators"
