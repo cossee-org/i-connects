@@ -16,12 +16,15 @@ from apps.projects.models import (
 )
 from apps.projects.services import (
     JoinRequestError,
+    LastProjectManagerError,
     approve_join_request,
+    assert_pm_self_action_allowed,
     cancel_join_request,
     create_invitation,
     create_join_request,
     create_project_with_owner,
     decline_join_request,
+    is_last_project_manager,
 )
 
 
@@ -429,3 +432,249 @@ def test_detail_shows_request_to_join_button_for_non_members(client, user, other
     content = response.content.decode()
     assert "Request to join as member" in content
     assert "Request to join as lead" in content
+
+
+# ---------------------------------------------------------------------------
+# Last-PM invariant
+# ---------------------------------------------------------------------------
+
+
+def _add_pm(project, target_user):
+    """Helper: make ``target_user`` a PROJECT_MANAGER on ``project``."""
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(target_user)
+    ProjectPrivilege.objects.create(
+        project=project,
+        user=target_user,
+        privilege=MemberPrivileges.PROJECT_MANAGER,
+    )
+    return member
+
+
+@pytest.mark.django_db
+def test_is_last_project_manager_true_when_solo(user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Solo PM", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    assert is_last_project_manager(project=project, user=user) is True
+
+
+@pytest.mark.django_db
+def test_is_last_project_manager_false_when_another_pm_exists(user, other_user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Two PMs", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    _add_pm(project, other_user)
+    assert is_last_project_manager(project=project, user=user) is False
+
+
+@pytest.mark.django_db
+def test_assert_pm_self_action_blocks_solo_self_demote(user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Solo", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    with pytest.raises(LastProjectManagerError):
+        assert_pm_self_action_allowed(
+            project=project,
+            actor=user,
+            target_user=user,
+            new_privilege=MemberPrivileges.CONTRIBUTOR,
+        )
+
+
+@pytest.mark.django_db
+def test_assert_pm_self_action_blocks_solo_self_removal(user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Solo", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    with pytest.raises(LastProjectManagerError):
+        assert_pm_self_action_allowed(
+            project=project,
+            actor=user,
+            target_user=user,
+            new_privilege=None,
+        )
+
+
+@pytest.mark.django_db
+def test_assert_pm_self_action_allows_acting_on_others(user, other_user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Solo", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    _add_pm(project, other_user)
+    # Solo PM demoting another PM is fine — actor remains PM.
+    assert_pm_self_action_allowed(
+        project=project,
+        actor=user,
+        target_user=other_user,
+        new_privilege=MemberPrivileges.CONTRIBUTOR,
+    )
+
+
+@pytest.mark.django_db
+def test_assert_pm_self_action_allows_self_when_coexisting_pm(user, other_user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Two", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    _add_pm(project, other_user)
+    # Co-PM exists — self-demotion is allowed.
+    assert_pm_self_action_allowed(
+        project=project,
+        actor=user,
+        target_user=user,
+        new_privilege=MemberPrivileges.CONTRIBUTOR,
+    )
+
+
+@pytest.mark.django_db
+def test_last_pm_cannot_self_demote_via_view(client, user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.get(project=project, users=user)
+    client.force_login(user)
+    response = client.post(
+        reverse(
+            "projects:update_privilege",
+            kwargs={"pk": project.pk, "member_pk": member.pk},
+        ),
+        {"privilege": MemberPrivileges.CONTRIBUTOR},
+    )
+    assert response.status_code in (301, 302)
+    # Privilege unchanged.
+    assert ProjectPrivilege.objects.filter(
+        project=project, user=user, privilege=MemberPrivileges.PROJECT_MANAGER
+    ).exists()
+    assert not ProjectPrivilege.objects.filter(
+        project=project, user=user, privilege=MemberPrivileges.CONTRIBUTOR
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_last_pm_cannot_self_demote_via_htmx_returns_400(client, user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.get(project=project, users=user)
+    client.force_login(user)
+    response = client.post(
+        reverse(
+            "projects:update_privilege",
+            kwargs={"pk": project.pk, "member_pk": member.pk},
+        ),
+        {"privilege": MemberPrivileges.CONTRIBUTOR},
+        HTTP_HX_REQUEST="true",
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_last_pm_cannot_self_remove_via_view(client, user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.get(project=project, users=user)
+    client.force_login(user)
+    response = client.post(
+        reverse(
+            "projects:remove_member",
+            kwargs={"pk": project.pk, "member_pk": member.pk},
+        )
+    )
+    assert response.status_code in (301, 302)
+    member.refresh_from_db()
+    assert member.deleted is False
+    assert ProjectPrivilege.objects.filter(
+        project=project, user=user, privilege=MemberPrivileges.PROJECT_MANAGER
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_pm_can_self_demote_when_another_pm_exists(client, user, other_user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    _add_pm(project, other_user)
+    member = ProjectMember.objects.get(project=project, users=user)
+    client.force_login(user)
+    response = client.post(
+        reverse(
+            "projects:update_privilege",
+            kwargs={"pk": project.pk, "member_pk": member.pk},
+        ),
+        {"privilege": MemberPrivileges.CONTRIBUTOR},
+    )
+    assert response.status_code == 200
+    assert ProjectPrivilege.objects.filter(
+        project=project, user=user, privilege=MemberPrivileges.CONTRIBUTOR
+    ).exists()
+    assert not ProjectPrivilege.objects.filter(
+        project=project, user=user, privilege=MemberPrivileges.PROJECT_MANAGER
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_pm_can_self_remove_when_another_pm_exists(client, user, other_user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    _add_pm(project, other_user)
+    member = ProjectMember.objects.get(project=project, users=user)
+    client.force_login(user)
+    response = client.post(
+        reverse(
+            "projects:remove_member",
+            kwargs={"pk": project.pk, "member_pk": member.pk},
+        )
+    )
+    assert response.status_code in (301, 302)
+    member.refresh_from_db()
+    assert member.deleted is True
+    assert not ProjectPrivilege.objects.filter(
+        project=project, user=user
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_pm_can_demote_another_pm(client, user, other_user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    other_member = _add_pm(project, other_user)
+    client.force_login(user)
+    response = client.post(
+        reverse(
+            "projects:update_privilege",
+            kwargs={"pk": project.pk, "member_pk": other_member.pk},
+        ),
+        {"privilege": MemberPrivileges.CONTRIBUTOR},
+    )
+    assert response.status_code == 200
+    assert ProjectPrivilege.objects.filter(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_members_page_disables_self_controls_for_last_pm(client, user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    client.force_login(user)
+    response = client.get(reverse("projects:members", kwargs={"pk": project.pk}))
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "A project must always have at least one Project Manager." in content

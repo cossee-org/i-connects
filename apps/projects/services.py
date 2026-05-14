@@ -203,6 +203,77 @@ def decline_invitation(*, invitation: Invitation, user=None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# "Last Project Manager" invariant
+# ---------------------------------------------------------------------------
+
+
+class LastProjectManagerError(Exception):
+    """Refused: would leave the project with zero Project Managers.
+
+    Django superuser/admin operations bypass this rule by design — admin is
+    god mode. Enforce only in user-facing flows.
+    """
+
+
+def _another_pm_exists(project: Project, *, excluding_user) -> bool:
+    return (
+        ProjectPrivilege.objects.filter(
+            project=project, privilege=MemberPrivileges.PROJECT_MANAGER
+        )
+        .exclude(user=excluding_user)
+        .exists()
+    )
+
+
+def is_last_project_manager(*, project: Project, user) -> bool:
+    """Return True if ``user`` currently holds PROJECT_MANAGER on ``project``
+    and no other user holds it."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    is_pm = ProjectPrivilege.objects.filter(
+        project=project,
+        user=user,
+        privilege=MemberPrivileges.PROJECT_MANAGER,
+    ).exists()
+    if not is_pm:
+        return False
+    return not _another_pm_exists(project, excluding_user=user)
+
+
+def assert_pm_self_action_allowed(
+    *,
+    project: Project,
+    actor,
+    target_user,
+    new_privilege: str | None,
+) -> None:
+    """Refuse a self-targeted demotion / removal that would leave the
+    project with zero Project Managers.
+
+    Parameters
+    ----------
+    new_privilege
+        The privilege the target will hold after the action. ``None`` means
+        the user is being removed from the project entirely. If the target
+        will still be a PROJECT_MANAGER, the action is always allowed.
+    """
+    if actor is None or target_user is None:
+        return
+    if getattr(actor, "id", None) != getattr(target_user, "id", None):
+        # Acting on someone else — the actor (a PM) remains, so the
+        # invariant cannot be broken by this single action.
+        return
+    if new_privilege == MemberPrivileges.PROJECT_MANAGER:
+        return
+    if not is_last_project_manager(project=project, user=actor):
+        return
+    raise LastProjectManagerError(
+        "A project must always have at least one Project Manager. "
+        "Promote another member first."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Join requests
 # ---------------------------------------------------------------------------
 

@@ -44,14 +44,17 @@ from .models import (
 )
 from .services import (
     JoinRequestError,
+    LastProjectManagerError,
     accept_invitation,
     approve_join_request,
+    assert_pm_self_action_allowed,
     cancel_join_request,
     create_invitation,
     create_join_request,
     create_project_with_owner,
     decline_invitation,
     decline_join_request,
+    is_last_project_manager,
 )
 
 
@@ -266,8 +269,13 @@ class ProjectDeleteView(ProjectManagerRequiredMixin, DeleteView):
 # ---------------------------------------------------------------------------
 
 
-def _member_rows(project):
-    """Collect (member, user, privilege, privilege_form) dicts for a project."""
+def _member_rows(project, *, viewer=None):
+    """Collect (member, user, privilege, privilege_form) dicts for a project.
+
+    When ``viewer`` is supplied, each row is annotated with ``is_self`` so
+    the template can disable PM-mutating controls on the viewer's own row
+    when the last-PM invariant would otherwise be broken.
+    """
     members = (
         ProjectMember.objects.filter(project=project, deleted=False)
         .prefetch_related("users", "roles")
@@ -277,6 +285,7 @@ def _member_rows(project):
         p.user_id: p.privilege
         for p in ProjectPrivilege.objects.filter(project=project)
     }
+    viewer_id = getattr(viewer, "id", None) if viewer is not None else None
     rows = []
     for m in members:
         primary_user = m.users.first()
@@ -290,6 +299,9 @@ def _member_rows(project):
                 "member": m,
                 "user": primary_user,
                 "privilege": effective,
+                "is_self": (
+                    primary_user is not None and primary_user.id == viewer_id
+                ),
                 "form": MemberPrivilegeForm(
                     initial={"privilege": effective or MemberPrivileges.CONTRIBUTOR}
                 ),
@@ -305,7 +317,10 @@ class ProjectMemberListView(
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["rows"] = _member_rows(self.project)
+        context["rows"] = _member_rows(self.project, viewer=self.request.user)
+        context["viewer_is_last_pm"] = is_last_project_manager(
+            project=self.project, user=self.request.user
+        )
         return context
 
 
@@ -327,6 +342,21 @@ class UpdateMemberPrivilegeView(
         if primary_user is None:
             return HttpResponseBadRequest("Member has no linked user.")
 
+        try:
+            assert_pm_self_action_allowed(
+                project=self.project,
+                actor=request.user,
+                target_user=primary_user,
+                new_privilege=new_privilege,
+            )
+        except LastProjectManagerError as exc:
+            messages.error(request, str(exc))
+            if request.headers.get("HX-Request"):
+                return HttpResponse(str(exc), status=400)
+            return HttpResponseRedirect(
+                reverse("projects:members", kwargs={"pk": self.project.pk})
+            )
+
         ProjectPrivilege.objects.filter(
             user=primary_user, project=self.project
         ).delete()
@@ -347,6 +377,7 @@ class UpdateMemberPrivilegeView(
             "member": member,
             "user": primary_user,
             "privilege": new_privilege,
+            "is_self": primary_user.id == request.user.id,
             "form": MemberPrivilegeForm(initial={"privilege": new_privilege}),
         }
         return render(
@@ -356,6 +387,9 @@ class UpdateMemberPrivilegeView(
                 "row": row,
                 "project": self.project,
                 "user_privilege": MemberPrivileges.PROJECT_MANAGER,
+                "viewer_is_last_pm": is_last_project_manager(
+                    project=self.project, user=request.user
+                ),
             },
         )
 
@@ -372,6 +406,23 @@ class RemoveMemberView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
     def _remove(self, request, member_pk):
         member = get_object_or_404(ProjectMember, pk=member_pk, project=self.project)
         primary_user = member.users.first()
+
+        if primary_user is not None:
+            try:
+                assert_pm_self_action_allowed(
+                    project=self.project,
+                    actor=request.user,
+                    target_user=primary_user,
+                    new_privilege=None,
+                )
+            except LastProjectManagerError as exc:
+                messages.error(request, str(exc))
+                if request.headers.get("HX-Request"):
+                    return HttpResponse(str(exc), status=400)
+                return HttpResponseRedirect(
+                    reverse("projects:members", kwargs={"pk": self.project.pk})
+                )
+
         member.deleted = True
         member.save(update_fields=["deleted", "updated_at"])
         if primary_user is not None:

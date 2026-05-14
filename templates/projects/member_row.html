@@ -1,6 +1,6 @@
 {% comment %}
 One row in the project members table. HTMX fragment — do NOT wrap in an extends tag.
-Context: row {member, user, privilege, form}, project, user_privilege.
+Context: row {member, user, privilege, is_self, form}, project, user_privilege, viewer_is_last_pm.
 {% endcomment %}
 <tr id="member-row-{{ row.member.pk }}" class="hover:bg-brand-lighter/40">
   <td>
@@ -28,8 +28,16 @@ Context: row {member, user, privilege, form}, project, user_privilege.
         class="flex items-center gap-2"
       >
         {% csrf_token %}
-        {{ row.form.privilege }}
-        <button class="btn btn-xs btn-ghost" type="submit">Save</button>
+        {% if row.is_self and viewer_is_last_pm %}
+          <select name="privilege" disabled
+                  title="A project must always have at least one Project Manager."
+                  class="select select-bordered select-sm">
+            <option value="PROJECT_MANAGER" selected>Project manager</option>
+          </select>
+        {% else %}
+          {{ row.form.privilege }}
+          <button class="btn btn-xs btn-ghost" type="submit">Save</button>
+        {% endif %}
       </form>
     {% else %}
       <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
@@ -49,17 +57,25 @@ Context: row {member, user, privilege, form}, project, user_privilege.
   </td>
   <td class="text-right">
     {% if user_privilege == "PROJECT_MANAGER" %}
-      <button
-        class="btn btn-xs btn-ghost text-error hover:bg-error/10"
-        hx-post="{% url 'projects:remove_member' pk=project.pk member_pk=row.member.pk %}"
-        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-        hx-target="#member-row-{{ row.member.pk }}"
-        hx-swap="outerHTML"
-        hx-confirm="Remove this member from the project?"
-        title="Remove member"
-      >
-        Remove
-      </button>
+      {% if row.is_self and viewer_is_last_pm %}
+        <button class="btn btn-xs btn-ghost text-error/50 cursor-not-allowed"
+                disabled
+                title="A project must always have at least one Project Manager.">
+          Remove
+        </button>
+      {% else %}
+        <button
+          class="btn btn-xs btn-ghost text-error hover:bg-error/10"
+          hx-post="{% url 'projects:remove_member' pk=project.pk member_pk=row.member.pk %}"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          hx-target="#member-row-{{ row.member.pk }}"
+          hx-swap="outerHTML"
+          hx-confirm="Remove this member from the project?"
+          title="Remove member"
+        >
+          Remove
+        </button>
+      {% endif %}
     {% endif %}
   </td>
 </tr>
