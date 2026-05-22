@@ -32,6 +32,12 @@
       </div>
     </div>
     <div class="flex flex-wrap gap-2 justify-end">
+      {% if user_privilege %}
+        <a href="{% url 'tasks:board' project_pk=project.pk %}"
+           class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+          Kanban board
+        </a>
+      {% endif %}
       {% if user_privilege == "PROJECT_MANAGER" %}
         <a href="{% url 'projects:join_requests' pk=project.pk %}"
            class="btn btn-sm btn-ghost relative">
@@ -98,6 +104,84 @@
       {% endif %}
     </div>
 
+    {% if user_privilege %}
+      <div class="brand-card p-6">
+        <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
+          <div>
+            <h2 class="text-lg font-semibold text-brand-navy">Tasks</h2>
+            <p class="text-xs text-brand-text/60 mt-0.5">
+              {{ open_task_count }} open &middot; {{ task_count }} total
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            {% if has_kanban_columns %}
+              <a href="{% url 'tasks:create' project_pk=project.pk %}"
+                 class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+                + New task
+              </a>
+            {% else %}
+              <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
+                 class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+                Set up columns
+              </a>
+            {% endif %}
+            <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-sm btn-ghost">
+              View board
+            </a>
+          </div>
+        </div>
+
+        {% if recent_tasks %}
+          <ul class="divide-y divide-brand-light/60">
+            {% for task in recent_tasks %}
+              <li class="py-2.5 flex items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <a href="{% url 'tasks:detail' project_pk=project.pk pk=task.pk %}"
+                     class="text-sm font-medium text-brand-navy hover:text-brand-coral truncate block">
+                    {{ task.name }}
+                  </a>
+                  <div class="text-xs text-brand-text/60 mt-0.5 flex flex-wrap items-center gap-2">
+                    <span>{{ task.container.name }}</span>
+                    {% if task.deadline %}
+                      <span aria-hidden="true">&middot;</span>
+                      <span>Due {{ task.deadline|date:"M j, Y" }}</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  {% include "_components/status_badge.html" with status=task.status %}
+                  <a href="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
+                     class="btn btn-ghost btn-xs"
+                     aria-label="Edit task {{ task.name }}">Edit</a>
+                  <a href="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
+                     class="btn btn-ghost btn-xs text-error"
+                     aria-label="Delete task {{ task.name }}">Delete</a>
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+          {% if task_count > recent_tasks|length %}
+            <div class="mt-3">
+              <a href="{% url 'tasks:board' project_pk=project.pk %}"
+                 class="text-sm font-medium text-brand-navy hover:text-brand-coral">
+                View all {{ task_count }} tasks &rarr;
+              </a>
+            </div>
+          {% endif %}
+        {% else %}
+          {% if has_kanban_columns %}
+            <p class="text-sm text-brand-text/60">
+              No tasks yet. Create the first one to get started.
+            </p>
+          {% else %}
+            <p class="text-sm text-brand-text/60">
+              No kanban columns yet. Set up columns before adding tasks.
+            </p>
+          {% endif %}
+        {% endif %}
+      </div>
+    {% endif %}
+
     <div class="brand-card p-6">
       <h2 class="text-lg font-semibold text-brand-navy mb-3">Recent activity</h2>
       <p class="text-sm text-brand-text/60">Activity feed coming soon.</p>
@@ -157,6 +241,16 @@
       <div class="brand-panel p-6">
         <h2 class="text-lg font-semibold text-brand-navy mb-3">Quick actions</h2>
         <ul class="space-y-2 text-sm">
+          <li>
+            <a href="{% url 'tasks:board' project_pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
+              Kanban board &rarr;
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'tasks:milestone_list' project_pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
+              Milestones &rarr;
+            </a>
+          </li>
           <li>
             <a href="{% url 'projects:members' pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
               Manage members &rarr;
