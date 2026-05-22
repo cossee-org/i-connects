@@ -87,6 +87,13 @@ class TaskCreateView(LoginRequiredMixin, ProjectContextMixin, CreateView):
     form_class = TaskForm
     model = Task
 
+    def get_template_names(self):
+        # HTMX requests (kanban modal) get the bare partial; direct page
+        # visits get the full base-layout wrapper.
+        if self.request.headers.get("HX-Request"):
+            return ["tasks/task_form.html"]
+        return ["tasks/task_form_page.html"]
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["project"] = self.project
@@ -187,6 +194,11 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
     template_name = "tasks/task_form.html"
     form_class = TaskForm
     model = Task
+
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["tasks/task_form.html"]
+        return ["tasks/task_form_page.html"]
 
     def get_queryset(self):
         return Task.objects.filter(project=self.project)
