@@ -194,6 +194,24 @@ class ProjectDetailView(DetailView):
         else:
             context["user_privilege"] = None
             context["pending_join_request"] = None
+
+        # Task summary — only meaningful for members, but the queries are
+        # cheap enough to run for any viewer who can see the project.
+        from apps.core.enums import TaskStatus
+        from apps.tasks.models import KanbanBoard, Task
+
+        task_qs = Task.objects.filter(project=project)
+        context["task_count"] = task_qs.count()
+        context["open_task_count"] = task_qs.filter(
+            status=TaskStatus.NOT_COMPLETED
+        ).count()
+        context["recent_tasks"] = (
+            task_qs.select_related("container")
+            .order_by("status", "deadline", "-updated_at")[:5]
+        )
+        context["has_kanban_columns"] = KanbanBoard.objects.filter(
+            project=project
+        ).exists()
         return context
 
 

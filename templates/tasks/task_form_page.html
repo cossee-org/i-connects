@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}{{ form_title|default:"Task" }} &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block breadcrumbs %}
+  <nav aria-label="Breadcrumb" class="min-w-0 hidden md:block">
+    <ol class="flex items-center gap-2 text-sm text-brand-navy/80 overflow-hidden whitespace-nowrap">
+      <li class="truncate min-w-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
+      <li aria-hidden="true" class="text-brand-navy/40">/</li>
+      <li class="truncate min-w-0"><a href="{% url 'projects:detail' pk=project.pk %}" class="hover:text-brand-coral truncate">{{ project.name }}</a></li>
+      <li aria-hidden="true" class="text-brand-navy/40">/</li>
+      <li class="truncate min-w-0"><a href="{% url 'tasks:board' project_pk=project.pk %}" class="hover:text-brand-coral">Kanban board</a></li>
+      <li aria-hidden="true" class="text-brand-navy/40">/</li>
+      <li class="truncate min-w-0"><span aria-current="page" class="font-medium text-brand-navy">{{ form_title|default:"Task" }}</span></li>
+    </ol>
+  </nav>
+{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with eyebrow=project.name title=form_title|default:"Task" %}
+{% endblock %}
+
+{% block content %}
+  <div class="brand-card max-w-3xl mx-auto p-6">
+    {% include "tasks/task_form.html" with standalone=True %}
+  </div>
+{% endblock %}
