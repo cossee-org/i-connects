@@ -29,10 +29,7 @@
       </div>
     {% endif %}
 
-    <form method="post"
-          hx-post="{% url 'accounts:profile' %}"
-          hx-target="closest .brand-card"
-          hx-swap="outerHTML">
+    <form method="post">
       {% csrf_token %}
 
       <h2 class="text-lg font-semibold text-brand-navy mb-3">Account details</h2>
