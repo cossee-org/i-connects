@@ -1,14 +1,14 @@
-{# Task create / update form.
-   Designed to be rendered inline inside a modal via HTMX. Non-HTMX
-   requests also receive this snippet wrapped in the base layout by
-   Django's TemplateView fallback. Keeping it a single block keeps the
-   template flow simple. #}
+{% comment %}
+  Task create / update form, designed to be embedded inline inside a
+  modal via HTMX. For non-HTMX GETs, ``task_form_page.html`` wraps this
+  partial in the base layout.
+{% endcomment %}
 <h2 class="text-lg font-semibold text-brand-navy mb-4">{{ form_title|default:"Task" }}</h2>
 <form method="post"
       action="{{ form_action }}"
-      hx-post="{{ form_action }}"
+      {% if not standalone %}hx-post="{{ form_action }}"
       hx-target="#kanban-board"
-      hx-swap="none">
+      hx-swap="none"{% endif %}>
   {% csrf_token %}
   <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
     <div class="md:col-span-2">
@@ -42,10 +42,14 @@
   {% endif %}
 
   <div class="flex gap-2 justify-end mt-6">
-    <button type="button" class="btn btn-ghost"
-            onclick="document.getElementById('task-modal') && document.getElementById('task-modal').close()">
-      Cancel
-    </button>
+    {% if standalone %}
+      <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-ghost">Cancel</a>
+    {% else %}
+      <button type="button" class="btn btn-ghost"
+              onclick="document.getElementById('task-modal') && document.getElementById('task-modal').close()">
+        Cancel
+      </button>
+    {% endif %}
     <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Save</button>
   </div>
 </form>
