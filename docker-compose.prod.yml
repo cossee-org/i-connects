@@ -1,0 +1,34 @@
+# Demo deployment override. Use alongside docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Requires .env with DJANGO_SETTINGS_MODULE=config.settings.prod,
+# DJANGO_SECRET_KEY, DJANGO_ALLOWED_HOSTS, POSTGRES_PASSWORD, DATABASE_URL.
+# For HTTP-on-IP demos, also set SECURE_SSL_REDIRECT=False.
+
+services:
+  web:
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    volumes: []
+    restart: unless-stopped
+    ports:
+      - "80:8000"
+
+  celery:
+    volumes: []
+    restart: unless-stopped
+
+  celery-beat:
+    volumes: []
+    restart: unless-stopped
+
+  db:
+    ports: []
+    restart: unless-stopped
+
+  redis:
+    ports: []
+    restart: unless-stopped
