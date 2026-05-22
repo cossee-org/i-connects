@@ -1,0 +1,53 @@
+# Demo deployment override. Use alongside docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Requires .env with DJANGO_SETTINGS_MODULE=config.settings.prod,
+# DJANGO_SECRET_KEY, DJANGO_ALLOWED_HOSTS=demo.i-connects.cossee.org,
+# POSTGRES_PASSWORD, and DATABASE_URL.
+# Caddy terminates TLS and proxies to gunicorn; SECURE_SSL_REDIRECT can stay True.
+
+services:
+  web:
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    volumes: []
+    restart: unless-stopped
+    ports: []
+    expose:
+      - "8000"
+
+  celery:
+    volumes: []
+    restart: unless-stopped
+
+  celery-beat:
+    volumes: []
+    restart: unless-stopped
+
+  db:
+    ports: []
+    restart: unless-stopped
+
+  redis:
+    ports: []
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  caddy_data:
+  caddy_config:
