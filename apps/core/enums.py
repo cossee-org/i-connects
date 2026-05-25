@@ -6,8 +6,8 @@ from django.db import models
 
 
 class MemberPrivileges(models.TextChoices):
-    PROJECT_MANAGER = "PROJECT_MANAGER", "Project manager"
-    CONTRIBUTOR = "CONTRIBUTOR", "Contributor"
+    PROJECT_MANAGER = "PROJECT_MANAGER", "Project Lead"
+    CONTRIBUTOR = "CONTRIBUTOR", "Member"
 
 
 class JoinRequestStatus(models.TextChoices):

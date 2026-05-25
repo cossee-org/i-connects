@@ -1,3 +1,4 @@
+{% load project_tags %}
 {% comment %}
 One row in the project members table. HTMX fragment — do NOT wrap in an extends tag.
 Context: row {member, user, privilege, is_self, form}, project, user_privilege, viewer_is_last_pm.
@@ -30,9 +31,9 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
         {% csrf_token %}
         {% if row.is_self and viewer_is_last_pm %}
           <select name="privilege" disabled
-                  title="A project must always have at least one Project Manager."
+                  title="A project must always have at least one Project Lead."
                   class="select select-bordered select-sm">
-            <option value="PROJECT_MANAGER" selected>Project manager</option>
+            <option value="PROJECT_MANAGER" selected>Project Lead</option>
           </select>
         {% else %}
           {{ row.form.privilege }}
@@ -42,7 +43,7 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
     {% else %}
       <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
         {% if row.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-        {{ row.privilege|default:"&mdash;" }}
+        {{ row.privilege|privilege_label|default:"&mdash;" }}
       </span>
     {% endif %}
   </td>
@@ -60,7 +61,7 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
       {% if row.is_self and viewer_is_last_pm %}
         <button class="btn btn-xs btn-ghost text-error/50 cursor-not-allowed"
                 disabled
-                title="A project must always have at least one Project Manager.">
+                title="A project must always have at least one Project Lead.">
           Remove
         </button>
       {% else %}
