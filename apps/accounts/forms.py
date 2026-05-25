@@ -38,12 +38,10 @@ class SignupForm(forms.Form):
         widget=forms.TextInput(attrs={"class": "input input-bordered w-full"}),
     )
     email = forms.EmailField(
-        error_messages={"invalid": "Email format is invalid."},
         widget=forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
     )
     email_confirm = forms.EmailField(
         label="Confirm email",
-        error_messages={"invalid": "Email format is invalid."},
         widget=forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
     )
     password = forms.CharField(
