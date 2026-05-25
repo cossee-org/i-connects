@@ -47,12 +47,18 @@ class SignupForm(forms.Form):
     password = forms.CharField(
         min_length=10,
         max_length=100,
-        widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
+        widget=forms.PasswordInput(
+            render_value=True,
+            attrs={"class": "input input-bordered w-full"},
+        ),
     )
     password_confirm = forms.CharField(
         max_length=100,
         label="Confirm password",
-        widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
+        widget=forms.PasswordInput(
+            render_value=True,
+            attrs={"class": "input input-bordered w-full"},
+        ),
     )
     agree_terms = forms.BooleanField(
         required=True,
