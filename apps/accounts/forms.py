@@ -73,6 +73,16 @@ class SignupForm(forms.Form):
     def clean_email_confirm(self) -> str:
         return self.cleaned_data["email_confirm"].lower().strip()
 
+    def clean_password(self) -> str:
+        pw = self.cleaned_data["password"]
+        validate_password(pw)
+        return pw
+
+    def clean_password_confirm(self) -> str:
+        pw_confirm = self.cleaned_data["password_confirm"]
+        validate_password(pw_confirm)
+        return pw_confirm
+
     def clean(self) -> dict:
         cleaned = super().clean()
         email = cleaned.get("email")
@@ -83,12 +93,6 @@ class SignupForm(forms.Form):
         pw_confirm = cleaned.get("password_confirm")
         if pw and pw_confirm and pw != pw_confirm:
             self.add_error("password_confirm", "Passwords do not match.")
-        # Run configured password validators against the signup data.
-        if pw:
-            try:
-                validate_password(pw)
-            except ValidationError as exc:
-                self.add_error("password", exc)
         return cleaned
 
     def save(self) -> User:
