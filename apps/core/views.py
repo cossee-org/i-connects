@@ -24,6 +24,18 @@ def home(request):
     return render(request, "core/home.html")
 
 
+class TermsOfUseView(TemplateView):
+    """Static Terms of Use page (content TBD)."""
+
+    template_name = "core/terms_of_use.html"
+
+
+class PrivacyPolicyView(TemplateView):
+    """Static Privacy Policy page (content TBD)."""
+
+    template_name = "core/privacy_policy.html"
+
+
 class AdminConsoleView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
     """Platform-admin tile view at ``/admin/console/``.
 
