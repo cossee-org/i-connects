@@ -21,7 +21,6 @@ class ProjectForm(forms.ModelForm):
             "keywords",
             "status",
             "is_public",
-            "public_summary",
         ]
         labels = {
             "name": "Title",
@@ -39,9 +38,6 @@ class ProjectForm(forms.ModelForm):
             ),
             "status": forms.Select(attrs={"class": "select select-bordered w-full"}),
             "is_public": forms.CheckboxInput(attrs={"class": "checkbox"}),
-            "public_summary": forms.Textarea(
-                attrs={"class": "textarea textarea-bordered w-full", "rows": 3}
-            ),
         }
 
 
