@@ -53,7 +53,12 @@ class User(AbstractUser):
 
     # Profile
     name = models.CharField(max_length=255, blank=True)
+    given_name = models.CharField(max_length=255, blank=True)
+    family_name = models.CharField(max_length=255, blank=True)
+    pronouns = models.CharField(max_length=64, null=True, blank=True)
     orcid = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    position = models.CharField(max_length=255, null=True, blank=True)
+    department = models.CharField(max_length=255, null=True, blank=True)
     institution = models.CharField(max_length=255, null=True, blank=True)
     language = models.CharField(max_length=16, default="en-US")
     gravatar = models.CharField(max_length=255, null=True, blank=True)

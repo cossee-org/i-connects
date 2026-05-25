@@ -22,29 +22,51 @@ User = get_user_model()
 class SignupForm(forms.Form):
     """Create a new user account.
 
-    Mirrors Blitz ``Signup`` schema: email, password + confirmation, and a
-    display name (the Blitz port used ``username`` for display; Django's
-    ``username`` field is kept as a back-compat handle and derived from email).
+    Collects given/family name (given name optional), email with
+    confirmation, password with confirmation, and an explicit Terms of
+    Use / Privacy Policy acknowledgement.
     """
 
-    name = forms.CharField(
+    given_name = forms.CharField(
         max_length=255,
-        min_length=3,
+        required=False,
+        widget=forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+    )
+    family_name = forms.CharField(
+        max_length=255,
+        min_length=1,
         widget=forms.TextInput(attrs={"class": "input input-bordered w-full"}),
     )
     email = forms.EmailField(
         widget=forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
     )
+    email_confirm = forms.EmailField(
+        label="Confirm email",
+        widget=forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
+    )
     password = forms.CharField(
         min_length=10,
         max_length=100,
-        widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
+        widget=forms.PasswordInput(
+            render_value=True,
+            attrs={"class": "input input-bordered w-full"},
+        ),
     )
     password_confirm = forms.CharField(
-        min_length=10,
         max_length=100,
         label="Confirm password",
-        widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
+        widget=forms.PasswordInput(
+            render_value=True,
+            attrs={"class": "input input-bordered w-full"},
+        ),
+    )
+    agree_terms = forms.BooleanField(
+        required=True,
+        label="I agree to the Terms of Use and Privacy Policy",
+        error_messages={
+            "required": "You must agree to the Terms of Use and Privacy Policy.",
+        },
+        widget=forms.CheckboxInput(attrs={"class": "checkbox checkbox-primary"}),
     )
 
     def clean_email(self) -> str:
@@ -53,27 +75,39 @@ class SignupForm(forms.Form):
             raise ValidationError("An account with this email already exists.")
         return email
 
+    def clean_email_confirm(self) -> str:
+        return self.cleaned_data["email_confirm"].lower().strip()
+
+    def clean_password(self) -> str:
+        pw = self.cleaned_data["password"]
+        validate_password(pw)
+        return pw
+
     def clean(self) -> dict:
         cleaned = super().clean()
+        email = cleaned.get("email")
+        email_confirm = cleaned.get("email_confirm")
+        if email and email_confirm and email != email_confirm:
+            self.add_error("email_confirm", "Email addresses do not match.")
         pw = cleaned.get("password")
         pw_confirm = cleaned.get("password_confirm")
         if pw and pw_confirm and pw != pw_confirm:
             self.add_error("password_confirm", "Passwords do not match.")
-        # Run configured password validators against the signup data.
-        if pw:
-            try:
-                validate_password(pw)
-            except ValidationError as exc:
-                self.add_error("password", exc)
         return cleaned
 
     def save(self) -> User:
         email = self.cleaned_data["email"]
+        given_name = (self.cleaned_data.get("given_name") or "").strip()
+        family_name = self.cleaned_data["family_name"].strip()
+        full_name = f"{given_name} {family_name}".strip()
         return User.objects.create_user(
             email=email,
             password=self.cleaned_data["password"],
-            name=self.cleaned_data["name"].strip(),
+            given_name=given_name,
+            family_name=family_name,
+            name=full_name,
             username=email,
+            tos=True,
         )
 
 
@@ -181,18 +215,28 @@ class SetPasswordForm(forms.Form):
 # ---------------------------------------------------------------------------
 class ChangePasswordForm(forms.Form):
     current_password = forms.CharField(
-        widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
+        label="Current password",
+        widget=forms.PasswordInput(
+            render_value=True,
+            attrs={"class": "input input-bordered w-full"},
+        ),
     )
     new_password = forms.CharField(
+        label="New password",
         min_length=10,
         max_length=100,
-        widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
+        widget=forms.PasswordInput(
+            render_value=True,
+            attrs={"class": "input input-bordered w-full"},
+        ),
     )
     new_password_confirm = forms.CharField(
-        min_length=10,
         max_length=100,
         label="Confirm new password",
-        widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
+        widget=forms.PasswordInput(
+            render_value=True,
+            attrs={"class": "input input-bordered w-full"},
+        ),
     )
 
     def __init__(self, user: User, *args, **kwargs) -> None:
@@ -205,17 +249,17 @@ class ChangePasswordForm(forms.Form):
             raise ValidationError("Current password is incorrect.")
         return current
 
+    def clean_new_password(self) -> str:
+        pw = self.cleaned_data["new_password"]
+        validate_password(pw, self.user)
+        return pw
+
     def clean(self) -> dict:
         cleaned = super().clean()
         pw = cleaned.get("new_password")
         pw_confirm = cleaned.get("new_password_confirm")
         if pw and pw_confirm and pw != pw_confirm:
             self.add_error("new_password_confirm", "Passwords do not match.")
-        if pw:
-            try:
-                validate_password(pw, self.user)
-            except ValidationError as exc:
-                self.add_error("new_password", exc)
         return cleaned
 
     def save(self) -> User:
@@ -230,22 +274,43 @@ class ChangePasswordForm(forms.Form):
 class ProfileForm(forms.ModelForm):
     """Editable profile fields for the logged-in user.
 
-    Email updates are allowed but enforce uniqueness case-insensitively.
+    Email is set at signup and is not exposed on this form — it's shown
+    next to the avatar on the profile page for reference only.
     """
 
     class Meta:
         model = User
         fields = [
-            "name",
-            "email",
+            # Account details
+            "given_name",
+            "family_name",
+            "pronouns",
             "orcid",
+            # Affiliation
+            "position",
+            "department",
+            "institution",
+            # Email notifications
             "email_project_activity_frequency",
             "email_overdue_task_frequency",
         ]
+        labels = {
+            "given_name": "Given name",
+            "family_name": "Family name",
+            "pronouns": "Pronouns",
+            "orcid": "ORCID ID",
+            "position": "Position",
+            "department": "Department",
+            "institution": "Institution / Employer",
+        }
         widgets = {
-            "name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
-            "email": forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
+            "given_name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "family_name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "pronouns": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "orcid": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "position": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "department": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "institution": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "email_project_activity_frequency": forms.Select(
                 attrs={"class": "select select-bordered w-full"}
             ),
@@ -254,9 +319,22 @@ class ProfileForm(forms.ModelForm):
             ),
         }
 
-    def clean_email(self) -> str:
-        email = self.cleaned_data["email"].lower().strip()
-        qs = User.objects.filter(email__iexact=email).exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise ValidationError("Another account is already using this email.")
-        return email
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        # ``given_name`` and ``family_name`` live on the model with
+        # ``blank=True`` so existing rows aren't broken, but on the profile
+        # form the family name is the required identity anchor.
+        self.fields["family_name"].required = True
+        self.fields["given_name"].required = False
+
+    def save(self, commit: bool = True) -> User:
+        # Keep the combined ``name`` field in sync so existing templates and
+        # email subjects that read ``user.name`` continue to display
+        # something sensible.
+        user = super().save(commit=False)
+        given = (user.given_name or "").strip()
+        family = (user.family_name or "").strip()
+        user.name = f"{given} {family}".strip()
+        if commit:
+            user.save()
+        return user

@@ -11,44 +11,56 @@
 <div class="max-w-2xl mx-auto space-y-6">
 
   <div class="brand-card p-6">
-    <div class="flex items-center gap-4 mb-6">
+    <div class="flex items-center gap-4">
       <div class="w-14 h-14 rounded-full bg-brand-navy text-white flex items-center justify-center text-xl font-semibold shrink-0" aria-hidden="true">
         {{ user.name|default:user.email|slice:":1"|upper }}
       </div>
       <div class="min-w-0">
-        <div class="text-lg font-semibold text-brand-navy truncate">{{ user.name|default:user.email }}</div>
         {% if user.name %}
-          <div class="text-sm text-brand-text/70 truncate">{{ user.email }}</div>
+          <div class="text-lg font-semibold text-brand-navy truncate">{{ user.name }}</div>
         {% endif %}
+        <div class="text-sm text-brand-text/70 truncate">{{ user.email }}</div>
       </div>
     </div>
+  </div>
 
-    {% if form.non_field_errors %}
-      <div class="alert alert-error mb-4">
-        {{ form.non_field_errors }}
-      </div>
-    {% endif %}
+  {% if form.non_field_errors %}
+    <div class="alert alert-error">
+      {{ form.non_field_errors }}
+    </div>
+  {% endif %}
 
-    <form method="post">
-      {% csrf_token %}
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
 
-      <h2 class="text-lg font-semibold text-brand-navy mb-3">Account details</h2>
-      {% include "_components/form_field.html" with field=form.name %}
-      {% include "_components/form_field.html" with field=form.email %}
+    <div class="brand-card p-6">
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">Account Details</h2>
+      {% include "_components/form_field.html" with field=form.given_name %}
+      {% include "_components/form_field.html" with field=form.family_name %}
+      {% include "_components/form_field.html" with field=form.pronouns %}
       {% include "_components/form_field.html" with field=form.orcid %}
+    </div>
 
-      <h2 class="text-lg font-semibold text-brand-navy mb-3 mt-6">Email notifications</h2>
+    <div class="brand-card p-6">
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">Affiliation</h2>
+      {% include "_components/form_field.html" with field=form.position %}
+      {% include "_components/form_field.html" with field=form.department %}
+      {% include "_components/form_field.html" with field=form.institution %}
+    </div>
+
+    <div class="brand-card p-6">
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">Email Notifications</h2>
       {% include "_components/form_field.html" with field=form.email_project_activity_frequency %}
       {% include "_components/form_field.html" with field=form.email_overdue_task_frequency %}
+    </div>
 
-      <div class="flex justify-end mt-6">
-        <button type="submit"
-                class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-          Save changes
-        </button>
-      </div>
-    </form>
-  </div>
+    <div class="flex justify-end">
+      <button type="submit"
+              class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+        Save changes
+      </button>
+    </div>
+  </form>
 
   <div class="brand-card p-6">
     <h2 class="text-lg font-semibold text-brand-navy mb-3">Security</h2>
@@ -69,7 +81,7 @@
   <section class="mt-8">
     <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-3">
       <div>
-        <h2 class="text-lg font-semibold text-brand-navy">My contributions</h2>
+        <h2 class="text-lg font-semibold text-brand-navy">My Contributions</h2>
         <p class="text-sm text-brand-text/70">Tasks you've completed across all projects, recorded as they're approved.</p>
       </div>
       {% if contribution_total > 0 %}

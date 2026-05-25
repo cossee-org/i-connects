@@ -3,22 +3,32 @@
 from __future__ import annotations
 
 import pytest
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.accounts.throttle import THROTTLE_THRESHOLD
 from apps.audit.models import AuditAction, AuditLog
 
+# The throttle is disabled by default in the test settings so unrelated
+# suites aren't perturbed by the counter. This module exercises the
+# throttle itself, so each test re-enables it explicitly.
+enable_throttle = override_settings(THROTTLE_ENABLED=True)
+
 
 def _signup_payload(n: int) -> dict:
     """Unique valid signup payload keyed by ``n`` (email + name differ)."""
     return {
-        "name": f"User {n}",
+        "given_name": f"User",
+        "family_name": f"{n}",
         "email": f"user{n}@test.com",
+        "email_confirm": f"user{n}@test.com",
         "password": "correct-horse-staple",
         "password_confirm": "correct-horse-staple",
+        "agree_terms": "on",
     }
 
 
+@enable_throttle
 @pytest.mark.django_db
 def test_signup_throttled_after_5_attempts(client):
     url = reverse("accounts:signup")
@@ -37,6 +47,7 @@ def test_signup_throttled_after_5_attempts(client):
     assert "too many" in body
 
 
+@enable_throttle
 @pytest.mark.django_db
 def test_password_reset_throttled_after_5_attempts(client, user):
     url = reverse("accounts:password_reset_request")
@@ -49,6 +60,7 @@ def test_password_reset_throttled_after_5_attempts(client, user):
     assert "too many" in body
 
 
+@enable_throttle
 @pytest.mark.django_db
 def test_throttle_counts_independently_per_action(client, user):
     signup_url = reverse("accounts:signup")

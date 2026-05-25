@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from django.conf import settings
 from django.utils import timezone
 
 from apps.audit.models import AuditAction, AuditLog
@@ -32,7 +33,13 @@ def is_throttled(request, action: AuditAction) -> bool:
     ``record_attempt`` is called BEFORE ``is_throttled`` in the view layer,
     so the check is ``>`` (strict) rather than ``>=`` — the Nth attempt is
     still allowed; the (N+1)th is the one that trips.
+
+    Set ``THROTTLE_ENABLED = False`` in Django settings to bypass entirely
+    (test suite uses this so unrelated tests aren't perturbed by the
+    counter — see ``config/settings/test.py``).
     """
+    if not getattr(settings, "THROTTLE_ENABLED", True):
+        return False
     ip = _client_ip(request)
     if not ip:
         return False
