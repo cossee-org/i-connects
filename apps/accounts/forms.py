@@ -274,7 +274,8 @@ class ChangePasswordForm(forms.Form):
 class ProfileForm(forms.ModelForm):
     """Editable profile fields for the logged-in user.
 
-    Email updates are allowed but enforce uniqueness case-insensitively.
+    Email is set at signup and is not exposed on this form — it's shown
+    next to the avatar on the profile page for reference only.
     """
 
     class Meta:
@@ -284,7 +285,6 @@ class ProfileForm(forms.ModelForm):
             "given_name",
             "family_name",
             "pronouns",
-            "email",
             "orcid",
             # Affiliation
             "position",
@@ -307,7 +307,6 @@ class ProfileForm(forms.ModelForm):
             "given_name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "family_name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "pronouns": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
-            "email": forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
             "orcid": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "position": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "department": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
@@ -327,13 +326,6 @@ class ProfileForm(forms.ModelForm):
         # form the family name is the required identity anchor.
         self.fields["family_name"].required = True
         self.fields["given_name"].required = False
-        # Email is fixed at signup. ``disabled=True`` makes Django ignore any
-        # POSTed value and always use the instance's email, so the field
-        # cannot be tampered with via DevTools either.
-        self.fields["email"].disabled = True
-        self.fields["email"].widget.attrs["class"] = (
-            "input input-bordered w-full bg-base-200 cursor-not-allowed"
-        )
 
     def save(self, commit: bool = True) -> User:
         # Keep the combined ``name`` field in sync so existing templates and

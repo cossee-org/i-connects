@@ -25,10 +25,10 @@
           {{ user.name|default:user.email|slice:":1"|upper }}
         </div>
         <div class="min-w-0">
-          <div class="text-lg font-semibold text-brand-navy truncate">{{ user.name|default:user.email }}</div>
           {% if user.name %}
-            <div class="text-sm text-brand-text/70 truncate">{{ user.email }}</div>
+            <div class="text-lg font-semibold text-brand-navy truncate">{{ user.name }}</div>
           {% endif %}
+          <div class="text-sm text-brand-text/70 truncate">{{ user.email }}</div>
         </div>
       </div>
 
@@ -36,7 +36,6 @@
       {% include "_components/form_field.html" with field=form.given_name %}
       {% include "_components/form_field.html" with field=form.family_name %}
       {% include "_components/form_field.html" with field=form.pronouns %}
-      {% include "_components/form_field.html" with field=form.email %}
       {% include "_components/form_field.html" with field=form.orcid %}
     </div>
 
