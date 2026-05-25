@@ -215,18 +215,28 @@ class SetPasswordForm(forms.Form):
 # ---------------------------------------------------------------------------
 class ChangePasswordForm(forms.Form):
     current_password = forms.CharField(
-        widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
+        label="Current password",
+        widget=forms.PasswordInput(
+            render_value=True,
+            attrs={"class": "input input-bordered w-full"},
+        ),
     )
     new_password = forms.CharField(
+        label="New password",
         min_length=10,
         max_length=100,
-        widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
+        widget=forms.PasswordInput(
+            render_value=True,
+            attrs={"class": "input input-bordered w-full"},
+        ),
     )
     new_password_confirm = forms.CharField(
-        min_length=10,
         max_length=100,
         label="Confirm new password",
-        widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
+        widget=forms.PasswordInput(
+            render_value=True,
+            attrs={"class": "input input-bordered w-full"},
+        ),
     )
 
     def __init__(self, user: User, *args, **kwargs) -> None:
@@ -239,17 +249,17 @@ class ChangePasswordForm(forms.Form):
             raise ValidationError("Current password is incorrect.")
         return current
 
+    def clean_new_password(self) -> str:
+        pw = self.cleaned_data["new_password"]
+        validate_password(pw, self.user)
+        return pw
+
     def clean(self) -> dict:
         cleaned = super().clean()
         pw = cleaned.get("new_password")
         pw_confirm = cleaned.get("new_password_confirm")
         if pw and pw_confirm and pw != pw_confirm:
             self.add_error("new_password_confirm", "Passwords do not match.")
-        if pw:
-            try:
-                validate_password(pw, self.user)
-            except ValidationError as exc:
-                self.add_error("new_password", exc)
         return cleaned
 
     def save(self) -> User:
