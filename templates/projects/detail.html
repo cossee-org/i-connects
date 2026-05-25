@@ -95,10 +95,6 @@
         <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Keywords</h3>
         <p class="text-sm text-brand-text/80 mt-1">{{ project.keywords }}</p>
       {% endif %}
-      {% if project.is_public and project.public_summary %}
-        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Public summary</h3>
-        <p class="whitespace-pre-line text-brand-text mt-1">{{ project.public_summary }}</p>
-      {% endif %}
       {% if not project.abstract and not project.description and not project.keywords %}
         <p class="text-sm text-brand-text/60">No description yet.</p>
       {% endif %}
