@@ -38,10 +38,12 @@ class SignupForm(forms.Form):
         widget=forms.TextInput(attrs={"class": "input input-bordered w-full"}),
     )
     email = forms.EmailField(
+        error_messages={"invalid": "Email format is invalid."},
         widget=forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
     )
     email_confirm = forms.EmailField(
         label="Confirm email",
+        error_messages={"invalid": "Email format is invalid."},
         widget=forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
     )
     password = forms.CharField(
@@ -50,7 +52,6 @@ class SignupForm(forms.Form):
         widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
     )
     password_confirm = forms.CharField(
-        min_length=10,
         max_length=100,
         label="Confirm password",
         widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
@@ -77,11 +78,6 @@ class SignupForm(forms.Form):
         pw = self.cleaned_data["password"]
         validate_password(pw)
         return pw
-
-    def clean_password_confirm(self) -> str:
-        pw_confirm = self.cleaned_data["password_confirm"]
-        validate_password(pw_confirm)
-        return pw_confirm
 
     def clean(self) -> dict:
         cleaned = super().clean()
