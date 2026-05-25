@@ -327,13 +327,13 @@ class ProfileForm(forms.ModelForm):
         # form the family name is the required identity anchor.
         self.fields["family_name"].required = True
         self.fields["given_name"].required = False
-
-    def clean_email(self) -> str:
-        email = self.cleaned_data["email"].lower().strip()
-        qs = User.objects.filter(email__iexact=email).exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise ValidationError("Another account is already using this email.")
-        return email
+        # Email is fixed at signup. ``disabled=True`` makes Django ignore any
+        # POSTed value and always use the instance's email, so the field
+        # cannot be tampered with via DevTools either.
+        self.fields["email"].disabled = True
+        self.fields["email"].widget.attrs["class"] = (
+            "input input-bordered w-full bg-base-200 cursor-not-allowed"
+        )
 
     def save(self, commit: bool = True) -> User:
         # Keep the combined ``name`` field in sync so existing templates and
