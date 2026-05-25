@@ -166,11 +166,26 @@ class ProjectDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         project = self.object
-        context["members"] = (
+        all_members = list(
             ProjectMember.objects.filter(project=project, deleted=False)
             .prefetch_related("users", "roles")
             .order_by("id")
         )
+        lead_user_ids = set(
+            ProjectPrivilege.objects.filter(
+                project=project,
+                privilege=MemberPrivileges.PROJECT_MANAGER,
+            ).values_list("user_id", flat=True)
+        )
+        leads, regulars = [], []
+        for m in all_members:
+            if any(u.id in lead_user_ids for u in m.users.all()):
+                leads.append(m)
+            else:
+                regulars.append(m)
+        context["members"] = all_members
+        context["project_leads"] = leads
+        context["regular_members"] = regulars
         if self.request.user.is_authenticated:
             user_priv = (
                 ProjectPrivilege.objects.filter(

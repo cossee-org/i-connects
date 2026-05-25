@@ -199,36 +199,24 @@
         {% endif %}
       </div>
       {% if members %}
-        <ul class="divide-y divide-brand-light/60">
-          {% for m in members %}
-            <li class="py-2">
-              {% if m.users.all %}
-                {% for u in m.users.all %}
-                  <div class="flex items-center gap-2 text-sm text-brand-text">
-                    <span aria-hidden="true" class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">
-                      {{ u.name|default:u.email|slice:":1"|upper }}
-                    </span>
-                    <span class="truncate">{{ u.name|default:u.email }}</span>
-                  </div>
-                {% endfor %}
-              {% else %}
-                <div class="flex items-center gap-2 text-sm text-brand-text/60">
-                  <span aria-hidden="true" class="w-7 h-7 rounded-full bg-brand-light text-brand-navy flex items-center justify-center text-xs font-semibold shrink-0">
-                    {{ m.name|default:"?"|slice:":1"|upper }}
-                  </span>
-                  <span class="truncate">{{ m.name|default:"Unnamed member" }}</span>
-                </div>
-              {% endif %}
-              {% if m.roles.all %}
-                <div class="flex flex-wrap gap-1 mt-1 pl-9">
-                  {% for r in m.roles.all %}
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-brand-lighter text-brand-navy">{{ r.name }}</span>
-                  {% endfor %}
-                </div>
-              {% endif %}
-            </li>
-          {% endfor %}
-        </ul>
+        {% if project_leads %}
+          <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">
+            {% if project_leads|length > 1 %}Project Leads{% else %}Project Lead{% endif %}
+          </h3>
+          <ul class="divide-y divide-brand-light/60 mb-3">
+            {% for m in project_leads %}
+              {% include "projects/partials/member_list_item.html" with m=m %}
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% if regular_members %}
+          <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">Members</h3>
+          <ul class="divide-y divide-brand-light/60">
+            {% for m in regular_members %}
+              {% include "projects/partials/member_list_item.html" with m=m %}
+            {% endfor %}
+          </ul>
+        {% endif %}
       {% else %}
         <p class="text-sm text-brand-text/60">No members yet.</p>
       {% endif %}
