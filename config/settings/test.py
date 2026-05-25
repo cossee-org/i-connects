@@ -24,3 +24,8 @@ CELERY_TASK_EAGER_PROPAGATES = True
 
 # Fast, deterministic password hasher for tests.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# Disable the per-IP signup / password-reset throttle by default in tests.
+# Tests that exercise the throttle (``apps/accounts/throttle_tests.py``)
+# re-enable it with ``@override_settings(THROTTLE_ENABLED=True)``.
+THROTTLE_ENABLED = False
