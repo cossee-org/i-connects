@@ -10,6 +10,20 @@
 {% block content %}
 <div class="max-w-2xl mx-auto space-y-6">
 
+  <div class="brand-card p-6">
+    <div class="flex items-center gap-4">
+      <div class="w-14 h-14 rounded-full bg-brand-navy text-white flex items-center justify-center text-xl font-semibold shrink-0" aria-hidden="true">
+        {{ user.name|default:user.email|slice:":1"|upper }}
+      </div>
+      <div class="min-w-0">
+        {% if user.name %}
+          <div class="text-lg font-semibold text-brand-navy truncate">{{ user.name }}</div>
+        {% endif %}
+        <div class="text-sm text-brand-text/70 truncate">{{ user.email }}</div>
+      </div>
+    </div>
+  </div>
+
   {% if form.non_field_errors %}
     <div class="alert alert-error">
       {{ form.non_field_errors }}
@@ -20,18 +34,6 @@
     {% csrf_token %}
 
     <div class="brand-card p-6">
-      <div class="flex items-center gap-4 mb-6">
-        <div class="w-14 h-14 rounded-full bg-brand-navy text-white flex items-center justify-center text-xl font-semibold shrink-0" aria-hidden="true">
-          {{ user.name|default:user.email|slice:":1"|upper }}
-        </div>
-        <div class="min-w-0">
-          {% if user.name %}
-            <div class="text-lg font-semibold text-brand-navy truncate">{{ user.name }}</div>
-          {% endif %}
-          <div class="text-sm text-brand-text/70 truncate">{{ user.email }}</div>
-        </div>
-      </div>
-
       <h2 class="text-lg font-semibold text-brand-navy mb-3">Account Details</h2>
       {% include "_components/form_field.html" with field=form.given_name %}
       {% include "_components/form_field.html" with field=form.family_name %}
