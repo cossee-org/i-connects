@@ -12,10 +12,13 @@ from apps.audit.models import AuditAction, AuditLog
 def _signup_payload(n: int) -> dict:
     """Unique valid signup payload keyed by ``n`` (email + name differ)."""
     return {
-        "name": f"User {n}",
+        "given_name": f"User",
+        "family_name": f"{n}",
         "email": f"user{n}@test.com",
+        "email_confirm": f"user{n}@test.com",
         "password": "correct-horse-staple",
         "password_confirm": "correct-horse-staple",
+        "agree_terms": "on",
     }
 
 

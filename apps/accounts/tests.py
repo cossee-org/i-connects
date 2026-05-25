@@ -16,10 +16,13 @@ def test_signup_creates_user_and_logs_in(client):
     response = client.post(
         url,
         {
-            "name": "Newbie",
+            "given_name": "New",
+            "family_name": "Bie",
             "email": "newbie@test.com",
+            "email_confirm": "newbie@test.com",
             "password": "supersecure123",
             "password_confirm": "supersecure123",
+            "agree_terms": "on",
         },
     )
     assert response.status_code in (301, 302)
@@ -35,10 +38,13 @@ def test_signup_creates_default_widgets(client):
     client.post(
         reverse("accounts:signup"),
         {
-            "name": "Widgets",
+            "given_name": "",
+            "family_name": "Widgets",
             "email": "widgets@test.com",
+            "email_confirm": "widgets@test.com",
             "password": "supersecure123",
             "password_confirm": "supersecure123",
+            "agree_terms": "on",
         },
     )
     User = get_user_model()

@@ -22,17 +22,26 @@ User = get_user_model()
 class SignupForm(forms.Form):
     """Create a new user account.
 
-    Mirrors Blitz ``Signup`` schema: email, password + confirmation, and a
-    display name (the Blitz port used ``username`` for display; Django's
-    ``username`` field is kept as a back-compat handle and derived from email).
+    Collects given/family name (given name optional), email with
+    confirmation, password with confirmation, and an explicit Terms of
+    Use / Privacy Policy acknowledgement.
     """
 
-    name = forms.CharField(
+    given_name = forms.CharField(
         max_length=255,
-        min_length=3,
+        required=False,
+        widget=forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+    )
+    family_name = forms.CharField(
+        max_length=255,
+        min_length=1,
         widget=forms.TextInput(attrs={"class": "input input-bordered w-full"}),
     )
     email = forms.EmailField(
+        widget=forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
+    )
+    email_confirm = forms.EmailField(
+        label="Confirm email",
         widget=forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
     )
     password = forms.CharField(
@@ -46,6 +55,14 @@ class SignupForm(forms.Form):
         label="Confirm password",
         widget=forms.PasswordInput(attrs={"class": "input input-bordered w-full"}),
     )
+    agree_terms = forms.BooleanField(
+        required=True,
+        label="I agree to the Terms of Use and Privacy Policy",
+        error_messages={
+            "required": "You must agree to the Terms of Use and Privacy Policy.",
+        },
+        widget=forms.CheckboxInput(attrs={"class": "checkbox checkbox-primary"}),
+    )
 
     def clean_email(self) -> str:
         email = self.cleaned_data["email"].lower().strip()
@@ -53,8 +70,15 @@ class SignupForm(forms.Form):
             raise ValidationError("An account with this email already exists.")
         return email
 
+    def clean_email_confirm(self) -> str:
+        return self.cleaned_data["email_confirm"].lower().strip()
+
     def clean(self) -> dict:
         cleaned = super().clean()
+        email = cleaned.get("email")
+        email_confirm = cleaned.get("email_confirm")
+        if email and email_confirm and email != email_confirm:
+            self.add_error("email_confirm", "Email addresses do not match.")
         pw = cleaned.get("password")
         pw_confirm = cleaned.get("password_confirm")
         if pw and pw_confirm and pw != pw_confirm:
@@ -69,11 +93,15 @@ class SignupForm(forms.Form):
 
     def save(self) -> User:
         email = self.cleaned_data["email"]
+        given_name = (self.cleaned_data.get("given_name") or "").strip()
+        family_name = self.cleaned_data["family_name"].strip()
+        full_name = f"{given_name} {family_name}".strip()
         return User.objects.create_user(
             email=email,
             password=self.cleaned_data["password"],
-            name=self.cleaned_data["name"].strip(),
+            name=full_name,
             username=email,
+            tos=True,
         )
 
 

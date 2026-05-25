@@ -123,10 +123,13 @@ def test_signup_writes_audit_row(client):
     resp = client.post(
         reverse("accounts:signup"),
         {
-            "name": "New User",
+            "given_name": "New",
+            "family_name": "User",
             "email": "newbie@example.com",
+            "email_confirm": "newbie@example.com",
             "password": "correct horse staple",
             "password_confirm": "correct horse staple",
+            "agree_terms": "on",
         },
     )
     assert resp.status_code in (200, 302)
