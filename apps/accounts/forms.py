@@ -103,6 +103,8 @@ class SignupForm(forms.Form):
         return User.objects.create_user(
             email=email,
             password=self.cleaned_data["password"],
+            given_name=given_name,
+            family_name=family_name,
             name=full_name,
             username=email,
             tos=True,
@@ -268,16 +270,38 @@ class ProfileForm(forms.ModelForm):
     class Meta:
         model = User
         fields = [
-            "name",
+            # Account details
+            "given_name",
+            "family_name",
+            "pronouns",
             "email",
             "orcid",
+            # Affiliation
+            "position",
+            "department",
+            "institution",
+            # Email notifications
             "email_project_activity_frequency",
             "email_overdue_task_frequency",
         ]
+        labels = {
+            "given_name": "Given name",
+            "family_name": "Family name",
+            "pronouns": "Pronouns",
+            "orcid": "ORCID ID",
+            "position": "Position",
+            "department": "Department / Institute",
+            "institution": "Institute / Employer",
+        }
         widgets = {
-            "name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "given_name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "family_name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "pronouns": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "email": forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
             "orcid": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "position": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "department": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "institution": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "email_project_activity_frequency": forms.Select(
                 attrs={"class": "select select-bordered w-full"}
             ),
@@ -286,9 +310,29 @@ class ProfileForm(forms.ModelForm):
             ),
         }
 
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        # ``given_name`` and ``family_name`` live on the model with
+        # ``blank=True`` so existing rows aren't broken, but on the profile
+        # form the family name is the required identity anchor.
+        self.fields["family_name"].required = True
+        self.fields["given_name"].required = False
+
     def clean_email(self) -> str:
         email = self.cleaned_data["email"].lower().strip()
         qs = User.objects.filter(email__iexact=email).exclude(pk=self.instance.pk)
         if qs.exists():
             raise ValidationError("Another account is already using this email.")
         return email
+
+    def save(self, commit: bool = True) -> User:
+        # Keep the combined ``name`` field in sync so existing templates and
+        # email subjects that read ``user.name`` continue to display
+        # something sensible.
+        user = super().save(commit=False)
+        given = (user.given_name or "").strip()
+        family = (user.family_name or "").strip()
+        user.name = f"{given} {family}".strip()
+        if commit:
+            user.save()
+        return user

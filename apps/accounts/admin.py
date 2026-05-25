@@ -17,7 +17,12 @@ class UserAdmin(BaseUserAdmin):
             {
                 "fields": (
                     "name",
+                    "given_name",
+                    "family_name",
+                    "pronouns",
                     "orcid",
+                    "position",
+                    "department",
                     "institution",
                     "language",
                     "gravatar",

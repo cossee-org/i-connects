@@ -32,12 +32,19 @@
     <form method="post">
       {% csrf_token %}
 
-      <h2 class="text-lg font-semibold text-brand-navy mb-3">Account details</h2>
-      {% include "_components/form_field.html" with field=form.name %}
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">Account Details</h2>
+      {% include "_components/form_field.html" with field=form.given_name %}
+      {% include "_components/form_field.html" with field=form.family_name %}
+      {% include "_components/form_field.html" with field=form.pronouns %}
       {% include "_components/form_field.html" with field=form.email %}
       {% include "_components/form_field.html" with field=form.orcid %}
 
-      <h2 class="text-lg font-semibold text-brand-navy mb-3 mt-6">Email notifications</h2>
+      <h2 class="text-lg font-semibold text-brand-navy mb-3 mt-6">Affiliation</h2>
+      {% include "_components/form_field.html" with field=form.position %}
+      {% include "_components/form_field.html" with field=form.department %}
+      {% include "_components/form_field.html" with field=form.institution %}
+
+      <h2 class="text-lg font-semibold text-brand-navy mb-3 mt-6">Email Notifications</h2>
       {% include "_components/form_field.html" with field=form.email_project_activity_frequency %}
       {% include "_components/form_field.html" with field=form.email_overdue_task_frequency %}
 
@@ -69,7 +76,7 @@
   <section class="mt-8">
     <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-3">
       <div>
-        <h2 class="text-lg font-semibold text-brand-navy">My contributions</h2>
+        <h2 class="text-lg font-semibold text-brand-navy">My Contributions</h2>
         <p class="text-sm text-brand-text/70">Tasks you've completed across all projects, recorded as they're approved.</p>
       </div>
       {% if contribution_total > 0 %}
