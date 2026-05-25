@@ -290,8 +290,8 @@ class ProfileForm(forms.ModelForm):
             "pronouns": "Pronouns",
             "orcid": "ORCID ID",
             "position": "Position",
-            "department": "Department / Institute",
-            "institution": "Institute / Employer",
+            "department": "Department",
+            "institution": "Institution / Employer",
         }
         widgets = {
             "given_name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
