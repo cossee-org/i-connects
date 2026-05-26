@@ -21,7 +21,7 @@
       <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-1">Project</div>
       <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
       <div class="flex flex-wrap gap-2 mt-3">
-        {% include "_components/status_badge.html" with status=project.status label=project.get_status_display %}
+        {% include "_components/status_badge.html" with status=project.status %}
         {% if project.is_public %}
           <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">Public</span>
         {% else %}
