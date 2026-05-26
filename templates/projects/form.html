@@ -15,9 +15,15 @@
       <div class="alert alert-error mb-4">{{ form.non_field_errors }}</div>
     {% endif %}
 
+    {% include "_components/form_field.html" with field=form.name %}
+
     {% for field in form %}
-      {% include "_components/form_field.html" with field=field %}
+      {% if field.name != "name" and field.name != "is_public" %}
+        {% include "_components/form_field.html" with field=field %}
+      {% endif %}
     {% endfor %}
+
+    {% include "_components/form_field.html" with field=form.is_public %}
 
     <div class="flex gap-2 justify-end mt-6">
       {% if object %}

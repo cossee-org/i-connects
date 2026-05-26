@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load project_tags %}
 
 {% block title %}My projects &mdash; i&bull;CONNECTS{% endblock %}
 
@@ -83,7 +84,7 @@
         {% if row.privilege %}
           <div class="mt-2">
             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">
-              {{ row.privilege }}
+              {{ row.privilege|privilege_label }}
             </span>
           </div>
         {% endif %}

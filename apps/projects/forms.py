@@ -18,20 +18,18 @@ class ProjectForm(forms.ModelForm):
         fields = [
             "name",
             "description",
-            "abstract",
             "keywords",
             "status",
             "is_public",
-            "public_summary",
-            "discord_webhook_url",
         ]
+        labels = {
+            "name": "Title",
+            "is_public": "Is public?",
+        }
         widgets = {
             "name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "description": forms.Textarea(
                 attrs={"class": "textarea textarea-bordered w-full", "rows": 4}
-            ),
-            "abstract": forms.Textarea(
-                attrs={"class": "textarea textarea-bordered w-full", "rows": 3}
             ),
             "keywords": forms.TextInput(
                 attrs={
@@ -41,15 +39,6 @@ class ProjectForm(forms.ModelForm):
             ),
             "status": forms.Select(attrs={"class": "select select-bordered w-full"}),
             "is_public": forms.CheckboxInput(attrs={"class": "checkbox"}),
-            "public_summary": forms.Textarea(
-                attrs={"class": "textarea textarea-bordered w-full", "rows": 3}
-            ),
-            "discord_webhook_url": forms.URLInput(
-                attrs={
-                    "class": "input input-bordered w-full",
-                    "placeholder": "https://discord.com/api/webhooks/...",
-                }
-            ),
         }
 
 
