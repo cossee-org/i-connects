@@ -24,6 +24,7 @@ class ProjectForm(forms.ModelForm):
         ]
         labels = {
             "name": "Title",
+            "is_public": "Is public?",
         }
         widgets = {
             "name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),

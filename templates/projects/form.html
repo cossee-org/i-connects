@@ -16,13 +16,14 @@
     {% endif %}
 
     {% include "_components/form_field.html" with field=form.name %}
-    {% include "_components/form_field.html" with field=form.is_public %}
 
     {% for field in form %}
       {% if field.name != "name" and field.name != "is_public" %}
         {% include "_components/form_field.html" with field=field %}
       {% endif %}
     {% endfor %}
+
+    {% include "_components/form_field.html" with field=form.is_public %}
 
     <div class="flex gap-2 justify-end mt-6">
       {% if object %}
