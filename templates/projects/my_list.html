@@ -78,7 +78,7 @@
          class="brand-card p-5 hover:shadow-md transition flex flex-col">
         <div class="flex items-start justify-between gap-3">
           <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
-          {% include "_components/status_badge.html" with status=row.project.status %}
+          {% include "_components/status_badge.html" with status=row.project.status label=row.project.get_status_display %}
         </div>
 
         {% if row.privilege %}
