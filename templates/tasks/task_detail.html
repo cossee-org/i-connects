@@ -12,7 +12,15 @@
 {% endblock %}
 
 {% block page_header %}
-  {% include "_components/page_header.html" with eyebrow=project.name title=task.name subtitle=task.container.name %}
+  <header class="mb-6">
+    <a href="{{ back_url }}"
+       class="text-sm text-brand-navy/70 hover:text-brand-coral font-medium">
+      &laquo; Back to {{ back_label }}
+    </a>
+    <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-1 mt-2">{{ project.name }}</div>
+    <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight">{{ task.name }}</h1>
+    <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">{{ task.container.name }}</p>
+  </header>
 {% endblock %}
 
 {% block content %}

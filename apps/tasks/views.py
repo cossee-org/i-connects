@@ -203,32 +203,41 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context["milestone_form"] = TaskMilestoneForm(
             project=self.project, initial={"milestone": task.milestone}
         )
-        context["delete_redirect_url"] = self._resolve_delete_redirect_url()
+        origin = self._resolve_origin()
+        context["back_url"] = origin["url"]
+        context["back_label"] = origin["label"]
+        context["delete_redirect_url"] = origin["url"]
         return context
 
-    def _resolve_delete_redirect_url(self) -> str:
-        """Where to send the user after deleting from the task detail page.
+    def _resolve_origin(self) -> dict:
+        """Identify the page the task was opened from.
 
-        Returns the originating Project view or Kanban board URL when the
-        Referer matches one of those routes for this project; otherwise
-        falls back to the Kanban board.
+        Returns ``{"url": ..., "label": ...}`` for either the originating
+        Project view or Kanban board. Falls back to the Kanban board when
+        the Referer is missing, off-host, or points elsewhere.
         """
-        board_url = reverse("tasks:board", kwargs={"project_pk": self.project.pk})
-        project_url = reverse("projects:detail", kwargs={"pk": self.project.pk})
+        board = {
+            "url": reverse("tasks:board", kwargs={"project_pk": self.project.pk}),
+            "label": "Kanban board",
+        }
+        project = {
+            "url": reverse("projects:detail", kwargs={"pk": self.project.pk}),
+            "label": self.project.name,
+        }
         referer = self.request.META.get("HTTP_REFERER", "")
         if not referer:
-            return board_url
+            return board
         parsed = urlparse(referer)
         if parsed.netloc and parsed.netloc != self.request.get_host():
-            return board_url
+            return board
         try:
             match = resolve(parsed.path)
         except Resolver404:
-            return board_url
+            return board
         view_name = f"{match.namespace}:{match.url_name}" if match.namespace else match.url_name
         if view_name == "projects:detail" and match.kwargs.get("pk") == self.project.pk:
-            return project_url
-        return board_url
+            return project
+        return board
 
 
 class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
