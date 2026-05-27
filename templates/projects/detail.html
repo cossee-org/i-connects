@@ -106,7 +106,7 @@
           </div>
           <div class="flex flex-wrap gap-2">
             {% if has_kanban_columns %}
-              <a href="{% url 'tasks:create' project_pk=project.pk %}"
+              <a href="{% url 'tasks:create' project_pk=project.pk %}?next={% url 'projects:detail' pk=project.pk %}"
                  class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
                 + New task
               </a>

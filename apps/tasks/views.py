@@ -149,6 +149,13 @@ class TaskCreateView(LoginRequiredMixin, ProjectContextMixin, CreateView):
             response["HX-Trigger"] = json.dumps({"task-created": {"id": task.id}})
             return response
         messages.success(self.request, f"Task '{task.name}' created.")
+        next_url = self.request.POST.get("next")
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
+        ):
+            return redirect(next_url)
         return redirect(self._detail_url(task))
 
     def get_context_data(self, **kwargs):
@@ -157,6 +164,13 @@ class TaskCreateView(LoginRequiredMixin, ProjectContextMixin, CreateView):
             "tasks:create", kwargs={"project_pk": self.project.pk}
         )
         context["form_title"] = "New task"
+        next_url = self.request.GET.get("next") or self.request.POST.get("next")
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
+        ):
+            context["next_url"] = next_url
         return context
 
     def _detail_url(self, task: Task) -> str:
