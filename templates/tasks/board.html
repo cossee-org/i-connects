@@ -63,6 +63,8 @@
 
   <script>
     (function initKanban() {
+      var csrfToken = '{{ csrf_token }}';
+
       document.querySelectorAll('.kanban-column-list').forEach(function (el) {
         new Sortable(el, {
           group: 'kanban',
@@ -74,6 +76,7 @@
             var newIndex = evt.newIndex;
             htmx.ajax('POST', '/tasks/' + taskId + '/move/', {
               values: { container_id: newColumnId, order: newIndex },
+              headers: { 'X-CSRFToken': csrfToken },
               swap: 'none'
             });
           }
@@ -84,6 +87,8 @@
       document.body.addEventListener('task-created', function () {
         var modal = document.getElementById('task-modal');
         if (modal && modal.open) modal.close();
+        // Reload so the new card appears in its column with an up-to-date count.
+        window.location.reload();
       });
     })();
   </script>
