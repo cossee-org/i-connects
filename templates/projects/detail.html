@@ -166,6 +166,7 @@
                   <form method="post" action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
                         class="flex gap-2 justify-end mt-6">
                     {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'projects:detail' pk=project.pk %}">
                     <button type="button" class="btn btn-ghost"
                             onclick="document.getElementById('delete-task-modal-{{ task.pk }}').close()">
                       Cancel

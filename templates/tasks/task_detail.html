@@ -61,6 +61,7 @@
           <form method="post" action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
                 class="flex gap-2 justify-end mt-6">
             {% csrf_token %}
+            <input type="hidden" name="next" value="{{ delete_redirect_url }}">
             <button type="button" class="btn btn-ghost"
                     onclick="document.getElementById('delete-task-modal').close()">
               Cancel

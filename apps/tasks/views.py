@@ -20,8 +20,10 @@ from django.http import (
     HttpResponseForbidden,
 )
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
+from django.urls import resolve, reverse, Resolver404
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.text import slugify
+from urllib.parse import urlparse
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -187,7 +189,32 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context["milestone_form"] = TaskMilestoneForm(
             project=self.project, initial={"milestone": task.milestone}
         )
+        context["delete_redirect_url"] = self._resolve_delete_redirect_url()
         return context
+
+    def _resolve_delete_redirect_url(self) -> str:
+        """Where to send the user after deleting from the task detail page.
+
+        Returns the originating Project view or Kanban board URL when the
+        Referer matches one of those routes for this project; otherwise
+        falls back to the Kanban board.
+        """
+        board_url = reverse("tasks:board", kwargs={"project_pk": self.project.pk})
+        project_url = reverse("projects:detail", kwargs={"pk": self.project.pk})
+        referer = self.request.META.get("HTTP_REFERER", "")
+        if not referer:
+            return board_url
+        parsed = urlparse(referer)
+        if parsed.netloc and parsed.netloc != self.request.get_host():
+            return board_url
+        try:
+            match = resolve(parsed.path)
+        except Resolver404:
+            return board_url
+        view_name = f"{match.namespace}:{match.url_name}" if match.namespace else match.url_name
+        if view_name == "projects:detail" and match.kwargs.get("pk") == self.project.pk:
+            return project_url
+        return board_url
 
 
 class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
@@ -291,6 +318,13 @@ class TaskDeleteView(LoginRequiredMixin, ProjectContextMixin, DeleteView):
         return Task.objects.filter(project=self.project)
 
     def get_success_url(self):
+        next_url = self.request.POST.get("next") or self.request.GET.get("next")
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
+        ):
+            return next_url
         return reverse("tasks:board", kwargs={"project_pk": self.project.pk})
 
     def form_valid(self, form):
