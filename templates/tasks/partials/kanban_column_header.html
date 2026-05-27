@@ -1,17 +1,33 @@
 {# Column row in the management list. Swapped on create / rename. #}
+{% with task_count=column.tasks.count %}
 <li id="column-row-{{ column.pk }}"
     class="flex items-center justify-between gap-2 px-1 py-2 border-b border-brand-light/60 last:border-b-0">
-  <span class="font-medium text-brand-navy text-sm">{{ column.name }}</span>
+  <span class="font-medium text-brand-navy text-sm flex items-center gap-2">
+    {{ column.name }}
+    {% if task_count %}
+      <span class="text-xs bg-brand-navy/10 text-brand-navy px-2 py-0.5 rounded-full">{{ task_count }}</span>
+    {% endif %}
+  </span>
   <span class="flex gap-1">
     <button class="btn btn-ghost btn-xs"
             hx-get="{% url 'tasks:column_update' project_pk=project.pk pk=column.pk %}"
             hx-target="#column-row-{{ column.pk }}"
             hx-swap="outerHTML">Rename</button>
-    <button type="button"
-            class="btn btn-outline btn-error btn-xs"
-            onclick="document.getElementById('delete-column-modal-{{ column.pk }}').showModal()">
-      Delete
-    </button>
+    {% if task_count %}
+      <button type="button"
+              class="btn btn-outline btn-error btn-xs btn-disabled"
+              disabled
+              aria-disabled="true"
+              title="Move or delete this column's tasks before deleting it.">
+        Delete
+      </button>
+    {% else %}
+      <button type="button"
+              class="btn btn-outline btn-error btn-xs"
+              onclick="document.getElementById('delete-column-modal-{{ column.pk }}').showModal()">
+        Delete
+      </button>
+    {% endif %}
   </span>
 
   <dialog id="delete-column-modal-{{ column.pk }}" class="modal" aria-label="Delete column confirmation">
@@ -21,8 +37,8 @@
       </form>
       <h2 class="text-lg font-semibold text-error">Delete &ldquo;{{ column.name }}&rdquo;?</h2>
       <p class="mt-3 text-brand-text">
-        Are you sure you want to delete the column <strong>{{ column.name }}</strong>
-        and all of its tasks? This action cannot be undone.
+        Are you sure you want to delete the column <strong>{{ column.name }}</strong>?
+        This action cannot be undone.
       </p>
       <div class="flex gap-2 justify-end mt-6">
         <button type="button" class="btn btn-ghost"
@@ -42,3 +58,4 @@
     <form method="dialog" class="modal-backdrop"><button>close</button></form>
   </dialog>
 </li>
+{% endwith %}

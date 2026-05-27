@@ -577,6 +577,11 @@ class BoardColumnDeleteView(LoginRequiredMixin, ProjectContextMixin, View):
         column = get_object_or_404(
             KanbanBoard, pk=kwargs["pk"], project=self.project
         )
+        if column.tasks.exists():
+            return HttpResponseBadRequest(
+                "Cannot delete a column that still contains tasks. "
+                "Move or delete its tasks first."
+            )
         column.delete()
         # Empty 200 (not 204) so htmx swaps and the row is removed.
         return HttpResponse("")
