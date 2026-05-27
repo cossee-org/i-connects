@@ -88,6 +88,38 @@ def test_complete_task_creates_tasklog(user):
 
 
 @pytest.mark.django_db
+def test_column_reorder_updates_container_order(client, user):
+    project, col1, col2 = _make_project_with_board(user)
+    col3 = KanbanBoard.objects.create(project=project, name="Done", container_order=2)
+    client.force_login(user)
+    response = client.post(
+        reverse("tasks:column_reorder", kwargs={"project_pk": project.pk}),
+        {"order": [col3.pk, col1.pk, col2.pk]},
+    )
+    assert response.status_code == 204
+    col1.refresh_from_db()
+    col2.refresh_from_db()
+    col3.refresh_from_db()
+    assert (col3.container_order, col1.container_order, col2.container_order) == (0, 1, 2)
+
+
+@pytest.mark.django_db
+def test_column_reorder_rejects_partial_payload(client, user):
+    project, col1, col2 = _make_project_with_board(user)
+    client.force_login(user)
+    response = client.post(
+        reverse("tasks:column_reorder", kwargs={"project_pk": project.pk}),
+        {"order": [col1.pk]},
+    )
+    assert response.status_code == 400
+    col1.refresh_from_db()
+    col2.refresh_from_db()
+    # Order is unchanged on rejection.
+    assert col1.container_order == 0
+    assert col2.container_order == 1
+
+
+@pytest.mark.django_db
 def test_approve_completion_requires_pm(client, user, other_user):
     project, col1, _col2 = _make_project_with_board(user)
     pm_member = _primary_member(project, user)

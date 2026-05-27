@@ -63,6 +63,15 @@
 
   <script>
     (function initKanban() {
+      var csrfToken = '{{ csrf_token }}';
+
+      function refreshColumnCount(columnId) {
+        if (!columnId) return;
+        var list = document.querySelector('[data-column-id="' + columnId + '"]');
+        var badge = document.querySelector('[data-column-count="' + columnId + '"]');
+        if (list && badge) badge.textContent = list.children.length;
+      }
+
       document.querySelectorAll('.kanban-column-list').forEach(function (el) {
         new Sortable(el, {
           group: 'kanban',
@@ -70,10 +79,14 @@
           ghostClass: 'opacity-40',
           onEnd: function (evt) {
             var taskId = evt.item.dataset.taskId;
+            var sourceColumnId = evt.from.dataset.columnId;
             var newColumnId = evt.to.dataset.columnId;
             var newIndex = evt.newIndex;
+            refreshColumnCount(sourceColumnId);
+            refreshColumnCount(newColumnId);
             htmx.ajax('POST', '/tasks/' + taskId + '/move/', {
               values: { container_id: newColumnId, order: newIndex },
+              headers: { 'X-CSRFToken': csrfToken },
               swap: 'none'
             });
           }
@@ -84,6 +97,8 @@
       document.body.addEventListener('task-created', function () {
         var modal = document.getElementById('task-modal');
         if (modal && modal.open) modal.close();
+        // Reload so the new card appears in its column with an up-to-date count.
+        window.location.reload();
       });
     })();
   </script>

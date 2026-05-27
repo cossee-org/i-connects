@@ -34,4 +34,45 @@
       <button type="submit" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Add</button>
     </form>
   </div>
+
+  <style>
+    /* Hide the source row while it's being dragged so only the floating clone
+       and the drop placeholder are visible. */
+    .column-row-chosen { opacity: 0; }
+    .column-row-ghost { opacity: 0.4; background: rgb(0 0 0 / 0.03); }
+    .column-row-drag { box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.2); background: white; }
+  </style>
+  <script>
+    (function () {
+      var list = document.getElementById('column-list');
+      if (!list || typeof Sortable === 'undefined') return;
+      var reorderUrl = '{% url "tasks:column_reorder" project_pk=project.pk %}';
+      var csrfToken = '{{ csrf_token }}';
+      new Sortable(list, {
+        animation: 150,
+        handle: '.column-drag-handle',
+        forceFallback: true,
+        fallbackOnBody: true,
+        chosenClass: 'column-row-chosen',
+        ghostClass: 'column-row-ghost',
+        fallbackClass: 'column-row-drag',
+        onEnd: function () {
+          var ids = Array.from(list.querySelectorAll('[data-column-id]'))
+            .map(function (el) { return el.dataset.columnId; });
+          if (!ids.length) return;
+          var body = new URLSearchParams();
+          ids.forEach(function (id) { body.append('order', id); });
+          fetch(reorderUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'X-CSRFToken': csrfToken,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: body,
+          });
+        },
+      });
+    })();
+  </script>
 {% endblock %}

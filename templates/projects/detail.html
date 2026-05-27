@@ -33,12 +33,6 @@
       </div>
     </div>
     <div class="flex flex-wrap gap-2 justify-end">
-      {% if user_privilege %}
-        <a href="{% url 'tasks:board' project_pk=project.pk %}"
-           class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-          Kanban board
-        </a>
-      {% endif %}
       {% if user_privilege == "PROJECT_MANAGER" %}
         <a href="{% url 'projects:join_requests' pk=project.pk %}"
            class="btn btn-sm btn-ghost relative">
@@ -112,10 +106,14 @@
           </div>
           <div class="flex flex-wrap gap-2">
             {% if has_kanban_columns %}
-              <a href="{% url 'tasks:create' project_pk=project.pk %}"
-                 class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+              <button type="button"
+                      class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                      hx-get="{% url 'tasks:create' project_pk=project.pk %}"
+                      hx-target="#task-modal-body"
+                      hx-swap="innerHTML"
+                      onclick="document.getElementById('task-modal').showModal()">
                 + New task
-              </a>
+              </button>
             {% else %}
               <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
                  class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
@@ -147,14 +145,47 @@
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
                   {% include "_components/status_badge.html" with status=task.status %}
-                  <a href="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
-                     class="btn btn-ghost btn-xs"
-                     aria-label="Edit task {{ task.name }}">Edit</a>
-                  <a href="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
-                     class="btn btn-ghost btn-xs text-error"
-                     aria-label="Delete task {{ task.name }}">Delete</a>
+                  <button type="button"
+                          class="btn btn-ghost btn-xs"
+                          aria-label="Edit task {{ task.name }}"
+                          hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
+                          hx-target="#task-modal-body"
+                          hx-swap="innerHTML"
+                          onclick="document.getElementById('task-modal').showModal()">
+                    Edit
+                  </button>
+                  <button type="button"
+                          class="btn btn-ghost btn-xs text-error"
+                          aria-label="Delete task {{ task.name }}"
+                          onclick="document.getElementById('delete-task-modal-{{ task.pk }}').showModal()">
+                    Delete
+                  </button>
                 </div>
               </li>
+              <dialog id="delete-task-modal-{{ task.pk }}" class="modal" aria-label="Delete task confirmation">
+                <div class="modal-box max-w-xl bg-base-100 border border-error/40">
+                  <form method="dialog">
+                    <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
+                  </form>
+                  <h2 class="text-lg font-semibold text-error">Delete &ldquo;{{ task.name }}&rdquo;?</h2>
+                  <p class="mt-3 text-brand-text">
+                    Are you sure you want to delete the task <strong>{{ task.name }}</strong>?
+                    This will remove the task and all of its task log entries. This action
+                    cannot be undone.
+                  </p>
+                  <form method="post" action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
+                        class="flex gap-2 justify-end mt-6">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'projects:detail' pk=project.pk %}">
+                    <button type="button" class="btn btn-ghost"
+                            onclick="document.getElementById('delete-task-modal-{{ task.pk }}').close()">
+                      Cancel
+                    </button>
+                    <button type="submit" class="btn btn-outline btn-error">Delete task</button>
+                  </form>
+                </div>
+                <form method="dialog" class="modal-backdrop"><button>close</button></form>
+              </dialog>
             {% endfor %}
           </ul>
           {% if task_count > recent_tasks|length %}
@@ -291,4 +322,28 @@
     {% endif %}
   </aside>
 </div>
+
+{% if user_privilege %}
+  <dialog id="task-modal" class="modal" aria-label="Task editor">
+    <div class="modal-box max-w-2xl bg-base-100 border border-brand-light/60">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close task editor">&times;</button>
+      </form>
+      <div id="task-modal-body"><!-- filled by HTMX --></div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <script>
+    (function () {
+      function handleTaskChange() {
+        var modal = document.getElementById('task-modal');
+        if (modal && modal.open) modal.close();
+        window.location.reload();
+      }
+      document.body.addEventListener('task-created', handleTaskChange);
+      document.body.addEventListener('task-updated', handleTaskChange);
+    })();
+  </script>
+{% endif %}
 {% endblock %}

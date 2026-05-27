@@ -12,6 +12,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.db.models import Max
 from django.http import (
     Http404,
@@ -20,8 +21,10 @@ from django.http import (
     HttpResponseForbidden,
 )
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
+from django.urls import resolve, reverse, Resolver404
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.text import slugify
+from urllib.parse import urlparse
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -147,6 +150,13 @@ class TaskCreateView(LoginRequiredMixin, ProjectContextMixin, CreateView):
             response["HX-Trigger"] = json.dumps({"task-created": {"id": task.id}})
             return response
         messages.success(self.request, f"Task '{task.name}' created.")
+        next_url = self.request.POST.get("next")
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
+        ):
+            return redirect(next_url)
         return redirect(self._detail_url(task))
 
     def get_context_data(self, **kwargs):
@@ -155,6 +165,13 @@ class TaskCreateView(LoginRequiredMixin, ProjectContextMixin, CreateView):
             "tasks:create", kwargs={"project_pk": self.project.pk}
         )
         context["form_title"] = "New task"
+        next_url = self.request.GET.get("next") or self.request.POST.get("next")
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
+        ):
+            context["next_url"] = next_url
         return context
 
     def _detail_url(self, task: Task) -> str:
@@ -187,7 +204,41 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context["milestone_form"] = TaskMilestoneForm(
             project=self.project, initial={"milestone": task.milestone}
         )
+        origin = self._resolve_origin()
+        context["back_url"] = origin["url"]
+        context["back_label"] = origin["label"]
+        context["delete_redirect_url"] = origin["url"]
         return context
+
+    def _resolve_origin(self) -> dict:
+        """Identify the page the task was opened from.
+
+        Returns ``{"url": ..., "label": ...}`` for either the originating
+        Project view or Kanban board. Falls back to the Kanban board when
+        the Referer is missing, off-host, or points elsewhere.
+        """
+        board = {
+            "url": reverse("tasks:board", kwargs={"project_pk": self.project.pk}),
+            "label": "Kanban board",
+        }
+        project = {
+            "url": reverse("projects:detail", kwargs={"pk": self.project.pk}),
+            "label": self.project.name,
+        }
+        referer = self.request.META.get("HTTP_REFERER", "")
+        if not referer:
+            return board
+        parsed = urlparse(referer)
+        if parsed.netloc and parsed.netloc != self.request.get_host():
+            return board
+        try:
+            match = resolve(parsed.path)
+        except Resolver404:
+            return board
+        view_name = f"{match.namespace}:{match.url_name}" if match.namespace else match.url_name
+        if view_name == "projects:detail" and match.kwargs.get("pk") == self.project.pk:
+            return project
+        return board
 
 
 class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
@@ -218,12 +269,21 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
             metadata={"name": task.name},
         )
         if self.request.headers.get("HX-Request"):
-            return render(
+            response = render(
                 self.request,
                 "tasks/partials/task_summary.html",
                 {"task": task, "project": self.project},
             )
+            response["HX-Trigger"] = json.dumps({"task-updated": {"id": task.id}})
+            return response
         messages.success(self.request, f"Task '{task.name}' updated.")
+        next_url = self.request.POST.get("next")
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
+        ):
+            return redirect(next_url)
         return redirect(
             "tasks:detail",
             project_pk=self.project.pk,
@@ -237,6 +297,13 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
             kwargs={"project_pk": self.project.pk, "pk": self.object.pk},
         )
         context["form_title"] = "Edit task"
+        next_url = self.request.GET.get("next") or self.request.POST.get("next")
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
+        ):
+            context["next_url"] = next_url
         return context
 
 
@@ -291,6 +358,13 @@ class TaskDeleteView(LoginRequiredMixin, ProjectContextMixin, DeleteView):
         return Task.objects.filter(project=self.project)
 
     def get_success_url(self):
+        next_url = self.request.POST.get("next") or self.request.GET.get("next")
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
+        ):
+            return next_url
         return reverse("tasks:board", kwargs={"project_pk": self.project.pk})
 
     def form_valid(self, form):
@@ -499,13 +573,44 @@ class BoardColumnUpdateView(LoginRequiredMixin, ProjectContextMixin, View):
         )
 
 
+class BoardColumnReorderView(LoginRequiredMixin, ProjectContextMixin, View):
+    """Persist a new ordering for this project's kanban columns."""
+
+    def post(self, request, *args, **kwargs):
+        try:
+            ids = [int(x) for x in request.POST.getlist("order")]
+        except (TypeError, ValueError):
+            return HttpResponseBadRequest("Invalid order payload.")
+        existing_ids = set(
+            KanbanBoard.objects.filter(project=self.project).values_list(
+                "id", flat=True
+            )
+        )
+        if set(ids) != existing_ids or len(ids) != len(existing_ids):
+            return HttpResponseBadRequest(
+                "Order must include every column exactly once."
+            )
+        with transaction.atomic():
+            for idx, col_id in enumerate(ids):
+                KanbanBoard.objects.filter(pk=col_id, project=self.project).update(
+                    container_order=idx
+                )
+        return HttpResponse(status=204)
+
+
 class BoardColumnDeleteView(LoginRequiredMixin, ProjectContextMixin, View):
     def post(self, request, *args, **kwargs):
         column = get_object_or_404(
             KanbanBoard, pk=kwargs["pk"], project=self.project
         )
+        if column.tasks.exists():
+            return HttpResponseBadRequest(
+                "Cannot delete a column that still contains tasks. "
+                "Move or delete its tasks first."
+            )
         column.delete()
-        return HttpResponse(status=204)
+        # Empty 200 (not 204) so htmx swaps and the row is removed.
+        return HttpResponse("")
 
 
 # ---------------------------------------------------------------------------
