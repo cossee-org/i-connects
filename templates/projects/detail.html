@@ -106,10 +106,14 @@
           </div>
           <div class="flex flex-wrap gap-2">
             {% if has_kanban_columns %}
-              <a href="{% url 'tasks:create' project_pk=project.pk %}?next={% url 'projects:detail' pk=project.pk %}"
-                 class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+              <button type="button"
+                      class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                      hx-get="{% url 'tasks:create' project_pk=project.pk %}"
+                      hx-target="#task-modal-body"
+                      hx-swap="innerHTML"
+                      onclick="document.getElementById('task-modal').showModal()">
                 + New task
-              </a>
+              </button>
             {% else %}
               <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
                  class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
@@ -312,4 +316,24 @@
     {% endif %}
   </aside>
 </div>
+
+{% if user_privilege %}
+  <dialog id="task-modal" class="modal" aria-label="Task editor">
+    <div class="modal-box max-w-2xl bg-base-100 border border-brand-light/60">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close task editor">&times;</button>
+      </form>
+      <div id="task-modal-body"><!-- filled by HTMX --></div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <script>
+    document.body.addEventListener('task-created', function () {
+      var modal = document.getElementById('task-modal');
+      if (modal && modal.open) modal.close();
+      window.location.reload();
+    });
+  </script>
+{% endif %}
 {% endblock %}
