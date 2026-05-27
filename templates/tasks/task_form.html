@@ -7,7 +7,7 @@
 <form method="post"
       action="{{ form_action }}"
       {% if not standalone %}hx-post="{{ form_action }}"
-      hx-target="#kanban-board"
+      hx-target="this"
       hx-swap="none"{% endif %}>
   {% csrf_token %}
   {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
