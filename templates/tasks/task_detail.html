@@ -35,7 +35,7 @@
                 hx-swap="outerHTML">Reopen</button>
       {% endif %}
       <a class="btn btn-sm btn-primary"
-         href="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}">Edit</a>
+         href="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}?next={% url 'tasks:detail' project_pk=project.pk pk=task.pk %}">Edit</a>
       <button type="button" class="btn btn-sm btn-outline btn-error"
               onclick="document.getElementById('delete-task-modal').showModal()">
         Delete

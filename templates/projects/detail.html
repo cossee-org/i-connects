@@ -145,7 +145,7 @@
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
                   {% include "_components/status_badge.html" with status=task.status %}
-                  <a href="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
+                  <a href="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}?next={% url 'projects:detail' pk=project.pk %}"
                      class="btn btn-ghost btn-xs"
                      aria-label="Edit task {{ task.name }}">Edit</a>
                   <button type="button"
