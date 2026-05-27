@@ -578,7 +578,8 @@ class BoardColumnDeleteView(LoginRequiredMixin, ProjectContextMixin, View):
             KanbanBoard, pk=kwargs["pk"], project=self.project
         )
         column.delete()
-        return HttpResponse(status=204)
+        # Empty 200 (not 204) so htmx swaps and the row is removed.
+        return HttpResponse("")
 
 
 # ---------------------------------------------------------------------------
