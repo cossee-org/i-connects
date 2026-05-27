@@ -34,4 +34,34 @@
       <button type="submit" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Add</button>
     </form>
   </div>
+
+  <script>
+    (function () {
+      var list = document.getElementById('column-list');
+      if (!list || typeof Sortable === 'undefined') return;
+      var reorderUrl = '{% url "tasks:column_reorder" project_pk=project.pk %}';
+      var csrfToken = '{{ csrf_token }}';
+      new Sortable(list, {
+        animation: 150,
+        handle: '.column-drag-handle',
+        ghostClass: 'opacity-40',
+        onEnd: function () {
+          var ids = Array.from(list.querySelectorAll('[data-column-id]'))
+            .map(function (el) { return el.dataset.columnId; });
+          if (!ids.length) return;
+          var body = new URLSearchParams();
+          ids.forEach(function (id) { body.append('order', id); });
+          fetch(reorderUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'X-CSRFToken': csrfToken,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: body,
+          });
+        },
+      });
+    })();
+  </script>
 {% endblock %}

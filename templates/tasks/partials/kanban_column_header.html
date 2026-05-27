@@ -1,9 +1,18 @@
 {# Column row in the management list. Swapped on create / rename. #}
 {% with task_count=column.tasks.count %}
 <li id="column-row-{{ column.pk }}"
+    data-column-id="{{ column.pk }}"
     class="flex items-center justify-between gap-2 px-1 py-2 border-b border-brand-light/60 last:border-b-0">
-  <span class="font-medium text-brand-navy text-sm flex items-center gap-2">
-    {{ column.name }}
+  <span class="font-medium text-brand-navy text-sm flex items-center gap-2 min-w-0">
+    <button type="button"
+            class="column-drag-handle cursor-grab text-brand-text/40 hover:text-brand-navy"
+            aria-label="Drag to reorder {{ column.name }}"
+            title="Drag to reorder">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4" aria-hidden="true">
+        <path d="M7 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6-9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z" />
+      </svg>
+    </button>
+    <span class="truncate">{{ column.name }}</span>
     {% if task_count %}
       <span class="text-xs bg-brand-navy/10 text-brand-navy px-2 py-0.5 rounded-full">{{ task_count }}</span>
     {% endif %}

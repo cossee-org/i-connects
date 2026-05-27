@@ -89,6 +89,11 @@ urlpatterns = [
         name="column_create",
     ),
     path(
+        "projects/<int:project_pk>/boards/reorder/",
+        views.BoardColumnReorderView.as_view(),
+        name="column_reorder",
+    ),
+    path(
         "projects/<int:project_pk>/boards/<int:pk>/edit/",
         views.BoardColumnUpdateView.as_view(),
         name="column_update",

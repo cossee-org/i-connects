@@ -12,6 +12,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.db.models import Max
 from django.http import (
     Http404,
@@ -570,6 +571,31 @@ class BoardColumnUpdateView(LoginRequiredMixin, ProjectContextMixin, View):
             "tasks/partials/kanban_column_header.html",
             {"column": column, "project": self.project},
         )
+
+
+class BoardColumnReorderView(LoginRequiredMixin, ProjectContextMixin, View):
+    """Persist a new ordering for this project's kanban columns."""
+
+    def post(self, request, *args, **kwargs):
+        try:
+            ids = [int(x) for x in request.POST.getlist("order")]
+        except (TypeError, ValueError):
+            return HttpResponseBadRequest("Invalid order payload.")
+        existing_ids = set(
+            KanbanBoard.objects.filter(project=self.project).values_list(
+                "id", flat=True
+            )
+        )
+        if set(ids) != existing_ids or len(ids) != len(existing_ids):
+            return HttpResponseBadRequest(
+                "Order must include every column exactly once."
+            )
+        with transaction.atomic():
+            for idx, col_id in enumerate(ids):
+                KanbanBoard.objects.filter(pk=col_id, project=self.project).update(
+                    container_order=idx
+                )
+        return HttpResponse(status=204)
 
 
 class BoardColumnDeleteView(LoginRequiredMixin, ProjectContextMixin, View):
