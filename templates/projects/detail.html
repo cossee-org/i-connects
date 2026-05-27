@@ -145,9 +145,15 @@
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
                   {% include "_components/status_badge.html" with status=task.status %}
-                  <a href="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}?next={% url 'projects:detail' pk=project.pk %}"
-                     class="btn btn-ghost btn-xs"
-                     aria-label="Edit task {{ task.name }}">Edit</a>
+                  <button type="button"
+                          class="btn btn-ghost btn-xs"
+                          aria-label="Edit task {{ task.name }}"
+                          hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
+                          hx-target="#task-modal-body"
+                          hx-swap="innerHTML"
+                          onclick="document.getElementById('task-modal').showModal()">
+                    Edit
+                  </button>
                   <button type="button"
                           class="btn btn-ghost btn-xs text-error"
                           aria-label="Delete task {{ task.name }}"
@@ -329,11 +335,15 @@
   </dialog>
 
   <script>
-    document.body.addEventListener('task-created', function () {
-      var modal = document.getElementById('task-modal');
-      if (modal && modal.open) modal.close();
-      window.location.reload();
-    });
+    (function () {
+      function handleTaskChange() {
+        var modal = document.getElementById('task-modal');
+        if (modal && modal.open) modal.close();
+        window.location.reload();
+      }
+      document.body.addEventListener('task-created', handleTaskChange);
+      document.body.addEventListener('task-updated', handleTaskChange);
+    })();
   </script>
 {% endif %}
 {% endblock %}

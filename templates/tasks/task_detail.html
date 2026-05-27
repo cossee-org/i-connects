@@ -34,8 +34,13 @@
                 hx-target="#task-status-block"
                 hx-swap="outerHTML">Reopen</button>
       {% endif %}
-      <a class="btn btn-sm btn-primary"
-         href="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}?next={% url 'tasks:detail' project_pk=project.pk pk=task.pk %}">Edit</a>
+      <button type="button" class="btn btn-sm btn-primary"
+              hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
+              hx-target="#task-modal-body"
+              hx-swap="innerHTML"
+              onclick="document.getElementById('task-modal').showModal()">
+        Edit
+      </button>
       <button type="button" class="btn btn-sm btn-outline btn-error"
               onclick="document.getElementById('delete-task-modal').showModal()">
         Delete
@@ -203,4 +208,22 @@
       </div>
     </aside>
   </div>
+
+  <dialog id="task-modal" class="modal" aria-label="Task editor">
+    <div class="modal-box max-w-2xl bg-base-100 border border-brand-light/60">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close task editor">&times;</button>
+      </form>
+      <div id="task-modal-body"><!-- filled by HTMX --></div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <script>
+    document.body.addEventListener('task-updated', function () {
+      var modal = document.getElementById('task-modal');
+      if (modal && modal.open) modal.close();
+      window.location.reload();
+    });
+  </script>
 {% endblock %}

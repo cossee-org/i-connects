@@ -268,11 +268,13 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
             metadata={"name": task.name},
         )
         if self.request.headers.get("HX-Request"):
-            return render(
+            response = render(
                 self.request,
                 "tasks/partials/task_summary.html",
                 {"task": task, "project": self.project},
             )
+            response["HX-Trigger"] = json.dumps({"task-updated": {"id": task.id}})
+            return response
         messages.success(self.request, f"Task '{task.name}' updated.")
         next_url = self.request.POST.get("next")
         if next_url and url_has_allowed_host_and_scheme(
