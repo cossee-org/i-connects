@@ -7,9 +7,10 @@
 <form method="post"
       action="{{ form_action }}"
       {% if not standalone %}hx-post="{{ form_action }}"
-      hx-target="#kanban-board"
+      hx-target="this"
       hx-swap="none"{% endif %}>
   {% csrf_token %}
+  {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
 
   {% if form.errors %}
     <div class="alert alert-error mb-4" role="alert">
@@ -56,7 +57,7 @@
 
   <div class="flex gap-2 justify-end mt-6">
     {% if standalone %}
-      <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-ghost">Cancel</a>
+      <a href="{% if next_url %}{{ next_url }}{% else %}{% url 'tasks:board' project_pk=project.pk %}{% endif %}" class="btn btn-ghost">Cancel</a>
     {% else %}
       <button type="button" class="btn btn-ghost"
               onclick="document.getElementById('task-modal') && document.getElementById('task-modal').close()">
