@@ -73,6 +73,9 @@ class TaskForm(forms.ModelForm):
         self.project = project
         self.fields["reviewers"].label = "Reviewer"
         self.fields["watchers"].label = "Watcher"
+        # Show only the container's name in the dropdown (e.g. "In Progress"),
+        # not the model's default "{name} (project {id})" representation.
+        self.fields["container"].label_from_instance = lambda obj: obj.name
         if project is not None:
             self.fields["container"].queryset = KanbanBoard.objects.filter(project=project)
             members = ProjectMember.objects.filter(project=project, deleted=False)
