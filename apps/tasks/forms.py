@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+
 from django import forms
+from django.utils.html import format_html, format_html_join
 
 from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
@@ -12,6 +15,67 @@ from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
 _daisy_input = "input input-bordered w-full"
 _daisy_textarea = "textarea textarea-bordered w-full"
 _daisy_select = "select select-bordered w-full"
+
+
+class MemberMultiSelect(forms.SelectMultiple):
+    """A DaisyUI/Alpine.js multi-select dropdown of project members.
+
+    Renders a collapsible dropdown of checkboxes (one per member) plus an
+    "All" option that selects every member — leads included, since leads
+    are project members carrying the project-manager privilege. Each
+    checkbox submits under the field name, so server-side parsing stays
+    identical to a native ``<select multiple>``.
+    """
+
+    def render(self, name, value, attrs=None, renderer=None):
+        selected = {str(v) for v in (value or [])}
+        all_ids = []
+        rows = []
+        for option_value, option_label in self.choices:
+            val = str(option_value)
+            all_ids.append(val)
+            rows.append((name, val, option_label))
+
+        options_html = format_html_join(
+            "",
+            (
+                '<label class="label cursor-pointer justify-start gap-2 py-1">'
+                '<input type="checkbox" name="{}" value="{}" '
+                'class="checkbox checkbox-sm" x-model="ids">'
+                '<span class="label-text">{}</span>'
+                "</label>"
+            ),
+            rows,
+        )
+
+        x_data = json.dumps({"open": False, "ids": sorted(selected), "allIds": all_ids})
+
+        return format_html(
+            '<div x-data="{}" class="dropdown w-full" @click.outside="open = false">'
+            '<div tabindex="0" role="button" @click="open = !open" '
+            'class="select select-bordered w-full flex items-center justify-between cursor-pointer">'
+            '<span x-text="ids.length ? (ids.length === allIds.length ? '
+            "'All members' : ids.length + ' selected') : 'Select members'\"></span>"
+            '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-60" '
+            'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+            '<path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>'
+            "</div>"
+            '<div x-show="open" style="display:none" '
+            'class="dropdown-content z-20 bg-base-100 rounded-box shadow border border-base-300 '
+            'w-full mt-1 p-2 max-h-64 overflow-y-auto">'
+            '<label class="label cursor-pointer justify-start gap-2 py-1">'
+            '<input type="checkbox" class="checkbox checkbox-sm" '
+            ':checked="allIds.length && ids.length === allIds.length" '
+            '@change="ids = $event.target.checked ? [...allIds] : []">'
+            '<span class="label-text font-semibold">All</span>'
+            "</label>"
+            '<div class="divider my-0"></div>'
+            "{}"
+            "</div>"
+            "</div>",
+            x_data,
+            options_html,
+        )
 
 
 class TaskForm(forms.ModelForm):
@@ -56,9 +120,7 @@ class TaskForm(forms.ModelForm):
             "description": forms.Textarea(attrs={"class": _daisy_textarea, "rows": 4}),
             "container": forms.Select(attrs={"class": _daisy_select}),
             "assign_by_role": forms.CheckboxInput(attrs={"class": "checkbox"}),
-            "assigned_members": forms.SelectMultiple(
-                attrs={"class": "select select-bordered w-full h-32"}
-            ),
+            "assigned_members": MemberMultiSelect(),
             "reviewers": forms.SelectMultiple(
                 attrs={"class": "select select-bordered w-full h-32"}
             ),
