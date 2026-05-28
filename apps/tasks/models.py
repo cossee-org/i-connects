@@ -122,11 +122,23 @@ class Task(models.Model):
         blank=True,
         related_name="assigned_tasks",
     )
+    reviewers = models.ManyToManyField(
+        "projects.ProjectMember",
+        blank=True,
+        related_name="reviewed_tasks",
+    )
+    watchers = models.ManyToManyField(
+        "projects.ProjectMember",
+        blank=True,
+        related_name="watched_tasks",
+    )
     roles = models.ManyToManyField(
         "roles.Role",
         blank=True,
         related_name="tasks",
     )
+
+    assign_by_role = models.BooleanField(default=False)
 
     auto_assign_new = models.CharField(
         max_length=16,

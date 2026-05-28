@@ -36,23 +36,18 @@
       {% include "_components/form_field.html" with field=form.description %}
     </div>
     {% include "_components/form_field.html" with field=form.container %}
-    {% include "_components/form_field.html" with field=form.milestone %}
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
-    <div class="md:col-span-2">
-      {% include "_components/form_field.html" with field=form.assigned_members %}
-    </div>
-    {% include "_components/form_field.html" with field=form.auto_assign_new %}
     {% include "_components/form_field.html" with field=form.contribution_type %}
-    <div class="md:col-span-2">
-      {% include "_components/form_field.html" with field=form.github_url %}
-    </div>
-    <div class="form-control w-full mb-4">
+    <div class="md:col-span-2 form-control w-full mb-4">
       <label class="label cursor-pointer justify-start gap-2">
-        {{ form.anonymous }}
-        <span class="label-text text-brand-navy font-medium">Anonymous</span>
+        {{ form.assign_by_role }}
+        <span class="label-text text-brand-navy font-medium">Assign by role</span>
       </label>
     </div>
+    {% include "_components/form_field.html" with field=form.assigned_members %}
+    {% include "_components/form_field.html" with field=form.reviewers %}
+    {% include "_components/form_field.html" with field=form.watchers %}
   </div>
 
   <div class="flex gap-2 justify-end mt-6">

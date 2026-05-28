@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django import forms
 
-from apps.core.enums import AutoAssignNew, CompletedAs, TaskStatus
+from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
 from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
 
@@ -18,9 +18,10 @@ class TaskForm(forms.ModelForm):
     """Create / update a Task.
 
     The ``project`` kwarg scopes the choices for ``container``,
-    ``milestone``, and ``assigned_members`` to the active project. The
-    ``container`` field is optional at the form level so inline creation
-    from a column can pre-fill it without surfacing the field in the UI.
+    ``assigned_members``, ``reviewers``, and ``watchers`` to the active
+    project. The ``container`` field is optional at the form level so
+    inline creation from a column can pre-fill it without surfacing the
+    field in the UI.
     """
 
     deadline = forms.DateTimeField(
@@ -42,42 +43,42 @@ class TaskForm(forms.ModelForm):
             "name",
             "description",
             "container",
-            "milestone",
+            "assign_by_role",
             "assigned_members",
+            "reviewers",
+            "watchers",
             "start_date",
             "deadline",
             "contribution_type",
-            "auto_assign_new",
-            "anonymous",
-            "github_url",
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": _daisy_input}),
             "description": forms.Textarea(attrs={"class": _daisy_textarea, "rows": 4}),
             "container": forms.Select(attrs={"class": _daisy_select}),
-            "milestone": forms.Select(attrs={"class": _daisy_select}),
+            "assign_by_role": forms.CheckboxInput(attrs={"class": "checkbox"}),
             "assigned_members": forms.SelectMultiple(
                 attrs={"class": "select select-bordered w-full h-32"}
             ),
+            "reviewers": forms.SelectMultiple(
+                attrs={"class": "select select-bordered w-full h-32"}
+            ),
+            "watchers": forms.SelectMultiple(
+                attrs={"class": "select select-bordered w-full h-32"}
+            ),
             "contribution_type": forms.Select(attrs={"class": _daisy_select}),
-            "auto_assign_new": forms.Select(attrs={"class": _daisy_select}),
-            "anonymous": forms.CheckboxInput(attrs={"class": "checkbox"}),
-            "github_url": forms.URLInput(attrs={
-                "class": "input input-bordered w-full",
-                "placeholder": "https://github.com/org/repo/issues/123",
-            }),
         }
 
     def __init__(self, *args, project=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.project = project
+        self.fields["reviewers"].label = "Reviewer"
+        self.fields["watchers"].label = "Watcher"
         if project is not None:
             self.fields["container"].queryset = KanbanBoard.objects.filter(project=project)
-            self.fields["milestone"].queryset = Milestone.objects.filter(project=project)
-            self.fields["milestone"].required = False
-            self.fields["assigned_members"].queryset = ProjectMember.objects.filter(
-                project=project, deleted=False
-            )
+            members = ProjectMember.objects.filter(project=project, deleted=False)
+            self.fields["assigned_members"].queryset = members
+            self.fields["reviewers"].queryset = members
+            self.fields["watchers"].queryset = members
 
 
 class MilestoneForm(forms.ModelForm):
