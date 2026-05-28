@@ -131,6 +131,7 @@ class TaskForm(forms.ModelForm):
         self.project = project
         self.fields["reviewers"].label = "Reviewer"
         self.fields["watchers"].label = "Watcher"
+        self.fields["container"].label = "Status"
         # Show only the container's name in the dropdown (e.g. "In Progress"),
         # not the model's default "{name} (project {id})" representation.
         self.fields["container"].label_from_instance = lambda obj: obj.name
