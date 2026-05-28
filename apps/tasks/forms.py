@@ -121,12 +121,8 @@ class TaskForm(forms.ModelForm):
             "container": forms.Select(attrs={"class": _daisy_select}),
             "assign_by_role": forms.CheckboxInput(attrs={"class": "checkbox"}),
             "assigned_members": MemberMultiSelect(),
-            "reviewers": forms.SelectMultiple(
-                attrs={"class": "select select-bordered w-full h-32"}
-            ),
-            "watchers": forms.SelectMultiple(
-                attrs={"class": "select select-bordered w-full h-32"}
-            ),
+            "reviewers": MemberMultiSelect(),
+            "watchers": MemberMultiSelect(),
             "contribution_type": forms.Select(attrs={"class": _daisy_select}),
         }
 
