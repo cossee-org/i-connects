@@ -83,6 +83,25 @@ class ProjectMember(models.Model):
     def __str__(self) -> str:
         return self.name or f"ProjectMember #{self.pk}"
 
+    @property
+    def display_name(self) -> str:
+        """Human-friendly name as ``"First Name Last Name"``.
+
+        Derived from the linked user's ``given_name``/``family_name``,
+        falling back to the user's ``name``/email and finally to the
+        membership's own ``name``.
+        """
+
+        user = self.users.order_by("given_name", "family_name").first()
+        if user is not None:
+            full = f"{(user.given_name or '').strip()} {(user.family_name or '').strip()}".strip()
+            if full:
+                return full
+            if user.name:
+                return user.name
+            return user.email
+        return self.name or f"ProjectMember #{self.pk}"
+
 
 class ProjectPrivilege(models.Model):
     """Per-user privilege assignment for a project."""

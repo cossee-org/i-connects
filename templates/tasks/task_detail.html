@@ -192,7 +192,7 @@
       <div>
         <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Details</h3>
         <ul class="text-sm text-brand-text space-y-1">
-          <li><span class="text-brand-text/60">Created by:</span> {{ task.created_by }}</li>
+          <li><span class="text-brand-text/60">Created by:</span> {{ task.created_by.display_name }}</li>
           {% if task.start_date %}<li><span class="text-brand-text/60">Starts:</span> {{ task.start_date|date:"M j, Y" }}</li>{% endif %}
           {% if task.deadline %}
             <li class="inline-flex items-center gap-1">

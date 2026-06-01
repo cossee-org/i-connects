@@ -10,9 +10,9 @@
   <div class="flex-1 brand-card p-3">
     <header class="flex flex-wrap items-center justify-between gap-2">
       <div class="text-sm text-brand-text">
-        <span class="font-medium text-brand-navy">{{ log.assigned_to }}</span>
+        <span class="font-medium text-brand-navy">{{ log.assigned_to.display_name }}</span>
         {% if log.completed_by %}
-          <span class="text-brand-text/70">&middot; by {{ log.completed_by }}</span>
+          <span class="text-brand-text/70">&middot; by {{ log.completed_by.display_name }}</span>
         {% endif %}
         <span class="text-xs text-brand-text/60 ml-1">&middot; {{ log.created_at|date:"M j, Y H:i" }}</span>
       </div>
