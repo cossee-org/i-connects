@@ -105,20 +105,22 @@
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
-            {% if has_kanban_columns %}
-              <button type="button"
-                      class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                      hx-get="{% url 'tasks:create' project_pk=project.pk %}"
-                      hx-target="#task-modal-body"
-                      hx-swap="innerHTML"
-                      onclick="document.getElementById('task-modal').showModal()">
-                + New task
-              </button>
-            {% else %}
-              <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
-                 class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-                Set up columns
-              </a>
+            {% if is_project_manager %}
+              {% if has_kanban_columns %}
+                <button type="button"
+                        class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                        hx-get="{% url 'tasks:create' project_pk=project.pk %}"
+                        hx-target="#task-modal-body"
+                        hx-swap="innerHTML"
+                        onclick="document.getElementById('task-modal').showModal()">
+                  + New task
+                </button>
+              {% else %}
+                <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
+                   class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+                  Set up columns
+                </a>
+              {% endif %}
             {% endif %}
             <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-sm btn-ghost">
               View board
@@ -145,6 +147,7 @@
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
                   {% include "_components/status_badge.html" with status=task.status %}
+                  {% if is_project_manager %}
                   <button type="button"
                           class="btn btn-ghost btn-xs"
                           aria-label="Edit task {{ task.name }}"
@@ -160,6 +163,7 @@
                           onclick="document.getElementById('delete-task-modal-{{ task.pk }}').showModal()">
                     Delete
                   </button>
+                  {% endif %}
                 </div>
               </li>
               <dialog id="delete-task-modal-{{ task.pk }}" class="modal" aria-label="Delete task confirmation">

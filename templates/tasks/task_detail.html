@@ -28,23 +28,25 @@
                 hx-post="{% url 'tasks:complete' pk=task.pk %}"
                 hx-target="#task-status-block"
                 hx-swap="outerHTML">Mark done</button>
-      {% else %}
+      {% elif is_project_manager %}
         <button class="btn btn-ghost btn-sm"
                 hx-post="{% url 'tasks:reopen' pk=task.pk %}"
                 hx-target="#task-status-block"
                 hx-swap="outerHTML">Reopen</button>
       {% endif %}
-      <button type="button" class="btn btn-sm btn-primary"
-              hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
-              hx-target="#task-modal-body"
-              hx-swap="innerHTML"
-              onclick="document.getElementById('task-modal').showModal()">
-        Edit
-      </button>
-      <button type="button" class="btn btn-sm btn-outline btn-error"
-              onclick="document.getElementById('delete-task-modal').showModal()">
-        Delete
-      </button>
+      {% if is_project_manager %}
+        <button type="button" class="btn btn-sm btn-primary"
+                hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
+                hx-target="#task-modal-body"
+                hx-swap="innerHTML"
+                onclick="document.getElementById('task-modal').showModal()">
+          Edit
+        </button>
+        <button type="button" class="btn btn-sm btn-outline btn-error"
+                onclick="document.getElementById('delete-task-modal').showModal()">
+          Delete
+        </button>
+      {% endif %}
     </div>
   </header>
 {% endblock %}
@@ -104,6 +106,7 @@
       <div>
         <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Column</h3>
         <div class="text-sm text-brand-navy font-medium">{{ task.container.name }}</div>
+        {% if is_project_manager %}
         <details class="mt-2">
           <summary class="btn btn-ghost btn-xs">Move to column</summary>
           <form method="post" action="{% url 'tasks:change_column' pk=task.pk %}" class="mt-2">
@@ -123,11 +126,13 @@
             </button>
           </form>
         </details>
+        {% endif %}
       </div>
 
       <div>
         <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Assignees</h3>
         {% include "tasks/partials/task_assignees.html" with task=task %}
+        {% if is_project_manager %}
         <details class="mt-2">
           <summary class="btn btn-ghost btn-xs">Change assignees</summary>
           <form class="mt-2"
@@ -139,6 +144,7 @@
             <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 mt-2" type="submit">Save</button>
           </form>
         </details>
+        {% endif %}
       </div>
 
       <div>
@@ -146,6 +152,7 @@
         <div id="task-milestone-{{ task.pk }}">
           {% include "tasks/partials/task_milestone.html" with task=task %}
         </div>
+        {% if is_project_manager %}
         <details class="mt-2">
           <summary class="btn btn-ghost btn-xs">Change milestone</summary>
           <form class="mt-2"
@@ -157,6 +164,7 @@
             <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 mt-2" type="submit">Save</button>
           </form>
         </details>
+        {% endif %}
       </div>
 
       {% if task.github_url %}

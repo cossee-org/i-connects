@@ -621,7 +621,7 @@ class BoardColumnCreateView(
         return render(
             request,
             "tasks/partials/kanban_column_header.html",
-            {"column": column, "project": self.project},
+            {"column": column, "project": self.project, "is_project_manager": True},
         )
 
 
@@ -650,7 +650,7 @@ class BoardColumnUpdateView(
         return render(
             request,
             "tasks/partials/kanban_column_header.html",
-            {"column": column, "project": self.project},
+            {"column": column, "project": self.project, "is_project_manager": True},
         )
 
 
@@ -734,7 +734,7 @@ class MilestoneCreateView(
         return render(
             request,
             "tasks/partials/milestone_item.html",
-            {"milestone": milestone, "project": self.project},
+            {"milestone": milestone, "project": self.project, "is_project_manager": True},
         )
 
 
@@ -782,7 +782,7 @@ class MilestoneUpdateView(
         return render(
             request,
             "tasks/partials/milestone_item.html",
-            {"milestone": milestone, "project": self.project},
+            {"milestone": milestone, "project": self.project, "is_project_manager": True},
         )
 
 
