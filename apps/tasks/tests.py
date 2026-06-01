@@ -186,11 +186,44 @@ def test_assigning_new_member_seeds_tasklog(client, user, other_user):
     assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
     assert TaskLog.objects.filter(task=task, assigned_to=pm_member).count() == 1
     # The response refreshes the activity timeline out-of-band so the new
-    # entry shows up without a page reload.
+    # entry shows up without a page reload, and it includes the new member's
+    # thread.
     content = response.content.decode()
     assert 'id="task-log-list"' in content
     assert 'hx-swap-oob="true"' in content
+    new_log = TaskLog.objects.get(task=task, assigned_to=extra_member)
+    assert f'id="task-log-{new_log.pk}"' in content
 
     # Re-submitting with the same members does not duplicate logs.
     client.post(url, {"assigned_members": [pm_member.pk, extra_member.pk]})
     assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
+
+
+@pytest.mark.django_db
+def test_assigning_backfills_member_missing_a_tasklog(client, user, other_user):
+    # An assignee that was added without a TaskLog (e.g. legacy/demo data)
+    # gets one seeded the next time assignees are saved.
+    project, col1, _col2 = _make_project_with_board(user)
+    pm_member = _primary_member(project, user)
+    no_log_member = ProjectMember.objects.create(project=project)
+    no_log_member.users.add(other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=pm_member,
+        container=col1,
+        container_task_order=0,
+        name="T6",
+    )
+    # Both are assigned, but only pm_member has an activity entry.
+    task.assigned_members.add(pm_member, no_log_member)
+    TaskLog.objects.create(task=task, assigned_to=pm_member)
+    assert not TaskLog.objects.filter(task=task, assigned_to=no_log_member).exists()
+
+    client.force_login(user)
+    response = client.post(
+        reverse("tasks:assign", kwargs={"pk": task.pk}),
+        {"assigned_members": [pm_member.pk, no_log_member.pk]},
+    )
+    assert response.status_code == 200
+    seeded_log = TaskLog.objects.get(task=task, assigned_to=no_log_member)
+    assert f'id="task-log-{seeded_log.pk}"' in response.content.decode()
