@@ -90,13 +90,7 @@
 
       <div class="mt-8">
         <h2 class="text-lg font-semibold text-brand-navy mb-3">Activity &amp; comments</h2>
-        <div id="task-log-list" class="flex flex-col gap-3">
-          {% for log in task_logs %}
-            {% include "tasks/task_log_item.html" with log=log %}
-          {% empty %}
-            <p class="text-sm text-brand-text/60">No task log entries yet.</p>
-          {% endfor %}
-        </div>
+        {% include "tasks/partials/task_log_list.html" %}
       </div>
     </section>
 

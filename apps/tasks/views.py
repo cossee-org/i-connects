@@ -21,6 +21,7 @@ from django.http import (
     HttpResponseForbidden,
 )
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import resolve, reverse, Resolver404
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.text import slugify
@@ -478,6 +479,7 @@ class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         self.task.assigned_members.set(members)
         # Seed a TaskLog (which surfaces as an Activity & comments entry) for
         # each newly-added member, mirroring the seeding done at task creation.
+        seeded = False
         for member in members:
             if member.pk in existing_ids:
                 continue
@@ -488,11 +490,30 @@ class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                     CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL
                 ),
             )
-        return render(
-            request,
+            seeded = True
+        assignees_html = render_to_string(
             "tasks/partials/task_assignees.html",
             {"task": self.task, "project": self.project},
+            request=request,
         )
+        # When new members were assigned, refresh the Activity & comments
+        # timeline out-of-band so the seeded entries appear immediately.
+        if seeded:
+            task_logs = self.task.task_logs.select_related(
+                "assigned_to", "completed_by"
+            ).prefetch_related("comments__author")
+            assignees_html += render_to_string(
+                "tasks/partials/task_log_list.html",
+                {
+                    "task": self.task,
+                    "task_logs": task_logs,
+                    "comment_form": CommentForm(),
+                    "is_project_manager": self.is_project_manager,
+                    "oob": True,
+                },
+                request=request,
+            )
+        return HttpResponse(assignees_html)
 
 
 class TaskLogApproveView(LoginRequiredMixin, TaskMemberAccessMixin, View):

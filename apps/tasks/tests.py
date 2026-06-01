@@ -185,6 +185,11 @@ def test_assigning_new_member_seeds_tasklog(client, user, other_user):
     assert response.status_code == 200
     assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
     assert TaskLog.objects.filter(task=task, assigned_to=pm_member).count() == 1
+    # The response refreshes the activity timeline out-of-band so the new
+    # entry shows up without a page reload.
+    content = response.content.decode()
+    assert 'id="task-log-list"' in content
+    assert 'hx-swap-oob="true"' in content
 
     # Re-submitting with the same members does not duplicate logs.
     client.post(url, {"assigned_members": [pm_member.pk, extra_member.pk]})
