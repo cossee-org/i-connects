@@ -25,7 +25,7 @@ def member_label(member: ProjectMember) -> str:
     structured given/family names are not populated.
     """
 
-    user = member.users.order_by("family_name", "given_name").first()
+    user = member.users.order_by("given_name", "family_name").first()
     if user is None:
         return member.name or f"Member #{member.pk}"
     first = (user.given_name or "").strip()
@@ -70,7 +70,7 @@ class MemberMultiSelect(forms.SelectMultiple):
         x_data = json.dumps({"open": False, "ids": sorted(selected), "allIds": all_ids})
 
         return format_html(
-            '<div x-data="{}" class="dropdown w-full" @click.outside="open = false">'
+            '<div x-data="{}" class="dropdown relative w-full" @click.outside="open = false">'
             '<div tabindex="0" role="button" @click="open = !open" '
             'class="select select-bordered w-full flex items-center justify-between cursor-pointer">'
             '<span x-text="ids.length ? (ids.length === allIds.length ? '
@@ -80,7 +80,7 @@ class MemberMultiSelect(forms.SelectMultiple):
             '<path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>'
             "</div>"
             '<div x-show="open" style="display:none" '
-            'class="dropdown-content z-20 bg-base-100 rounded-box shadow border border-base-300 '
+            'class="dropdown-content absolute left-0 top-full z-30 bg-base-100 rounded-box shadow border border-base-300 '
             'w-full mt-1 p-2 max-h-64 overflow-y-auto">'
             '<label class="label cursor-pointer justify-start gap-2 py-1">'
             '<input type="checkbox" class="checkbox checkbox-sm" '
@@ -163,10 +163,10 @@ class TaskForm(forms.ModelForm):
             self.fields["container"].queryset = KanbanBoard.objects.filter(project=project)
             members = (
                 ProjectMember.objects.filter(project=project, deleted=False)
-                .annotate(sort_name=Min("users__family_name"))
+                .annotate(sort_name=Min("users__given_name"))
                 .order_by("sort_name")
             )
-            # Render members as "LastName, FirstName (email)", sorted by last name.
+            # Render members as "Given Name Last Name (email)", sorted by given name.
             for field_name in ("assigned_members", "reviewers"):
                 self.fields[field_name].queryset = members
                 self.fields[field_name].label_from_instance = member_label
