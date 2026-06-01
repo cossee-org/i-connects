@@ -123,14 +123,7 @@ class TaskCreateView(LoginRequiredMixin, ProjectContextMixin, CreateView):
         task.save()
         form.save_m2m()
         # Seed a TaskLog per assignee (mirrors the Blitz createTask behaviour).
-        for member in task.assigned_members.all():
-            TaskLog.objects.create(
-                task=task,
-                assigned_to=member,
-                completed_as=(
-                    CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL
-                ),
-            )
+        _seed_assignee_logs(task)
         log_action(
             AuditAction.TASK_CREATED,
             actor=self.request.user,
@@ -261,6 +254,9 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
 
     def form_valid(self, form):
         task = form.save()
+        # Seed Activity & comments entries for any newly-assigned members,
+        # mirroring the Assignees ("Change assignees") flow.
+        _seed_assignee_logs(task)
         log_action(
             AuditAction.TASK_UPDATED,
             actor=self.request.user,
@@ -274,7 +270,11 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
                 "tasks/partials/task_summary.html",
                 {"task": task, "project": self.project},
             )
-            response["HX-Trigger"] = json.dumps({"task-updated": {"id": task.id}})
+            # ``assignees-changed`` refreshes the task detail timeline if the
+            # edit happened from there; ``task-updated`` refreshes board/project.
+            response["HX-Trigger"] = json.dumps(
+                {"task-updated": {"id": task.id}, "assignees-changed": True}
+            )
             return response
         messages.success(self.request, f"Task '{task.name}' updated.")
         next_url = self.request.POST.get("next")
@@ -480,6 +480,29 @@ def _task_activity_context(task, *, is_project_manager):
     }
 
 
+def _seed_assignee_logs(task) -> bool:
+    """Seed a TaskLog (Activity & comments entry) for each assigned member
+    that doesn't have one yet.
+
+    Idempotent — keying off existing logs means it can run on create, on
+    edit, and on assignee changes without producing duplicates. Returns
+    ``True`` when at least one log was created.
+    """
+    logged_member_ids = set(task.task_logs.values_list("assigned_to_id", flat=True))
+    new_logs = [
+        TaskLog(
+            task=task,
+            assigned_to=member,
+            completed_as=(CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL),
+        )
+        for member in task.assigned_members.all()
+        if member.pk not in logged_member_ids
+    ]
+    if new_logs:
+        TaskLog.objects.bulk_create(new_logs)
+    return bool(new_logs)
+
+
 class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     def post(self, request, *args, **kwargs):
         form = TaskAssignForm(request.POST, project=self.project)
@@ -487,23 +510,10 @@ class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseBadRequest("Invalid assignment data.")
         members = form.cleaned_data.get("assigned_members") or []
         self.task.assigned_members.set(members)
-        # Ensure every assigned member has an Activity & comments entry: seed a
-        # TaskLog for any assigned member that doesn't have one yet. Keying off
-        # the existing logs (rather than the previous assignee set) makes this
-        # idempotent and also backfills members assigned without a log.
-        logged_member_ids = set(
-            self.task.task_logs.values_list("assigned_to_id", flat=True)
-        )
-        for member in members:
-            if member.pk in logged_member_ids:
-                continue
-            TaskLog.objects.create(
-                task=self.task,
-                assigned_to=member,
-                completed_as=(
-                    CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL
-                ),
-            )
+        # Ensure every assigned member has an Activity & comments entry. Keying
+        # off existing logs makes this idempotent and also backfills members
+        # assigned without a log.
+        _seed_assignee_logs(self.task)
         # Fallback for when htmx isn't running (e.g. the script failed to
         # load): a native form submit reloads the task page, which renders
         # the full timeline server-side — so seeded threads still appear.

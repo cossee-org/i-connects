@@ -261,3 +261,35 @@ def test_assigning_backfills_member_missing_a_tasklog(client, user, other_user):
     seeded_log = TaskLog.objects.get(task=task, assigned_to=no_log_member)
     activity = client.get(reverse("tasks:activity", kwargs={"pk": task.pk}))
     assert f'id="task-log-{seeded_log.pk}"' in activity.content.decode()
+
+
+@pytest.mark.django_db
+def test_edit_form_seeds_assignee_logs(client, user, other_user):
+    # Adding an assignee via the Task edit form should seed an activity entry,
+    # just like the "Change assignees" flow does.
+    project, col1, _col2 = _make_project_with_board(user)
+    pm_member = _primary_member(project, user)
+    extra_member = ProjectMember.objects.create(project=project)
+    extra_member.users.add(other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=pm_member,
+        container=col1,
+        container_task_order=0,
+        name="EditSeed",
+    )
+    task.assigned_members.add(pm_member)
+    TaskLog.objects.create(task=task, assigned_to=pm_member)
+
+    client.force_login(user)
+    response = client.post(
+        reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        {
+            "name": "EditSeed",
+            "container": col1.pk,
+            "contribution_type": "OTHER",
+            "assigned_members": [pm_member.pk, extra_member.pk],
+        },
+    )
+    assert response.status_code in (200, 302)
+    assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
