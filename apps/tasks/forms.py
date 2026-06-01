@@ -226,9 +226,14 @@ class TaskAssignForm(forms.Form):
     def __init__(self, *args, project=None, **kwargs):
         super().__init__(*args, **kwargs)
         if project is not None:
-            self.fields["assigned_members"].queryset = ProjectMember.objects.filter(
-                project=project, deleted=False
+            members = (
+                ProjectMember.objects.filter(project=project, deleted=False)
+                .annotate(sort_name=Min("users__given_name"))
+                .order_by("sort_name")
             )
+            # Render members as "First Name Last Name (email)", sorted by given name.
+            self.fields["assigned_members"].queryset = members
+            self.fields["assigned_members"].label_from_instance = member_label
 
 
 class TaskLogForm(forms.ModelForm):
