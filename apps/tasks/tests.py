@@ -153,3 +153,37 @@ def test_approve_completion_requires_pm(client, user, other_user):
     log.refresh_from_db()
     assert log.approved is True
     assert AuditLog.objects.filter(action=AuditAction.TASK_APPROVED).exists()
+
+
+@pytest.mark.django_db
+def test_assigning_new_member_seeds_tasklog(client, user, other_user):
+    project, col1, _col2 = _make_project_with_board(user)
+    pm_member = _primary_member(project, user)
+    extra_member = ProjectMember.objects.create(project=project)
+    extra_member.users.add(other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=pm_member,
+        container=col1,
+        container_task_order=0,
+        name="T5",
+    )
+    task.assigned_members.add(pm_member)
+    TaskLog.objects.create(task=task, assigned_to=pm_member)
+    assert TaskLog.objects.filter(task=task).count() == 1
+
+    client.force_login(user)
+    url = reverse("tasks:assign", kwargs={"pk": task.pk})
+
+    # Adding a brand-new assignee seeds a TaskLog (activity entry) for them,
+    # while leaving the already-assigned member's log untouched.
+    response = client.post(
+        url, {"assigned_members": [pm_member.pk, extra_member.pk]}
+    )
+    assert response.status_code == 200
+    assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
+    assert TaskLog.objects.filter(task=task, assigned_to=pm_member).count() == 1
+
+    # Re-submitting with the same members does not duplicate logs.
+    client.post(url, {"assigned_members": [pm_member.pk, extra_member.pk]})
+    assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1

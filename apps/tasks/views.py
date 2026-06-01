@@ -474,7 +474,20 @@ class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         if not form.is_valid():
             return HttpResponseBadRequest("Invalid assignment data.")
         members = form.cleaned_data.get("assigned_members") or []
+        existing_ids = set(self.task.assigned_members.values_list("pk", flat=True))
         self.task.assigned_members.set(members)
+        # Seed a TaskLog (which surfaces as an Activity & comments entry) for
+        # each newly-added member, mirroring the seeding done at task creation.
+        for member in members:
+            if member.pk in existing_ids:
+                continue
+            TaskLog.objects.create(
+                task=self.task,
+                assigned_to=member,
+                completed_as=(
+                    CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL
+                ),
+            )
         return render(
             request,
             "tasks/partials/task_assignees.html",
