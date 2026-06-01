@@ -180,7 +180,9 @@ def test_assigning_new_member_seeds_tasklog(client, user, other_user):
     # Adding a brand-new assignee seeds a TaskLog (activity entry) for them,
     # while leaving the already-assigned member's log untouched.
     response = client.post(
-        url, {"assigned_members": [pm_member.pk, extra_member.pk]}
+        url,
+        {"assigned_members": [pm_member.pk, extra_member.pk]},
+        HTTP_HX_REQUEST="true",
     )
     assert response.status_code == 200
     assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
@@ -194,8 +196,39 @@ def test_assigning_new_member_seeds_tasklog(client, user, other_user):
     assert f'id="task-log-{new_log.pk}"' in activity.content.decode()
 
     # Re-submitting with the same members does not duplicate logs.
-    client.post(url, {"assigned_members": [pm_member.pk, extra_member.pk]})
+    client.post(
+        url,
+        {"assigned_members": [pm_member.pk, extra_member.pk]},
+        HTTP_HX_REQUEST="true",
+    )
     assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
+
+
+@pytest.mark.django_db
+def test_assign_without_htmx_redirects_to_task(client, user, other_user):
+    # When htmx isn't running, a native form submit should still seed the
+    # log and reload the task page (rather than return a bare partial).
+    project, col1, _col2 = _make_project_with_board(user)
+    pm_member = _primary_member(project, user)
+    extra_member = ProjectMember.objects.create(project=project)
+    extra_member.users.add(other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=pm_member,
+        container=col1,
+        container_task_order=0,
+        name="T7",
+    )
+    client.force_login(user)
+    response = client.post(  # no HX-Request header
+        reverse("tasks:assign", kwargs={"pk": task.pk}),
+        {"assigned_members": [pm_member.pk, extra_member.pk]},
+    )
+    assert response.status_code == 302
+    assert response.url == reverse(
+        "tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}
+    )
+    assert TaskLog.objects.filter(task=task, assigned_to=extra_member).exists()
 
 
 @pytest.mark.django_db
@@ -222,6 +255,7 @@ def test_assigning_backfills_member_missing_a_tasklog(client, user, other_user):
     response = client.post(
         reverse("tasks:assign", kwargs={"pk": task.pk}),
         {"assigned_members": [pm_member.pk, no_log_member.pk]},
+        HTTP_HX_REQUEST="true",
     )
     assert response.status_code == 200
     seeded_log = TaskLog.objects.get(task=task, assigned_to=no_log_member)

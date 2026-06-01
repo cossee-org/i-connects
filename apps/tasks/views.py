@@ -504,6 +504,13 @@ class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                     CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL
                 ),
             )
+        # Fallback for when htmx isn't running (e.g. the script failed to
+        # load): a native form submit reloads the task page, which renders
+        # the full timeline server-side — so seeded threads still appear.
+        if not request.headers.get("HX-Request"):
+            return redirect(
+                "tasks:detail", project_pk=self.project.pk, pk=self.task.pk
+            )
         response = render(
             request,
             "tasks/partials/task_assignees.html",
@@ -513,6 +520,12 @@ class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         # newly-seeded entries appear without a full reload.
         response["HX-Trigger"] = "assignees-changed"
         return response
+
+    def get(self, request, *args, **kwargs):
+        # Direct (non-HTMX) navigation lands here; send users to the task.
+        return redirect(
+            "tasks:detail", project_pk=self.project.pk, pk=self.task.pk
+        )
 
 
 class TaskActivityView(LoginRequiredMixin, TaskMemberAccessMixin, View):
