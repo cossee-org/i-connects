@@ -18,6 +18,8 @@ def _make_project_with_board(owner, *, name="P"):
         user=owner,
         form_data={"name": name, "status": ProjectStatus.ACTIVE, "is_public": True},
     )
+    # Drop the default seeded columns so these tests control the board exactly.
+    project.containers.all().delete()
     col1 = KanbanBoard.objects.create(project=project, name="Todo", container_order=0)
     col2 = KanbanBoard.objects.create(project=project, name="Doing", container_order=1)
     return project, col1, col2

@@ -72,6 +72,17 @@ def test_create_project_makes_creator_a_pm(client_logged_in, user):
 
 
 @pytest.mark.django_db
+def test_create_project_seeds_default_kanban_columns(user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Seeded", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    columns = list(project.containers.order_by("container_order"))
+    assert [c.name for c in columns] == ["To Do", "In Progress", "Done"]
+    assert [c.container_order for c in columns] == [0, 1, 2]
+
+
+@pytest.mark.django_db
 def test_only_pm_can_edit_project(client, user, other_user):
     # User A creates a project (PM).
     project = create_project_with_owner(
