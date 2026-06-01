@@ -71,14 +71,15 @@ class MemberMultiSelect(forms.SelectMultiple):
 
         return format_html(
             '<div x-data="{}" class="dropdown relative w-full" @click.outside="open = false">'
-            '<div tabindex="0" role="button" @click="open = !open" '
-            'class="select select-bordered w-full flex items-center justify-between cursor-pointer">'
+            '<button type="button" @click="open = !open" '
+            'class="select select-bordered w-full flex items-center justify-between '
+            'cursor-pointer text-left font-normal">'
             '<span x-text="ids.length ? (ids.length === allIds.length ? '
             "'All members' : ids.length + ' selected') : 'Select members'\"></span>"
-            '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-60" '
+            '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-60 pointer-events-none" '
             'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
             '<path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>'
-            "</div>"
+            "</button>"
             '<div x-show="open" style="display:none" '
             'class="dropdown-content absolute left-0 top-full z-30 bg-base-100 rounded-box shadow border border-base-300 '
             'w-full mt-1 p-2 max-h-64 overflow-y-auto">'
