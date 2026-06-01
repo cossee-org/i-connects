@@ -36,18 +36,11 @@
       {% include "_components/form_field.html" with field=form.description %}
     </div>
     {% include "_components/form_field.html" with field=form.container %}
+    {% include "_components/form_field.html" with field=form.contribution_type %}
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
-    {% include "_components/form_field.html" with field=form.contribution_type %}
-    <div class="md:col-span-2 form-control w-full mb-4">
-      <label class="label cursor-pointer justify-start gap-2">
-        {{ form.assign_by_role }}
-        <span class="label-text text-brand-navy font-medium">Assign by role</span>
-      </label>
-    </div>
     {% include "_components/form_field.html" with field=form.assigned_members %}
     {% include "_components/form_field.html" with field=form.reviewers %}
-    {% include "_components/form_field.html" with field=form.watchers %}
   </div>
 
   <div class="flex gap-2 justify-end mt-6">

@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 
 from django import forms
+from django.db.models import Min
 from django.utils.html import format_html, format_html_join
 
-from apps.core.enums import CompletedAs, TaskStatus
+from apps.core.enums import CompletedAs, ContributionType, TaskStatus
 from apps.projects.models import ProjectMember
 from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
 
@@ -15,6 +16,25 @@ from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
 _daisy_input = "input input-bordered w-full"
 _daisy_textarea = "textarea textarea-bordered w-full"
 _daisy_select = "select select-bordered w-full"
+
+
+def member_label(member: ProjectMember) -> str:
+    """Render a project member as ``"LastName, FirstName (email)"``.
+
+    Falls back to the member's name (or the user's ``name``/email) when the
+    structured given/family names are not populated.
+    """
+
+    user = member.users.order_by("family_name", "given_name").first()
+    if user is None:
+        return member.name or f"Member #{member.pk}"
+    last = (user.family_name or "").strip()
+    first = (user.given_name or "").strip()
+    if last or first:
+        display = f"{last}, {first}".strip().strip(",").strip()
+    else:
+        display = (user.name or user.email).strip()
+    return f"{display} ({user.email})"
 
 
 class MemberMultiSelect(forms.SelectMultiple):
@@ -82,10 +102,9 @@ class TaskForm(forms.ModelForm):
     """Create / update a Task.
 
     The ``project`` kwarg scopes the choices for ``container``,
-    ``assigned_members``, ``reviewers``, and ``watchers`` to the active
-    project. The ``container`` field is optional at the form level so
-    inline creation from a column can pre-fill it without surfacing the
-    field in the UI.
+    ``assigned_members``, and ``reviewers`` to the active project. The
+    ``container`` field is optional at the form level so inline creation
+    from a column can pre-fill it without surfacing the field in the UI.
     """
 
     deadline = forms.DateTimeField(
@@ -107,10 +126,8 @@ class TaskForm(forms.ModelForm):
             "name",
             "description",
             "container",
-            "assign_by_role",
             "assigned_members",
             "reviewers",
-            "watchers",
             "start_date",
             "deadline",
             "contribution_type",
@@ -119,10 +136,8 @@ class TaskForm(forms.ModelForm):
             "name": forms.TextInput(attrs={"class": _daisy_input}),
             "description": forms.Textarea(attrs={"class": _daisy_textarea, "rows": 4}),
             "container": forms.Select(attrs={"class": _daisy_select}),
-            "assign_by_role": forms.CheckboxInput(attrs={"class": "checkbox"}),
             "assigned_members": MemberMultiSelect(),
             "reviewers": MemberMultiSelect(),
-            "watchers": MemberMultiSelect(),
             "contribution_type": forms.Select(attrs={"class": _daisy_select}),
         }
 
@@ -130,17 +145,32 @@ class TaskForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.project = project
         self.fields["reviewers"].label = "Reviewer"
-        self.fields["watchers"].label = "Watcher"
         self.fields["container"].label = "Status"
         # Show only the container's name in the dropdown (e.g. "In Progress"),
         # not the model's default "{name} (project {id})" representation.
         self.fields["container"].label_from_instance = lambda obj: obj.name
+        # Sort contribution types by name, keeping "Other" last (and any
+        # leading blank choice at the top).
+        ct_field = self.fields["contribution_type"]
+        choices = list(ct_field.choices)
+        blanks = [c for c in choices if c[0] in ("", None)]
+        other = [c for c in choices if c[0] == ContributionType.OTHER]
+        rest = sorted(
+            (c for c in choices if c[0] not in ("", None) and c[0] != ContributionType.OTHER),
+            key=lambda c: c[1],
+        )
+        ct_field.choices = blanks + rest + other
         if project is not None:
             self.fields["container"].queryset = KanbanBoard.objects.filter(project=project)
-            members = ProjectMember.objects.filter(project=project, deleted=False)
-            self.fields["assigned_members"].queryset = members
-            self.fields["reviewers"].queryset = members
-            self.fields["watchers"].queryset = members
+            members = (
+                ProjectMember.objects.filter(project=project, deleted=False)
+                .annotate(sort_name=Min("users__family_name"))
+                .order_by("sort_name")
+            )
+            # Render members as "LastName, FirstName (email)", sorted by last name.
+            for field_name in ("assigned_members", "reviewers"):
+                self.fields[field_name].queryset = members
+                self.fields[field_name].label_from_instance = member_label
 
 
 class MilestoneForm(forms.ModelForm):
