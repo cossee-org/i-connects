@@ -1,6 +1,8 @@
-{# Activity & comments timeline — HTMX swap target.
-   Pass ``oob=True`` to have HTMX swap it out-of-band (e.g. from the
-   assign endpoint, whose primary target is the assignees block). #}
+{% comment %}
+  Activity & comments timeline — HTMX swap target. Pass ``oob=True`` to
+  have HTMX swap it out-of-band (e.g. from the assign endpoint, whose
+  primary target is the assignees block).
+{% endcomment %}
 <div id="task-log-list" class="flex flex-col gap-3"{% if oob %} hx-swap-oob="true"{% endif %}>
   {% for log in task_logs %}
     {% include "tasks/task_log_item.html" with log=log %}
