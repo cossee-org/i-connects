@@ -19,7 +19,7 @@ _daisy_select = "select select-bordered w-full"
 
 
 def member_label(member: ProjectMember) -> str:
-    """Render a project member as ``"LastName, FirstName (email)"``.
+    """Render a project member as ``"Given Name Last Name (email)"``.
 
     Falls back to the member's name (or the user's ``name``/email) when the
     structured given/family names are not populated.
@@ -28,11 +28,10 @@ def member_label(member: ProjectMember) -> str:
     user = member.users.order_by("family_name", "given_name").first()
     if user is None:
         return member.name or f"Member #{member.pk}"
-    last = (user.family_name or "").strip()
     first = (user.given_name or "").strip()
-    if last or first:
-        display = f"{last}, {first}".strip().strip(",").strip()
-    else:
+    last = (user.family_name or "").strip()
+    display = f"{first} {last}".strip()
+    if not display:
         display = (user.name or user.email).strip()
     return f"{display} ({user.email})"
 
