@@ -185,14 +185,13 @@ def test_assigning_new_member_seeds_tasklog(client, user, other_user):
     assert response.status_code == 200
     assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
     assert TaskLog.objects.filter(task=task, assigned_to=pm_member).count() == 1
-    # The response refreshes the activity timeline out-of-band so the new
-    # entry shows up without a page reload, and it includes the new member's
-    # thread.
-    content = response.content.decode()
-    assert 'id="task-log-list"' in content
-    assert 'hx-swap-oob="true"' in content
+    # The response asks the page to refresh the activity timeline.
+    assert response["HX-Trigger"] == "assignees-changed"
+
+    # The activity endpoint now renders a thread for the new member.
+    activity = client.get(reverse("tasks:activity", kwargs={"pk": task.pk}))
     new_log = TaskLog.objects.get(task=task, assigned_to=extra_member)
-    assert f'id="task-log-{new_log.pk}"' in content
+    assert f'id="task-log-{new_log.pk}"' in activity.content.decode()
 
     # Re-submitting with the same members does not duplicate logs.
     client.post(url, {"assigned_members": [pm_member.pk, extra_member.pk]})
@@ -226,4 +225,5 @@ def test_assigning_backfills_member_missing_a_tasklog(client, user, other_user):
     )
     assert response.status_code == 200
     seeded_log = TaskLog.objects.get(task=task, assigned_to=no_log_member)
-    assert f'id="task-log-{seeded_log.pk}"' in response.content.decode()
+    activity = client.get(reverse("tasks:activity", kwargs={"pk": task.pk}))
+    assert f'id="task-log-{seeded_log.pk}"' in activity.content.decode()

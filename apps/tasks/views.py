@@ -21,7 +21,6 @@ from django.http import (
     HttpResponseForbidden,
 )
 from django.shortcuts import get_object_or_404, redirect, render
-from django.template.loader import render_to_string
 from django.urls import resolve, reverse, Resolver404
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.text import slugify
@@ -469,6 +468,18 @@ class TaskReopenView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         return _respond_task_card(request, self.task)
 
 
+def _task_activity_context(task, *, is_project_manager):
+    """Context for rendering the Activity & comments timeline partial."""
+    return {
+        "task": task,
+        "task_logs": task.task_logs.select_related(
+            "assigned_to", "completed_by"
+        ).prefetch_related("comments__author"),
+        "comment_form": CommentForm(),
+        "is_project_manager": is_project_manager,
+    }
+
+
 class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     def post(self, request, *args, **kwargs):
         form = TaskAssignForm(request.POST, project=self.project)
@@ -483,7 +494,6 @@ class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         logged_member_ids = set(
             self.task.task_logs.values_list("assigned_to_id", flat=True)
         )
-        seeded = False
         for member in members:
             if member.pk in logged_member_ids:
                 continue
@@ -494,30 +504,28 @@ class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                     CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL
                 ),
             )
-            seeded = True
-        assignees_html = render_to_string(
+        response = render(
+            request,
             "tasks/partials/task_assignees.html",
             {"task": self.task, "project": self.project},
-            request=request,
         )
-        # When new members were assigned, refresh the Activity & comments
-        # timeline out-of-band so the seeded entries appear immediately.
-        if seeded:
-            task_logs = self.task.task_logs.select_related(
-                "assigned_to", "completed_by"
-            ).prefetch_related("comments__author")
-            assignees_html += render_to_string(
-                "tasks/partials/task_log_list.html",
-                {
-                    "task": self.task,
-                    "task_logs": task_logs,
-                    "comment_form": CommentForm(),
-                    "is_project_manager": self.is_project_manager,
-                    "oob": True,
-                },
-                request=request,
-            )
-        return HttpResponse(assignees_html)
+        # Tell the page to refresh the Activity & comments timeline so any
+        # newly-seeded entries appear without a full reload.
+        response["HX-Trigger"] = "assignees-changed"
+        return response
+
+
+class TaskActivityView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """Render the Activity & comments timeline (used for HTMX refreshes)."""
+
+    def get(self, request, *args, **kwargs):
+        return render(
+            request,
+            "tasks/partials/task_log_list.html",
+            _task_activity_context(
+                self.task, is_project_manager=self.is_project_manager
+            ),
+        )
 
 
 class TaskLogApproveView(LoginRequiredMixin, TaskMemberAccessMixin, View):

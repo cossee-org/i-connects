@@ -68,6 +68,11 @@ urlpatterns = [
         name="assign",
     ),
     path(
+        "tasks/<int:pk>/activity/",
+        views.TaskActivityView.as_view(),
+        name="activity",
+    ),
+    path(
         "tasks/<int:pk>/milestone/",
         views.TaskMilestoneAssignView.as_view(),
         name="set_milestone",
