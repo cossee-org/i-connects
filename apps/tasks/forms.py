@@ -67,22 +67,25 @@ class MemberMultiSelect(forms.SelectMultiple):
             rows,
         )
 
-        x_data = json.dumps({"open": False, "ids": sorted(selected), "allIds": all_ids})
+        x_data = json.dumps({"ids": sorted(selected), "allIds": all_ids})
 
+        # Built on the native <details>/<summary> disclosure widget so the
+        # toggle works in every browser (notably Safari, where click handlers
+        # on <div>/<button> proxies are unreliable) — and even if Alpine fails
+        # to load. Alpine only manages the checkbox state + summary label; the
+        # checkboxes are real form inputs, so submission works regardless.
         return format_html(
-            '<div x-data="{}" class="dropdown relative w-full" @click.outside="open = false">'
-            '<button type="button" @click="open = !open" '
-            'class="select select-bordered w-full flex items-center justify-between '
+            '<details x-data="{}" class="dropdown w-full">'
+            '<summary class="select select-bordered w-full flex items-center justify-between '
             'cursor-pointer text-left font-normal">'
             '<span x-text="ids.length ? (ids.length === allIds.length ? '
-            "'All members' : ids.length + ' selected') : 'Select members'\"></span>"
+            "'All members' : ids.length + ' selected') : 'Select members'\">Select members</span>"
             '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-60 pointer-events-none" '
             'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
             '<path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>'
-            "</button>"
-            '<div x-show="open" style="display:none" '
-            'class="dropdown-content absolute left-0 top-full z-30 bg-base-100 rounded-box shadow border border-base-300 '
-            'w-full mt-1 p-2 max-h-64 overflow-y-auto">'
+            "</summary>"
+            '<div class="dropdown-content absolute left-0 top-full z-30 bg-base-100 rounded-box shadow '
+            'border border-base-300 w-full mt-1 p-2 max-h-64 overflow-y-auto">'
             '<label class="label cursor-pointer justify-start gap-2 py-1">'
             '<input type="checkbox" class="checkbox checkbox-sm" '
             ':checked="allIds.length && ids.length === allIds.length" '
@@ -92,7 +95,7 @@ class MemberMultiSelect(forms.SelectMultiple):
             '<div class="divider my-0"></div>'
             "{}"
             "</div>"
-            "</div>",
+            "</details>",
             x_data,
             options_html,
         )

@@ -8,6 +8,12 @@
 
   <link rel="stylesheet" href="{% static 'css/output.css' %}" />
   <link rel="icon" type="image/png" href="{% static 'img/iconnects-logo.png' %}" />
+  <style>
+    /* Hide the native disclosure triangle on custom-styled <summary> toggles
+       (e.g. the members multiselect) across browsers, including Safari. */
+    summary { list-style: none; }
+    summary::-webkit-details-marker { display: none; }
+  </style>
 
   {% comment %}Vendored locally (previously loaded from unpkg/jsdelivr CDNs) so the UI works in environments whose network policy blocks external hosts.{% endcomment %}
   <script src="{% static 'js/vendor/htmx.min.js' %}"></script>
