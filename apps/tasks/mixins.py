@@ -13,6 +13,7 @@ Provides:
 from __future__ import annotations
 
 from django.core.exceptions import PermissionDenied
+from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404
 
 from apps.core.enums import MemberPrivileges
@@ -97,11 +98,13 @@ class TaskMemberAccessMixin:
 
 
 class ProjectManagerRequiredMixin:
-    """Restrict view to project managers.
+    """Restrict a view to Project Leads (``PROJECT_MANAGER`` privilege).
 
-    Expects to be composed with ``ProjectContextMixin`` (or
-    ``TaskMemberAccessMixin``) so ``self.project`` is available. Checks
-    the privilege itself; safe regardless of MRO order.
+    Compose *before* ``ProjectContextMixin`` / ``TaskMemberAccessMixin`` in
+    the base-class list (so this ``dispatch`` runs first); it resolves the
+    project itself, so it's safe regardless of MRO. Members without the
+    privilege get a clean ``403`` — which both full-page navigation and HTMX
+    handle correctly (htmx won't swap a non-2xx response).
     """
 
     def dispatch(self, request, *args, **kwargs):  # type: ignore[override]
@@ -118,5 +121,7 @@ class ProjectManagerRequiredMixin:
         if project is None or not ProjectContextMixin._is_project_manager(
             request.user, project
         ):
-            raise PermissionDenied("Project manager privilege required.")
+            return HttpResponseForbidden(
+                "Only a Project Lead can perform this action."
+            )
         return super().dispatch(request, *args, **kwargs)

@@ -18,7 +18,6 @@ from django.http import (
     Http404,
     HttpResponse,
     HttpResponseBadRequest,
-    HttpResponseForbidden,
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import resolve, reverse, Resolver404
@@ -49,7 +48,11 @@ from apps.tasks.forms import (
 from apps.tasks.ics import build_ics
 from apps.tasks.import_csv import import_rows, parse_csv
 from apps.tasks.import_form import TaskImportForm
-from apps.tasks.mixins import ProjectContextMixin, TaskMemberAccessMixin
+from apps.tasks.mixins import (
+    ProjectContextMixin,
+    ProjectManagerRequiredMixin,
+    TaskMemberAccessMixin,
+)
 from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
 from apps.tasks.services import (
     approve_completion,
@@ -85,7 +88,9 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
 # ---------------------------------------------------------------------------
 
 
-class TaskCreateView(LoginRequiredMixin, ProjectContextMixin, CreateView):
+class TaskCreateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, CreateView
+):
     template_name = "tasks/task_form.html"
     form_class = TaskForm
     model = Task
@@ -234,7 +239,9 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         return board
 
 
-class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
+class TaskUpdateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, UpdateView
+):
     template_name = "tasks/task_form.html"
     form_class = TaskForm
     model = Task
@@ -307,22 +314,13 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
         return context
 
 
-class TaskImportView(LoginRequiredMixin, ProjectContextMixin, FormView):
-    """Bulk-create tasks from a CSV upload. PM only."""
+class TaskImportView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, FormView
+):
+    """Bulk-create tasks from a CSV upload. Project Lead only."""
 
     template_name = "tasks/task_import.html"
     form_class = TaskImportForm
-
-    def dispatch(self, request, *args, **kwargs):
-        response = super().dispatch(request, *args, **kwargs)
-        # ``super().dispatch`` already resolved ``self.is_project_manager``
-        # via ProjectContextMixin. We re-check here so non-PM members see a
-        # clean 403 rather than reaching the import logic.
-        if not getattr(self, "is_project_manager", False):
-            return HttpResponseForbidden(
-                "Bulk task import is restricted to project managers."
-            )
-        return response
 
     def form_valid(self, form):
         upload = form.cleaned_data["csv_file"]
@@ -350,7 +348,9 @@ class TaskImportView(LoginRequiredMixin, ProjectContextMixin, FormView):
         return redirect("tasks:board", project_pk=self.project.pk)
 
 
-class TaskDeleteView(LoginRequiredMixin, ProjectContextMixin, DeleteView):
+class TaskDeleteView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, DeleteView
+):
     template_name = "tasks/task_confirm_delete.html"
     model = Task
 
@@ -392,7 +392,9 @@ class TaskDeleteView(LoginRequiredMixin, ProjectContextMixin, DeleteView):
 # ---------------------------------------------------------------------------
 
 
-class TaskMoveView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+class TaskMoveView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
     """HTMX endpoint: drag-drop task into a new column / position."""
 
     def post(self, request, *args, **kwargs):
@@ -408,7 +410,9 @@ class TaskMoveView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         return HttpResponse(status=204)
 
 
-class TaskChangeColumnView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+class TaskChangeColumnView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
     """Keyboard-accessible alternative to SortableJS drag-drop.
 
     Accepts a form POST with ``container_id`` and appends the task to the
@@ -455,7 +459,9 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         return _respond_task_card(request, self.task)
 
 
-class TaskReopenView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+class TaskReopenView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
     def post(self, request, *args, **kwargs):
         if self.project_member is None:
             return HttpResponseBadRequest("No project membership.")
@@ -503,7 +509,9 @@ def _seed_assignee_logs(task) -> bool:
     return bool(new_logs)
 
 
-class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+class TaskAssignView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
     def post(self, request, *args, **kwargs):
         form = TaskAssignForm(request.POST, project=self.project)
         if not form.is_valid():
@@ -596,7 +604,9 @@ class BoardColumnListView(LoginRequiredMixin, ProjectContextMixin, TemplateView)
         return context
 
 
-class BoardColumnCreateView(LoginRequiredMixin, ProjectContextMixin, View):
+class BoardColumnCreateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def post(self, request, *args, **kwargs):
         form = KanbanBoardForm(request.POST)
         if not form.is_valid():
@@ -615,7 +625,9 @@ class BoardColumnCreateView(LoginRequiredMixin, ProjectContextMixin, View):
         )
 
 
-class BoardColumnUpdateView(LoginRequiredMixin, ProjectContextMixin, View):
+class BoardColumnUpdateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def get(self, request, *args, **kwargs):
         column = get_object_or_404(
             KanbanBoard, pk=kwargs["pk"], project=self.project
@@ -642,7 +654,9 @@ class BoardColumnUpdateView(LoginRequiredMixin, ProjectContextMixin, View):
         )
 
 
-class BoardColumnReorderView(LoginRequiredMixin, ProjectContextMixin, View):
+class BoardColumnReorderView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     """Persist a new ordering for this project's kanban columns."""
 
     def post(self, request, *args, **kwargs):
@@ -667,7 +681,9 @@ class BoardColumnReorderView(LoginRequiredMixin, ProjectContextMixin, View):
         return HttpResponse(status=204)
 
 
-class BoardColumnDeleteView(LoginRequiredMixin, ProjectContextMixin, View):
+class BoardColumnDeleteView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def post(self, request, *args, **kwargs):
         column = get_object_or_404(
             KanbanBoard, pk=kwargs["pk"], project=self.project
@@ -700,7 +716,9 @@ class MilestoneListView(LoginRequiredMixin, ProjectContextMixin, ListView):
         return context
 
 
-class MilestoneCreateView(LoginRequiredMixin, ProjectContextMixin, View):
+class MilestoneCreateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def post(self, request, *args, **kwargs):
         form = MilestoneForm(request.POST)
         if not form.is_valid():
@@ -720,7 +738,9 @@ class MilestoneCreateView(LoginRequiredMixin, ProjectContextMixin, View):
         )
 
 
-class MilestoneUpdateView(LoginRequiredMixin, ProjectContextMixin, View):
+class MilestoneUpdateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def get(self, request, *args, **kwargs):
         milestone = get_object_or_404(
             Milestone, pk=kwargs["pk"], project=self.project
@@ -766,7 +786,9 @@ class MilestoneUpdateView(LoginRequiredMixin, ProjectContextMixin, View):
         )
 
 
-class MilestoneDeleteView(LoginRequiredMixin, ProjectContextMixin, View):
+class MilestoneDeleteView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def post(self, request, *args, **kwargs):
         milestone = get_object_or_404(
             Milestone, pk=kwargs["pk"], project=self.project
@@ -797,7 +819,9 @@ class MilestoneCalendarView(LoginRequiredMixin, ProjectContextMixin, View):
         return response
 
 
-class TaskMilestoneAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+class TaskMilestoneAssignView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
     """HTMX endpoint: set / clear ``Task.milestone``."""
 
     def post(self, request, *args, **kwargs):

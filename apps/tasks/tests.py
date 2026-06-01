@@ -293,3 +293,91 @@ def test_edit_form_seeds_assignee_logs(client, user, other_user):
     )
     assert response.status_code in (200, 302)
     assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
+
+
+# ---------------------------------------------------------------------------
+# Authorization: only Project Leads may create/edit/delete/move tasks etc.
+# ---------------------------------------------------------------------------
+
+
+def _add_contributor(project, user):
+    """Add ``user`` as a plain Member (CONTRIBUTOR, not a Lead)."""
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(user)
+    ProjectPrivilege.objects.create(
+        project=project, user=user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    return member
+
+
+@pytest.mark.django_db
+def test_member_cannot_mutate_tasks(client, user, other_user):
+    project, col1, col2 = _make_project_with_board(user)
+    lead_member = _primary_member(project, user)
+    _add_contributor(project, other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=lead_member,
+        container=col1,
+        container_task_order=0,
+        name="Locked",
+    )
+    milestone_pks = {"project_pk": project.pk}
+    client.force_login(other_user)
+
+    # Each of these mutating endpoints must be forbidden for a plain member.
+    forbidden = [
+        ("post", reverse("tasks:create", kwargs={"project_pk": project.pk}), {}),
+        ("post", reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}), {}),
+        ("post", reverse("tasks:delete", kwargs={"project_pk": project.pk, "pk": task.pk}), {}),
+        ("post", reverse("tasks:assign", kwargs={"pk": task.pk}), {}),
+        ("post", reverse("tasks:move", kwargs={"pk": task.pk}), {"container_id": col2.pk, "order": 0}),
+        ("post", reverse("tasks:change_column", kwargs={"pk": task.pk}), {"container_id": col2.pk}),
+        ("post", reverse("tasks:reopen", kwargs={"pk": task.pk}), {}),
+        ("post", reverse("tasks:set_milestone", kwargs={"pk": task.pk}), {}),
+        ("post", reverse("tasks:column_create", kwargs=milestone_pks), {"name": "X"}),
+        ("post", reverse("tasks:milestone_create", kwargs=milestone_pks), {"name": "M"}),
+    ]
+    for method, url, data in forbidden:
+        resp = getattr(client, method)(url, data)
+        assert resp.status_code == 403, f"{url} returned {resp.status_code}, expected 403"
+
+    # The task must not have moved.
+    task.refresh_from_db()
+    assert task.container_id == col1.pk
+
+
+@pytest.mark.django_db
+def test_member_can_view_comment_and_complete(client, user, other_user):
+    project, col1, _col2 = _make_project_with_board(user)
+    lead_member = _primary_member(project, user)
+    contrib_member = _add_contributor(project, other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=lead_member,
+        container=col1,
+        container_task_order=0,
+        name="Viewable",
+    )
+    task.assigned_members.add(contrib_member)
+    log = TaskLog.objects.create(task=task, assigned_to=contrib_member)
+    client.force_login(other_user)
+
+    # View the task detail.
+    detail = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    )
+    assert detail.status_code == 200
+
+    # Post a comment.
+    comment = client.post(
+        reverse("comments:create", kwargs={"task_pk": task.pk, "log_pk": log.pk}),
+        {"content": "Looks good"},
+    )
+    assert comment.status_code in (200, 201)
+    assert task.task_logs.get(pk=log.pk).comments.filter(content="Looks good").exists()
+
+    # Mark the task done (members are allowed to).
+    done = client.post(reverse("tasks:complete", kwargs={"pk": task.pk}))
+    assert done.status_code in (200, 302)
+    assert TaskLog.objects.filter(task=task, status=TaskStatus.COMPLETED).exists()
