@@ -22,7 +22,8 @@
 
   {% block extra_head %}{% endblock %}
 </head>
-<body class="min-h-screen flex flex-col bg-brand-lighter text-brand-text font-sans">
+<body class="min-h-screen flex flex-col bg-brand-lighter text-brand-text font-sans"
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
   <a href="#main-content" class="skip-link">Skip to main content</a>
 
