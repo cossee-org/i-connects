@@ -23,17 +23,6 @@
       <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">{{ task.container.name }}</p>
     </div>
     <div class="flex flex-wrap gap-2 justify-end">
-      {% if task.status != "COMPLETED" %}
-        <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                hx-post="{% url 'tasks:complete' pk=task.pk %}"
-                hx-target="#task-status-block"
-                hx-swap="outerHTML">Mark done</button>
-      {% elif is_project_manager %}
-        <button class="btn btn-ghost btn-sm"
-                hx-post="{% url 'tasks:reopen' pk=task.pk %}"
-                hx-target="#task-status-block"
-                hx-swap="outerHTML">Reopen</button>
-      {% endif %}
       {% if is_project_manager %}
         <button type="button" class="btn btn-sm btn-primary"
                 hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
@@ -88,7 +77,7 @@
         <form method="dialog" class="modal-backdrop"><button>close</button></form>
       </dialog>
 
-      <div id="task-status-block" class="hidden"></div>
+      {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done %}
 
       <div class="mt-8">
         <h2 class="text-lg font-semibold text-brand-navy mb-3">Activity &amp; comments</h2>

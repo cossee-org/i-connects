@@ -18,6 +18,7 @@ from django.http import (
     Http404,
     HttpResponse,
     HttpResponseBadRequest,
+    HttpResponseForbidden,
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import resolve, reverse, Resolver404
@@ -36,7 +37,7 @@ from django.views.generic import (
 
 from apps.audit.services import AuditAction, log_action
 from apps.comments.forms import CommentForm
-from apps.core.enums import CompletedAs
+from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
 from apps.tasks.forms import (
     KanbanBoardForm,
@@ -55,9 +56,13 @@ from apps.tasks.mixins import (
 )
 from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
 from apps.tasks.services import (
+    TaskNotReadyToClose,
     approve_completion,
+    close_task,
     complete_task,
+    mark_own_done,
     move_task,
+    reopen_own,
     reopen_task,
 )
 
@@ -201,6 +206,11 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         )
         context["milestone_form"] = TaskMilestoneForm(
             project=self.project, initial={"milestone": task.milestone}
+        )
+        context["status_block"] = _task_status_context(
+            task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
         )
         origin = self._resolve_origin()
         context["back_url"] = origin["url"]
@@ -446,32 +456,120 @@ class TaskChangeColumnView(
         )
 
 
+def _task_status_context(task, *, project_member, is_project_manager):
+    """Context for the completion status block (per-assignee done state)."""
+    current = {}
+    for log in task.task_logs.all():  # newest-first; first seen is current
+        current.setdefault(log.assigned_to_id, log)
+    assignees = list(task.assigned_members.all())
+    assignee_states = [
+        {
+            "member": m,
+            "done": (
+                (log := current.get(m.id)) is not None
+                and log.status == TaskStatus.COMPLETED
+            ),
+        }
+        for m in assignees
+    ]
+    my_state = next(
+        (s for s in assignee_states if project_member and s["member"].id == project_member.id),
+        None,
+    )
+    return {
+        "task": task,
+        "project": task.project,
+        "is_project_manager": is_project_manager,
+        "is_team_mode": task.completion_mode == CompletedAs.TEAM,
+        "assignee_states": assignee_states,
+        "done_count": sum(1 for s in assignee_states if s["done"]),
+        "assignee_count": len(assignee_states),
+        "all_done": task.all_assignees_done,
+        "is_assignee": my_state is not None,
+        "my_done": bool(my_state and my_state["done"]),
+    }
+
+
+def _respond_status_block(request, task, *, project_member, is_project_manager):
+    """Render the status block for HTMX, or redirect to the task for full GETs."""
+    if request.headers.get("HX-Request"):
+        return render(
+            request,
+            "tasks/partials/task_status_block.html",
+            _task_status_context(
+                task, project_member=project_member, is_project_manager=is_project_manager
+            ),
+        )
+    return redirect("tasks:detail", project_pk=task.project_id, pk=task.pk)
+
+
 class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """An assignee marks *their own* part of an INDIVIDUAL-mode task done."""
+
     def post(self, request, *args, **kwargs):
         if self.project_member is None:
             return HttpResponseBadRequest("No project membership.")
-        completed_as = request.POST.get("completed_as") or CompletedAs.INDIVIDUAL
-        complete_task(
-            task=self.task,
-            completed_by=self.project_member,
-            completed_as=completed_as,
+        if self.task.completion_mode == CompletedAs.TEAM:
+            return HttpResponseBadRequest(
+                "This task is completed as a team; a Project Lead closes it."
+            )
+        if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
+            return HttpResponseForbidden("Only an assignee can mark their part done.")
+        mark_own_done(task=self.task, member=self.project_member)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
         )
-        return _respond_task_card(request, self.task)
+
+
+class TaskUndoOwnView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """An assignee undoes their own INDIVIDUAL-mode completion."""
+
+    def post(self, request, *args, **kwargs):
+        if self.project_member is None:
+            return HttpResponseBadRequest("No project membership.")
+        if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
+            return HttpResponseForbidden("Only an assignee can undo their mark.")
+        reopen_own(task=self.task, member=self.project_member)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
+class TaskCloseView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
+    """A Project Lead closes the task (finalises Task.status = COMPLETED)."""
+
+    def post(self, request, *args, **kwargs):
+        closer = self.project_member or _fallback_member(request.user, self.project)
+        try:
+            close_task(task=self.task, closed_by=closer)
+        except TaskNotReadyToClose as exc:
+            return HttpResponseBadRequest(str(exc))
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
 
 
 class TaskReopenView(
     LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
 ):
+    """A Project Lead reopens a closed task, clearing all completion state."""
+
     def post(self, request, *args, **kwargs):
-        if self.project_member is None:
-            return HttpResponseBadRequest("No project membership.")
-        completed_as = request.POST.get("completed_as") or CompletedAs.INDIVIDUAL
-        reopen_task(
-            task=self.task,
-            completed_by=self.project_member,
-            completed_as=completed_as,
+        reopener = self.project_member or _fallback_member(request.user, self.project)
+        reopen_task(task=self.task, completed_by=reopener)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
         )
-        return _respond_task_card(request, self.task)
 
 
 def _task_activity_context(task, *, is_project_manager):

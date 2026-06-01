@@ -134,6 +134,7 @@ class TaskForm(forms.ModelForm):
             "start_date",
             "deadline",
             "contribution_type",
+            "completion_mode",
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": _daisy_input}),
@@ -142,12 +143,14 @@ class TaskForm(forms.ModelForm):
             "assigned_members": MemberMultiSelect(),
             "reviewers": MemberMultiSelect(),
             "contribution_type": forms.Select(attrs={"class": _daisy_select}),
+            "completion_mode": forms.Select(attrs={"class": _daisy_select}),
         }
 
     def __init__(self, *args, project=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.project = project
         self.fields["reviewers"].label = "Reviewer"
+        self.fields["completion_mode"].label = "Completion mode"
         self.fields["container"].label = "Status"
         # Prompt text shown for the unselected (blank) choice.
         self.fields["container"].empty_label = "Select status"

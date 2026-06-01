@@ -288,6 +288,7 @@ def test_edit_form_seeds_assignee_logs(client, user, other_user):
             "name": "EditSeed",
             "container": col1.pk,
             "contribution_type": "OTHER",
+            "completion_mode": "INDIVIDUAL",
             "assigned_members": [pm_member.pk, extra_member.pk],
         },
     )
@@ -381,3 +382,90 @@ def test_member_can_view_comment_and_complete(client, user, other_user):
     done = client.post(reverse("tasks:complete", kwargs={"pk": task.pk}))
     assert done.status_code in (200, 302)
     assert TaskLog.objects.filter(task=task, status=TaskStatus.COMPLETED).exists()
+
+
+# ---------------------------------------------------------------------------
+# TEAM vs INDIVIDUAL task completion
+# ---------------------------------------------------------------------------
+
+
+def _two_assignee_task(user, other_user, *, mode):
+    from apps.core.enums import CompletedAs
+
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    contrib = ProjectMember.objects.create(project=project)
+    contrib.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    task = Task.objects.create(
+        project=project,
+        created_by=lead,
+        container=col1,
+        container_task_order=0,
+        name="Moded",
+        completion_mode=mode,
+    )
+    task.assigned_members.add(lead, contrib)
+    TaskLog.objects.create(task=task, assigned_to=lead)
+    TaskLog.objects.create(task=task, assigned_to=contrib)
+    return project, task, lead, contrib
+
+
+@pytest.mark.django_db
+def test_individual_mode_close_blocked_until_all_done(client, user, other_user):
+    from apps.core.enums import CompletedAs
+
+    project, task, lead, contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+
+    # A member marks only their own part done.
+    client.force_login(other_user)
+    client.post(reverse("tasks:complete", kwargs={"pk": task.pk}))
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED  # not all done yet
+    assert task.assignees_done_count == 1
+
+    # Lead cannot close while someone is still outstanding.
+    client.force_login(user)
+    blocked = client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    assert blocked.status_code == 400
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+
+    # The remaining assignee (the lead) marks their part; now close succeeds.
+    from apps.tasks.services import mark_own_done
+
+    mark_own_done(task=task, member=lead)
+    ok = client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    assert ok.status_code in (200, 302)
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+
+@pytest.mark.django_db
+def test_team_mode_lead_closes_for_everyone(client, user, other_user):
+    from apps.core.enums import CompletedAs
+
+    project, task, lead, contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.TEAM
+    )
+
+    # A member cannot self-mark in TEAM mode.
+    client.force_login(other_user)
+    resp = client.post(reverse("tasks:complete", kwargs={"pk": task.pk}))
+    assert resp.status_code == 400
+
+    # A member cannot close (Lead-only).
+    assert client.post(reverse("tasks:close", kwargs={"pk": task.pk})).status_code == 403
+
+    # The Lead closes once for everyone.
+    client.force_login(user)
+    ok = client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    assert ok.status_code in (200, 302)
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+    # Every assignee ends up done.
+    assert task.all_assignees_done
