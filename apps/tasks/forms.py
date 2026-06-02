@@ -104,10 +104,10 @@ class MemberMultiSelect(forms.SelectMultiple):
 class TaskForm(forms.ModelForm):
     """Create / update a Task.
 
-    The ``project`` kwarg scopes the choices for ``container``,
-    ``assigned_members``, and ``reviewers`` to the active project. The
-    ``container`` field is optional at the form level so inline creation
-    from a column can pre-fill it without surfacing the field in the UI.
+    The ``project`` kwarg scopes the choices for ``container`` and
+    ``assigned_members`` to the active project. The ``container`` field is
+    optional at the form level so inline creation from a column can pre-fill
+    it without surfacing the field in the UI.
     """
 
     deadline = forms.DateTimeField(
@@ -130,7 +130,6 @@ class TaskForm(forms.ModelForm):
             "description",
             "container",
             "assigned_members",
-            "reviewers",
             "start_date",
             "deadline",
             "contribution_type",
@@ -141,7 +140,6 @@ class TaskForm(forms.ModelForm):
             "description": forms.Textarea(attrs={"class": _daisy_textarea, "rows": 4}),
             "container": forms.Select(attrs={"class": _daisy_select}),
             "assigned_members": MemberMultiSelect(),
-            "reviewers": MemberMultiSelect(),
             "contribution_type": forms.Select(attrs={"class": _daisy_select}),
             "completion_mode": forms.Select(attrs={"class": _daisy_select}),
         }
@@ -149,7 +147,6 @@ class TaskForm(forms.ModelForm):
     def __init__(self, *args, project=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.project = project
-        self.fields["reviewers"].label = "Reviewer"
         self.fields["completion_mode"].label = "Completion mode"
         self.fields["container"].label = "Status"
         # Prompt text shown for the unselected (blank) choice.
@@ -176,9 +173,8 @@ class TaskForm(forms.ModelForm):
                 .order_by("sort_name")
             )
             # Render members as "Given Name Last Name (email)", sorted by given name.
-            for field_name in ("assigned_members", "reviewers"):
-                self.fields[field_name].queryset = members
-                self.fields[field_name].label_from_instance = member_label
+            self.fields["assigned_members"].queryset = members
+            self.fields["assigned_members"].label_from_instance = member_label
 
 
 class MilestoneForm(forms.ModelForm):
