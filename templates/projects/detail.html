@@ -48,7 +48,6 @@
           Invite member
         </a>
         <a href="{% url 'projects:update' pk=project.pk %}" class="btn btn-sm btn-primary">Edit</a>
-        <a href="{% url 'projects:delete' pk=project.pk %}" class="btn btn-sm btn-outline btn-error">Delete</a>
       {% elif user.is_authenticated and not user_privilege %}
         {% if pending_join_request %}
           <span class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-brand-light/60 text-brand-text">
