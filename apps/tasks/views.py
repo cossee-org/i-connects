@@ -13,7 +13,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Min
 from django.http import (
     Http404,
     HttpResponse,
@@ -125,11 +125,12 @@ class TaskCreateView(
         task.created_by = self.project_member or _fallback_member(
             self.request.user, self.project
         )
-        # container_task_order — append to end of column
-        max_order = Task.objects.filter(container=task.container).aggregate(
-            m=Max("container_task_order")
+        # container_task_order — place at the top of the column so a newly
+        # created task surfaces first (Task ordering is ascending).
+        min_order = Task.objects.filter(container=task.container).aggregate(
+            m=Min("container_task_order")
         )["m"]
-        task.container_task_order = 0 if max_order is None else max_order + 1
+        task.container_task_order = 0 if min_order is None else min_order - 1
         task.save()
         form.save_m2m()
         # Seed a TaskLog per assignee (mirrors the Blitz createTask behaviour).
