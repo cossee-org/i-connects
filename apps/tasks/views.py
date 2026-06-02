@@ -13,7 +13,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Max, Min
+from django.db.models import Max, Min, ProtectedError
 from django.http import (
     Http404,
     HttpResponse,
@@ -378,13 +378,31 @@ class TaskDeleteView(
             return next_url
         return reverse("tasks:board", kwargs={"project_pk": self.project.pk})
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["has_contributions"] = _task_has_contributions(self.object)
+        return context
+
     def form_valid(self, form):
         task = self.get_object()
+        # Closed tasks generate append-only ContributionRecord rows whose FKs
+        # PROTECT the task and its logs. A hard delete would raise
+        # ProtectedError (a 500); refuse up front with a clear message.
+        if _task_has_contributions(task):
+            return self._blocked_response(
+                "This task has recorded contributions and can't be deleted."
+            )
         task_pk = task.pk
         task_name = task.name
         project = task.project
         actor = self.request.user
-        response = super().form_valid(form)
+        try:
+            response = super().form_valid(form)
+        except ProtectedError:
+            # Defensive: catch any other protected relation we don't pre-check.
+            return self._blocked_response(
+                "This task is referenced by protected records and can't be deleted."
+            )
         log_action(
             AuditAction.TASK_DELETED,
             actor=actor,
@@ -396,6 +414,14 @@ class TaskDeleteView(
         if self.request.headers.get("HX-Request"):
             return HttpResponse(status=204)
         return response
+
+    def _blocked_response(self, message: str):
+        if self.request.headers.get("HX-Request"):
+            return HttpResponse(message, status=409)
+        messages.error(self.request, message)
+        return redirect(
+            "tasks:detail", project_pk=self.project.pk, pk=self.object.pk
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -950,6 +976,18 @@ def _respond_task_card(request, task: Task) -> HttpResponse:
             {"task": task, "project": task.project},
         )
     return redirect("tasks:detail", project_pk=task.project_id, pk=task.pk)
+
+
+def _task_has_contributions(task) -> bool:
+    """True when the task has append-only ContributionRecord rows.
+
+    Such records PROTECT the task (and its logs), so a hard delete would
+    raise ProtectedError. Imported lazily to avoid a hard dependency on the
+    contributions app at module load.
+    """
+    from apps.contributions.models import ContributionRecord
+
+    return ContributionRecord.objects.filter(task=task).exists()
 
 
 def _fallback_member(user, project):
