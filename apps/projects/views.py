@@ -127,17 +127,20 @@ class MyProjectListView(LoginRequiredMixin, ListView):
             if priv == MemberPrivileges.PROJECT_MANAGER
         ]
         if pm_project_ids:
-            context["pending_approvals"] = (
+            all_pending_approvals = list(
                 TaskLog.objects.filter(
                     status=TaskStatus.COMPLETED,
                     approved__isnull=True,
                     task__project_id__in=pm_project_ids,
                 )
                 .select_related("task", "task__project", "assigned_to")
-                .order_by("-created_at")[:5]
+                .order_by("-created_at")
             )
+            context["pending_approvals"] = all_pending_approvals[:5]
+            context["pending_approvals_all"] = all_pending_approvals
         else:
             context["pending_approvals"] = []
+            context["pending_approvals_all"] = []
 
         return context
 
