@@ -130,27 +130,7 @@
         {% endif %}
       </div>
 
-      <div>
-        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Milestone</h3>
-        <div id="task-milestone-{{ task.pk }}">
-          {% include "tasks/partials/task_milestone.html" with task=task %}
-        </div>
-        {% if is_project_manager %}
-        <details class="mt-2">
-          <summary class="btn btn-ghost btn-xs">Change milestone</summary>
-          <form class="mt-2"
-                hx-post="{% url 'tasks:set_milestone' pk=task.pk %}"
-                hx-target="#task-milestone-{{ task.pk }}"
-                hx-swap="innerHTML">
-            {% csrf_token %}
-            {{ milestone_form.milestone }}
-            <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 mt-2" type="submit">Save</button>
-          </form>
-        </details>
-        {% endif %}
-      </div>
-
-      {% if task.github_url %}
+{% if task.github_url %}
         <div>
           <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">GitHub</h3>
           {% with gh=task.github_url|github_link %}
