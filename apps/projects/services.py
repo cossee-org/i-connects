@@ -44,6 +44,16 @@ def create_project_with_owner(*, user, form_data: dict) -> Project:
         user=user,
         privilege=MemberPrivileges.PROJECT_MANAGER,
     )
+    # Seed the default Kanban columns so a new board is ready to use.
+    # Imported locally to avoid a circular import with the tasks app.
+    from apps.tasks.models import KanbanBoard
+
+    KanbanBoard.objects.bulk_create(
+        [
+            KanbanBoard(project=project, name=name, container_order=order)
+            for order, name in enumerate(("To Do", "In Progress", "Done"))
+        ]
+    )
     log_action(
         AuditAction.PROJECT_CREATED,
         actor=user,

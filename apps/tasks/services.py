@@ -15,6 +15,10 @@ from apps.projects.models import ProjectMember
 from apps.tasks.models import KanbanBoard, Task, TaskLog
 
 
+class TaskNotReadyToClose(Exception):
+    """Raised when an INDIVIDUAL-mode task is closed before all assignees are done."""
+
+
 @transaction.atomic
 def move_task(task: Task, *, container_id: int, order: int) -> Task:
     """Move ``task`` to ``container_id`` at position ``order``.
@@ -149,6 +153,77 @@ def reopen_task(
         if log.assigned_to_id == completed_by.id:
             return log
     return logs[0]
+
+
+def _current_log_for(task: Task, member: ProjectMember) -> TaskLog | None:
+    """The member's most-recent TaskLog on this task (their current state)."""
+    return (
+        task.task_logs.filter(assigned_to=member).order_by("-created_at").first()
+    )
+
+
+@transaction.atomic
+def mark_own_done(*, task: Task, member: ProjectMember) -> TaskLog:
+    """Mark a single assignee's part of an INDIVIDUAL-mode task done.
+
+    Updates the member's current TaskLog in place (or seeds one) and leaves
+    ``Task.status`` untouched — closing the whole task is a separate, Lead-only
+    action handled by :func:`close_task`.
+    """
+    log = _current_log_for(task, member)
+    if log is None:
+        log = TaskLog(
+            task=task, assigned_to=member, completed_as=CompletedAs.INDIVIDUAL
+        )
+    log.status = TaskStatus.COMPLETED
+    log.completed_by = member
+    log.completed_as = CompletedAs.INDIVIDUAL
+    log.save()
+    return log
+
+
+@transaction.atomic
+def reopen_own(*, task: Task, member: ProjectMember) -> TaskLog | None:
+    """Undo a single assignee's INDIVIDUAL-mode completion."""
+    log = _current_log_for(task, member)
+    if log is None:
+        return None
+    log.status = TaskStatus.NOT_COMPLETED
+    log.save(update_fields=["status"])
+    return log
+
+
+@transaction.atomic
+def close_task(*, task: Task, closed_by: ProjectMember) -> Task:
+    """Close a task (Lead action), finalising ``Task.status`` to COMPLETED.
+
+    TEAM mode: completes every assignee at once. INDIVIDUAL mode: only allowed
+    once every assignee has marked their own part done, otherwise raises
+    :class:`TaskNotReadyToClose`. This does not write contributions — the
+    separate PM approval flow remains the ledger event.
+    """
+    if task.completion_mode == CompletedAs.TEAM:
+        complete_task(task=task, completed_by=closed_by, completed_as=CompletedAs.TEAM)
+        task.refresh_from_db()
+        return task
+
+    # INDIVIDUAL mode.
+    if not task.all_assignees_done:
+        raise TaskNotReadyToClose(
+            "Every assigned member must mark their part done before the task "
+            "can be closed."
+        )
+    task.status = TaskStatus.COMPLETED
+    task.save(update_fields=["status", "updated_at"])
+    log_action(
+        AuditAction.TASK_COMPLETED,
+        actor=closed_by.users.first(),
+        entity=task,
+        project=task.project,
+        metadata={"name": task.name},
+    )
+    _notify_task_completed(task=task, completed_by=closed_by)
+    return task
 
 
 @transaction.atomic

@@ -35,23 +35,18 @@
     <div class="md:col-span-2">
       {% include "_components/form_field.html" with field=form.description %}
     </div>
-    {% include "_components/form_field.html" with field=form.container %}
-    {% include "_components/form_field.html" with field=form.milestone %}
+    <div class="md:col-span-2">
+      {% include "_components/form_field.html" with field=form.container %}
+    </div>
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
+    {% include "_components/form_field.html" with field=form.contribution_type %}
+    {% include "_components/form_field.html" with field=form.completion_mode %}
     <div class="md:col-span-2">
       {% include "_components/form_field.html" with field=form.assigned_members %}
     </div>
-    {% include "_components/form_field.html" with field=form.auto_assign_new %}
-    {% include "_components/form_field.html" with field=form.contribution_type %}
     <div class="md:col-span-2">
-      {% include "_components/form_field.html" with field=form.github_url %}
-    </div>
-    <div class="form-control w-full mb-4">
-      <label class="label cursor-pointer justify-start gap-2">
-        {{ form.anonymous }}
-        <span class="label-text text-brand-navy font-medium">Anonymous</span>
-      </label>
+      {% include "_components/form_field.html" with field=form.reviewers %}
     </div>
   </div>
 

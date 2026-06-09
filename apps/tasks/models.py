@@ -117,16 +117,39 @@ class Task(models.Model):
         default=TaskStatus.NOT_COMPLETED,
     )
 
+    completion_mode = models.CharField(
+        max_length=16,
+        choices=CompletedAs.choices,
+        default=CompletedAs.INDIVIDUAL,
+        help_text=(
+            "How the task is completed. INDIVIDUAL: each assignee marks their "
+            "own part done and a Lead closes once everyone is done. TEAM: a "
+            "Lead closes the task at once for all assignees."
+        ),
+    )
+
     assigned_members = models.ManyToManyField(
         "projects.ProjectMember",
         blank=True,
         related_name="assigned_tasks",
+    )
+    reviewers = models.ManyToManyField(
+        "projects.ProjectMember",
+        blank=True,
+        related_name="reviewed_tasks",
+    )
+    watchers = models.ManyToManyField(
+        "projects.ProjectMember",
+        blank=True,
+        related_name="watched_tasks",
     )
     roles = models.ManyToManyField(
         "roles.Role",
         blank=True,
         related_name="tasks",
     )
+
+    assign_by_role = models.BooleanField(default=False)
 
     auto_assign_new = models.CharField(
         max_length=16,
@@ -163,6 +186,43 @@ class Task(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    # -- Completion helpers --------------------------------------------------
+    def _current_logs_by_member(self) -> dict[int, "TaskLog"]:
+        """Map each assignee id to their most-recent TaskLog (the current one).
+
+        ``task_logs`` is ordered newest-first, so the first log seen per
+        member is the current one.
+        """
+        current: dict[int, TaskLog] = {}
+        for log in self.task_logs.all():
+            current.setdefault(log.assigned_to_id, log)
+        return current
+
+    @property
+    def assignee_count(self) -> int:
+        return self.assigned_members.count()
+
+    @property
+    def assignees_done_count(self) -> int:
+        """Number of assignees whose current TaskLog is COMPLETED."""
+        from apps.core.enums import TaskStatus
+
+        current = self._current_logs_by_member()
+        return sum(
+            1
+            for member in self.assigned_members.all()
+            if (log := current.get(member.id)) is not None
+            and log.status == TaskStatus.COMPLETED
+        )
+
+    @property
+    def all_assignees_done(self) -> bool:
+        """True when every assignee's current TaskLog is COMPLETED.
+
+        Vacuously true when the task has no assignees.
+        """
+        return self.assignees_done_count >= self.assignee_count
 
 
 class TaskLog(models.Model):

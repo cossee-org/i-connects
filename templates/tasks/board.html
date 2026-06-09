@@ -16,26 +16,30 @@
 {% endblock %}
 
 {% block page_header %}
-  {% include "_components/page_header.html" with eyebrow=project.name title="Kanban Board" subtitle="Drag tasks between columns to update their status." %}
+  {% if is_project_manager %}
+    {% include "_components/page_header.html" with eyebrow=project.name title="Kanban Board" subtitle="Drag tasks between columns to update their status." %}
+  {% else %}
+    {% include "_components/page_header.html" with eyebrow=project.name title="Kanban Board" subtitle="View tasks across the board." %}
+  {% endif %}
 {% endblock %}
 
 {% block content %}
   <div class="flex flex-wrap items-center justify-end gap-2 -mt-2 mb-4">
     <a href="{% url 'tasks:milestone_list' project_pk=project.pk %}"
        class="btn btn-ghost btn-sm">Milestones</a>
-    <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
-       class="btn btn-ghost btn-sm">Manage columns</a>
     {% if is_project_manager %}
+      <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
+         class="btn btn-ghost btn-sm">Manage columns</a>
       <a href="{% url 'tasks:import' project_pk=project.pk %}"
          class="btn btn-ghost btn-sm">Import CSV</a>
+      <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+              hx-get="{% url 'tasks:create' project_pk=project.pk %}"
+              hx-target="#task-modal-body"
+              hx-swap="innerHTML"
+              onclick="document.getElementById('task-modal').showModal()">
+        + New task
+      </button>
     {% endif %}
-    <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-            hx-get="{% url 'tasks:create' project_pk=project.pk %}"
-            hx-target="#task-modal-body"
-            hx-swap="innerHTML"
-            onclick="document.getElementById('task-modal').showModal()">
-      + New task
-    </button>
   </div>
 
   {% if columns %}
@@ -72,6 +76,9 @@
         if (list && badge) badge.textContent = list.children.length;
       }
 
+      {% if is_project_manager %}
+      // Drag-and-drop reordering is a Project Lead action (the move endpoint
+      // is Lead-only); members get a read-only board.
       document.querySelectorAll('.kanban-column-list').forEach(function (el) {
         new Sortable(el, {
           group: 'kanban',
@@ -92,6 +99,7 @@
           }
         });
       });
+      {% endif %}
 
       // Close the modal whenever HTMX swaps a new task card onto the board.
       document.body.addEventListener('task-created', function () {

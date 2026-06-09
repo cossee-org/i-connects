@@ -13,7 +13,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Min, ProtectedError
 from django.http import (
     Http404,
     HttpResponse,
@@ -37,7 +37,7 @@ from django.views.generic import (
 
 from apps.audit.services import AuditAction, log_action
 from apps.comments.forms import CommentForm
-from apps.core.enums import CompletedAs
+from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
 from apps.tasks.forms import (
     KanbanBoardForm,
@@ -49,12 +49,20 @@ from apps.tasks.forms import (
 from apps.tasks.ics import build_ics
 from apps.tasks.import_csv import import_rows, parse_csv
 from apps.tasks.import_form import TaskImportForm
-from apps.tasks.mixins import ProjectContextMixin, TaskMemberAccessMixin
+from apps.tasks.mixins import (
+    ProjectContextMixin,
+    ProjectManagerRequiredMixin,
+    TaskMemberAccessMixin,
+)
 from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
 from apps.tasks.services import (
+    TaskNotReadyToClose,
     approve_completion,
+    close_task,
     complete_task,
+    mark_own_done,
     move_task,
+    reopen_own,
     reopen_task,
 )
 
@@ -85,7 +93,9 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
 # ---------------------------------------------------------------------------
 
 
-class TaskCreateView(LoginRequiredMixin, ProjectContextMixin, CreateView):
+class TaskCreateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, CreateView
+):
     template_name = "tasks/task_form.html"
     form_class = TaskForm
     model = Task
@@ -115,22 +125,16 @@ class TaskCreateView(LoginRequiredMixin, ProjectContextMixin, CreateView):
         task.created_by = self.project_member or _fallback_member(
             self.request.user, self.project
         )
-        # container_task_order — append to end of column
-        max_order = Task.objects.filter(container=task.container).aggregate(
-            m=Max("container_task_order")
+        # container_task_order — place at the top of the column so a newly
+        # created task surfaces first (Task ordering is ascending).
+        min_order = Task.objects.filter(container=task.container).aggregate(
+            m=Min("container_task_order")
         )["m"]
-        task.container_task_order = 0 if max_order is None else max_order + 1
+        task.container_task_order = 0 if min_order is None else min_order - 1
         task.save()
         form.save_m2m()
         # Seed a TaskLog per assignee (mirrors the Blitz createTask behaviour).
-        for member in task.assigned_members.all():
-            TaskLog.objects.create(
-                task=task,
-                assigned_to=member,
-                completed_as=(
-                    CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL
-                ),
-            )
+        _seed_assignee_logs(task)
         log_action(
             AuditAction.TASK_CREATED,
             actor=self.request.user,
@@ -204,6 +208,11 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context["milestone_form"] = TaskMilestoneForm(
             project=self.project, initial={"milestone": task.milestone}
         )
+        context["status_block"] = _task_status_context(
+            task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
         origin = self._resolve_origin()
         context["back_url"] = origin["url"]
         context["back_label"] = origin["label"]
@@ -241,7 +250,9 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         return board
 
 
-class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
+class TaskUpdateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, UpdateView
+):
     template_name = "tasks/task_form.html"
     form_class = TaskForm
     model = Task
@@ -261,6 +272,9 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
 
     def form_valid(self, form):
         task = form.save()
+        # Seed Activity & comments entries for any newly-assigned members,
+        # mirroring the Assignees ("Change assignees") flow.
+        _seed_assignee_logs(task)
         log_action(
             AuditAction.TASK_UPDATED,
             actor=self.request.user,
@@ -274,7 +288,11 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
                 "tasks/partials/task_summary.html",
                 {"task": task, "project": self.project},
             )
-            response["HX-Trigger"] = json.dumps({"task-updated": {"id": task.id}})
+            # ``assignees-changed`` refreshes the task detail timeline if the
+            # edit happened from there; ``task-updated`` refreshes board/project.
+            response["HX-Trigger"] = json.dumps(
+                {"task-updated": {"id": task.id}, "assignees-changed": True}
+            )
             return response
         messages.success(self.request, f"Task '{task.name}' updated.")
         next_url = self.request.POST.get("next")
@@ -307,22 +325,13 @@ class TaskUpdateView(LoginRequiredMixin, ProjectContextMixin, UpdateView):
         return context
 
 
-class TaskImportView(LoginRequiredMixin, ProjectContextMixin, FormView):
-    """Bulk-create tasks from a CSV upload. PM only."""
+class TaskImportView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, FormView
+):
+    """Bulk-create tasks from a CSV upload. Project Lead only."""
 
     template_name = "tasks/task_import.html"
     form_class = TaskImportForm
-
-    def dispatch(self, request, *args, **kwargs):
-        response = super().dispatch(request, *args, **kwargs)
-        # ``super().dispatch`` already resolved ``self.is_project_manager``
-        # via ProjectContextMixin. We re-check here so non-PM members see a
-        # clean 403 rather than reaching the import logic.
-        if not getattr(self, "is_project_manager", False):
-            return HttpResponseForbidden(
-                "Bulk task import is restricted to project managers."
-            )
-        return response
 
     def form_valid(self, form):
         upload = form.cleaned_data["csv_file"]
@@ -350,7 +359,9 @@ class TaskImportView(LoginRequiredMixin, ProjectContextMixin, FormView):
         return redirect("tasks:board", project_pk=self.project.pk)
 
 
-class TaskDeleteView(LoginRequiredMixin, ProjectContextMixin, DeleteView):
+class TaskDeleteView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, DeleteView
+):
     template_name = "tasks/task_confirm_delete.html"
     model = Task
 
@@ -367,13 +378,31 @@ class TaskDeleteView(LoginRequiredMixin, ProjectContextMixin, DeleteView):
             return next_url
         return reverse("tasks:board", kwargs={"project_pk": self.project.pk})
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["has_contributions"] = _task_has_contributions(self.object)
+        return context
+
     def form_valid(self, form):
         task = self.get_object()
+        # Closed tasks generate append-only ContributionRecord rows whose FKs
+        # PROTECT the task and its logs. A hard delete would raise
+        # ProtectedError (a 500); refuse up front with a clear message.
+        if _task_has_contributions(task):
+            return self._blocked_response(
+                "This task has recorded contributions and can't be deleted."
+            )
         task_pk = task.pk
         task_name = task.name
         project = task.project
         actor = self.request.user
-        response = super().form_valid(form)
+        try:
+            response = super().form_valid(form)
+        except ProtectedError:
+            # Defensive: catch any other protected relation we don't pre-check.
+            return self._blocked_response(
+                "This task is referenced by protected records and can't be deleted."
+            )
         log_action(
             AuditAction.TASK_DELETED,
             actor=actor,
@@ -386,13 +415,23 @@ class TaskDeleteView(LoginRequiredMixin, ProjectContextMixin, DeleteView):
             return HttpResponse(status=204)
         return response
 
+    def _blocked_response(self, message: str):
+        if self.request.headers.get("HX-Request"):
+            return HttpResponse(message, status=409)
+        messages.error(self.request, message)
+        return redirect(
+            "tasks:detail", project_pk=self.project.pk, pk=self.object.pk
+        )
+
 
 # ---------------------------------------------------------------------------
 # HTMX task actions: move, complete, reopen, assign, approve
 # ---------------------------------------------------------------------------
 
 
-class TaskMoveView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+class TaskMoveView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
     """HTMX endpoint: drag-drop task into a new column / position."""
 
     def post(self, request, *args, **kwargs):
@@ -408,7 +447,9 @@ class TaskMoveView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         return HttpResponse(status=204)
 
 
-class TaskChangeColumnView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+class TaskChangeColumnView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
     """Keyboard-accessible alternative to SortableJS drag-drop.
 
     Accepts a form POST with ``container_id`` and appends the task to the
@@ -442,43 +483,204 @@ class TaskChangeColumnView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         )
 
 
+def _task_status_context(task, *, project_member, is_project_manager):
+    """Context for the completion status block (per-assignee done state)."""
+    current = {}
+    for log in task.task_logs.all():  # newest-first; first seen is current
+        current.setdefault(log.assigned_to_id, log)
+    assignees = list(task.assigned_members.all())
+    assignee_states = [
+        {
+            "member": m,
+            "done": (
+                (log := current.get(m.id)) is not None
+                and log.status == TaskStatus.COMPLETED
+            ),
+        }
+        for m in assignees
+    ]
+    my_state = next(
+        (s for s in assignee_states if project_member and s["member"].id == project_member.id),
+        None,
+    )
+    return {
+        "task": task,
+        "project": task.project,
+        "is_project_manager": is_project_manager,
+        "is_team_mode": task.completion_mode == CompletedAs.TEAM,
+        "assignee_states": assignee_states,
+        "done_count": sum(1 for s in assignee_states if s["done"]),
+        "assignee_count": len(assignee_states),
+        "all_done": task.all_assignees_done,
+        "is_assignee": my_state is not None,
+        "my_done": bool(my_state and my_state["done"]),
+    }
+
+
+def _respond_status_block(request, task, *, project_member, is_project_manager):
+    """Render the status block for HTMX, or redirect to the task for full GETs."""
+    if request.headers.get("HX-Request"):
+        return render(
+            request,
+            "tasks/partials/task_status_block.html",
+            _task_status_context(
+                task, project_member=project_member, is_project_manager=is_project_manager
+            ),
+        )
+    return redirect("tasks:detail", project_pk=task.project_id, pk=task.pk)
+
+
 class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """An assignee marks *their own* part of an INDIVIDUAL-mode task done."""
+
     def post(self, request, *args, **kwargs):
         if self.project_member is None:
             return HttpResponseBadRequest("No project membership.")
-        completed_as = request.POST.get("completed_as") or CompletedAs.INDIVIDUAL
-        complete_task(
-            task=self.task,
-            completed_by=self.project_member,
-            completed_as=completed_as,
+        if self.task.completion_mode == CompletedAs.TEAM:
+            return HttpResponseBadRequest(
+                "This task is completed as a team; a Project Lead closes it."
+            )
+        if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
+            return HttpResponseForbidden("Only an assignee can mark their part done.")
+        mark_own_done(task=self.task, member=self.project_member)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
         )
-        return _respond_task_card(request, self.task)
 
 
-class TaskReopenView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+class TaskUndoOwnView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """An assignee undoes their own INDIVIDUAL-mode completion."""
+
     def post(self, request, *args, **kwargs):
         if self.project_member is None:
             return HttpResponseBadRequest("No project membership.")
-        completed_as = request.POST.get("completed_as") or CompletedAs.INDIVIDUAL
-        reopen_task(
-            task=self.task,
-            completed_by=self.project_member,
-            completed_as=completed_as,
+        if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
+            return HttpResponseForbidden("Only an assignee can undo their mark.")
+        reopen_own(task=self.task, member=self.project_member)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
         )
-        return _respond_task_card(request, self.task)
 
 
-class TaskAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+class TaskCloseView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
+    """A Project Lead closes the task (finalises Task.status = COMPLETED)."""
+
+    def post(self, request, *args, **kwargs):
+        closer = self.project_member or _fallback_member(request.user, self.project)
+        try:
+            close_task(task=self.task, closed_by=closer)
+        except TaskNotReadyToClose as exc:
+            return HttpResponseBadRequest(str(exc))
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
+class TaskReopenView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
+    """A Project Lead reopens a closed task, clearing all completion state."""
+
+    def post(self, request, *args, **kwargs):
+        reopener = self.project_member or _fallback_member(request.user, self.project)
+        reopen_task(task=self.task, completed_by=reopener)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
+def _task_activity_context(task, *, is_project_manager):
+    """Context for rendering the Activity & comments timeline partial."""
+    return {
+        "task": task,
+        "task_logs": task.task_logs.select_related(
+            "assigned_to", "completed_by"
+        ).prefetch_related("comments__author"),
+        "comment_form": CommentForm(),
+        "is_project_manager": is_project_manager,
+    }
+
+
+def _seed_assignee_logs(task) -> bool:
+    """Seed a TaskLog (Activity & comments entry) for each assigned member
+    that doesn't have one yet.
+
+    Idempotent — keying off existing logs means it can run on create, on
+    edit, and on assignee changes without producing duplicates. Returns
+    ``True`` when at least one log was created.
+    """
+    logged_member_ids = set(task.task_logs.values_list("assigned_to_id", flat=True))
+    new_logs = [
+        TaskLog(
+            task=task,
+            assigned_to=member,
+            completed_as=(CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL),
+        )
+        for member in task.assigned_members.all()
+        if member.pk not in logged_member_ids
+    ]
+    if new_logs:
+        TaskLog.objects.bulk_create(new_logs)
+    return bool(new_logs)
+
+
+class TaskAssignView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
     def post(self, request, *args, **kwargs):
         form = TaskAssignForm(request.POST, project=self.project)
         if not form.is_valid():
             return HttpResponseBadRequest("Invalid assignment data.")
         members = form.cleaned_data.get("assigned_members") or []
         self.task.assigned_members.set(members)
-        return render(
+        # Ensure every assigned member has an Activity & comments entry. Keying
+        # off existing logs makes this idempotent and also backfills members
+        # assigned without a log.
+        _seed_assignee_logs(self.task)
+        # Fallback for when htmx isn't running (e.g. the script failed to
+        # load): a native form submit reloads the task page, which renders
+        # the full timeline server-side — so seeded threads still appear.
+        if not request.headers.get("HX-Request"):
+            return redirect(
+                "tasks:detail", project_pk=self.project.pk, pk=self.task.pk
+            )
+        response = render(
             request,
             "tasks/partials/task_assignees.html",
             {"task": self.task, "project": self.project},
+        )
+        # Tell the page to refresh the Activity & comments timeline so any
+        # newly-seeded entries appear without a full reload.
+        response["HX-Trigger"] = "assignees-changed"
+        return response
+
+    def get(self, request, *args, **kwargs):
+        # Direct (non-HTMX) navigation lands here; send users to the task.
+        return redirect(
+            "tasks:detail", project_pk=self.project.pk, pk=self.task.pk
+        )
+
+
+class TaskActivityView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """Render the Activity & comments timeline (used for HTMX refreshes)."""
+
+    def get(self, request, *args, **kwargs):
+        return render(
+            request,
+            "tasks/partials/task_log_list.html",
+            _task_activity_context(
+                self.task, is_project_manager=self.is_project_manager
+            ),
         )
 
 
@@ -527,7 +729,9 @@ class BoardColumnListView(LoginRequiredMixin, ProjectContextMixin, TemplateView)
         return context
 
 
-class BoardColumnCreateView(LoginRequiredMixin, ProjectContextMixin, View):
+class BoardColumnCreateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def post(self, request, *args, **kwargs):
         form = KanbanBoardForm(request.POST)
         if not form.is_valid():
@@ -542,11 +746,13 @@ class BoardColumnCreateView(LoginRequiredMixin, ProjectContextMixin, View):
         return render(
             request,
             "tasks/partials/kanban_column_header.html",
-            {"column": column, "project": self.project},
+            {"column": column, "project": self.project, "is_project_manager": True},
         )
 
 
-class BoardColumnUpdateView(LoginRequiredMixin, ProjectContextMixin, View):
+class BoardColumnUpdateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def get(self, request, *args, **kwargs):
         column = get_object_or_404(
             KanbanBoard, pk=kwargs["pk"], project=self.project
@@ -569,11 +775,13 @@ class BoardColumnUpdateView(LoginRequiredMixin, ProjectContextMixin, View):
         return render(
             request,
             "tasks/partials/kanban_column_header.html",
-            {"column": column, "project": self.project},
+            {"column": column, "project": self.project, "is_project_manager": True},
         )
 
 
-class BoardColumnReorderView(LoginRequiredMixin, ProjectContextMixin, View):
+class BoardColumnReorderView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     """Persist a new ordering for this project's kanban columns."""
 
     def post(self, request, *args, **kwargs):
@@ -598,7 +806,9 @@ class BoardColumnReorderView(LoginRequiredMixin, ProjectContextMixin, View):
         return HttpResponse(status=204)
 
 
-class BoardColumnDeleteView(LoginRequiredMixin, ProjectContextMixin, View):
+class BoardColumnDeleteView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def post(self, request, *args, **kwargs):
         column = get_object_or_404(
             KanbanBoard, pk=kwargs["pk"], project=self.project
@@ -631,7 +841,9 @@ class MilestoneListView(LoginRequiredMixin, ProjectContextMixin, ListView):
         return context
 
 
-class MilestoneCreateView(LoginRequiredMixin, ProjectContextMixin, View):
+class MilestoneCreateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def post(self, request, *args, **kwargs):
         form = MilestoneForm(request.POST)
         if not form.is_valid():
@@ -647,11 +859,13 @@ class MilestoneCreateView(LoginRequiredMixin, ProjectContextMixin, View):
         return render(
             request,
             "tasks/partials/milestone_item.html",
-            {"milestone": milestone, "project": self.project},
+            {"milestone": milestone, "project": self.project, "is_project_manager": True},
         )
 
 
-class MilestoneUpdateView(LoginRequiredMixin, ProjectContextMixin, View):
+class MilestoneUpdateView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def get(self, request, *args, **kwargs):
         milestone = get_object_or_404(
             Milestone, pk=kwargs["pk"], project=self.project
@@ -693,11 +907,13 @@ class MilestoneUpdateView(LoginRequiredMixin, ProjectContextMixin, View):
         return render(
             request,
             "tasks/partials/milestone_item.html",
-            {"milestone": milestone, "project": self.project},
+            {"milestone": milestone, "project": self.project, "is_project_manager": True},
         )
 
 
-class MilestoneDeleteView(LoginRequiredMixin, ProjectContextMixin, View):
+class MilestoneDeleteView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
     def post(self, request, *args, **kwargs):
         milestone = get_object_or_404(
             Milestone, pk=kwargs["pk"], project=self.project
@@ -728,7 +944,9 @@ class MilestoneCalendarView(LoginRequiredMixin, ProjectContextMixin, View):
         return response
 
 
-class TaskMilestoneAssignView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+class TaskMilestoneAssignView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+):
     """HTMX endpoint: set / clear ``Task.milestone``."""
 
     def post(self, request, *args, **kwargs):
@@ -758,6 +976,18 @@ def _respond_task_card(request, task: Task) -> HttpResponse:
             {"task": task, "project": task.project},
         )
     return redirect("tasks:detail", project_pk=task.project_id, pk=task.pk)
+
+
+def _task_has_contributions(task) -> bool:
+    """True when the task has append-only ContributionRecord rows.
+
+    Such records PROTECT the task (and its logs), so a hard delete would
+    raise ProtectedError. Imported lazily to avoid a hard dependency on the
+    contributions app at module load.
+    """
+    from apps.contributions.models import ContributionRecord
+
+    return ContributionRecord.objects.filter(task=task).exists()
 
 
 def _fallback_member(user, project):

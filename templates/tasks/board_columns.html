@@ -22,6 +22,7 @@
       {% endfor %}
     </ul>
 
+    {% if is_project_manager %}
     <form class="flex gap-2 mt-4 pt-4 border-t border-brand-light/60"
           hx-post="{% url 'tasks:column_create' project_pk=project.pk %}"
           hx-target="#column-list"
@@ -33,6 +34,7 @@
              class="input input-bordered input-sm flex-1" required>
       <button type="submit" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Add</button>
     </form>
+    {% endif %}
   </div>
 
   <style>
@@ -42,6 +44,7 @@
     .column-row-ghost { opacity: 0.4; background: rgb(0 0 0 / 0.03); }
     .column-row-drag { box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.2); background: white; }
   </style>
+  {% if is_project_manager %}
   <script>
     (function () {
       var list = document.getElementById('column-list');
@@ -75,4 +78,5 @@
       });
     })();
   </script>
+  {% endif %}
 {% endblock %}

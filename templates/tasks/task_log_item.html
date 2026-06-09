@@ -10,9 +10,9 @@
   <div class="flex-1 brand-card p-3">
     <header class="flex flex-wrap items-center justify-between gap-2">
       <div class="text-sm text-brand-text">
-        <span class="font-medium text-brand-navy">{{ log.assigned_to }}</span>
+        <span class="font-medium text-brand-navy">{{ log.assigned_to.display_name }}</span>
         {% if log.completed_by %}
-          <span class="text-brand-text/70">&middot; by {{ log.completed_by }}</span>
+          <span class="text-brand-text/70">&middot; by {{ log.completed_by.display_name }}</span>
         {% endif %}
         <span class="text-xs text-brand-text/60 ml-1">&middot; {{ log.created_at|date:"M j, Y H:i" }}</span>
       </div>
@@ -35,21 +35,24 @@
 
     {% if is_project_manager and log.status == "COMPLETED" %}
       <div class="flex gap-1 mt-2">
-        <button class="btn btn-xs bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                hx-post="{% url 'tasks:approve_log' pk=task.pk log_pk=log.pk %}"
-                hx-vals='{"approved": "true"}'
-                hx-target="#task-log-{{ log.pk }}"
-                hx-swap="outerHTML">Approve</button>
-        <button class="btn btn-xs btn-outline btn-error"
-                hx-post="{% url 'tasks:approve_log' pk=task.pk log_pk=log.pk %}"
-                hx-vals='{"approved": "false"}'
-                hx-target="#task-log-{{ log.pk }}"
-                hx-swap="outerHTML">Reject</button>
-        <button class="btn btn-xs btn-ghost"
-                hx-post="{% url 'tasks:approve_log' pk=task.pk log_pk=log.pk %}"
-                hx-vals='{"approved": ""}'
-                hx-target="#task-log-{{ log.pk }}"
-                hx-swap="outerHTML">Clear</button>
+        {% if log.approved is None %}
+          <button class="btn btn-xs bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                  hx-post="{% url 'tasks:approve_log' pk=task.pk log_pk=log.pk %}"
+                  hx-vals='{"approved": "true"}'
+                  hx-target="#task-log-{{ log.pk }}"
+                  hx-swap="outerHTML">Approve</button>
+          <button class="btn btn-xs btn-outline btn-error"
+                  hx-post="{% url 'tasks:approve_log' pk=task.pk log_pk=log.pk %}"
+                  hx-vals='{"approved": "false"}'
+                  hx-target="#task-log-{{ log.pk }}"
+                  hx-swap="outerHTML">Reject</button>
+        {% else %}
+          <button class="btn btn-xs btn-ghost"
+                  hx-post="{% url 'tasks:approve_log' pk=task.pk log_pk=log.pk %}"
+                  hx-vals='{"approved": ""}'
+                  hx-target="#task-log-{{ log.pk }}"
+                  hx-swap="outerHTML">Clear</button>
+        {% endif %}
       </div>
     {% endif %}
 

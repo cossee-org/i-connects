@@ -4,6 +4,7 @@
     data-column-id="{{ column.pk }}"
     class="flex items-center justify-between gap-2 px-1 py-2 border-b border-brand-light/60 last:border-b-0">
   <span class="font-medium text-brand-navy text-sm flex items-center gap-2 min-w-0">
+    {% if is_project_manager %}
     <button type="button"
             class="column-drag-handle cursor-grab text-brand-text/40 hover:text-brand-navy"
             aria-label="Drag to reorder {{ column.name }}"
@@ -12,11 +13,13 @@
         <path d="M7 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6-9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z" />
       </svg>
     </button>
+    {% endif %}
     <span class="truncate">{{ column.name }}</span>
     {% if task_count %}
       <span class="text-xs bg-brand-navy/10 text-brand-navy px-2 py-0.5 rounded-full">{{ task_count }}</span>
     {% endif %}
   </span>
+  {% if is_project_manager %}
   <span class="flex gap-1">
     <button class="btn btn-ghost btn-xs"
             hx-get="{% url 'tasks:column_update' project_pk=project.pk pk=column.pk %}"
@@ -66,5 +69,6 @@
     </div>
     <form method="dialog" class="modal-backdrop"><button>close</button></form>
   </dialog>
+  {% endif %}
 </li>
 {% endwith %}
