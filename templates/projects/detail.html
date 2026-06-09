@@ -83,7 +83,30 @@
       {% endif %}
       {% if project.description %}
         <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Description</h3>
-        <p class="whitespace-pre-line text-brand-text mt-1">{{ project.description }}</p>
+        <div class="mt-1" id="proj-desc-wrapper">
+          <p class="whitespace-pre-line text-brand-text line-clamp-3" id="proj-desc-text">{{ project.description }}</p>
+          <button type="button"
+                  id="proj-desc-toggle"
+                  class="text-brand-coral hover:underline text-sm mt-1 hidden"
+                  onclick="(function(){
+                    var p = document.getElementById('proj-desc-text');
+                    var btn = document.getElementById('proj-desc-toggle');
+                    if (p.classList.contains('line-clamp-3')) {
+                      p.classList.remove('line-clamp-3');
+                      btn.textContent = 'Show less';
+                    } else {
+                      p.classList.add('line-clamp-3');
+                      btn.textContent = 'Read more';
+                    }
+                  })()">Read more</button>
+        </div>
+        <script>
+          (function () {
+            var p = document.getElementById('proj-desc-text');
+            var btn = document.getElementById('proj-desc-toggle');
+            if (p.scrollHeight > p.clientHeight) { btn.classList.remove('hidden'); }
+          })();
+        </script>
       {% endif %}
       {% if project.keywords %}
         <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Keywords</h3>
