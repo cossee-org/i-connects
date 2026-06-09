@@ -6,7 +6,7 @@
      class="block">
     <div class="flex items-start justify-between gap-2">
       <span class="font-medium text-brand-navy text-sm leading-tight">{{ task.name }}</span>
-      {% include "_components/status_badge.html" with status=task.status %}
+      {% include "_components/status_badge.html" with status=task.container.name %}
     </div>
 
     {% if task.description %}
