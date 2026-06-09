@@ -12,8 +12,25 @@
       <div class="min-w-0">
         <span class="font-medium text-brand-navy text-sm">{{ comment.author.display_name }}</span>
         <time class="text-xs text-brand-text/50 ml-2">{{ comment.created_at|date:"M j, Y H:i" }}</time>
+        {% if comment.updated_at != comment.created_at %}
+          <span class="text-xs text-brand-text/40 ml-1">(edited)</span>
+        {% endif %}
       </div>
-      {% if user.is_authenticated and comment.author_id == user.id %}
+      {% if project_member and comment.author_id == project_member.id %}
+        <div class="flex gap-2 shrink-0">
+          <button class="text-xs text-brand-text/50 hover:underline"
+                  aria-label="Edit comment"
+                  hx-get="{% url 'comments:edit' pk=comment.pk %}"
+                  hx-target="#comment-{{ comment.pk }}"
+                  hx-swap="outerHTML">Edit</button>
+          <button class="text-xs text-error hover:underline"
+                  aria-label="Delete comment"
+                  hx-post="{% url 'comments:delete' pk=comment.pk %}"
+                  hx-target="#comment-{{ comment.pk }}"
+                  hx-swap="outerHTML swap:200ms"
+                  hx-confirm="Delete this comment?">Delete</button>
+        </div>
+      {% elif is_project_manager %}
         <button class="text-xs text-error hover:underline shrink-0"
                 aria-label="Delete comment"
                 hx-post="{% url 'comments:delete' pk=comment.pk %}"

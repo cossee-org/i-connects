@@ -12,7 +12,7 @@ from django.db import transaction
 from apps.audit.services import AuditAction, log_action
 from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
-from apps.tasks.models import KanbanBoard, Task, TaskLog
+from apps.tasks.models import ActivityEvent, KanbanBoard, Task, TaskActivity, TaskLog
 
 
 class TaskNotReadyToClose(Exception):

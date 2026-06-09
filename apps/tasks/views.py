@@ -54,7 +54,7 @@ from apps.tasks.mixins import (
     ProjectManagerRequiredMixin,
     TaskMemberAccessMixin,
 )
-from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
+from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
 from apps.tasks.services import (
     TaskNotReadyToClose,
     approve_completion,
@@ -192,14 +192,12 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            .prefetch_related("assigned_members", "task_logs__comments__author")
+            .prefetch_related("assigned_members", "task_logs__comments__author", "comments__author", "activities__actor", "activities__member")
             .filter(project=self.project),
             pk=kwargs["pk"],
         )
         context["task"] = task
-        context["task_logs"] = task.task_logs.select_related(
-            "assigned_to", "completed_by"
-        ).prefetch_related("comments__author")
+        context["task_activities"] = task.activities.select_related("actor", "member")
         context["comment_form"] = CommentForm()
         context["assign_form"] = TaskAssignForm(
             project=self.project,
@@ -600,18 +598,15 @@ class TaskReopenView(
 
 
 def _task_activity_context(task, *, is_project_manager):
-    """Context for rendering the Activity & comments timeline partial."""
+    """Context for rendering the Activity timeline partial."""
     return {
         "task": task,
-        "task_logs": task.task_logs.select_related(
-            "assigned_to", "completed_by"
-        ).prefetch_related("comments__author"),
-        "comment_form": CommentForm(),
+        "task_activities": task.activities.select_related("actor", "member"),
         "is_project_manager": is_project_manager,
     }
 
 
-def _seed_assignee_logs(task) -> bool:
+def _seed_assignee_logs(task, actor=None) -> bool:
     """Seed a TaskLog (Activity & comments entry) for each assigned member
     that doesn't have one yet.
 
@@ -620,18 +615,21 @@ def _seed_assignee_logs(task) -> bool:
     ``True`` when at least one log was created.
     """
     logged_member_ids = set(task.task_logs.values_list("assigned_to_id", flat=True))
-    new_logs = [
-        TaskLog(
-            task=task,
-            assigned_to=member,
-            completed_as=(CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL),
-        )
+    new_members = [
+        member
         for member in task.assigned_members.all()
         if member.pk not in logged_member_ids
     ]
-    if new_logs:
-        TaskLog.objects.bulk_create(new_logs)
-    return bool(new_logs)
+    if new_members:
+        TaskLog.objects.bulk_create([
+            TaskLog(
+                task=task,
+                assigned_to=member,
+                completed_as=(CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL),
+            )
+            for member in new_members
+        ])
+    return bool(new_members)
 
 
 class TaskAssignView(
@@ -646,7 +644,7 @@ class TaskAssignView(
         # Ensure every assigned member has an Activity & comments entry. Keying
         # off existing logs makes this idempotent and also backfills members
         # assigned without a log.
-        _seed_assignee_logs(self.task)
+        _seed_assignee_logs(self.task, actor=self.project_member)
         # Fallback for when htmx isn't running (e.g. the script failed to
         # load): a native form submit reloads the task page, which renders
         # the full timeline server-side — so seeded threads still appear.

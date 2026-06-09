@@ -10,10 +10,19 @@ class Comment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     content = models.TextField()
 
+    task = models.ForeignKey(
+        "tasks.Task",
+        on_delete=models.CASCADE,
+        related_name="comments",
+        null=True,
+        blank=True,
+    )
     task_log = models.ForeignKey(
         "tasks.TaskLog",
         on_delete=models.CASCADE,
         related_name="comments",
+        null=True,
+        blank=True,
     )
     author = models.ForeignKey(
         "projects.ProjectMember",
@@ -22,8 +31,9 @@ class Comment(models.Model):
     )
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at"]
         indexes = [
+            models.Index(fields=["task"]),
             models.Index(fields=["task_log"]),
             models.Index(fields=["author"]),
         ]
