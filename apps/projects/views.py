@@ -277,7 +277,7 @@ class ProjectUpdateView(ProjectManagerRequiredMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["form_title"] = f"Edit {self.object.name}"
+        context["form_title"] = "Edit project"
         context["submit_label"] = "Save changes"
         return context
 

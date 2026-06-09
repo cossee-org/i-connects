@@ -35,10 +35,12 @@
     <div class="md:col-span-2">
       {% include "_components/form_field.html" with field=form.description %}
     </div>
-    {% include "_components/form_field.html" with field=form.container %}
-    {% include "_components/form_field.html" with field=form.contribution_type %}
+    <div class="md:col-span-2">
+      {% include "_components/form_field.html" with field=form.container %}
+    </div>
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
+    {% include "_components/form_field.html" with field=form.contribution_type %}
     {% include "_components/form_field.html" with field=form.completion_mode %}
     <div class="md:col-span-2">
       {% include "_components/form_field.html" with field=form.assigned_members %}
