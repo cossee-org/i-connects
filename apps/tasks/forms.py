@@ -168,6 +168,7 @@ class TaskForm(forms.ModelForm):
             key=lambda c: c[1],
         )
         ct_field.choices = blanks + rest + other
+        ct_field.required = False
         if project is not None:
             self.fields["container"].queryset = KanbanBoard.objects.filter(project=project)
             members = (

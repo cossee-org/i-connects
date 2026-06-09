@@ -40,13 +40,11 @@
     </div>
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
-    {% include "_components/form_field.html" with field=form.contribution_type %}
-    {% include "_components/form_field.html" with field=form.completion_mode %}
     <div class="md:col-span-2">
-      {% include "_components/form_field.html" with field=form.assigned_members %}
+      {% include "_components/form_field.html" with field=form.completion_mode %}
     </div>
     <div class="md:col-span-2">
-      {% include "_components/form_field.html" with field=form.reviewers %}
+      {% include "_components/form_field.html" with field=form.assigned_members %}
     </div>
   </div>
 

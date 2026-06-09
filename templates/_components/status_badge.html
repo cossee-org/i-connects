@@ -1,8 +1,8 @@
 {# Status badge — {% include "_components/status_badge.html" with status=project.status %} #}
 {% with s=status|lower %}
 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-  {% if s == 'active' or s == 'open' or s == 'in_progress' %}bg-success/10 text-success
-  {% elif s == 'pending' or s == 'new' or s == 'draft' %}bg-warning/10 text-warning
+  {% if s == 'active' or s == 'open' or s == 'in_progress' or s == 'in progress' %}bg-success/10 text-success
+  {% elif s == 'pending' or s == 'new' or s == 'draft' or s == 'to do' or s == 'to-do' or s == 'todo' %}bg-warning/10 text-warning
   {% elif s == 'closed' or s == 'done' or s == 'completed' or s == 'archived' %}bg-brand-navy/10 text-brand-navy
   {% elif s == 'overdue' or s == 'blocked' or s == 'error' %}bg-error/10 text-error
   {% else %}bg-brand-light/50 text-brand-text{% endif %}">
