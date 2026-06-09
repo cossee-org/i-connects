@@ -21,8 +21,11 @@
   <div class="grid md:grid-cols-2 gap-5 mb-8">
     {# My active tasks #}
     <section class="brand-card p-5" aria-labelledby="active-tasks-heading">
-      <h2 id="active-tasks-heading" class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">
+      <h2 id="active-tasks-heading" class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3 flex items-center gap-2">
         My active tasks
+        {% if my_active_tasks_all %}
+          <span class="inline-flex items-center justify-center rounded-full bg-brand-navy/10 text-brand-navy text-xs font-semibold px-2 py-0.5 normal-case tracking-normal">{{ my_active_tasks_all|length }}</span>
+        {% endif %}
       </h2>
       {% if my_active_tasks %}
         <ul class="divide-y divide-brand-light">
@@ -38,6 +41,39 @@
             </li>
           {% endfor %}
         </ul>
+        {% if my_active_tasks_all|length > 5 %}
+          <div class="mt-3 pt-3 border-t border-brand-light">
+            <button onclick="document.getElementById('all-active-tasks-modal').showModal()"
+                    class="text-sm text-brand-coral hover:text-brand-coral/80 font-medium">
+              View all {{ my_active_tasks_all|length }} tasks &rarr;
+            </button>
+          </div>
+          <dialog id="all-active-tasks-modal" class="modal">
+            <div class="modal-box max-w-lg">
+              <form method="dialog">
+                <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">&times;</button>
+              </form>
+              <h3 class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">
+                All active tasks ({{ my_active_tasks_all|length }})
+              </h3>
+              <ul class="divide-y divide-brand-light max-h-96 overflow-y-auto">
+                {% for task in my_active_tasks_all %}
+                  <li class="py-3 text-sm">
+                    <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
+                       class="font-medium text-brand-navy hover:text-brand-coral"
+                       onclick="document.getElementById('all-active-tasks-modal').close()">
+                      {{ task.name }}
+                    </a>
+                    <div class="text-xs text-brand-text/60 mt-0.5">
+                      {{ task.project.name }}{% if task.deadline %} &middot; due {{ task.deadline|date:"M j" }}{% endif %}
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+            <form method="dialog" class="modal-backdrop"><button>close</button></form>
+          </dialog>
+        {% endif %}
       {% else %}
         <p class="text-sm text-brand-text/60 italic">No open tasks assigned to you.</p>
       {% endif %}
@@ -46,8 +82,9 @@
     {# Pending approvals (PM-only) #}
     {% if pending_approvals %}
       <section class="brand-card p-5" aria-labelledby="pending-approvals-heading">
-        <h2 id="pending-approvals-heading" class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">
+        <h2 id="pending-approvals-heading" class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3 flex items-center gap-2">
           Pending your approval
+          <span class="inline-flex items-center justify-center rounded-full bg-brand-navy/10 text-brand-navy text-xs font-semibold px-2 py-0.5 normal-case tracking-normal">{{ pending_approvals_all|length }}</span>
         </h2>
         <ul class="divide-y divide-brand-light">
           {% for log in pending_approvals %}
@@ -62,6 +99,39 @@
             </li>
           {% endfor %}
         </ul>
+        {% if pending_approvals_all|length > 5 %}
+          <div class="mt-3 pt-3 border-t border-brand-light">
+            <button onclick="document.getElementById('all-pending-approvals-modal').showModal()"
+                    class="text-sm text-brand-coral hover:text-brand-coral/80 font-medium">
+              View all {{ pending_approvals_all|length }} pending &rarr;
+            </button>
+          </div>
+          <dialog id="all-pending-approvals-modal" class="modal">
+            <div class="modal-box max-w-lg">
+              <form method="dialog">
+                <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">&times;</button>
+              </form>
+              <h3 class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">
+                All pending approvals ({{ pending_approvals_all|length }})
+              </h3>
+              <ul class="divide-y divide-brand-light max-h-96 overflow-y-auto">
+                {% for log in pending_approvals_all %}
+                  <li class="py-3 text-sm">
+                    <a href="{% url 'tasks:detail' project_pk=log.task.project_id pk=log.task_id %}"
+                       class="font-medium text-brand-navy hover:text-brand-coral"
+                       onclick="document.getElementById('all-pending-approvals-modal').close()">
+                      {{ log.task.name }}
+                    </a>
+                    <div class="text-xs text-brand-text/60 mt-0.5">
+                      {{ log.task.project.name }} &middot; completed by {{ log.assigned_to.name|default:"—" }} {{ log.created_at|date:"M j" }}
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+            <form method="dialog" class="modal-backdrop"><button>close</button></form>
+          </dialog>
+        {% endif %}
       </section>
     {% endif %}
   </div>
