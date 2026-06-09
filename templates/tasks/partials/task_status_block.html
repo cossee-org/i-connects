@@ -15,14 +15,7 @@
     </div>
 
     <div class="flex items-center gap-2">
-      {% if task.status == "COMPLETED" %}
-        {% if is_project_manager %}
-          <button class="btn btn-ghost btn-sm"
-                  hx-post="{% url 'tasks:reopen' pk=task.pk %}"
-                  hx-target="#task-status-block"
-                  hx-swap="outerHTML">Reopen</button>
-        {% endif %}
-      {% else %}
+      {% if task.status != "COMPLETED" %}
         {# Individual self-mark (assignee only, not team mode) #}
         {% if not is_team_mode and is_assignee %}
           {% if my_done %}
@@ -35,23 +28,6 @@
                     hx-post="{% url 'tasks:complete' pk=task.pk %}"
                     hx-target="#task-status-block"
                     hx-swap="outerHTML">Mark my part done</button>
-          {% endif %}
-        {% endif %}
-        {# Close (Project Lead) #}
-        {% if is_project_manager %}
-          {% if is_team_mode %}
-            <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                    hx-post="{% url 'tasks:close' pk=task.pk %}"
-                    hx-target="#task-status-block"
-                    hx-swap="outerHTML">Close task</button>
-          {% elif all_done %}
-            <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                    hx-post="{% url 'tasks:close' pk=task.pk %}"
-                    hx-target="#task-status-block"
-                    hx-swap="outerHTML">Close task</button>
-          {% else %}
-            <button class="btn btn-sm btn-disabled" disabled aria-disabled="true"
-                    title="All assigned members must mark their part done first.">Close task</button>
           {% endif %}
         {% endif %}
       {% endif %}
