@@ -106,14 +106,32 @@ class MyProjectListView(LoginRequiredMixin, ListView):
 
         # --- Dashboard widgets (Ultra Plan §A3) ---------------------------
         # Late-import to keep the projects app free of a hard task dep.
+        from django.db.models import OuterRef, Subquery
         from apps.core.enums import TaskStatus
         from apps.tasks.models import Task, TaskLog
+
+        user_member_qs = ProjectMember.objects.filter(users=user)
+
+        # Subquery: status of the user's most-recent log for each task.
+        # If it's COMPLETED the user already marked their part done, so the
+        # task should not appear in "active" even though Task.status is still
+        # NOT_COMPLETED (it stays that way until a PM closes it).
+        latest_log_status = Subquery(
+            TaskLog.objects.filter(
+                task=OuterRef("pk"),
+                assigned_to__in=user_member_qs,
+            )
+            .order_by("-created_at")
+            .values("status")[:1]
+        )
 
         all_active_tasks = list(
             Task.objects.filter(
                 assigned_members__users=user,
                 status=TaskStatus.NOT_COMPLETED,
             )
+            .annotate(_user_log_status=latest_log_status)
+            .exclude(_user_log_status=TaskStatus.COMPLETED)
             .select_related("project", "container")
             .order_by("deadline", "id")
             .distinct()
