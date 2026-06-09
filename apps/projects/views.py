@@ -109,15 +109,17 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         from apps.core.enums import TaskStatus
         from apps.tasks.models import Task, TaskLog
 
-        context["my_active_tasks"] = (
+        all_active_tasks = list(
             Task.objects.filter(
                 assigned_members__users=user,
                 status=TaskStatus.NOT_COMPLETED,
             )
             .select_related("project", "container")
             .order_by("deadline", "id")
-            .distinct()[:5]
+            .distinct()
         )
+        context["my_active_tasks"] = all_active_tasks[:5]
+        context["my_active_tasks_all"] = all_active_tasks
 
         # Pending approvals — only meaningful if the user is a PM somewhere.
         pm_project_ids = [
