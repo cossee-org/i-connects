@@ -38,6 +38,7 @@
     {% endfor %}
   </ul>
 
+  {% if is_project_manager %}
   <div class="brand-card p-6 max-w-2xl">
     <h2 class="text-lg font-semibold text-brand-navy mb-3">New milestone</h2>
     <form hx-post="{% url 'tasks:milestone_create' project_pk=project.pk %}"
@@ -48,4 +49,5 @@
       {% include "tasks/milestone_form.html" with form=form form_title="" %}
     </form>
   </div>
+  {% endif %}
 {% endblock %}

@@ -210,6 +210,10 @@ class ProjectDetailView(DetailView):
             context["user_privilege"] = None
             context["pending_join_request"] = None
 
+        context["is_project_manager"] = (
+            context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER
+        )
+
         # Task summary — only meaningful for members, but the queries are
         # cheap enough to run for any viewer who can see the project.
         from apps.core.enums import TaskStatus
@@ -273,7 +277,7 @@ class ProjectUpdateView(ProjectManagerRequiredMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["form_title"] = f"Edit {self.object.name}"
+        context["form_title"] = "Edit project"
         context["submit_label"] = "Save changes"
         return context
 

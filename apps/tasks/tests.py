@@ -18,6 +18,8 @@ def _make_project_with_board(owner, *, name="P"):
         user=owner,
         form_data={"name": name, "status": ProjectStatus.ACTIVE, "is_public": True},
     )
+    # Drop the default seeded columns so these tests control the board exactly.
+    project.containers.all().delete()
     col1 = KanbanBoard.objects.create(project=project, name="Todo", container_order=0)
     col2 = KanbanBoard.objects.create(project=project, name="Doing", container_order=1)
     return project, col1, col2
@@ -153,3 +155,317 @@ def test_approve_completion_requires_pm(client, user, other_user):
     log.refresh_from_db()
     assert log.approved is True
     assert AuditLog.objects.filter(action=AuditAction.TASK_APPROVED).exists()
+
+
+@pytest.mark.django_db
+def test_assigning_new_member_seeds_tasklog(client, user, other_user):
+    project, col1, _col2 = _make_project_with_board(user)
+    pm_member = _primary_member(project, user)
+    extra_member = ProjectMember.objects.create(project=project)
+    extra_member.users.add(other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=pm_member,
+        container=col1,
+        container_task_order=0,
+        name="T5",
+    )
+    task.assigned_members.add(pm_member)
+    TaskLog.objects.create(task=task, assigned_to=pm_member)
+    assert TaskLog.objects.filter(task=task).count() == 1
+
+    client.force_login(user)
+    url = reverse("tasks:assign", kwargs={"pk": task.pk})
+
+    # Adding a brand-new assignee seeds a TaskLog (activity entry) for them,
+    # while leaving the already-assigned member's log untouched.
+    response = client.post(
+        url,
+        {"assigned_members": [pm_member.pk, extra_member.pk]},
+        HTTP_HX_REQUEST="true",
+    )
+    assert response.status_code == 200
+    assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
+    assert TaskLog.objects.filter(task=task, assigned_to=pm_member).count() == 1
+    # The response asks the page to refresh the activity timeline.
+    assert response["HX-Trigger"] == "assignees-changed"
+
+    # The activity endpoint now renders a thread for the new member.
+    activity = client.get(reverse("tasks:activity", kwargs={"pk": task.pk}))
+    new_log = TaskLog.objects.get(task=task, assigned_to=extra_member)
+    assert f'id="task-log-{new_log.pk}"' in activity.content.decode()
+
+    # Re-submitting with the same members does not duplicate logs.
+    client.post(
+        url,
+        {"assigned_members": [pm_member.pk, extra_member.pk]},
+        HTTP_HX_REQUEST="true",
+    )
+    assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
+
+
+@pytest.mark.django_db
+def test_assign_without_htmx_redirects_to_task(client, user, other_user):
+    # When htmx isn't running, a native form submit should still seed the
+    # log and reload the task page (rather than return a bare partial).
+    project, col1, _col2 = _make_project_with_board(user)
+    pm_member = _primary_member(project, user)
+    extra_member = ProjectMember.objects.create(project=project)
+    extra_member.users.add(other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=pm_member,
+        container=col1,
+        container_task_order=0,
+        name="T7",
+    )
+    client.force_login(user)
+    response = client.post(  # no HX-Request header
+        reverse("tasks:assign", kwargs={"pk": task.pk}),
+        {"assigned_members": [pm_member.pk, extra_member.pk]},
+    )
+    assert response.status_code == 302
+    assert response.url == reverse(
+        "tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}
+    )
+    assert TaskLog.objects.filter(task=task, assigned_to=extra_member).exists()
+
+
+@pytest.mark.django_db
+def test_assigning_backfills_member_missing_a_tasklog(client, user, other_user):
+    # An assignee that was added without a TaskLog (e.g. legacy/demo data)
+    # gets one seeded the next time assignees are saved.
+    project, col1, _col2 = _make_project_with_board(user)
+    pm_member = _primary_member(project, user)
+    no_log_member = ProjectMember.objects.create(project=project)
+    no_log_member.users.add(other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=pm_member,
+        container=col1,
+        container_task_order=0,
+        name="T6",
+    )
+    # Both are assigned, but only pm_member has an activity entry.
+    task.assigned_members.add(pm_member, no_log_member)
+    TaskLog.objects.create(task=task, assigned_to=pm_member)
+    assert not TaskLog.objects.filter(task=task, assigned_to=no_log_member).exists()
+
+    client.force_login(user)
+    response = client.post(
+        reverse("tasks:assign", kwargs={"pk": task.pk}),
+        {"assigned_members": [pm_member.pk, no_log_member.pk]},
+        HTTP_HX_REQUEST="true",
+    )
+    assert response.status_code == 200
+    seeded_log = TaskLog.objects.get(task=task, assigned_to=no_log_member)
+    activity = client.get(reverse("tasks:activity", kwargs={"pk": task.pk}))
+    assert f'id="task-log-{seeded_log.pk}"' in activity.content.decode()
+
+
+@pytest.mark.django_db
+def test_edit_form_seeds_assignee_logs(client, user, other_user):
+    # Adding an assignee via the Task edit form should seed an activity entry,
+    # just like the "Change assignees" flow does.
+    project, col1, _col2 = _make_project_with_board(user)
+    pm_member = _primary_member(project, user)
+    extra_member = ProjectMember.objects.create(project=project)
+    extra_member.users.add(other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=pm_member,
+        container=col1,
+        container_task_order=0,
+        name="EditSeed",
+    )
+    task.assigned_members.add(pm_member)
+    TaskLog.objects.create(task=task, assigned_to=pm_member)
+
+    client.force_login(user)
+    response = client.post(
+        reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        {
+            "name": "EditSeed",
+            "container": col1.pk,
+            "contribution_type": "OTHER",
+            "completion_mode": "INDIVIDUAL",
+            "assigned_members": [pm_member.pk, extra_member.pk],
+        },
+    )
+    assert response.status_code in (200, 302)
+    assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
+
+
+# ---------------------------------------------------------------------------
+# Authorization: only Project Leads may create/edit/delete/move tasks etc.
+# ---------------------------------------------------------------------------
+
+
+def _add_contributor(project, user):
+    """Add ``user`` as a plain Member (CONTRIBUTOR, not a Lead)."""
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(user)
+    ProjectPrivilege.objects.create(
+        project=project, user=user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    return member
+
+
+@pytest.mark.django_db
+def test_member_cannot_mutate_tasks(client, user, other_user):
+    project, col1, col2 = _make_project_with_board(user)
+    lead_member = _primary_member(project, user)
+    _add_contributor(project, other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=lead_member,
+        container=col1,
+        container_task_order=0,
+        name="Locked",
+    )
+    milestone_pks = {"project_pk": project.pk}
+    client.force_login(other_user)
+
+    # Each of these mutating endpoints must be forbidden for a plain member.
+    forbidden = [
+        ("post", reverse("tasks:create", kwargs={"project_pk": project.pk}), {}),
+        ("post", reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}), {}),
+        ("post", reverse("tasks:delete", kwargs={"project_pk": project.pk, "pk": task.pk}), {}),
+        ("post", reverse("tasks:assign", kwargs={"pk": task.pk}), {}),
+        ("post", reverse("tasks:move", kwargs={"pk": task.pk}), {"container_id": col2.pk, "order": 0}),
+        ("post", reverse("tasks:change_column", kwargs={"pk": task.pk}), {"container_id": col2.pk}),
+        ("post", reverse("tasks:reopen", kwargs={"pk": task.pk}), {}),
+        ("post", reverse("tasks:set_milestone", kwargs={"pk": task.pk}), {}),
+        ("post", reverse("tasks:column_create", kwargs=milestone_pks), {"name": "X"}),
+        ("post", reverse("tasks:milestone_create", kwargs=milestone_pks), {"name": "M"}),
+    ]
+    for method, url, data in forbidden:
+        resp = getattr(client, method)(url, data)
+        assert resp.status_code == 403, f"{url} returned {resp.status_code}, expected 403"
+
+    # The task must not have moved.
+    task.refresh_from_db()
+    assert task.container_id == col1.pk
+
+
+@pytest.mark.django_db
+def test_member_can_view_comment_and_complete(client, user, other_user):
+    project, col1, _col2 = _make_project_with_board(user)
+    lead_member = _primary_member(project, user)
+    contrib_member = _add_contributor(project, other_user)
+    task = Task.objects.create(
+        project=project,
+        created_by=lead_member,
+        container=col1,
+        container_task_order=0,
+        name="Viewable",
+    )
+    task.assigned_members.add(contrib_member)
+    log = TaskLog.objects.create(task=task, assigned_to=contrib_member)
+    client.force_login(other_user)
+
+    # View the task detail.
+    detail = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    )
+    assert detail.status_code == 200
+
+    # Post a comment.
+    comment = client.post(
+        reverse("comments:create", kwargs={"task_pk": task.pk, "log_pk": log.pk}),
+        {"content": "Looks good"},
+    )
+    assert comment.status_code in (200, 201)
+    assert task.task_logs.get(pk=log.pk).comments.filter(content="Looks good").exists()
+
+    # Mark the task done (members are allowed to).
+    done = client.post(reverse("tasks:complete", kwargs={"pk": task.pk}))
+    assert done.status_code in (200, 302)
+    assert TaskLog.objects.filter(task=task, status=TaskStatus.COMPLETED).exists()
+
+
+# ---------------------------------------------------------------------------
+# TEAM vs INDIVIDUAL task completion
+# ---------------------------------------------------------------------------
+
+
+def _two_assignee_task(user, other_user, *, mode):
+    from apps.core.enums import CompletedAs
+
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    contrib = ProjectMember.objects.create(project=project)
+    contrib.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    task = Task.objects.create(
+        project=project,
+        created_by=lead,
+        container=col1,
+        container_task_order=0,
+        name="Moded",
+        completion_mode=mode,
+    )
+    task.assigned_members.add(lead, contrib)
+    TaskLog.objects.create(task=task, assigned_to=lead)
+    TaskLog.objects.create(task=task, assigned_to=contrib)
+    return project, task, lead, contrib
+
+
+@pytest.mark.django_db
+def test_individual_mode_close_blocked_until_all_done(client, user, other_user):
+    from apps.core.enums import CompletedAs
+
+    project, task, lead, contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+
+    # A member marks only their own part done.
+    client.force_login(other_user)
+    client.post(reverse("tasks:complete", kwargs={"pk": task.pk}))
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED  # not all done yet
+    assert task.assignees_done_count == 1
+
+    # Lead cannot close while someone is still outstanding.
+    client.force_login(user)
+    blocked = client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    assert blocked.status_code == 400
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+
+    # The remaining assignee (the lead) marks their part; now close succeeds.
+    from apps.tasks.services import mark_own_done
+
+    mark_own_done(task=task, member=lead)
+    ok = client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    assert ok.status_code in (200, 302)
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+
+@pytest.mark.django_db
+def test_team_mode_lead_closes_for_everyone(client, user, other_user):
+    from apps.core.enums import CompletedAs
+
+    project, task, lead, contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.TEAM
+    )
+
+    # A member cannot self-mark in TEAM mode.
+    client.force_login(other_user)
+    resp = client.post(reverse("tasks:complete", kwargs={"pk": task.pk}))
+    assert resp.status_code == 400
+
+    # A member cannot close (Lead-only).
+    assert client.post(reverse("tasks:close", kwargs={"pk": task.pk})).status_code == 403
+
+    # The Lead closes once for everyone.
+    client.force_login(user)
+    ok = client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    assert ok.status_code in (200, 302)
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+    # Every assignee ends up done.
+    assert task.all_assignees_done

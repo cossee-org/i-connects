@@ -7,9 +7,11 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-2xl mx-auto">
+<div class="max-w-2xl mx-auto space-y-5">
   <form method="post" class="brand-card p-6">
     {% csrf_token %}
+
+    <h2 class="text-lg font-semibold text-brand-navy mb-4">Project details</h2>
 
     {% if form.non_field_errors %}
       <div class="alert alert-error mb-4">{{ form.non_field_errors }}</div>
@@ -36,5 +38,19 @@
       </button>
     </div>
   </form>
+
+  {% if object %}
+    <div class="brand-card p-6 border-error/40">
+      <h2 class="text-lg font-semibold text-brand-navy mb-1">Deletion and archiving</h2>
+      <p class="text-sm text-brand-text/70 mb-4">
+        Archive this project to hide it from active lists while keeping its data,
+        or permanently delete it to remove the project and everything in it.
+      </p>
+      <div class="flex flex-wrap gap-2 justify-end">
+        <button type="button" class="btn btn-outline" disabled title="Archiving is coming soon">Archive project</button>
+        <a href="{% url 'projects:delete' pk=object.pk %}" class="btn btn-outline btn-error">Permanently delete project</a>
+      </div>
+    </div>
+  {% endif %}
 </div>
 {% endblock %}

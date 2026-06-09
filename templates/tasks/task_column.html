@@ -6,6 +6,7 @@
       <span data-column-count="{{ column.pk }}"
             class="ml-2 text-xs bg-brand-navy/10 text-brand-navy px-2 py-0.5 rounded-full">{{ column.tasks.count }}</span>
     </h2>
+    {% if is_project_manager %}
     <button class="btn btn-ghost btn-xs text-brand-navy"
             hx-get="{% url 'tasks:create' project_pk=project.pk %}?container={{ column.pk }}"
             hx-target="#task-modal-body"
@@ -15,6 +16,7 @@
             aria-label="Add task to this column">
       +
     </button>
+    {% endif %}
   </div>
 
   <ul id="column-{{ column.pk }}"

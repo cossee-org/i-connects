@@ -1,0 +1,16 @@
+{% comment %}
+  Activity & comments timeline. Self-refreshes via HTMX when an
+  ``assignees-changed`` event fires on the body (e.g. after assignees are
+  saved), re-fetching itself so newly-seeded entries appear without a
+  full page reload.
+{% endcomment %}
+<div id="task-log-list" class="flex flex-col gap-3"
+     hx-get="{% url 'tasks:activity' pk=task.pk %}"
+     hx-trigger="assignees-changed from:body"
+     hx-swap="outerHTML">
+  {% for log in task_logs %}
+    {% include "tasks/task_log_item.html" with log=log %}
+  {% empty %}
+    <p class="text-sm text-brand-text/60">No task log entries yet.</p>
+  {% endfor %}
+</div>

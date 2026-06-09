@@ -58,6 +58,16 @@ urlpatterns = [
         name="complete",
     ),
     path(
+        "tasks/<int:pk>/undo/",
+        views.TaskUndoOwnView.as_view(),
+        name="undo",
+    ),
+    path(
+        "tasks/<int:pk>/close/",
+        views.TaskCloseView.as_view(),
+        name="close",
+    ),
+    path(
         "tasks/<int:pk>/reopen/",
         views.TaskReopenView.as_view(),
         name="reopen",
@@ -66,6 +76,11 @@ urlpatterns = [
         "tasks/<int:pk>/assign/",
         views.TaskAssignView.as_view(),
         name="assign",
+    ),
+    path(
+        "tasks/<int:pk>/activity/",
+        views.TaskActivityView.as_view(),
+        name="activity",
     ),
     path(
         "tasks/<int:pk>/milestone/",

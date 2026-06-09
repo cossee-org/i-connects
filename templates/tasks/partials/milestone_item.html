@@ -11,6 +11,7 @@
         &middot; {{ milestone.tasks.count }} task{{ milestone.tasks.count|pluralize }}
       </div>
     </div>
+    {% if is_project_manager %}
     <div class="flex gap-1 shrink-0">
       <button class="btn btn-ghost btn-xs"
               hx-get="{% url 'tasks:milestone_update' project_pk=project.pk pk=milestone.pk %}"
@@ -22,6 +23,7 @@
               hx-swap="outerHTML swap:200ms"
               hx-confirm="Delete milestone '{{ milestone.name }}'? Tasks will be detached.">Delete</button>
     </div>
+    {% endif %}
   </div>
 
   {% if milestone.description %}
