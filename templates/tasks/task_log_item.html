@@ -33,13 +33,5 @@
       </div>
     </header>
 
-
-<div id="comments-for-log-{{ log.pk }}" class="flex flex-col gap-2 mt-3">
-      {% for comment in log.comments.all %}
-        {% include "comments/comment_item.html" with comment=comment task=task task_log=log %}
-      {% endfor %}
-    </div>
-
-    {% include "comments/comment_form.html" with task=task task_log=log form=comment_form %}
   </div>
 </article>

@@ -10,7 +10,7 @@ app_name = "comments"
 
 urlpatterns = [
     path(
-        "tasks/<int:task_pk>/logs/<int:log_pk>/comments/",
+        "tasks/<int:task_pk>/comments/",
         views.CommentCreateView.as_view(),
         name="create",
     ),
@@ -18,6 +18,11 @@ urlpatterns = [
         "comments/<int:pk>/read/",
         views.CommentMarkReadView.as_view(),
         name="mark_read",
+    ),
+    path(
+        "comments/<int:pk>/edit/",
+        views.CommentEditView.as_view(),
+        name="edit",
     ),
     path(
         "comments/<int:pk>/",
