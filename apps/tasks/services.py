@@ -12,7 +12,7 @@ from django.db import transaction
 from apps.audit.services import AuditAction, log_action
 from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
-from apps.tasks.models import KanbanBoard, Task, TaskLog
+from apps.tasks.models import ActivityEvent, KanbanBoard, Task, TaskActivity, TaskLog
 
 
 class TaskNotReadyToClose(Exception):
@@ -179,6 +179,9 @@ def mark_own_done(*, task: Task, member: ProjectMember) -> TaskLog:
     log.completed_by = member
     log.completed_as = CompletedAs.INDIVIDUAL
     log.save()
+    TaskActivity.objects.create(
+        task=task, event=ActivityEvent.MEMBER_DONE, actor=member, member=member
+    )
     return log
 
 
@@ -190,6 +193,9 @@ def reopen_own(*, task: Task, member: ProjectMember) -> TaskLog | None:
         return None
     log.status = TaskStatus.NOT_COMPLETED
     log.save(update_fields=["status"])
+    TaskActivity.objects.create(
+        task=task, event=ActivityEvent.MEMBER_UNDONE, actor=member, member=member
+    )
     return log
 
 

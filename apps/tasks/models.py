@@ -269,3 +269,43 @@ class TaskLog(models.Model):
 
     def __str__(self) -> str:
         return f"TaskLog #{self.pk} (task {self.task_id})"
+
+
+class ActivityEvent(models.TextChoices):
+    CREATED = "CREATED", "Created"
+    MEMBER_ADDED = "MEMBER_ADDED", "Member added"
+    MEMBER_DONE = "MEMBER_DONE", "Member marked done"
+    MEMBER_UNDONE = "MEMBER_UNDONE", "Member undid completion"
+
+
+class TaskActivity(models.Model):
+    """Chronological activity feed for a task."""
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    event = models.CharField(max_length=32, choices=ActivityEvent.choices)
+    task = models.ForeignKey(
+        Task,
+        on_delete=models.CASCADE,
+        related_name="activities",
+    )
+    actor = models.ForeignKey(
+        "projects.ProjectMember",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_activities_acted",
+    )
+    member = models.ForeignKey(
+        "projects.ProjectMember",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_activities_affected",
+    )
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [models.Index(fields=["task"])]
+
+    def __str__(self) -> str:
+        return f"TaskActivity #{self.pk} ({self.event}) for task {self.task_id}"
