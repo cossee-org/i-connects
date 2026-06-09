@@ -21,8 +21,11 @@
   <div class="grid md:grid-cols-2 gap-5 mb-8">
     {# My active tasks #}
     <section class="brand-card p-5" aria-labelledby="active-tasks-heading">
-      <h2 id="active-tasks-heading" class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">
+      <h2 id="active-tasks-heading" class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3 flex items-center gap-2">
         My active tasks
+        {% if my_active_tasks_all %}
+          <span class="inline-flex items-center justify-center rounded-full bg-brand-navy/10 text-brand-navy text-xs font-semibold px-2 py-0.5 normal-case tracking-normal">{{ my_active_tasks_all|length }}</span>
+        {% endif %}
       </h2>
       {% if my_active_tasks %}
         <ul class="divide-y divide-brand-light">
@@ -79,8 +82,9 @@
     {# Pending approvals (PM-only) #}
     {% if pending_approvals %}
       <section class="brand-card p-5" aria-labelledby="pending-approvals-heading">
-        <h2 id="pending-approvals-heading" class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">
+        <h2 id="pending-approvals-heading" class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3 flex items-center gap-2">
           Pending your approval
+          <span class="inline-flex items-center justify-center rounded-full bg-brand-navy/10 text-brand-navy text-xs font-semibold px-2 py-0.5 normal-case tracking-normal">{{ pending_approvals_all|length }}</span>
         </h2>
         <ul class="divide-y divide-brand-light">
           {% for log in pending_approvals %}
