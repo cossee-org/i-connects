@@ -78,12 +78,7 @@
 
       {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done %}
 
-      <div class="mt-8">
-        <h2 class="text-lg font-semibold text-brand-navy mb-3">Activity</h2>
-        {% include "tasks/partials/task_log_list.html" %}
-      </div>
-
-      <div class="mt-8">
+<div class="mt-8">
         <h2 class="text-lg font-semibold text-brand-navy mb-3">Comments</h2>
         <div id="task-comments" class="flex flex-col gap-4">
           {% for comment in task.comments.all %}

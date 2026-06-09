@@ -179,9 +179,6 @@ def mark_own_done(*, task: Task, member: ProjectMember) -> TaskLog:
     log.completed_by = member
     log.completed_as = CompletedAs.INDIVIDUAL
     log.save()
-    TaskActivity.objects.create(
-        task=task, event=ActivityEvent.MEMBER_DONE, actor=member, member=member
-    )
     return log
 
 
@@ -193,9 +190,6 @@ def reopen_own(*, task: Task, member: ProjectMember) -> TaskLog | None:
         return None
     log.status = TaskStatus.NOT_COMPLETED
     log.save(update_fields=["status"])
-    TaskActivity.objects.create(
-        task=task, event=ActivityEvent.MEMBER_UNDONE, actor=member, member=member
-    )
     return log
 
 

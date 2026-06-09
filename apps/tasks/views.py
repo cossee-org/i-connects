@@ -135,9 +135,6 @@ class TaskCreateView(
         form.save_m2m()
         # Seed a TaskLog per assignee (mirrors the Blitz createTask behaviour).
         _seed_assignee_logs(task)
-        TaskActivity.objects.create(
-            task=task, event=ActivityEvent.CREATED, actor=self.project_member
-        )
         log_action(
             AuditAction.TASK_CREATED,
             actor=self.request.user,
@@ -629,15 +626,6 @@ def _seed_assignee_logs(task, actor=None) -> bool:
                 task=task,
                 assigned_to=member,
                 completed_as=(CompletedAs.TEAM if member.name else CompletedAs.INDIVIDUAL),
-            )
-            for member in new_members
-        ])
-        TaskActivity.objects.bulk_create([
-            TaskActivity(
-                task=task,
-                event=ActivityEvent.MEMBER_ADDED,
-                actor=actor,
-                member=member,
             )
             for member in new_members
         ])
