@@ -270,11 +270,6 @@
               Manage members &rarr;
             </a>
           </li>
-          <li>
-            <a href="{% url 'roles:list' project_pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
-              Manage roles &rarr;
-            </a>
-          </li>
           {% if user_privilege == "PROJECT_MANAGER" %}
             <li>
               <a href="{% url 'projects:invite' pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
