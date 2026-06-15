@@ -37,7 +37,10 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body class="min-h-screen bg-brand-lighter text-brand-text font-sans"
-      {% if user.is_authenticated %}x-data="{ sidebarOpen: false }"{% endif %}
+      {% if user.is_authenticated %}x-data="{
+        sidebarOpen: localStorage.getItem('sidebarOpen') === 'true',
+        init() { this.$watch('sidebarOpen', v => localStorage.setItem('sidebarOpen', v)); }
+      }"{% endif %}
       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
   <a href="#main-content" class="sr-only focus:not-sr-only">Skip to main content</a>
