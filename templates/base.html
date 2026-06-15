@@ -42,9 +42,9 @@
   <a href="#main-content" class="sr-only focus:not-sr-only">Skip to main content</a>
   <div class="brand-stripe fixed top-0 left-0 right-0 z-50" aria-hidden="true"></div>
 
-  {% if user.is_authenticated %}
   <div class="flex min-h-screen">
 
+  {% if user.is_authenticated %}
     <!-- Mobile overlay -->
     <div x-show="sidebarOpen"
          x-transition:enter="transition-opacity duration-200"
@@ -202,8 +202,9 @@
         </div>
       </div>
     </aside>
+  {% endif %}<!-- end authenticated sidebar/drawers -->
 
-  <!-- Main content column (flex-1 so it fills remaining width beside the sidebar) -->
+  <!-- Main content column: always a flex child, takes remaining width -->
   <div class="flex flex-col flex-1 min-w-0 min-h-screen">
 
     <!-- Anonymous top bar -->
@@ -272,8 +273,7 @@
       </div>
     </footer>
   </div><!-- end main content column -->
-
-  {% if user.is_authenticated %}</div>{% endif %}<!-- end flex min-h-screen wrapper -->
+  </div><!-- end flex min-h-screen wrapper -->
 
   {% block extra_body %}{% endblock %}
 </body>
