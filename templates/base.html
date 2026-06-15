@@ -27,6 +27,20 @@
     .sidebar-link:hover { background: rgb(226 232 240 / 0.6); color: rgb(31 41 99); }
     .sidebar-link.active { background: rgb(226 232 240 / 0.8); color: rgb(31 41 99); font-weight: 600; }
     [x-cloak] { display: none !important; }
+
+    /* Sidebar layout — defined here to avoid Tailwind utility ordering issues */
+    .app-sidebar {
+      display: none;
+      flex-direction: column;
+      position: fixed;
+      top: 0; bottom: 0; left: 0;
+      width: 14rem; /* w-56 */
+      z-index: 40;
+    }
+    @media (min-width: 1024px) {
+      .app-sidebar { display: flex; }
+      .app-main-authenticated { padding-left: 14rem; }
+    }
   </style>
 
   {% comment %}Vendored locally so the UI works in environments whose network policy blocks external hosts.{% endcomment %}
@@ -49,7 +63,7 @@
   {% if user.is_authenticated %}
 
   <!-- ── DESKTOP SIDEBAR: truly fixed, never affected by page height ── -->
-  <aside class="hidden lg:flex flex-col fixed inset-y-0 left-0 w-56 bg-brand-light border-r border-brand-light/70 z-40"
+  <aside class="app-sidebar bg-brand-light border-r border-brand-light/70"
          aria-label="Sidebar navigation">
     <div class="flex items-center gap-2 px-4 pt-6 pb-4 border-b border-brand-light/60 shrink-0">
       <a href="{% url 'projects:dashboard' %}" aria-label="i-CONNECTS home">
@@ -123,7 +137,7 @@
   {% endif %}<!-- end authenticated sidebar/drawers -->
 
   <!-- ── MAIN CONTENT: offset by sidebar width on desktop ── -->
-  <div class="{% if user.is_authenticated %}lg:pl-56{% endif %} flex flex-col min-h-screen w-full">
+  <div class="{% if user.is_authenticated %}app-main-authenticated{% endif %} flex flex-col min-h-screen w-full">
 
     <!-- Anonymous top bar -->
     {% if not user.is_authenticated %}
