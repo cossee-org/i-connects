@@ -39,14 +39,11 @@
       {% if user.is_authenticated %}x-data="{ sidebarOpen: false }"{% endif %}
       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
-  <a href="#main-content" class="skip-link">Skip to main content</a>
-  <div class="brand-stripe fixed top-0 left-0 right-0 z-50" aria-hidden="true"></div>
+  <a href="#main-content" class="skip-link sr-only focus:not-sr-only">Skip to main content</a>
+  <div class="brand-stripe" aria-hidden="true"></div>
 
-  {# ══════════════════════════════════════════════════════════════════════
-     SIDEBAR — authenticated users only
-     ══════════════════════════════════════════════════════════════════════ #}
   {% if user.is_authenticated %}
-    {# Mobile overlay #}
+    <!-- Mobile overlay -->
     <div x-show="sidebarOpen"
          x-transition:enter="transition-opacity duration-200"
          x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
@@ -171,14 +168,11 @@
         </div>
       </div>
     </aside>
-  {% endif %}{# end authenticated sidebar #}
+  {% endif %}
 
-  {# ══════════════════════════════════════════════════════════════════════
-     MAIN CONTENT COLUMN (both layouts share blocks here)
-     ══════════════════════════════════════════════════════════════════════ #}
   <div class="flex flex-col flex-1 min-w-0 min-h-screen">
 
-    {# Anonymous top bar #}
+    <!-- Anonymous top bar -->
     {% if not user.is_authenticated %}
       <header class="navbar bg-brand-light border-b border-brand-light sticky top-0 z-30 px-4 sm:px-6 lg:px-8" role="banner">
         <div class="flex-1">
