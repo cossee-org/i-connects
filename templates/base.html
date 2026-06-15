@@ -7,166 +7,259 @@
   <title>{% block title %}i&bull;CONNECTS{% endblock %}</title>
 
   <link rel="stylesheet" href="{% static 'css/output.css' %}" />
-  <link rel="icon" type="image/png" href="{% static 'img/iconnects-logo.png' %}" />
+  <link rel="icon" type="image/png" href="{% static 'img/favicon.png' %}" />
   <style>
-    /* Hide the native disclosure triangle on custom-styled <summary> toggles
-       (e.g. the members multiselect) across browsers, including Safari. */
     summary { list-style: none; }
     summary::-webkit-details-marker { display: none; }
+
+    [x-cloak] { display: none !important; }
+
+    .sidebar-link {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: rgb(31 41 99 / 0.65);
+      white-space: nowrap;
+    }
+    .sidebar-link:hover { background: rgb(226 232 240 / 0.6); color: rgb(31 41 99); }
+    .sidebar-link.active { background: rgb(226 232 240 / 0.8); color: rgb(31 41 99); font-weight: 600; }
+
+    /* ── Top bar ── */
+    .app-topbar {
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 3.5rem; z-index: 50;
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0 1rem;
+      background: #f1f5f9;
+      border-bottom: 1px solid rgb(226 232 240 / 0.7);
+    }
+
+    /* ── Sidebar ── */
+    .app-sidebar {
+      position: fixed; top: 3.5rem; bottom: 0; left: 0;
+      width: 14rem; z-index: 40;
+      display: flex; flex-direction: column;
+      background: #f1f5f9;
+      border-right: 1px solid rgb(226 232 240 / 0.7);
+      transform: translateX(-14rem);
+      overflow: hidden;
+    }
+    /* Transition only applied after Alpine initialises — prevents slide-in on page load */
+    .app-sidebar.sidebar-ready { transition: transform 0.25s ease; }
+    .app-sidebar.open { transform: translateX(0); }
+
+    /* ── Main content ── */
+    .app-main-authenticated {
+      padding-top: 3.5rem;
+    }
+    .app-main-authenticated.sidebar-ready { transition: padding-left 0.25s ease; }
+
+    @media (min-width: 1024px) {
+      .app-main-authenticated.sidebar-open { padding-left: 14rem; }
+    }
   </style>
 
-  {% comment %}Vendored locally (previously loaded from unpkg/jsdelivr CDNs) so the UI works in environments whose network policy blocks external hosts.{% endcomment %}
+  {% comment %}Vendored locally so the UI works in environments whose network policy blocks external hosts.{% endcomment %}
   <script src="{% static 'js/vendor/htmx.min.js' %}"></script>
   <script defer src="{% static 'js/vendor/alpine.min.js' %}"></script>
   <script src="{% static 'js/vendor/sortable.min.js' %}"></script>
 
   {% block extra_head %}{% endblock %}
 </head>
-<body class="min-h-screen flex flex-col bg-brand-lighter text-brand-text font-sans"
+<body class="min-h-screen bg-brand-lighter text-brand-text font-sans"
+      {% if user.is_authenticated %}x-data="{
+        sidebarOpen: window.innerWidth >= 1024
+          ? localStorage.getItem('sidebarOpen') !== 'false'
+          : false,
+        mobile: window.innerWidth < 1024,
+        sidebarReady: false,
+        userMenuOpen: false,
+        init() {
+          this.$watch('sidebarOpen', v => localStorage.setItem('sidebarOpen', v));
+          const mq = window.matchMedia('(max-width: 1023px)');
+          mq.addEventListener('change', e => { this.mobile = e.matches; if (e.matches) this.sidebarOpen = false; });
+          this.$nextTick(() => { this.sidebarReady = true; });
+        }
+      }"{% endif %}
       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
-  <a href="#main-content" class="skip-link">Skip to main content</a>
-
-  <div class="brand-stripe" aria-hidden="true"></div>
-
-  <header class="navbar bg-brand-light border-b border-brand-light sticky top-0 z-30 px-4 sm:px-6 lg:px-8" role="banner">
-    <div class="flex-1 flex items-center gap-6 overflow-hidden">
-      <a href="{% if user.is_authenticated %}{% url 'projects:my_list' %}{% else %}{% url 'core:home' %}{% endif %}"
-         class="flex items-center gap-2 shrink-0"
-         aria-label="i-CONNECTS home">
-        <img src="{% static 'img/iconnects-logo.png' %}" alt="" class="h-9 w-auto" />
-        <span class="sr-only">i&bull;CONNECTS</span>
-      </a>
-      {% block breadcrumbs %}{% endblock %}
-    </div>
-
-    <div class="flex-none flex items-center gap-2">
-      {% if user.is_authenticated %}
-        <div class="dropdown dropdown-end">
-          <label tabindex="0" class="btn btn-ghost btn-circle text-brand-navy hover:bg-brand-lighter indicator"
-                 hx-get="{% url 'notifications:dropdown' %}"
-                 hx-trigger="click once"
-                 hx-target="#notification-dropdown-panel"
-                 hx-swap="innerHTML"
-                 aria-label="Notifications">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                 stroke-width="1.8" stroke="currentColor" class="w-5 h-5">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                    d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9a6 6 0 1 0-12 0v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
-            </svg>
-            <span id="notification-badge"
-                  class="indicator-item"
-                  hx-get="{% url 'notifications:badge' %}"
-                  hx-trigger="load, every 60s"
-                  hx-swap="innerHTML"></span>
-          </label>
-          <div tabindex="0" id="notification-dropdown-panel"
-               class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-80 border border-brand-light">
-            <span class="p-2 text-sm opacity-60">Loading&hellip;</span>
-          </div>
-        </div>
-
-        <div class="dropdown dropdown-end">
-          <label tabindex="0" class="btn btn-ghost flex items-center gap-2 text-brand-navy hover:bg-brand-lighter">
-            <div class="w-8 h-8 rounded-full bg-brand-navy text-white flex items-center justify-center text-sm font-semibold">
-              {{ user.name|default:user.email|slice:":1"|upper }}
-            </div>
-            <span class="hidden sm:inline text-sm font-medium">{{ user.name|default:user.email }}</span>
-          </label>
-          <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-56 border border-brand-light">
-            <li><a href="{% url 'accounts:profile' %}">Profile</a></li>
-            <li><a href="{% url 'projects:my_invitations' %}">Invitations</a></li>
-            <li><a href="{% url 'audit:my_activity' %}">My activity</a></li>
-            {% if user.role == 'ADMIN' %}<li><a href="{% url 'core:admin_console' %}">Admin console</a></li>{% endif %}
-            <li>
-              <form method="post" action="{% url 'accounts:logout' %}" class="contents">
-                {% csrf_token %}
-                <button type="submit">Sign out</button>
-              </form>
-            </li>
-          </ul>
-        </div>
-      {% else %}
-        <a href="{% url 'accounts:login' %}" class="btn btn-ghost btn-sm text-brand-navy hover:bg-brand-lighter">
-          Sign in
-        </a>
-        <a href="{% url 'accounts:signup' %}" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-          Sign up
-        </a>
-      {% endif %}
-    </div>
-  </header>
+  <a href="#main-content" class="sr-only focus:not-sr-only">Skip to main content</a>
 
   {% if user.is_authenticated %}
-    {% block brand_tabs %}
-      <nav class="bg-brand-lighter border-b border-brand-light px-4 sm:px-6 lg:px-8"
-           aria-label="Primary">
-        <div class="flex gap-6 overflow-x-auto">
-          {% url 'projects:my_list' as my_projects_url %}
-          {% url 'projects:list' as browse_url %}
-          {% url 'forms_builder:form_list' as forms_url %}
-          {% url 'notifications:list' as notifs_url %}
-          <a href="{{ my_projects_url }}"
-             class="brand-tab {% if request.path == my_projects_url %}brand-tab-active{% endif %}"
-             {% if request.path == my_projects_url %}aria-current="page"{% endif %}>
-            My Projects
-          </a>
-          <a href="{{ browse_url }}"
-             class="brand-tab {% if request.path == browse_url %}brand-tab-active{% endif %}"
-             {% if request.path == browse_url %}aria-current="page"{% endif %}>
-            Browse
-          </a>
-          <a href="{{ forms_url }}"
-             class="brand-tab {% if request.path == forms_url %}brand-tab-active{% endif %}"
-             {% if request.path == forms_url %}aria-current="page"{% endif %}>
-            Forms
-          </a>
-          <a href="{{ notifs_url }}"
-             class="brand-tab {% if request.path == notifs_url %}brand-tab-active{% endif %}"
-             {% if request.path == notifs_url %}aria-current="page"{% endif %}>
-            Notifications
+
+  <!-- ── TOP BAR ── -->
+  <header class="app-topbar" role="banner">
+    <button @click="sidebarOpen = !sidebarOpen"
+            :aria-label="sidebarOpen ? 'Close menu' : 'Open menu'"
+            class="p-1.5 rounded text-brand-navy hover:bg-brand-lighter transition-colors shrink-0">
+      <svg x-show="!sidebarOpen" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+      </svg>
+      <svg x-show="sidebarOpen" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+      </svg>
+    </button>
+
+    <a href="{% url 'projects:dashboard' %}" class="flex items-center gap-2 shrink-0" aria-label="i-CONNECTS home">
+      <img src="{% static 'img/favicon.png' %}" alt="" class="h-7 w-7" />
+      <span class="font-bold text-brand-navy text-sm">i&bull;CONNECTS</span>
+    </a>
+  </header>
+
+  <!-- ── MOBILE OVERLAY ── -->
+  <div x-cloak x-show="sidebarOpen && mobile"
+       x-transition:enter="transition-opacity ease-out duration-250"
+       x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+       x-transition:leave="transition-opacity ease-in duration-200"
+       x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+       @click="sidebarOpen = false"
+       style="position:fixed;inset:0;top:3.5rem;z-index:39;background:rgba(0,0,0,0.3);"
+       aria-hidden="true"></div>
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="app-sidebar"
+         :class="{ 'open': sidebarOpen, 'sidebar-ready': sidebarReady }"
+         aria-label="Sidebar navigation">
+    <nav class="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1" aria-label="Primary">
+      <a href="{% url 'projects:dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>
+        Dashboard
+      </a>
+      <a href="{% url 'projects:my_list' %}" class="sidebar-link {% if request.resolver_match.url_name == 'my_list' %}active{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" /></svg>
+        My projects
+      </a>
+      <a href="{% url 'projects:list' %}" class="sidebar-link {% if request.resolver_match.url_name == 'list' %}active{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 15.803 7.5 7.5 0 0 0 15.803 15.803Z" /></svg>
+        Public projects
+      </a>
+      <a href="{% url 'forms_builder:form_list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'forms_builder' %}active{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" /></svg>
+        Forms
+      </a>
+      <a href="{% url 'notifications:list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'notifications' %}active{% endif %}">
+        <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9a6 6 0 1 0-12 0v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" /></svg>
+          <span hx-get="{% url 'notifications:badge' %}" hx-trigger="load, every 60s" hx-swap="innerHTML" class="absolute -top-1 -right-1 text-[10px] leading-none pointer-events-none"></span>
+        </span>
+        Notifications
+      </a>
+      <a href="{% url 'audit:my_activity' %}" class="sidebar-link {% if request.resolver_match.url_name == 'my_activity' %}active{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" /></svg>
+        My activity
+      </a>
+      {% if user.role == 'ADMIN' %}
+      <a href="{% url 'core:admin_console' %}" class="sidebar-link {% if request.resolver_match.url_name == 'admin_console' %}active{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+        Admin console
+      </a>
+      {% endif %}
+    </nav>
+
+    <!-- User section with dropdown menu -->
+    <div class="border-t border-brand-light/60 px-3 py-3 shrink-0 relative">
+      <!-- Dropdown menu (opens upward) -->
+      <div x-cloak x-show="userMenuOpen"
+           x-transition:enter="transition ease-out duration-150"
+           x-transition:enter-start="opacity-0 translate-y-1"
+           x-transition:enter-end="opacity-100 translate-y-0"
+           x-transition:leave="transition ease-in duration-100"
+           x-transition:leave-start="opacity-100 translate-y-0"
+           x-transition:leave-end="opacity-0 translate-y-1"
+           @click.outside="userMenuOpen = false"
+           class="absolute bottom-full left-3 right-3 mb-2 bg-white rounded-lg shadow-lg border border-brand-light/60 overflow-hidden z-50">
+        <a href="{% url 'accounts:profile' %}"
+           class="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-navy hover:bg-brand-lighter transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+          My profile
+        </a>
+        <div class="border-t border-brand-light/60"></div>
+        <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}
+          <button type="submit"
+                  class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-brand-text/60 hover:text-brand-coral hover:bg-brand-lighter transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" /></svg>
+            Sign out
+          </button>
+        </form>
+      </div>
+
+      <!-- Trigger button -->
+      <button @click="userMenuOpen = !userMenuOpen"
+              class="flex items-center gap-2 w-full px-2 py-2 rounded-md hover:bg-brand-lighter transition-colors text-left">
+        <div class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">{{ user.name|default:user.email|slice:":1"|upper }}</div>
+        <span class="text-sm font-medium text-brand-navy truncate flex-1">{{ user.name|default:user.email }}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+             class="w-3.5 h-3.5 shrink-0 text-brand-text/40 transition-transform"
+             :class="userMenuOpen ? 'rotate-180' : ''">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+        </svg>
+      </button>
+    </div>
+  </aside>
+
+  {% endif %}<!-- end authenticated chrome -->
+
+  <!-- ── MAIN CONTENT ── -->
+  <div class="{% if user.is_authenticated %}app-main-authenticated{% endif %} flex flex-col min-h-screen w-full"
+       {% if user.is_authenticated %}:class="{ 'sidebar-open': sidebarOpen, 'sidebar-ready': sidebarReady }"{% endif %}>
+
+    <!-- Anonymous top bar -->
+    {% if not user.is_authenticated %}
+      <header class="navbar bg-brand-light border-b border-brand-light sticky top-0 z-30 px-4 sm:px-6 lg:px-8" role="banner">
+        <div class="flex-1">
+          <a href="{% url 'core:home' %}" class="flex items-center gap-2" aria-label="i-CONNECTS home">
+            <img src="{% static 'img/iconnects-logo.png' %}" alt="" class="h-9 w-auto" />
+            <span class="sr-only">i&bull;CONNECTS</span>
           </a>
         </div>
-      </nav>
-    {% endblock %}
-  {% endif %}
+        <div class="flex-none flex items-center gap-2">
+          <a href="{% url 'accounts:login' %}" class="btn btn-ghost btn-sm text-brand-navy hover:bg-brand-lighter">Sign in</a>
+          <a href="{% url 'accounts:signup' %}" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Sign up</a>
+        </div>
+      </header>
+    {% endif %}
 
-  <div class="flex flex-1">
-    {% block sidebar %}{% endblock %}
+    {# Flash messages #}
+    {% if messages %}
+      <div class="px-4 sm:px-6 lg:px-8 pt-4 space-y-2" role="status" aria-live="polite">
+        {% for message in messages %}
+          <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %} shadow-sm"
+               {% if message.tags == 'error' %}role="alert"{% endif %}>
+            <span>{{ message }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
 
     <main id="main-content" tabindex="-1" class="flex-1 min-w-0" role="main">
-      {% if messages %}
-        <div class="px-4 sm:px-6 lg:px-8 pt-4 space-y-2"
-             role="status" aria-live="polite">
-          {% for message in messages %}
-            <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %} shadow-sm"
-                 {% if message.tags == 'error' %}role="alert"{% endif %}>
-              <span>{{ message }}</span>
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-
+      {% block sidebar %}{% endblock %}
       <div class="{% block main_wrapper %}container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl{% endblock %}">
+        {% block breadcrumbs %}{% endblock %}
         {% block page_header %}{% endblock %}
         {% block content %}{% endblock %}
       </div>
     </main>
-  </div>
 
-  <footer class="border-t border-brand-light bg-base-100 mt-auto" role="contentinfo">
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-brand-text/70">
-      <div class="flex items-center gap-2">
-        <span class="font-semibold text-brand-navy">i&bull;CONNECTS</span>
-        <span>&middot;</span>
-        <span>Collaborative research platform</span>
+    {% if not user.is_authenticated %}
+    <footer class="border-t border-brand-light bg-base-100 mt-auto" role="contentinfo">
+      <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-brand-text/70">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold text-brand-navy">i&bull;CONNECTS</span>
+          <span>&middot;</span>
+          <span>Collaborative research platform</span>
+        </div>
+        <div class="flex gap-4">
+          <a href="{% url 'core:home' %}" class="hover:text-brand-coral">Home</a>
+          <a href="{% url 'projects:list' %}" class="hover:text-brand-coral">Browse projects</a>
+        </div>
       </div>
-      <div class="flex gap-4">
-        <a href="{% url 'core:home' %}" class="hover:text-brand-coral">Home</a>
-        <a href="{% url 'projects:list' %}" class="hover:text-brand-coral">Browse projects</a>
-      </div>
-    </div>
-  </footer>
+    </footer>
+    {% endif %}
+  </div><!-- end main content -->
 
   {% block extra_body %}{% endblock %}
 </body>
