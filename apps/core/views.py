@@ -20,7 +20,7 @@ def home(request):
     visitors see the marketing/landing page.
     """
     if request.user.is_authenticated:
-        return redirect("projects:my_list")
+        return redirect("projects:dashboard")
     return render(request, "core/home.html")
 
 
