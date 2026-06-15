@@ -23,7 +23,6 @@
       font-size: 0.875rem;
       font-weight: 500;
       color: rgb(31 41 99 / 0.65);
-      transition: background-color 0.15s, color 0.15s;
       white-space: nowrap;
     }
     .sidebar-link:hover { background: rgb(226 232 240 / 0.6); color: rgb(31 41 99); }
@@ -47,18 +46,18 @@
       background: #f1f5f9;
       border-right: 1px solid rgb(226 232 240 / 0.7);
       transform: translateX(-14rem);
-      transition: transform 0.25s ease;
       overflow: hidden;
     }
+    /* Transition only applied after Alpine initialises — prevents slide-in on page load */
+    .app-sidebar.sidebar-ready { transition: transform 0.25s ease; }
     .app-sidebar.open { transform: translateX(0); }
 
     /* ── Main content ── */
     .app-main-authenticated {
       padding-top: 3.5rem;
-      transition: padding-left 0.25s ease;
     }
+    .app-main-authenticated.sidebar-ready { transition: padding-left 0.25s ease; }
 
-    /* Desktop: main content shifts when sidebar is open */
     @media (min-width: 1024px) {
       .app-main-authenticated.sidebar-open { padding-left: 14rem; }
     }
@@ -77,10 +76,13 @@
           ? localStorage.getItem('sidebarOpen') !== 'false'
           : false,
         mobile: window.innerWidth < 1024,
+        sidebarReady: false,
+        userMenuOpen: false,
         init() {
           this.$watch('sidebarOpen', v => localStorage.setItem('sidebarOpen', v));
           const mq = window.matchMedia('(max-width: 1023px)');
           mq.addEventListener('change', e => { this.mobile = e.matches; if (e.matches) this.sidebarOpen = false; });
+          this.$nextTick(() => { this.sidebarReady = true; });
         }
       }"{% endif %}
       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
@@ -106,26 +108,6 @@
       <img src="{% static 'img/favicon.png' %}" alt="" class="h-7 w-7" />
       <span class="font-bold text-brand-navy text-sm">i&bull;CONNECTS</span>
     </a>
-
-    <div class="flex-1"></div>
-
-    <!-- Notification bell -->
-    <a href="{% url 'notifications:list' %}"
-       class="relative p-1.5 rounded text-brand-navy/60 hover:text-brand-navy hover:bg-brand-lighter transition-colors"
-       aria-label="Notifications">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-5 h-5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9a6 6 0 1 0-12 0v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
-      </svg>
-      <span hx-get="{% url 'notifications:badge' %}" hx-trigger="load, every 60s" hx-swap="innerHTML"
-            class="absolute top-0.5 right-0.5 text-[10px] leading-none pointer-events-none"></span>
-    </a>
-
-    <!-- User avatar -->
-    <a href="{% url 'accounts:profile' %}"
-       class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0 hover:opacity-80 transition-opacity"
-       aria-label="My profile">
-      {{ user.name|default:user.email|slice:":1"|upper }}
-    </a>
   </header>
 
   <!-- ── MOBILE OVERLAY ── -->
@@ -139,7 +121,9 @@
        aria-hidden="true"></div>
 
   <!-- ── SIDEBAR ── -->
-  <aside class="app-sidebar" :class="{ 'open': sidebarOpen }" aria-label="Sidebar navigation">
+  <aside class="app-sidebar"
+         :class="{ 'open': sidebarOpen, 'sidebar-ready': sidebarReady }"
+         aria-label="Sidebar navigation">
     <nav class="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1" aria-label="Primary">
       <a href="{% url 'projects:dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>
@@ -157,16 +141,16 @@
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" /></svg>
         Forms
       </a>
-
-      <div class="my-2 border-t border-brand-light/60"></div>
-
+      <a href="{% url 'notifications:list' %}" class="sidebar-link {% if request.resolver_match.app_name == 'notifications' %}active{% endif %}">
+        <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9a6 6 0 1 0-12 0v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" /></svg>
+          <span hx-get="{% url 'notifications:badge' %}" hx-trigger="load, every 60s" hx-swap="innerHTML" class="absolute -top-1 -right-1 text-[10px] leading-none pointer-events-none"></span>
+        </span>
+        Notifications
+      </a>
       <a href="{% url 'audit:my_activity' %}" class="sidebar-link {% if request.resolver_match.url_name == 'my_activity' %}active{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" /></svg>
         My activity
-      </a>
-      <a href="{% url 'accounts:profile' %}" class="sidebar-link {% if request.resolver_match.url_name == 'profile' %}active{% endif %}">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
-        My profile
       </a>
       {% if user.role == 'ADMIN' %}
       <a href="{% url 'core:admin_console' %}" class="sidebar-link {% if request.resolver_match.url_name == 'admin_console' %}active{% endif %}">
@@ -176,15 +160,44 @@
       {% endif %}
     </nav>
 
-    <!-- User section -->
-    <div class="border-t border-brand-light/60 px-3 py-3 shrink-0">
-      <a href="{% url 'accounts:profile' %}" class="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-brand-lighter transition-colors w-full">
+    <!-- User section with dropdown menu -->
+    <div class="border-t border-brand-light/60 px-3 py-3 shrink-0 relative">
+      <!-- Dropdown menu (opens upward) -->
+      <div x-cloak x-show="userMenuOpen"
+           x-transition:enter="transition ease-out duration-150"
+           x-transition:enter-start="opacity-0 translate-y-1"
+           x-transition:enter-end="opacity-100 translate-y-0"
+           x-transition:leave="transition ease-in duration-100"
+           x-transition:leave-start="opacity-100 translate-y-0"
+           x-transition:leave-end="opacity-0 translate-y-1"
+           @click.outside="userMenuOpen = false"
+           class="absolute bottom-full left-3 right-3 mb-2 bg-white rounded-lg shadow-lg border border-brand-light/60 overflow-hidden z-50">
+        <a href="{% url 'accounts:profile' %}"
+           class="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-navy hover:bg-brand-lighter transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+          My profile
+        </a>
+        <div class="border-t border-brand-light/60"></div>
+        <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}
+          <button type="submit"
+                  class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-brand-text/60 hover:text-brand-coral hover:bg-brand-lighter transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" /></svg>
+            Sign out
+          </button>
+        </form>
+      </div>
+
+      <!-- Trigger button -->
+      <button @click="userMenuOpen = !userMenuOpen"
+              class="flex items-center gap-2 w-full px-2 py-2 rounded-md hover:bg-brand-lighter transition-colors text-left">
         <div class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">{{ user.name|default:user.email|slice:":1"|upper }}</div>
-        <span class="text-sm font-medium text-brand-navy truncate">{{ user.name|default:user.email }}</span>
-      </a>
-      <form method="post" action="{% url 'accounts:logout' %}" class="mt-1 px-2">{% csrf_token %}
-        <button type="submit" class="w-full text-left text-xs text-brand-text/50 hover:text-brand-coral transition-colors py-1">Sign out</button>
-      </form>
+        <span class="text-sm font-medium text-brand-navy truncate flex-1">{{ user.name|default:user.email }}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+             class="w-3.5 h-3.5 shrink-0 text-brand-text/40 transition-transform"
+             :class="userMenuOpen ? 'rotate-180' : ''">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+        </svg>
+      </button>
     </div>
   </aside>
 
@@ -192,7 +205,7 @@
 
   <!-- ── MAIN CONTENT ── -->
   <div class="{% if user.is_authenticated %}app-main-authenticated{% endif %} flex flex-col min-h-screen w-full"
-       {% if user.is_authenticated %}:class="{ 'sidebar-open': sidebarOpen }"{% endif %}>
+       {% if user.is_authenticated %}:class="{ 'sidebar-open': sidebarOpen, 'sidebar-ready': sidebarReady }"{% endif %}>
 
     <!-- Anonymous top bar -->
     {% if not user.is_authenticated %}
