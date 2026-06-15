@@ -116,15 +116,32 @@ class MyProjectListView(LoginRequiredMixin, ListView):
     model = Project
     template_name = "projects/my_list.html"
     context_object_name = "projects"
-    paginate_by = 24
+    paginate_by = 12
+
+    _SORT_MAP = {
+        "newest": "-created_at",
+        "oldest": "created_at",
+        "name_asc": "name",
+        "name_desc": "-name",
+    }
+    _VALID_PER_PAGE = {6, 12, 24, 48}
+
+    def get_paginate_by(self, queryset):
+        try:
+            per_page = int(self.request.GET.get("per_page", self.paginate_by))
+        except (TypeError, ValueError):
+            per_page = self.paginate_by
+        return per_page if per_page in self._VALID_PER_PAGE else self.paginate_by
 
     def get_queryset(self):
         user = self.request.user
-        return (
-            Project.objects.filter(privileges__user=user)
-            .distinct()
-            .order_by("-created_at")
-        )
+        qs = Project.objects.filter(privileges__user=user).distinct()
+        status = self.request.GET.get("status", "")
+        if status:
+            qs = qs.filter(status=status)
+        sort = self.request.GET.get("sort", "newest")
+        order = self._SORT_MAP.get(sort, "-created_at")
+        return qs.order_by(order)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -138,6 +155,17 @@ class MyProjectListView(LoginRequiredMixin, ListView):
             {"project": p, "privilege": privs_map.get(p.id)}
             for p in context["projects"]
         ]
+
+        # Filter / sort context
+        context["current_sort"] = self.request.GET.get("sort", "newest")
+        context["current_status"] = self.request.GET.get("status", "")
+        context["current_per_page"] = self.get_paginate_by(self.get_queryset())
+        context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
+        from apps.core.enums import ProjectStatus
+        context["project_statuses"] = ProjectStatus.choices
+        params = self.request.GET.copy()
+        params.pop("page", None)
+        context["filter_params"] = params.urlencode()
 
         # --- Dashboard widgets (Ultra Plan §A3) ---------------------------
         # Late-import to keep the projects app free of a hard task dep.
