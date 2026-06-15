@@ -49,7 +49,7 @@
   {% if user.is_authenticated %}
 
   <!-- ── DESKTOP SIDEBAR: truly fixed, never affected by page height ── -->
-  <aside class="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col lg:w-56 bg-brand-light border-r border-brand-light/70 z-40"
+  <aside class="hidden lg:flex flex-col fixed inset-y-0 left-0 w-56 bg-brand-light border-r border-brand-light/70 z-40"
          aria-label="Sidebar navigation">
     <div class="flex items-center gap-2 px-4 pt-6 pb-4 border-b border-brand-light/60 shrink-0">
       <a href="{% url 'projects:dashboard' %}" aria-label="i-CONNECTS home">
