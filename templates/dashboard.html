@@ -11,19 +11,19 @@
 
 {# ── Stats bar ─────────────────────────────────────────────────────────────── #}
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-  <div class="brand-card p-4 flex flex-col gap-1">
+  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" data-tooltip="Total projects you belong to">
     <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
     <span class="text-3xl font-bold text-brand-navy">{{ project_count }}</span>
   </div>
-  <div class="brand-card p-4 flex flex-col gap-1">
+  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" data-tooltip="Tasks currently assigned to you">
     <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
     <span class="text-3xl font-bold text-brand-navy">{{ active_task_count }}</span>
   </div>
-  <div class="brand-card p-4 flex flex-col gap-1 {% if overdue_count %}border-l-4 border-error{% endif %}">
+  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if overdue_count %}border-l-4 border-error{% endif %}" data-tooltip="Tasks past their deadline">
     <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
     <span class="text-3xl font-bold {% if overdue_count %}text-error{% else %}text-brand-navy{% endif %}">{{ overdue_count }}</span>
   </div>
-  <div class="brand-card p-4 flex flex-col gap-1 {% if pending_count %}border-l-4 border-warning{% endif %}">
+  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if pending_count %}border-l-4 border-warning{% endif %}" data-tooltip="Task completions awaiting your approval">
     <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Pending approvals</span>
     <span class="text-3xl font-bold {% if pending_count %}text-warning{% else %}text-brand-navy{% endif %}">{{ pending_count }}</span>
   </div>
@@ -62,8 +62,8 @@
                 hx-post="{% url 'tasks:complete' pk=task.pk %}"
                 hx-target="closest li" hx-swap="outerHTML">
             {% csrf_token %}
-            <button type="submit" title="Mark my part done"
-                    class="btn btn-xs btn-ghost text-brand-text/50 hover:text-success shrink-0">
+            <button type="submit"
+                    class="btn btn-xs btn-ghost text-brand-text/50 hover:text-success shrink-0 has-tooltip" data-tooltip="Mark my part done">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                    stroke-width="2" stroke="currentColor" class="w-4 h-4">
                 <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
@@ -183,8 +183,8 @@
                     hx-target="#log-{{ log.pk }}" hx-swap="outerHTML">
                 {% csrf_token %}
                 <input type="hidden" name="approved" value="true">
-                <button type="submit" title="Approve"
-                        class="btn btn-xs bg-success/10 text-success hover:bg-success hover:text-white border-0">
+                <button type="submit"
+                        class="btn btn-xs bg-success/10 text-success hover:bg-success hover:text-white border-0 has-tooltip" data-tooltip="Approve completion">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                        stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
@@ -197,8 +197,8 @@
                     hx-target="#log-{{ log.pk }}" hx-swap="outerHTML">
                 {% csrf_token %}
                 <input type="hidden" name="approved" value="false">
-                <button type="submit" title="Decline"
-                        class="btn btn-xs bg-error/10 text-error hover:bg-error hover:text-white border-0">
+                <button type="submit"
+                        class="btn btn-xs bg-error/10 text-error hover:bg-error hover:text-white border-0 has-tooltip" data-tooltip="Decline completion">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                        stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -290,7 +290,7 @@
       <h2 id="quick-links-heading" class="section-heading mb-4">Quick links</h2>
       <nav class="flex flex-col gap-2">
         <a href="{% url 'projects:create' %}"
-           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors">
+           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors has-tooltip" data-tooltip="Start a new project">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -298,7 +298,7 @@
           New project
         </a>
         <a href="{% url 'projects:list' %}"
-           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors">
+           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors has-tooltip" data-tooltip="Discover projects open to the public">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
             <path stroke-linecap="round" stroke-linejoin="round"
@@ -307,7 +307,7 @@
           Browse public projects
         </a>
         <a href="{% url 'projects:my_invitations' %}"
-           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors">
+           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors has-tooltip" data-tooltip="Projects you've been invited to join">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
             <path stroke-linecap="round" stroke-linejoin="round"
@@ -316,7 +316,7 @@
           Invitations
         </a>
         <a href="{% url 'projects:my_join_requests' %}"
-           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors">
+           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors has-tooltip" data-tooltip="Track requests you've submitted to join projects">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
             <path stroke-linecap="round" stroke-linejoin="round"
@@ -325,7 +325,7 @@
           My join requests
         </a>
         <a href="{% url 'audit:my_activity' %}"
-           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors">
+           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors has-tooltip" data-tooltip="View a log of your recent actions">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
             <path stroke-linecap="round" stroke-linejoin="round"
@@ -346,6 +346,49 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: rgb(var(--color-brand-navy, 31 41 99) / 0.8);
+  }
+
+  .has-tooltip {
+    position: relative;
+  }
+  .has-tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    color: #f8fafc;
+    font-size: 0.7rem;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+    line-height: 1.4;
+    padding: 4px 9px;
+    border-radius: 5px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 50;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
+  }
+  .has-tooltip::before {
+    content: "";
+    position: absolute;
+    bottom: calc(100% + 1px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1e293b;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 50;
+  }
+  .has-tooltip:hover::after,
+  .has-tooltip:hover::before {
+    opacity: 1;
   }
 </style>
 
