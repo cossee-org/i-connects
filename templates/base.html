@@ -38,7 +38,7 @@
         <span class="sr-only">i&bull;CONNECTS</span>
       </a>
       {% if user.is_authenticated %}
-        <nav class="hidden sm:flex items-center gap-1 text-sm">
+        <nav class="hidden sm:flex items-center gap-1 text-sm" aria-label="Primary">
           <a href="{% url 'projects:dashboard' %}"
              class="px-3 py-1.5 rounded-md font-medium text-brand-navy/70 hover:text-brand-navy hover:bg-brand-lighter transition-colors {% if request.resolver_match.url_name == 'dashboard' %}bg-brand-lighter text-brand-navy{% endif %}">
             Dashboard
@@ -50,6 +50,10 @@
           <a href="{% url 'projects:list' %}"
              class="px-3 py-1.5 rounded-md font-medium text-brand-navy/70 hover:text-brand-navy hover:bg-brand-lighter transition-colors {% if request.resolver_match.url_name == 'list' %}bg-brand-lighter text-brand-navy{% endif %}">
             Public projects
+          </a>
+          <a href="{% url 'forms_builder:form_list' %}"
+             class="px-3 py-1.5 rounded-md font-medium text-brand-navy/70 hover:text-brand-navy hover:bg-brand-lighter transition-colors {% if request.resolver_match.app_name == 'forms_builder' %}bg-brand-lighter text-brand-navy{% endif %}">
+            Forms
           </a>
         </nav>
       {% endif %}
@@ -113,39 +117,6 @@
     </div>
   </header>
 
-  {% if user.is_authenticated %}
-    {% block brand_tabs %}
-      <nav class="bg-brand-lighter border-b border-brand-light px-4 sm:px-6 lg:px-8"
-           aria-label="Primary">
-        <div class="flex gap-6 overflow-x-auto">
-          {% url 'projects:my_list' as my_projects_url %}
-          {% url 'projects:list' as browse_url %}
-          {% url 'forms_builder:form_list' as forms_url %}
-          {% url 'notifications:list' as notifs_url %}
-          <a href="{{ my_projects_url }}"
-             class="brand-tab {% if request.path == my_projects_url %}brand-tab-active{% endif %}"
-             {% if request.path == my_projects_url %}aria-current="page"{% endif %}>
-            My Projects
-          </a>
-          <a href="{{ browse_url }}"
-             class="brand-tab {% if request.path == browse_url %}brand-tab-active{% endif %}"
-             {% if request.path == browse_url %}aria-current="page"{% endif %}>
-            Browse
-          </a>
-          <a href="{{ forms_url }}"
-             class="brand-tab {% if request.path == forms_url %}brand-tab-active{% endif %}"
-             {% if request.path == forms_url %}aria-current="page"{% endif %}>
-            Forms
-          </a>
-          <a href="{{ notifs_url }}"
-             class="brand-tab {% if request.path == notifs_url %}brand-tab-active{% endif %}"
-             {% if request.path == notifs_url %}aria-current="page"{% endif %}>
-            Notifications
-          </a>
-        </div>
-      </nav>
-    {% endblock %}
-  {% endif %}
 
   <div class="flex flex-1">
     {% block sidebar %}{% endblock %}
