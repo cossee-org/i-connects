@@ -88,7 +88,7 @@
     </div>
 
     <!-- Desktop sidebar (always visible, in normal flow) -->
-    <aside class="hidden lg:flex flex-col w-56 shrink-0 bg-brand-light border-r border-brand-light/70 sticky top-0 h-screen"
+    <aside class="hidden lg:flex flex-col w-56 shrink-0 bg-brand-light border-r border-brand-light/70"
            aria-label="Sidebar navigation">
 
       {# Logo #}
@@ -258,6 +258,7 @@
       </div>
     </main>
 
+    {% if not user.is_authenticated %}
     <footer class="border-t border-brand-light bg-base-100 mt-auto" role="contentinfo">
       <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-brand-text/70">
         <div class="flex items-center gap-2">
@@ -271,6 +272,7 @@
         </div>
       </div>
     </footer>
+    {% endif %}
   </div><!-- end main content column -->
   </div><!-- end flex min-h-screen wrapper -->
 
