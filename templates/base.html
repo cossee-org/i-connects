@@ -40,7 +40,7 @@
       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
   <a href="#main-content" class="skip-link sr-only focus:not-sr-only">Skip to main content</a>
-  <div class="brand-stripe" aria-hidden="true"></div>
+  <div class="brand-stripe fixed top-0 left-0 right-0 z-50" aria-hidden="true"></div>
 
   {% if user.is_authenticated %}
     <!-- Mobile overlay -->
