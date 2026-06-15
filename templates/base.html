@@ -31,12 +31,28 @@
 
   <header class="navbar bg-brand-light border-b border-brand-light sticky top-0 z-30 px-4 sm:px-6 lg:px-8" role="banner">
     <div class="flex-1 flex items-center gap-6 overflow-hidden">
-      <a href="{% if user.is_authenticated %}{% url 'projects:my_list' %}{% else %}{% url 'core:home' %}{% endif %}"
+      <a href="{% if user.is_authenticated %}{% url 'projects:dashboard' %}{% else %}{% url 'core:home' %}{% endif %}"
          class="flex items-center gap-2 shrink-0"
          aria-label="i-CONNECTS home">
         <img src="{% static 'img/iconnects-logo.png' %}" alt="" class="h-9 w-auto" />
         <span class="sr-only">i&bull;CONNECTS</span>
       </a>
+      {% if user.is_authenticated %}
+        <nav class="hidden sm:flex items-center gap-1 text-sm">
+          <a href="{% url 'projects:dashboard' %}"
+             class="px-3 py-1.5 rounded-md font-medium text-brand-navy/70 hover:text-brand-navy hover:bg-brand-lighter transition-colors {% if request.resolver_match.url_name == 'dashboard' %}bg-brand-lighter text-brand-navy{% endif %}">
+            Dashboard
+          </a>
+          <a href="{% url 'projects:my_list' %}"
+             class="px-3 py-1.5 rounded-md font-medium text-brand-navy/70 hover:text-brand-navy hover:bg-brand-lighter transition-colors {% if request.resolver_match.url_name == 'my_list' %}bg-brand-lighter text-brand-navy{% endif %}">
+            My projects
+          </a>
+          <a href="{% url 'projects:list' %}"
+             class="px-3 py-1.5 rounded-md font-medium text-brand-navy/70 hover:text-brand-navy hover:bg-brand-lighter transition-colors {% if request.resolver_match.url_name == 'list' %}bg-brand-lighter text-brand-navy{% endif %}">
+            Public projects
+          </a>
+        </nav>
+      {% endif %}
       {% block breadcrumbs %}{% endblock %}
     </div>
 

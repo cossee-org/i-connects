@@ -9,6 +9,8 @@ from . import views
 app_name = "projects"
 
 urlpatterns = [
+    # Dashboard
+    path("dashboard/", views.DashboardView.as_view(), name="dashboard"),
     # Project list & CRUD
     path("projects/", views.PublicProjectListView.as_view(), name="list"),
     path("projects/mine/", views.MyProjectListView.as_view(), name="my_list"),

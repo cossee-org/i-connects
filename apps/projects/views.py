@@ -63,6 +63,106 @@ from .services import (
 # ---------------------------------------------------------------------------
 
 
+class DashboardView(LoginRequiredMixin, TemplateView):
+    """Personal dashboard — active tasks, overdue, pending approvals, stats."""
+
+    template_name = "dashboard.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        from django.db.models import Count, OuterRef, Subquery, Q
+        from django.utils import timezone
+        from apps.core.enums import TaskStatus, MemberPrivileges
+        from apps.tasks.models import Task, TaskLog
+        from apps.notifications.models import Notification
+
+        now = timezone.now()
+        soon = now + timezone.timedelta(days=7)
+
+        # --- Privilege map -------------------------------------------------
+        privs = ProjectPrivilege.objects.filter(user=user).select_related("project")
+        privs_map = {p.project_id: p.privilege for p in privs}
+        pm_project_ids = [
+            pid for pid, priv in privs_map.items()
+            if priv == MemberPrivileges.PROJECT_MANAGER
+        ]
+
+        # --- Projects ------------------------------------------------------
+        user_projects = (
+            Project.objects.filter(privileges__user=user)
+            .distinct()
+            .order_by("-updated_at")
+        )
+        context["project_count"] = user_projects.count()
+        context["recent_projects"] = user_projects[:5]
+
+        # --- Task querysets ------------------------------------------------
+        user_member_qs = ProjectMember.objects.filter(users=user)
+
+        latest_log_status = Subquery(
+            TaskLog.objects.filter(
+                task=OuterRef("pk"),
+                assigned_to__in=user_member_qs,
+            )
+            .order_by("-created_at")
+            .values("status")[:1]
+        )
+
+        assigned_tasks = (
+            Task.objects.filter(
+                assigned_members__users=user,
+                status=TaskStatus.NOT_COMPLETED,
+            )
+            .annotate(_user_log_status=latest_log_status)
+            .exclude(_user_log_status=TaskStatus.COMPLETED)
+            .select_related("project", "container")
+            .order_by("deadline", "id")
+            .distinct()
+        )
+
+        all_active = list(assigned_tasks)
+        overdue = [t for t in all_active if t.deadline and t.deadline < now]
+        due_soon = [t for t in all_active if t.deadline and now <= t.deadline <= soon]
+        no_deadline = [t for t in all_active if not t.deadline]
+
+        context["overdue_tasks"] = overdue
+        context["due_soon_tasks"] = due_soon
+        context["no_deadline_tasks"] = no_deadline
+        context["active_task_count"] = len(all_active)
+        context["overdue_count"] = len(overdue)
+
+        # --- Pending approvals (PM only) -----------------------------------
+        if pm_project_ids:
+            pending_logs = list(
+                TaskLog.objects.filter(
+                    status=TaskStatus.COMPLETED,
+                    approved__isnull=True,
+                    task__project_id__in=pm_project_ids,
+                )
+                .select_related("task", "task__project", "assigned_to")
+                .order_by("-created_at")
+            )
+        else:
+            pending_logs = []
+        context["pending_logs"] = pending_logs
+        context["pending_count"] = len(pending_logs)
+        context["is_pm_anywhere"] = bool(pm_project_ids)
+
+        # --- Notifications -------------------------------------------------
+        context["recent_notifications"] = list(
+            Notification.objects.unread_for_user(user)
+            .select_related("project")
+            .order_by("-created_at")[:8]
+        )
+        context["unread_notification_count"] = (
+            Notification.objects.unread_for_user(user).count()
+        )
+
+        return context
+
+
 class PublicProjectListView(ListView):
     """Grid of public projects -- accessible to anonymous visitors."""
 
