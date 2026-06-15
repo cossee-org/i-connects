@@ -1,0 +1,37 @@
+{# One entry in the task activity feed. #}
+<div class="relative flex gap-3 pl-4">
+  <div class="absolute left-0 top-1.5 w-2 h-2 rounded-full
+    {% if activity.event == 'CREATED' %}bg-brand-navy
+    {% elif activity.event == 'MEMBER_ADDED' %}bg-brand-coral
+    {% elif activity.event == 'MEMBER_DONE' %}bg-success
+    {% elif activity.event == 'MEMBER_UNDONE' %}bg-warning
+    {% endif %}"></div>
+
+  <div class="flex-1 brand-card p-3 text-sm text-brand-text">
+    {% if activity.event == 'CREATED' %}
+      <span class="font-medium text-brand-navy">
+        {% if activity.actor %}{{ activity.actor.display_name }}{% else %}Someone{% endif %}
+      </span>
+      created this task
+    {% elif activity.event == 'MEMBER_ADDED' %}
+      <span class="font-medium text-brand-navy">
+        {% if activity.member %}{{ activity.member.display_name }}{% else %}A member{% endif %}
+      </span>
+      was added to this task
+      {% if activity.actor and activity.actor != activity.member %}
+        by <span class="font-medium text-brand-navy">{{ activity.actor.display_name }}</span>
+      {% endif %}
+    {% elif activity.event == 'MEMBER_DONE' %}
+      <span class="font-medium text-brand-navy">
+        {% if activity.member %}{{ activity.member.display_name }}{% else %}A member{% endif %}
+      </span>
+      marked their part done
+    {% elif activity.event == 'MEMBER_UNDONE' %}
+      <span class="font-medium text-brand-navy">
+        {% if activity.member %}{{ activity.member.display_name }}{% else %}A member{% endif %}
+      </span>
+      undid their completion
+    {% endif %}
+    <time class="text-xs text-brand-text/50 ml-2">{{ activity.created_at|date:"M j, Y H:i" }}</time>
+  </div>
+</div>

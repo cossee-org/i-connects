@@ -1,7 +1,7 @@
 {# Inline comment form. Submits to the comments:create HTMX endpoint. #}
 <form class="mt-3 space-y-2"
-      hx-post="{% url 'comments:create' task_pk=task.pk log_pk=task_log.pk %}"
-      hx-target="#comments-for-log-{{ task_log.pk }}"
+      hx-post="{% url 'comments:create' task_pk=task.pk %}"
+      hx-target="#task-comments"
       hx-swap="beforeend"
       hx-on::after-request="if(event.detail.successful) this.reset()">
   {% csrf_token %}

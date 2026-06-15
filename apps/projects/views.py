@@ -63,16 +63,151 @@ from .services import (
 # ---------------------------------------------------------------------------
 
 
+class DashboardView(LoginRequiredMixin, TemplateView):
+    """Personal dashboard — active tasks, overdue, pending approvals, stats."""
+
+    template_name = "dashboard.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        from django.db.models import Count, OuterRef, Subquery, Q
+        from django.utils import timezone
+        from apps.core.enums import TaskStatus, MemberPrivileges
+        from apps.tasks.models import Task, TaskLog
+        from apps.notifications.models import Notification
+
+        now = timezone.now()
+        soon = now + timezone.timedelta(days=7)
+
+        # --- Privilege map -------------------------------------------------
+        privs = ProjectPrivilege.objects.filter(user=user).select_related("project")
+        privs_map = {p.project_id: p.privilege for p in privs}
+        pm_project_ids = [
+            pid for pid, priv in privs_map.items()
+            if priv == MemberPrivileges.PROJECT_MANAGER
+        ]
+
+        # --- Projects ------------------------------------------------------
+        user_projects = (
+            Project.objects.filter(privileges__user=user)
+            .distinct()
+            .order_by("-updated_at")
+        )
+        context["project_count"] = user_projects.count()
+        context["recent_projects"] = user_projects[:5]
+
+        # --- Task querysets ------------------------------------------------
+        user_member_qs = ProjectMember.objects.filter(users=user)
+
+        latest_log_status = Subquery(
+            TaskLog.objects.filter(
+                task=OuterRef("pk"),
+                assigned_to__in=user_member_qs,
+            )
+            .order_by("-created_at")
+            .values("status")[:1]
+        )
+
+        assigned_tasks = (
+            Task.objects.filter(
+                assigned_members__users=user,
+                status=TaskStatus.NOT_COMPLETED,
+            )
+            .annotate(_user_log_status=latest_log_status)
+            .exclude(_user_log_status=TaskStatus.COMPLETED)
+            .select_related("project", "container")
+            .order_by("deadline", "id")
+            .distinct()
+        )
+
+        all_active = list(assigned_tasks)
+        overdue = [t for t in all_active if t.deadline and t.deadline < now]
+        due_soon = [t for t in all_active if t.deadline and now <= t.deadline <= soon]
+        no_deadline = [t for t in all_active if not t.deadline]
+
+        context["overdue_tasks"] = overdue
+        context["due_soon_tasks"] = due_soon
+        context["no_deadline_tasks"] = no_deadline
+        context["active_task_count"] = len(all_active)
+        context["overdue_count"] = len(overdue)
+
+        # --- Pending approvals (PM only) -----------------------------------
+        if pm_project_ids:
+            pending_logs = list(
+                TaskLog.objects.filter(
+                    status=TaskStatus.COMPLETED,
+                    approved__isnull=True,
+                    task__project_id__in=pm_project_ids,
+                )
+                .select_related("task", "task__project", "assigned_to")
+                .order_by("-created_at")
+            )
+        else:
+            pending_logs = []
+        context["pending_logs"] = pending_logs
+        context["pending_count"] = len(pending_logs)
+        context["is_pm_anywhere"] = bool(pm_project_ids)
+
+        # --- Notifications -------------------------------------------------
+        context["recent_notifications"] = list(
+            Notification.objects.unread_for_user(user)
+            .select_related("project")
+            .order_by("-created_at")[:8]
+        )
+        context["unread_notification_count"] = (
+            Notification.objects.unread_for_user(user).count()
+        )
+
+        return context
+
+
 class PublicProjectListView(ListView):
     """Grid of public projects -- accessible to anonymous visitors."""
 
     model = Project
     template_name = "projects/list.html"
     context_object_name = "projects"
-    paginate_by = 24
+    paginate_by = 12
+
+    _SORT_MAP = {
+        "newest": "-created_at",
+        "oldest": "created_at",
+        "name_asc": "name",
+        "name_desc": "-name",
+    }
+    _VALID_PER_PAGE = {6, 12, 24, 48}
+
+    def get_paginate_by(self, queryset):
+        try:
+            per_page = int(self.request.GET.get("per_page", self.paginate_by))
+        except (TypeError, ValueError):
+            per_page = self.paginate_by
+        return per_page if per_page in self._VALID_PER_PAGE else self.paginate_by
 
     def get_queryset(self):
-        return Project.objects.filter(is_public=True).order_by("-created_at")
+        qs = Project.objects.filter(is_public=True)
+        status = self.request.GET.get("status", "")
+        if status:
+            qs = qs.filter(status=status)
+        sort = self.request.GET.get("sort", "newest")
+        order = self._SORT_MAP.get(sort, "-created_at")
+        return qs.order_by(order)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["current_sort"] = self.request.GET.get("sort", "newest")
+        context["current_status"] = self.request.GET.get("status", "")
+        context["current_per_page"] = self.get_paginate_by(self.get_queryset())
+        context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
+        from apps.core.enums import ProjectStatus
+        context["project_statuses"] = ProjectStatus.choices
+        # Build a query string without 'page' for pagination links that preserve filters
+        params = self.request.GET.copy()
+        params.pop("page", None)
+        context["filter_params"] = params.urlencode()
+        return context
 
 
 class MyProjectListView(LoginRequiredMixin, ListView):
@@ -81,15 +216,32 @@ class MyProjectListView(LoginRequiredMixin, ListView):
     model = Project
     template_name = "projects/my_list.html"
     context_object_name = "projects"
-    paginate_by = 24
+    paginate_by = 12
+
+    _SORT_MAP = {
+        "newest": "-created_at",
+        "oldest": "created_at",
+        "name_asc": "name",
+        "name_desc": "-name",
+    }
+    _VALID_PER_PAGE = {6, 12, 24, 48}
+
+    def get_paginate_by(self, queryset):
+        try:
+            per_page = int(self.request.GET.get("per_page", self.paginate_by))
+        except (TypeError, ValueError):
+            per_page = self.paginate_by
+        return per_page if per_page in self._VALID_PER_PAGE else self.paginate_by
 
     def get_queryset(self):
         user = self.request.user
-        return (
-            Project.objects.filter(privileges__user=user)
-            .distinct()
-            .order_by("-created_at")
-        )
+        qs = Project.objects.filter(privileges__user=user).distinct()
+        status = self.request.GET.get("status", "")
+        if status:
+            qs = qs.filter(status=status)
+        sort = self.request.GET.get("sort", "newest")
+        order = self._SORT_MAP.get(sort, "-created_at")
+        return qs.order_by(order)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -104,20 +256,51 @@ class MyProjectListView(LoginRequiredMixin, ListView):
             for p in context["projects"]
         ]
 
+        # Filter / sort context
+        context["current_sort"] = self.request.GET.get("sort", "newest")
+        context["current_status"] = self.request.GET.get("status", "")
+        context["current_per_page"] = self.get_paginate_by(self.get_queryset())
+        context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
+        from apps.core.enums import ProjectStatus
+        context["project_statuses"] = ProjectStatus.choices
+        params = self.request.GET.copy()
+        params.pop("page", None)
+        context["filter_params"] = params.urlencode()
+
         # --- Dashboard widgets (Ultra Plan §A3) ---------------------------
         # Late-import to keep the projects app free of a hard task dep.
+        from django.db.models import OuterRef, Subquery
         from apps.core.enums import TaskStatus
         from apps.tasks.models import Task, TaskLog
 
-        context["my_active_tasks"] = (
+        user_member_qs = ProjectMember.objects.filter(users=user)
+
+        # Subquery: status of the user's most-recent log for each task.
+        # If it's COMPLETED the user already marked their part done, so the
+        # task should not appear in "active" even though Task.status is still
+        # NOT_COMPLETED (it stays that way until a PM closes it).
+        latest_log_status = Subquery(
+            TaskLog.objects.filter(
+                task=OuterRef("pk"),
+                assigned_to__in=user_member_qs,
+            )
+            .order_by("-created_at")
+            .values("status")[:1]
+        )
+
+        all_active_tasks = list(
             Task.objects.filter(
                 assigned_members__users=user,
                 status=TaskStatus.NOT_COMPLETED,
             )
+            .annotate(_user_log_status=latest_log_status)
+            .exclude(_user_log_status=TaskStatus.COMPLETED)
             .select_related("project", "container")
             .order_by("deadline", "id")
-            .distinct()[:5]
+            .distinct()
         )
+        context["my_active_tasks"] = all_active_tasks[:5]
+        context["my_active_tasks_all"] = all_active_tasks
 
         # Pending approvals — only meaningful if the user is a PM somewhere.
         pm_project_ids = [
@@ -125,17 +308,20 @@ class MyProjectListView(LoginRequiredMixin, ListView):
             if priv == MemberPrivileges.PROJECT_MANAGER
         ]
         if pm_project_ids:
-            context["pending_approvals"] = (
+            all_pending_approvals = list(
                 TaskLog.objects.filter(
                     status=TaskStatus.COMPLETED,
                     approved__isnull=True,
                     task__project_id__in=pm_project_ids,
                 )
                 .select_related("task", "task__project", "assigned_to")
-                .order_by("-created_at")[:5]
+                .order_by("-created_at")
             )
+            context["pending_approvals"] = all_pending_approvals[:5]
+            context["pending_approvals_all"] = all_pending_approvals
         else:
             context["pending_approvals"] = []
+            context["pending_approvals_all"] = []
 
         return context
 
