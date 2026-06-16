@@ -64,6 +64,12 @@
           <p class="text-sm text-brand-text/70 mt-3 line-clamp-2">{{ row.project.description }}</p>
         {% endif %}
 
+        {% with row.members|truncate_members as member_line %}
+          {% if member_line %}
+            <p class="text-xs text-brand-text/60 mt-2">{{ member_line }}</p>
+          {% endif %}
+        {% endwith %}
+
         <div class="mt-auto pt-3 flex items-center gap-2 flex-wrap">
           {% if row.privilege %}
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">

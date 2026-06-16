@@ -254,9 +254,33 @@ class MyProjectListView(LoginRequiredMixin, ListView):
             p.project_id: p.privilege
             for p in ProjectPrivilege.objects.filter(user=user)
         }
+
+        # Fetch all member privileges for visible projects in one query.
+        project_ids = [p.id for p in context["projects"]]
+        all_member_privs = (
+            ProjectPrivilege.objects
+            .filter(project_id__in=project_ids)
+            .select_related("user")
+            # Leads (PROJECT_MANAGER) first, then contributors
+            .order_by("project_id", "privilege")
+        )
+        members_by_project: dict[int, list] = {}
+        for mp in all_member_privs:
+            members_by_project.setdefault(mp.project_id, []).append(mp)
+        # Re-sort so PROJECT_MANAGER always comes before CONTRIBUTOR
+        pm = MemberPrivileges.PROJECT_MANAGER.value
+        for pid in members_by_project:
+            members_by_project[pid].sort(
+                key=lambda p: (0 if p.privilege == pm else 1)
+            )
+
         # Templates can't do dict lookups by variable key, so pre-zip here.
         context["project_rows"] = [
-            {"project": p, "privilege": privs_map.get(p.id)}
+            {
+                "project": p,
+                "privilege": privs_map.get(p.id),
+                "members": members_by_project.get(p.id, []),
+            }
             for p in context["projects"]
         ]
 
