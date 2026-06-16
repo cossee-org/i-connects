@@ -41,7 +41,7 @@
     <label class="text-xs font-medium text-brand-text/60 uppercase tracking-wide">Status</label>
     <select name="status" onchange="this.form.submit()"
             class="select select-sm select-bordered min-w-[180px] text-brand-text">
-      <option value="" {% if not current_status %}selected{% endif %}>All Projects</option>
+      <option value="" {% if not current_status %}selected{% endif %}>All</option>
       {% for value, label in project_statuses %}
         <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}

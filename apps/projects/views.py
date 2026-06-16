@@ -197,7 +197,7 @@ class PublicProjectListView(ListView):
         context["current_sort"] = self.request.GET.get("sort", "newest")
         context["current_status"] = self.request.GET.get("status", "")
         from apps.core.enums import ProjectStatus
-        context["project_statuses"] = ProjectStatus.choices
+        context["project_statuses"] = sorted(ProjectStatus.choices, key=lambda c: c[1])
         params = self.request.GET.copy()
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
@@ -304,7 +304,7 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         context["current_per_page"] = self.get_paginate_by(self.get_queryset())
         context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
         from apps.core.enums import ProjectStatus
-        context["project_statuses"] = ProjectStatus.choices
+        context["project_statuses"] = sorted(ProjectStatus.choices, key=lambda c: c[1])
         params = self.request.GET.copy()
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
