@@ -1,0 +1,52 @@
+{# Contribution tracking Alpine dropdown. Requires: `contribution_tracking_value` (e.g. "NONE"). #}
+{# Renders a hidden <input name="contribution_tracking"> kept in sync by Alpine. #}
+<div class="form-control w-full mb-3"
+     x-data="{
+       open: false,
+       options: [
+         {value: 'NONE',   label: 'None',                                disabled: false},
+         {value: 'CREDIT', label: 'Contributor Role Taxonomy (CRediT)', disabled: true},
+         {value: 'DKP',    label: 'Dragon Kill Points',                  disabled: true}
+       ],
+       value: '{{ contribution_tracking_value|default:"NONE" }}',
+       get selected() { return this.options.find(o => o.value === this.value) || this.options[0] },
+       pick(opt) { if (!opt.disabled) { this.value = opt.value; this.open = false; } }
+     }"
+     @keydown.escape="open = false"
+     @click.outside="open = false">
+  <div class="flex justify-between items-center gap-4 border border-gray-200 rounded-lg px-4 py-3">
+    <div>
+      <p class="label-text text-sm text-brand-navy font-medium">Choose contribution tracking</p>
+      <p class="text-xs text-brand-text/60 mt-0.5">Define how individual member contributions are attributed and tracked within this project.</p>
+    </div>
+    <input type="hidden" name="contribution_tracking" :value="value">
+    <div class="relative shrink-0">
+      <button type="button" @click="open = !open"
+              class="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+        <span x-text="selected.label"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100"
+           x-transition:enter-start="opacity-0 scale-95"
+           x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75"
+           x-transition:leave-start="opacity-100 scale-100"
+           x-transition:leave-end="opacity-0 scale-95"
+           class="absolute right-0 bottom-full mb-1 w-64 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        <template x-for="opt in options" :key="opt.value">
+          <button type="button" @click="pick(opt)"
+                  class="w-full text-left px-4 py-2 text-sm text-gray-900 transition-colors whitespace-nowrap"
+                  :class="[
+                    opt.disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50',
+                    opt.value === value ? 'font-semibold bg-gray-50' : 'font-normal'
+                  ]"
+                  :disabled="opt.disabled"
+                  x-text="opt.label"></button>
+        </template>
+      </div>
+    </div>
+  </div>
+</div>

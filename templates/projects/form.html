@@ -25,7 +25,7 @@
     {% include "_components/status_dropdown.html" with status_value=form.status.value %}
 
     {% include "_components/visibility_dropdown.html" with is_public_value=form.is_public.value %}
-    {% include "_components/credit_tracking_toggle.html" with credit_tracking_value=form.credit_tracking.value %}
+    {% include "_components/contribution_tracking_dropdown.html" with contribution_tracking_value=form.contribution_tracking.value %}
 
     <div class="flex gap-2 justify-end mt-6">
       {% if object %}

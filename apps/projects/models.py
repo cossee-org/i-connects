@@ -8,6 +8,12 @@ from django.db import models
 from apps.core.enums import JoinRequestStatus, MemberPrivileges, ProjectStatus, WidgetSize
 
 
+class ContributionTracking(models.TextChoices):
+    NONE = "NONE", "None"
+    CREDIT = "CREDIT", "Contributor Role Taxonomy (CRediT)"
+    DKP = "DKP", "Dragon Kill Points"
+
+
 class Project(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -38,7 +44,11 @@ class Project(models.Model):
         default=ProjectStatus.PLANNING,
     )
     is_public = models.BooleanField(default=True)
-    credit_tracking = models.BooleanField(default=False)
+    contribution_tracking = models.CharField(
+        max_length=32,
+        choices=ContributionTracking.choices,
+        default=ContributionTracking.NONE,
+    )
     public_summary = models.TextField(null=True, blank=True)
 
     discord_webhook_url = models.URLField(
