@@ -52,33 +52,38 @@
 </form>
 
 {% if project_rows %}
-  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  <div class="flex flex-col gap-4">
     {% for row in project_rows %}
       <a href="{% url 'projects:detail' pk=row.project.pk %}"
-         class="brand-card p-5 hover:shadow-md transition flex flex-col">
-        <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
+         class="brand-card p-5 hover:shadow-md transition flex items-start gap-6">
+        <div class="flex-1 min-w-0">
+          <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
 
-        {% if row.project.abstract %}
-          <p class="text-sm text-brand-text/70 mt-3 line-clamp-2">{{ row.project.abstract }}</p>
-        {% elif row.project.description %}
-          <p class="text-sm text-brand-text/70 mt-3 line-clamp-2">{{ row.project.description }}</p>
-        {% endif %}
-
-        {% with row.members|truncate_members as member_line %}
-          {% if member_line %}
-            <p class="text-xs text-brand-text/60 mt-2">{{ member_line }}</p>
+          {% if row.project.abstract %}
+            <p class="text-sm text-brand-text/70 mt-1.5 line-clamp-2">{{ row.project.abstract }}</p>
+          {% elif row.project.description %}
+            <p class="text-sm text-brand-text/70 mt-1.5 line-clamp-2">{{ row.project.description }}</p>
           {% endif %}
-        {% endwith %}
-
-        <div class="mt-auto pt-3 flex items-center gap-2 flex-wrap">
-          {% if row.privilege %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">
-              {{ row.privilege|privilege_label }}
-            </span>
-          {% endif %}
-          {% include "_components/status_badge.html" with status=row.project.get_status_display %}
         </div>
-        <p class="text-xs text-brand-text/40 mt-2">{{ row.project.updated_at|relative_updated }}</p>
+
+        <div class="shrink-0 flex flex-col items-end gap-2 pt-0.5">
+          {% with row.members|truncate_members as member_line %}
+            {% if member_line %}
+              <p class="text-xs text-brand-text/60 text-right">{{ member_line }}</p>
+            {% endif %}
+          {% endwith %}
+
+          <div class="flex items-center gap-2 flex-wrap justify-end">
+            {% if row.privilege %}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">
+                {{ row.privilege|privilege_label }}
+              </span>
+            {% endif %}
+            {% include "_components/status_badge.html" with status=row.project.get_status_display %}
+          </div>
+
+          <p class="text-xs text-brand-text/40">{{ row.project.updated_at|relative_updated }}</p>
+        </div>
       </a>
     {% endfor %}
   </div>
