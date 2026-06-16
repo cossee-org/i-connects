@@ -36,7 +36,7 @@ class ProjectForm(forms.ModelForm):
                     "placeholder": "comma, separated, tags",
                 }
             ),
-            "status": forms.Select(attrs={"class": "select select-sm select-bordered w-full"}),
+            "status": forms.HiddenInput(),
             "is_public": forms.HiddenInput(),
         }
 
