@@ -26,7 +26,12 @@
   {% endif %}
 
   {% include "_components/form_field.html" with field=form.name %}
-  {% include "_components/form_field.html" with field=form.description %}
+  <div x-data="{ charCount: {{ form.description.value|default:''|length }} }">
+    {% include "_components/form_field.html" with field=form.description %}
+    <p class="text-xs text-brand-text/50 -mt-2 mb-3 text-right" :class="charCount > 350 ? 'text-error' : ''">
+      <span x-text="charCount"></span> / 350
+    </p>
+  </div>
   {% include "_components/form_field.html" with field=form.keywords %}
   {% include "_components/status_dropdown.html" with status_value=form.status.value %}
   {% include "_components/visibility_dropdown.html" with is_public_value=form.is_public.value %}

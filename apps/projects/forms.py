@@ -23,12 +23,17 @@ class ProjectForm(forms.ModelForm):
             "is_public",
         ]
         labels = {
-            "name": "Title",
+            "name": "Project name",
         }
         widgets = {
             "name": forms.TextInput(attrs={"class": "input input-sm input-bordered w-full"}),
             "description": forms.Textarea(
-                attrs={"class": "textarea textarea-sm textarea-bordered w-full", "rows": 4}
+                attrs={
+                    "class": "textarea textarea-sm textarea-bordered w-full",
+                    "rows": 4,
+                    "maxlength": "350",
+                    "@input": "charCount = $event.target.value.length",
+                }
             ),
             "keywords": forms.TextInput(
                 attrs={
