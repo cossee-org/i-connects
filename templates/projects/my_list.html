@@ -55,20 +55,22 @@
   <div class="flex flex-col gap-4">
     {% for row in project_rows %}
       <a href="{% url 'projects:detail' pk=row.project.pk %}"
-         class="brand-card p-5 hover:shadow-md transition flex flex-col gap-1.5">
-        <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
+         class="brand-card p-5 hover:shadow-md transition flex items-start gap-4">
+        <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+          <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
 
-        {% with row.members|truncate_members as member_line %}
-          {% if member_line %}
-            <p class="text-xs text-brand-text/60">{{ member_line }}</p>
-          {% endif %}
-        {% endwith %}
+          {% with row.members|truncate_members as member_line %}
+            {% if member_line %}
+              <p class="text-xs text-brand-text/60">{{ member_line }}</p>
+            {% endif %}
+          {% endwith %}
 
-        <div class="flex items-center gap-2 flex-wrap">
-          {% include "_components/status_badge.html" with status=row.project.get_status_display %}
+          <p class="text-xs text-brand-text/40 mt-auto pt-2">{{ row.project.updated_at|relative_updated }}</p>
         </div>
 
-        <p class="text-xs text-brand-text/40 mt-auto pt-2">{{ row.project.updated_at|relative_updated }}</p>
+        <div class="shrink-0 pt-0.5">
+          {% include "_components/status_badge.html" with status=row.project.get_status_display %}
+        </div>
       </a>
     {% endfor %}
   </div>
