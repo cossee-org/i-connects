@@ -28,7 +28,7 @@
   {% include "_components/form_field.html" with field=form.name %}
   <div x-data="{ charCount: {{ form.description.value|default:''|length }} }">
     {% include "_components/form_field.html" with field=form.description %}
-    <p class="text-xs text-brand-text/50 -mt-2 mb-3 text-right" :class="charCount > 350 ? 'text-error' : ''">
+    <p class="text-xs text-brand-text/50 -mt-2 mb-3 text-left" :class="charCount > 350 ? 'text-error' : ''">
       <span x-text="charCount"></span> / 350
     </p>
   </div>
