@@ -7,7 +7,7 @@
   {% if user.is_authenticated %}
     <nav aria-label="Breadcrumb" class="min-w-0 hidden md:block">
       <ol class="flex items-center gap-2 text-sm text-brand-navy/80 overflow-hidden whitespace-nowrap">
-        <li class="truncate min-w-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
+        <li class="truncate min-w-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">Projects</a></li>
         <li aria-hidden="true" class="text-brand-navy/40">/</li>
         <li class="truncate min-w-0"><span aria-current="page" class="font-medium text-brand-navy truncate">{{ project.name }}</span></li>
       </ol>
@@ -21,7 +21,7 @@
       <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-1">Project</div>
       <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
       <div class="flex flex-wrap gap-2 mt-3">
-        {% include "_components/status_badge.html" with status=project.status %}
+        {% include "_components/status_badge.html" with status=project.get_status_display %}
         {% if project.is_public %}
           <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">Public</span>
         {% else %}

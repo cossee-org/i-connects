@@ -11,32 +11,29 @@
 
 {# ── Stats bar ─────────────────────────────────────────────────────────────── #}
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" data-tooltip="Total projects you belong to">
-    <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
-    <span class="text-3xl font-bold text-brand-navy">{{ project_count }}</span>
-  </div>
   <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" data-tooltip="Tasks currently assigned to you">
     <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
     <span class="text-3xl font-bold text-brand-navy">{{ active_task_count }}</span>
-  </div>
-  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if overdue_count %}border-l-4 border-error{% endif %}" data-tooltip="Tasks past their deadline">
-    <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
-    <span class="text-3xl font-bold {% if overdue_count %}text-error{% else %}text-brand-navy{% endif %}">{{ overdue_count }}</span>
   </div>
   <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if pending_count %}border-l-4 border-warning{% endif %}" data-tooltip="Task completions awaiting your approval">
     <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Pending approvals</span>
     <span class="text-3xl font-bold {% if pending_count %}text-warning{% else %}text-brand-navy{% endif %}">{{ pending_count }}</span>
   </div>
+  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if overdue_count %}border-l-4 border-error{% endif %}" data-tooltip="Tasks past their deadline">
+    <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
+    <span class="text-3xl font-bold {% if overdue_count %}text-error{% else %}text-brand-navy{% endif %}">{{ overdue_count }}</span>
+  </div>
+  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" data-tooltip="Total projects you belong to">
+    <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
+    <span class="text-3xl font-bold text-brand-navy">{{ project_count }}</span>
+  </div>
 </div>
 
-{# ── Main grid ─────────────────────────────────────────────────────────────── #}
-<div class="grid lg:grid-cols-3 gap-6">
+{# ── Main content ──────────────────────────────────────────────────────────── #}
+<div class="flex flex-col gap-6">
 
-  {# ── Left / centre column (2/3 width) ──────────────────────────────────── #}
-  <div class="lg:col-span-2 flex flex-col gap-6">
-
-    {# Overdue tasks #}
-    {% if overdue_tasks %}
+  {# Overdue tasks #}
+  {% if overdue_tasks %}
     <section class="brand-card p-5" aria-labelledby="overdue-heading">
       <h2 id="overdue-heading" class="section-heading text-error flex items-center gap-2 mb-4">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -74,7 +71,10 @@
         {% endfor %}
       </ul>
     </section>
-    {% endif %}
+  {% endif %}
+
+  {# ── Active tasks + Pending approvals side by side ──────────────────────── #}
+  <div class="grid lg:grid-cols-2 gap-6">
 
     {# Active / due-soon tasks #}
     <section class="brand-card p-5" aria-labelledby="active-tasks-heading">
@@ -215,129 +215,9 @@
     </section>
     {% endif %}
 
-  </div>{# end left/centre column #}
+  </div>{# end two-column grid #}
 
-  {# ── Right column (1/3 width) ───────────────────────────────────────────── #}
-  <div class="flex flex-col gap-6">
-
-    {# My projects #}
-    <section class="brand-card p-5" aria-labelledby="projects-heading">
-      <h2 id="projects-heading" class="section-heading flex items-center gap-2 mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" />
-        </svg>
-        My projects
-        <a href="{% url 'projects:my_list' %}" class="ml-auto text-xs text-brand-coral hover:underline font-medium normal-case tracking-normal">View all</a>
-      </h2>
-      {% if recent_projects %}
-        <ul class="divide-y divide-brand-light/60">
-          {% for project in recent_projects %}
-          <li class="py-2.5">
-            <a href="{% url 'projects:detail' pk=project.pk %}"
-               class="block hover:text-brand-coral transition-colors">
-              <span class="text-sm font-medium text-brand-navy block leading-snug">{{ project.name }}</span>
-              <span class="text-xs text-brand-text/50">{{ project.get_status_display }}</span>
-            </a>
-          </li>
-          {% endfor %}
-        </ul>
-        {% if project_count > 5 %}
-          <a href="{% url 'projects:my_list' %}" class="text-xs text-brand-coral hover:underline mt-3 inline-block">
-            +{{ project_count|add:"-5" }} more &rarr;
-          </a>
-        {% endif %}
-      {% else %}
-        <p class="text-sm text-brand-text/60 italic">No projects yet.</p>
-        <a href="{% url 'projects:create' %}" class="btn btn-sm btn-ghost mt-2 w-full">Create a project</a>
-      {% endif %}
-    </section>
-
-    {# Notifications #}
-    <section class="brand-card p-5" aria-labelledby="notifications-heading">
-      <h2 id="notifications-heading" class="section-heading flex items-center gap-2 mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9a6 6 0 1 0-12 0v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
-        </svg>
-        Unread notifications
-        {% if unread_notification_count %}<span class="ml-auto text-xs font-semibold bg-brand-coral/10 text-brand-coral px-2 py-0.5 rounded-full normal-case tracking-normal">{{ unread_notification_count }}</span>{% endif %}
-      </h2>
-      {% if recent_notifications %}
-        <ul class="divide-y divide-brand-light/60">
-          {% for notif in recent_notifications %}
-          <li class="py-2.5">
-            {% if notif.project %}
-              <a href="{% url 'projects:detail' pk=notif.project_id %}"
-                 class="text-sm text-brand-text hover:text-brand-coral leading-snug block">{{ notif.message }}</a>
-            {% else %}
-              <p class="text-sm text-brand-text leading-snug">{{ notif.message }}</p>
-            {% endif %}
-            <p class="text-xs text-brand-text/50 mt-0.5">{{ notif.created_at|date:"M j, g:i a" }}</p>
-          </li>
-          {% endfor %}
-        </ul>
-        <a href="{% url 'notifications:list' %}" class="text-xs text-brand-coral hover:underline mt-3 inline-block">All notifications &rarr;</a>
-      {% else %}
-        <p class="text-sm text-brand-text/60 italic">No unread notifications.</p>
-      {% endif %}
-    </section>
-
-    {# Quick links #}
-    <section class="brand-card p-5" aria-labelledby="quick-links-heading">
-      <h2 id="quick-links-heading" class="section-heading mb-4">Quick links</h2>
-      <nav class="flex flex-col gap-2">
-        <a href="{% url 'projects:create' %}"
-           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors has-tooltip" data-tooltip="Start a new project">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-               stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          New project
-        </a>
-        <a href="{% url 'projects:list' %}"
-           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors has-tooltip" data-tooltip="Discover projects open to the public">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-               stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-            <path stroke-linecap="round" stroke-linejoin="round"
-                  d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 15.803 7.5 7.5 0 0 0 15.803 15.803Z" />
-          </svg>
-          Browse public projects
-        </a>
-        <a href="{% url 'projects:my_invitations' %}"
-           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors has-tooltip" data-tooltip="Projects you've been invited to join">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-               stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-            <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-          </svg>
-          Invitations
-        </a>
-        <a href="{% url 'projects:my_join_requests' %}"
-           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors has-tooltip" data-tooltip="Track requests you've submitted to join projects">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-               stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-            <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-          </svg>
-          My join requests
-        </a>
-        <a href="{% url 'audit:my_activity' %}"
-           class="flex items-center gap-2 text-sm text-brand-text hover:text-brand-coral transition-colors has-tooltip" data-tooltip="View a log of your recent actions">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-               stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-            <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-          </svg>
-          My activity
-        </a>
-      </nav>
-    </section>
-
-  </div>{# end right column #}
-</div>{# end main grid #}
+</div>{# end main content #}
 
 <style>
   .section-heading {

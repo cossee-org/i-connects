@@ -19,10 +19,10 @@ class JoinRequestStatus(models.TextChoices):
 
 class ProjectStatus(models.TextChoices):
     PLANNING = "PLANNING", "Planning"
-    LOOKING_FOR_COLLABORATORS = "LOOKING_FOR_COLLABORATORS", "Looking for collaborators"
     ACTIVE = "ACTIVE", "Active"
     PAUSED = "PAUSED", "Paused"
     COMPLETED = "COMPLETED", "Completed"
+    INACTIVE = "INACTIVE", "Inactive"
 
 
 class TaskStatus(models.TextChoices):
