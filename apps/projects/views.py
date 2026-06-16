@@ -473,10 +473,22 @@ class ProjectCreateView(LoginRequiredMixin, CreateView):
     form_class = ProjectForm
     template_name = "projects/form.html"
 
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["projects/partials/create_form.html"]
+        return ["projects/form.html"]
+
     def form_valid(self, form):
         project = create_project_with_owner(
             user=self.request.user, form_data=form.cleaned_data
         )
+        if self.request.headers.get("HX-Request"):
+            import json
+            response = HttpResponse(status=204)
+            response["HX-Trigger"] = json.dumps(
+                {"project-created": {"url": reverse("projects:detail", kwargs={"pk": project.pk})}}
+            )
+            return response
         messages.success(self.request, f"Project '{project.name}' created.")
         return HttpResponseRedirect(
             reverse("projects:detail", kwargs={"pk": project.pk})
