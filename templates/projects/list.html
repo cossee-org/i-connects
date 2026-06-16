@@ -11,6 +11,7 @@
   <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy">Public projects</h1>
   {% if user.is_authenticated %}
     <div class="flex flex-wrap items-center gap-2">
+      <a href="{% url 'projects:my_list' %}" class="btn btn-sm btn-ghost">My projects</a>
       <a href="{% url 'projects:create' %}"
          class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
         New project
