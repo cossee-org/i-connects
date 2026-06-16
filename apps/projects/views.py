@@ -177,36 +177,49 @@ class PublicProjectListView(ListView):
         "name_asc": "name",
         "name_desc": "-name",
     }
-    _VALID_PER_PAGE = {6, 12, 24, 48}
-
-    def get_paginate_by(self, queryset):
-        try:
-            per_page = int(self.request.GET.get("per_page", self.paginate_by))
-        except (TypeError, ValueError):
-            per_page = self.paginate_by
-        return per_page if per_page in self._VALID_PER_PAGE else self.paginate_by
 
     def get_queryset(self):
+        from django.db.models import Q
         qs = Project.objects.filter(is_public=True)
         status = self.request.GET.get("status", "")
         if status:
             qs = qs.filter(status=status)
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q) | Q(abstract__icontains=q))
         sort = self.request.GET.get("sort", "newest")
         order = self._SORT_MAP.get(sort, "-created_at")
         return qs.order_by(order)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context["current_q"] = self.request.GET.get("q", "")
         context["current_sort"] = self.request.GET.get("sort", "newest")
         context["current_status"] = self.request.GET.get("status", "")
-        context["current_per_page"] = self.get_paginate_by(self.get_queryset())
-        context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
         from apps.core.enums import ProjectStatus
         context["project_statuses"] = ProjectStatus.choices
-        # Build a query string without 'page' for pagination links that preserve filters
         params = self.request.GET.copy()
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
+
+        # Build project_rows with member privileges for member name display
+        pm = MemberPrivileges.PROJECT_MANAGER.value
+        project_ids = [p.id for p in context["projects"]]
+        all_member_privs = (
+            ProjectPrivilege.objects
+            .filter(project_id__in=project_ids)
+            .select_related("user")
+        )
+        members_by_project: dict[int, list] = {}
+        for mp in all_member_privs:
+            members_by_project.setdefault(mp.project_id, []).append(mp)
+        for pid in members_by_project:
+            members_by_project[pid].sort(key=lambda p: (0 if p.privilege == pm else 1))
+
+        context["project_rows"] = [
+            {"project": p, "members": members_by_project.get(p.id, [])}
+            for p in context["projects"]
+        ]
         return context
 
 

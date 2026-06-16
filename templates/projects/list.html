@@ -1,41 +1,36 @@
 {% extends "base.html" %}
+{% load project_tags %}
 
 {% block title %}Public projects &mdash; i&bull;CONNECTS{% endblock %}
 
-{% block page_header %}
-  {% include "_components/page_header.html" with title="Public projects" %}
-{% endblock %}
+{% block page_header %}{% endblock %}
 
 {% block content %}
-{% if user.is_authenticated %}
-  <div class="flex flex-wrap items-center justify-end gap-2 mb-5">
-    <a href="{% url 'projects:my_list' %}" class="btn btn-sm btn-ghost">My projects</a>
-    <a href="{% url 'projects:create' %}"
-       class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-      New project
-    </a>
-  </div>
-{% endif %}
+{# ── Page header row with inline action buttons ────────────────────────────── #}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy">Public projects</h1>
+  {% if user.is_authenticated %}
+    <div class="flex flex-wrap items-center gap-2">
+      <a href="{% url 'projects:create' %}"
+         class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+        New project
+      </a>
+    </div>
+  {% endif %}
+</div>
 
-{# ── Filter / sort / per-page bar ─────────────────────────────────────────── #}
+{# ── Filter / sort bar ─────────────────────────────────────────────────────── #}
 <form method="get" class="flex flex-wrap gap-3 items-end mb-6">
-  {# Status filter #}
-  <div class="flex flex-col gap-1">
-    <label class="text-xs font-medium text-brand-text/60 uppercase tracking-wide">Status</label>
-    <select name="status" onchange="this.form.submit()"
-            class="select select-sm select-bordered min-w-[180px]">
-      <option value="" {% if not current_status %}selected{% endif %}>All Projects</option>
-      {% for value, label in project_statuses %}
-        <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
+  <div class="flex flex-col gap-1 flex-1 min-w-[200px]">
+    <label class="text-xs font-medium text-brand-text/60 uppercase tracking-wide">Search</label>
+    <input type="text" name="q" value="{{ current_q }}" placeholder="Search projects…"
+           class="input input-sm input-bordered w-full" />
   </div>
 
-  {# Sort #}
   <div class="flex flex-col gap-1">
     <label class="text-xs font-medium text-brand-text/60 uppercase tracking-wide">Sort by</label>
     <select name="sort" onchange="this.form.submit()"
-            class="select select-sm select-bordered min-w-[160px]">
+            class="select select-sm select-bordered min-w-[160px] text-brand-text">
       <option value="newest" {% if current_sort == "newest" %}selected{% endif %}>Newest first</option>
       <option value="oldest" {% if current_sort == "oldest" %}selected{% endif %}>Oldest first</option>
       <option value="name_asc" {% if current_sort == "name_asc" %}selected{% endif %}>Name A–Z</option>
@@ -43,36 +38,46 @@
     </select>
   </div>
 
-  {# Per-page #}
   <div class="flex flex-col gap-1">
-    <label class="text-xs font-medium text-brand-text/60 uppercase tracking-wide">Show</label>
-    <select name="per_page" onchange="this.form.submit()"
-            class="select select-sm select-bordered w-24">
-      {% for n in valid_per_page %}
-        <option value="{{ n }}" {% if current_per_page == n %}selected{% endif %}>{{ n }}</option>
+    <label class="text-xs font-medium text-brand-text/60 uppercase tracking-wide">Status</label>
+    <select name="status" onchange="this.form.submit()"
+            class="select select-sm select-bordered min-w-[180px] text-brand-text">
+      <option value="" {% if not current_status %}selected{% endif %}>All Projects</option>
+      {% for value, label in project_statuses %}
+        <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
   </div>
 
-  {# Hidden page reset so filters always go back to page 1 #}
   <noscript><button type="submit" class="btn btn-sm">Apply</button></noscript>
 </form>
 
-{% if projects %}
+{% if project_rows %}
   <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-    {% for project in projects %}
-      <a href="{% url 'projects:detail' pk=project.pk %}"
+    {% for row in project_rows %}
+      <a href="{% url 'projects:detail' pk=row.project.pk %}"
          class="brand-card p-5 hover:shadow-md transition flex flex-col">
-        <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ project.name }}</h2>
+        <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
 
-        {% if project.abstract %}
-          <p class="text-sm text-brand-text/70 mt-3 line-clamp-2">{{ project.abstract }}</p>
-        {% elif project.description %}
-          <p class="text-sm text-brand-text/70 mt-3 line-clamp-2">{{ project.description }}</p>
+        {% if row.project.abstract %}
+          <p class="text-sm text-brand-text/70 mt-3 line-clamp-2">{{ row.project.abstract }}</p>
+        {% elif row.project.description %}
+          <p class="text-sm text-brand-text/70 mt-3 line-clamp-2">{{ row.project.description }}</p>
         {% endif %}
 
-        <div class="mt-auto pt-3">
-          {% include "_components/status_badge.html" with status=project.get_status_display %}
+        {% with row.members|truncate_members as member_line %}
+          {% if member_line %}
+            <p class="text-xs text-brand-text/60 mt-2">{{ member_line }}</p>
+          {% endif %}
+        {% endwith %}
+
+        <div class="mt-auto pt-3 flex items-center gap-2 flex-wrap">
+          {% include "_components/status_badge.html" with status=row.project.get_status_display %}
+        </div>
+        <div class="pt-3 mt-3 border-t border-brand-light/50 flex items-center gap-2 text-xs text-brand-text/50">
+          <span>Created {{ row.project.created_at|date:"M j, Y" }}</span>
+          <span class="text-brand-text/30">&middot;</span>
+          <span>Modified {{ row.project.updated_at|date:"M j, Y" }}</span>
         </div>
       </a>
     {% endfor %}
