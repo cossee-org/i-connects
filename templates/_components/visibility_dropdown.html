@@ -8,54 +8,57 @@
      }"
      @keydown.escape="open = false"
      @click.outside="open = false">
-  <div class="label py-0.5 pb-1">
-    <span class="label-text text-sm text-brand-navy font-medium">Choose visibility</span>
-  </div>
-  <input type="hidden" name="is_public" :value="value">
-  <div class="relative w-fit">
-    <button type="button" @click="open = !open"
-            class="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
-      {# Lock icon (private) #}
-      <template x-if="!value">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0">
-          <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
+  <div class="flex justify-between items-center gap-4 py-0.5 pb-1">
+    <div>
+      <p class="label-text text-sm text-brand-navy font-medium">Choose visibility</p>
+      <p class="text-xs text-brand-text/60 mt-0.5">Public projects are discoverable by all platform users.</p>
+    </div>
+    <input type="hidden" name="is_public" :value="value">
+    <div class="relative shrink-0">
+      <button type="button" @click="open = !open"
+              class="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+        {# Lock icon (private) #}
+        <template x-if="!value">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0">
+            <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
+          </svg>
+        </template>
+        {# Globe icon (public) #}
+        <template x-if="value">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-1.5 0a6.5 6.5 0 1 0-10.947 4.79c.083-.208.17-.424.26-.646C6.362 12.637 7.565 12 9.5 12c1.48 0 2.441.741 3.024 1.503.105.138.2.28.287.422A6.479 6.479 0 0 0 16.5 10ZM10 11c-1.105 0-2-.895-2-2s.895-2 2-2 2 .895 2 2-.895 2-2 2Z" clip-rule="evenodd" />
+          </svg>
+        </template>
+        <span x-text="label"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
         </svg>
-      </template>
-      {# Globe icon (public) #}
-      <template x-if="value">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0">
-          <path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-1.5 0a6.5 6.5 0 1 0-10.947 4.79c.083-.208.17-.424.26-.646C6.362 12.637 7.565 12 9.5 12c1.48 0 2.441.741 3.024 1.503.105.138.2.28.287.422A6.479 6.479 0 0 0 16.5 10ZM10 11c-1.105 0-2-.895-2-2s.895-2 2-2 2 .895 2 2-.895 2-2 2Z" clip-rule="evenodd" />
-        </svg>
-      </template>
-      <span x-text="label"></span>
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
-        <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-      </svg>
-    </button>
-    <div x-cloak x-show="open"
-         x-transition:enter="transition ease-out duration-100"
-         x-transition:enter-start="opacity-0 scale-95"
-         x-transition:enter-end="opacity-100 scale-100"
-         x-transition:leave="transition ease-in duration-75"
-         x-transition:leave-start="opacity-100 scale-100"
-         x-transition:leave-end="opacity-0 scale-95"
-         class="absolute left-0 mt-1 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
-      <button type="button" @click="value = false; open = false"
-              class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap inline-flex items-center gap-2"
-              :class="!value ? 'font-semibold bg-gray-50' : 'font-normal'">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0">
-          <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
-        </svg>
-        Private
       </button>
-      <button type="button" @click="value = true; open = false"
-              class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap inline-flex items-center gap-2"
-              :class="value ? 'font-semibold bg-gray-50' : 'font-normal'">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0">
-          <path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-1.5 0a6.5 6.5 0 1 0-10.947 4.79c.083-.208.17-.424.26-.646C6.362 12.637 7.565 12 9.5 12c1.48 0 2.441.741 3.024 1.503.105.138.2.28.287.422A6.479 6.479 0 0 0 16.5 10ZM10 11c-1.105 0-2-.895-2-2s.895-2 2-2 2 .895 2 2-.895 2-2 2Z" clip-rule="evenodd" />
-        </svg>
-        Public
-      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100"
+           x-transition:enter-start="opacity-0 scale-95"
+           x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75"
+           x-transition:leave-start="opacity-100 scale-100"
+           x-transition:leave-end="opacity-0 scale-95"
+           class="absolute right-0 mt-1 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        <button type="button" @click="value = false; open = false"
+                class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap inline-flex items-center gap-2"
+                :class="!value ? 'font-semibold bg-gray-50' : 'font-normal'">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0">
+            <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" />
+          </svg>
+          Private
+        </button>
+        <button type="button" @click="value = true; open = false"
+                class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap inline-flex items-center gap-2"
+                :class="value ? 'font-semibold bg-gray-50' : 'font-normal'">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-1.5 0a6.5 6.5 0 1 0-10.947 4.79c.083-.208.17-.424.26-.646C6.362 12.637 7.565 12 9.5 12c1.48 0 2.441.741 3.024 1.503.105.138.2.28.287.422A6.479 6.479 0 0 0 16.5 10ZM10 11c-1.105 0-2-.895-2-2s.895-2 2-2 2 .895 2 2-.895 2-2 2Z" clip-rule="evenodd" />
+          </svg>
+          Public
+        </button>
+      </div>
     </div>
   </div>
   {% if form.is_public.errors %}
