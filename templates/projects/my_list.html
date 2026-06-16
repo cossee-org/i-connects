@@ -48,17 +48,6 @@
     </select>
   </div>
 
-  <div class="flex flex-col gap-1">
-    <label class="text-xs font-medium text-brand-text/60 uppercase tracking-wide">Show</label>
-    <select name="per_page" onchange="this.form.submit()"
-            class="select select-sm select-bordered w-24">
-      {% for n in valid_per_page %}
-        <option value="{{ n }}" {% if current_per_page == n %}selected{% endif %}>{{ n }}</option>
-      {% endfor %}
-    </select>
-  </div>
-
-  <button type="submit" class="btn btn-sm btn-ghost">Search</button>
   <noscript><button type="submit" class="btn btn-sm">Apply</button></noscript>
 </form>
 
@@ -83,9 +72,10 @@
           {% endif %}
           {% include "_components/status_badge.html" with status=row.project.get_status_display %}
         </div>
-        <div class="pt-2 mt-1 border-t border-brand-light/50 flex flex-col gap-0.5">
-          <span class="text-xs text-brand-text/50">Created {{ row.project.created_at|date:"M j, Y" }}</span>
-          <span class="text-xs text-brand-text/50">Modified {{ row.project.updated_at|date:"M j, Y" }}</span>
+        <div class="pt-3 mt-3 border-t border-brand-light/50 flex items-center gap-2 text-xs text-brand-text/50">
+          <span>Created {{ row.project.created_at|date:"M j, Y" }}</span>
+          <span class="text-brand-text/30">|</span>
+          <span>Modified {{ row.project.updated_at|date:"M j, Y" }}</span>
         </div>
       </a>
     {% endfor %}
