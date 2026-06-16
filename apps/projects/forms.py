@@ -18,7 +18,6 @@ class ProjectForm(forms.ModelForm):
         fields = [
             "name",
             "description",
-            "keywords",
             "status",
             "is_public",
         ]
@@ -35,13 +34,7 @@ class ProjectForm(forms.ModelForm):
                     "@input": "charCount = $event.target.value.length",
                 }
             ),
-            "keywords": forms.TextInput(
-                attrs={
-                    "class": "input input-sm input-bordered w-full",
-                    "placeholder": "comma, separated, tags",
-                }
-            ),
-            "status": forms.HiddenInput(),
+"status": forms.HiddenInput(),
             "is_public": forms.HiddenInput(),
         }
 

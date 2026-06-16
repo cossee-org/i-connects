@@ -32,8 +32,7 @@
       <span x-text="charCount"></span> / 350
     </p>
   </div>
-  {% include "_components/form_field.html" with field=form.keywords %}
-  {% include "_components/status_dropdown.html" with status_value=form.status.value %}
+{% include "_components/status_dropdown.html" with status_value=form.status.value %}
   {% include "_components/visibility_dropdown.html" with is_public_value=form.is_public.value %}
 
   <div class="flex gap-2 justify-end mt-6">
