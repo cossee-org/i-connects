@@ -38,7 +38,7 @@ class ProjectForm(forms.ModelForm):
                 }
             ),
             "status": forms.Select(attrs={"class": "select select-sm select-bordered w-full"}),
-            "is_public": forms.CheckboxInput(attrs={"class": "checkbox checkbox-sm"}),
+            "is_public": forms.CheckboxInput(attrs={"class": "toggle toggle-sm"}),
         }
 
 
