@@ -234,11 +234,15 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         return per_page if per_page in self._VALID_PER_PAGE else self.paginate_by
 
     def get_queryset(self):
+        from django.db.models import Q
         user = self.request.user
         qs = Project.objects.filter(privileges__user=user).distinct()
         status = self.request.GET.get("status", "")
         if status:
             qs = qs.filter(status=status)
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q) | Q(abstract__icontains=q))
         sort = self.request.GET.get("sort", "newest")
         order = self._SORT_MAP.get(sort, "-created_at")
         return qs.order_by(order)
@@ -257,6 +261,7 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         ]
 
         # Filter / sort context
+        context["current_q"] = self.request.GET.get("q", "")
         context["current_sort"] = self.request.GET.get("sort", "newest")
         context["current_status"] = self.request.GET.get("status", "")
         context["current_per_page"] = self.get_paginate_by(self.get_queryset())
