@@ -1,12 +1,19 @@
 {# Form field — wraps a Django BoundField with brand-consistent markup. #}
 {# Usage: {% include "_components/form_field.html" with field=form.email %} #}
-<div class="form-control w-full mb-4">
-  {% if field.label %}
-    <label for="{{ field.id_for_label }}" class="label pb-1">
-      <span class="label-text text-brand-navy font-medium">{{ field.label }}{% if field.field.required %} <span class="text-brand-coral" aria-hidden="true">*</span><span class="sr-only"> (required)</span>{% endif %}</span>
+<div class="form-control w-full mb-3">
+  {% if 'toggle' in field.field.widget.attrs.class %}
+    <label for="{{ field.id_for_label }}" class="label cursor-pointer justify-between py-0.5">
+      <span class="label-text text-sm text-brand-navy font-medium">{{ field.label }}{% if field.field.required %} <span class="text-brand-coral" aria-hidden="true">*</span><span class="sr-only"> (required)</span>{% endif %}</span>
+      {{ field }}
     </label>
+  {% else %}
+    {% if field.label %}
+      <label for="{{ field.id_for_label }}" class="label py-0.5 pb-1">
+        <span class="label-text text-sm text-brand-navy font-medium">{{ field.label }}{% if field.field.required %} <span class="text-brand-coral" aria-hidden="true">*</span><span class="sr-only"> (required)</span>{% endif %}</span>
+      </label>
+    {% endif %}
+    {{ field }}
   {% endif %}
-  {{ field }}
   {% if field.help_text %}
     <label class="label pt-1"><span class="label-text-alt text-brand-text/60">{{ field.help_text }}</span></label>
   {% endif %}

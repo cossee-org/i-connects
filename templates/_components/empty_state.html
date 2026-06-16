@@ -9,7 +9,16 @@
   </div>
   <h3 class="text-lg font-semibold text-brand-navy">{{ title }}</h3>
   {% if body %}<p class="text-sm text-brand-text/70 mt-1 max-w-md mx-auto">{{ body }}</p>{% endif %}
-  {% if cta_href and cta_label %}
+  {% if cta_modal and cta_label %}
+    <button type="button"
+            class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 mt-4"
+            hx-get="{% url 'projects:create' %}"
+            hx-target="#new-project-modal-body"
+            hx-swap="innerHTML"
+            onclick="document.getElementById('{{ cta_modal }}').showModal()">
+      {{ cta_label }}
+    </button>
+  {% elif cta_href and cta_label %}
     <a href="{{ cta_href }}" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 mt-4">
       {{ cta_label }}
     </a>
