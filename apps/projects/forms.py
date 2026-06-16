@@ -24,7 +24,6 @@ class ProjectForm(forms.ModelForm):
         ]
         labels = {
             "name": "Title",
-            "is_public": "Is public?",
         }
         widgets = {
             "name": forms.TextInput(attrs={"class": "input input-sm input-bordered w-full"}),
@@ -38,7 +37,7 @@ class ProjectForm(forms.ModelForm):
                 }
             ),
             "status": forms.Select(attrs={"class": "select select-sm select-bordered w-full"}),
-            "is_public": forms.CheckboxInput(attrs={"class": "toggle toggle-sm"}),
+            "is_public": forms.HiddenInput(),
         }
 
 

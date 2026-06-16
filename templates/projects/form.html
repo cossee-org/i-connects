@@ -23,7 +23,7 @@
       {% endif %}
     {% endfor %}
 
-    {% include "_components/form_field.html" with field=form.is_public %}
+    {% include "_components/visibility_dropdown.html" with is_public_value=form.is_public.value %}
 
     <div class="flex gap-2 justify-end mt-6">
       {% if object %}
