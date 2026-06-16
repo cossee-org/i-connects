@@ -14,13 +14,13 @@
      }"
      @keydown.escape="open = false"
      @click.outside="open = false">
-  <div class="flex justify-between items-center gap-4 border border-gray-200 rounded-lg px-4 py-3">
+  <div class="relative flex justify-between items-center gap-4 border border-gray-200 rounded-lg px-4 py-3">
     <div class="flex-1 min-w-0">
       <p class="label-text text-sm text-brand-navy font-medium">Choose contribution tracking</p>
       <p class="text-xs text-brand-text/60 mt-0.5">Define how individual member contributions are attributed and tracked within this project.</p>
     </div>
     <input type="hidden" name="contribution_tracking" :value="value">
-    <div class="relative shrink-0">
+    <div class="shrink-0">
       <button type="button" @click="open = !open"
               class="inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm" style="width:8rem">
         <span x-text="selected.label"></span>
