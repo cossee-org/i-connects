@@ -35,7 +35,7 @@
            x-transition:leave="transition ease-in duration-75"
            x-transition:leave-start="opacity-100 scale-100"
            x-transition:leave-end="opacity-0 scale-95"
-           class="absolute right-0 bottom-full mb-1 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+           class="absolute left-0 right-0 bottom-full mb-1 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
         <template x-for="opt in options" :key="opt.value">
           <button type="button" @click="pick(opt)"
                   class="w-full text-left px-4 py-2 text-sm text-gray-900 transition-colors whitespace-nowrap"

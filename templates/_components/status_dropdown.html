@@ -16,13 +16,13 @@
      }"
      @keydown.escape="open = false"
      @click.outside="open = false">
-  <div class="flex justify-between items-center gap-4 border border-gray-200 rounded-lg px-4 py-3">
+  <div class="relative flex justify-between items-center gap-4 border border-gray-200 rounded-lg px-4 py-3">
     <div class="flex-1 min-w-0">
       <p class="label-text text-sm text-brand-navy font-medium">Choose status</p>
       <p class="text-xs text-brand-text/60 mt-0.5">Reflects where the project currently stands in its lifecycle.</p>
     </div>
     <input type="hidden" name="status" :value="value">
-    <div class="relative shrink-0">
+    <div class="shrink-0">
       <button type="button" @click="open = !open"
               class="inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm" style="width:8rem">
         <span :class="selected.color" class="w-2 h-2 rounded-full shrink-0 inline-block"></span>
@@ -38,7 +38,7 @@
            x-transition:leave="transition ease-in duration-75"
            x-transition:leave-start="opacity-100 scale-100"
            x-transition:leave-end="opacity-0 scale-95"
-           class="absolute right-0 bottom-full mb-1 w-40 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+           class="absolute left-0 right-0 bottom-full mb-1 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
         <template x-for="opt in options" :key="opt.value">
           <button type="button" @click="pick(opt.value)"
                   class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap inline-flex items-center gap-2"
