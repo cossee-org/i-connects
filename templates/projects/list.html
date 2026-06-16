@@ -49,7 +49,7 @@
     }
   }" class="relative" @keydown.escape="open = false" @click.outside="open = false">
     <button type="button" @click="open = !open"
-            class="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-brand-navy shadow-sm">
+            class="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
       <span x-text="label"></span>
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
         <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
@@ -58,7 +58,7 @@
     <div x-cloak x-show="open"
          x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
          x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-         class="absolute left-0 mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+         class="absolute left-0 mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
       <template x-for="opt in options" :key="opt.value">
         <button type="button" @click="pick(opt.value)"
                 class="w-full text-left px-4 py-2 text-sm text-brand-navy hover:bg-gray-50 transition-colors"
@@ -85,7 +85,7 @@
     }
   }" class="relative" @keydown.escape="open = false" @click.outside="open = false">
     <button type="button" @click="open = !open"
-            class="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-brand-navy shadow-sm">
+            class="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
       <span x-text="label"></span>
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
         <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
@@ -94,7 +94,7 @@
     <div x-cloak x-show="open"
          x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
          x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-         class="absolute left-0 mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+         class="absolute left-0 mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
       <template x-for="opt in options" :key="opt.value">
         <button type="button" @click="pick(opt.value)"
                 class="w-full text-left px-4 py-2 text-sm text-brand-navy hover:bg-gray-50 transition-colors"
