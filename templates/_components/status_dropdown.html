@@ -41,7 +41,7 @@
            class="absolute left-0 right-0 bottom-full mb-1 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
         <template x-for="opt in options" :key="opt.value">
           <button type="button" @click="pick(opt.value)"
-                  class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap inline-flex items-center gap-2"
+                  class="w-full text-left px-4 py-1.5 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap inline-flex items-center gap-2"
                   :class="opt.value === value ? 'font-semibold bg-gray-50' : 'font-normal'">
             <span :class="opt.color" class="w-2 h-2 rounded-full shrink-0 inline-block"></span>
             <span x-text="opt.label"></span>

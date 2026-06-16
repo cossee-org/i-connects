@@ -38,7 +38,7 @@
            class="absolute left-0 right-0 bottom-full mb-1 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
         <template x-for="opt in options" :key="opt.value">
           <button type="button" @click="pick(opt)"
-                  class="w-full text-left px-4 py-2 text-sm text-gray-900 transition-colors whitespace-nowrap"
+                  class="w-full text-left px-4 py-1.5 text-sm text-gray-900 transition-colors whitespace-nowrap"
                   :class="[
                     opt.disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50',
                     opt.value === value ? 'font-semibold bg-gray-50' : 'font-normal'
