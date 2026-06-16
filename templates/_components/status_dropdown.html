@@ -24,7 +24,7 @@
     <input type="hidden" name="status" :value="value">
     <div class="relative shrink-0">
       <button type="button" @click="open = !open"
-              class="inline-flex items-center justify-between gap-1.5 w-32 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+              class="inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm" style="width:8rem">
         <span :class="selected.color" class="w-2 h-2 rounded-full shrink-0 inline-block"></span>
         <span x-text="selected.label"></span>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
