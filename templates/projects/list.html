@@ -59,6 +59,7 @@
       <a href="{% url 'projects:detail' pk=row.project.pk %}"
          class="brand-card p-5 hover:shadow-md transition flex flex-col">
         <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
+        <p class="text-xs text-brand-text/40 mt-1">{{ row.project.updated_at|relative_updated }}</p>
 
         {% if row.project.abstract %}
           <p class="text-sm text-brand-text/70 mt-3 line-clamp-2">{{ row.project.abstract }}</p>
@@ -74,11 +75,6 @@
 
         <div class="mt-auto pt-3 flex items-center gap-2 flex-wrap">
           {% include "_components/status_badge.html" with status=row.project.get_status_display %}
-        </div>
-        <div class="pt-3 mt-3 border-t border-brand-light/50 flex items-center gap-2 text-xs text-brand-text/50">
-          <span>Created {{ row.project.created_at|date:"M j, Y" }}</span>
-          <span class="text-brand-text/30">&middot;</span>
-          <span>Modified {{ row.project.updated_at|date:"M j, Y" }}</span>
         </div>
       </a>
     {% endfor %}
