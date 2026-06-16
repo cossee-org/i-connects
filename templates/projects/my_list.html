@@ -29,7 +29,7 @@
   <div class="flex flex-col gap-1">
     <label class="text-xs font-medium text-brand-text/60 uppercase tracking-wide">Sort by</label>
     <select name="sort" onchange="this.form.submit()"
-            class="select select-sm select-bordered min-w-[160px]">
+            class="select select-sm select-bordered min-w-[160px] text-brand-text">
       <option value="newest" {% if current_sort == "newest" %}selected{% endif %}>Newest first</option>
       <option value="oldest" {% if current_sort == "oldest" %}selected{% endif %}>Oldest first</option>
       <option value="name_asc" {% if current_sort == "name_asc" %}selected{% endif %}>Name A–Z</option>
@@ -40,7 +40,7 @@
   <div class="flex flex-col gap-1">
     <label class="text-xs font-medium text-brand-text/60 uppercase tracking-wide">Status</label>
     <select name="status" onchange="this.form.submit()"
-            class="select select-sm select-bordered min-w-[180px]">
+            class="select select-sm select-bordered min-w-[180px] text-brand-text">
       <option value="" {% if not current_status %}selected{% endif %}>All Projects</option>
       {% for value, label in project_statuses %}
         <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
@@ -74,7 +74,7 @@
         </div>
         <div class="pt-3 mt-3 border-t border-brand-light/50 flex items-center gap-2 text-xs text-brand-text/50">
           <span>Created {{ row.project.created_at|date:"M j, Y" }}</span>
-          <span class="text-brand-text/30">|</span>
+          <span class="text-brand-text/30">&middot;</span>
           <span>Modified {{ row.project.updated_at|date:"M j, Y" }}</span>
         </div>
       </a>
