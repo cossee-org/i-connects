@@ -38,6 +38,7 @@ class Project(models.Model):
         default=ProjectStatus.PLANNING,
     )
     is_public = models.BooleanField(default=True)
+    credit_tracking = models.BooleanField(default=False)
     public_summary = models.TextField(null=True, blank=True)
 
     discord_webhook_url = models.URLField(

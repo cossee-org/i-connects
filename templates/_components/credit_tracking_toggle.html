@@ -1,0 +1,14 @@
+{# CRediT tracking toggle. Requires: `credit_tracking_value` ("True"/"False"). #}
+{# Renders a hidden <input name="credit_tracking"> kept in sync by Alpine. #}
+<div class="form-control w-full mb-3"
+     x-data="{ value: {{ credit_tracking_value|default:'false'|lower }} }"
+     @keydown.escape="open = false">
+  <div class="flex justify-between items-center gap-4 border border-gray-200 rounded-lg px-4 py-3">
+    <div>
+      <p class="label-text text-sm text-brand-navy font-medium">Enable CRediT – Contributor Role Taxonomy tracking</p>
+      <p class="text-xs text-brand-text/60 mt-0.5">Track individual contributions using the CRediT taxonomy — a standardised way to attribute specific roles such as Methodology, Writing, or Data Curation to project members.</p>
+    </div>
+    <input type="hidden" name="credit_tracking" :value="value">
+    <input type="checkbox" class="toggle toggle-sm shrink-0" :checked="value" @change="value = $event.target.checked">
+  </div>
+</div>

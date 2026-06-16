@@ -20,6 +20,7 @@ class ProjectForm(forms.ModelForm):
             "description",
             "status",
             "is_public",
+            "credit_tracking",
         ]
         labels = {
             "name": "Project name",
@@ -36,6 +37,7 @@ class ProjectForm(forms.ModelForm):
             ),
 "status": forms.HiddenInput(),
             "is_public": forms.HiddenInput(),
+            "credit_tracking": forms.HiddenInput(),
         }
 
 
