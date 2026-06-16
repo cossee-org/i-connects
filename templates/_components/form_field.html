@@ -1,9 +1,9 @@
 {# Form field — wraps a Django BoundField with brand-consistent markup. #}
 {# Usage: {% include "_components/form_field.html" with field=form.email %} #}
-<div class="form-control w-full mb-4">
+<div class="form-control w-full mb-3">
   {% if field.label %}
-    <label for="{{ field.id_for_label }}" class="label pb-1">
-      <span class="label-text text-brand-navy font-medium">{{ field.label }}{% if field.field.required %} <span class="text-brand-coral" aria-hidden="true">*</span><span class="sr-only"> (required)</span>{% endif %}</span>
+    <label for="{{ field.id_for_label }}" class="label py-0.5 pb-1">
+      <span class="label-text text-sm text-brand-navy font-medium">{{ field.label }}{% if field.field.required %} <span class="text-brand-coral" aria-hidden="true">*</span><span class="sr-only"> (required)</span>{% endif %}</span>
     </label>
   {% endif %}
   {{ field }}
