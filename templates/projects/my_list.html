@@ -56,10 +56,10 @@
     <div x-cloak x-show="open"
          x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
          x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-         class="absolute left-0 mt-1 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+         class="absolute left-0 mt-1 w-auto min-w-max bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
       <template x-for="opt in options" :key="opt.value">
         <button type="button" @click="pick(opt.value)"
-                class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors"
+                class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
                 :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
                 x-text="opt.label"></button>
       </template>
