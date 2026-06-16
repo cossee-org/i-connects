@@ -15,14 +15,14 @@
      @keydown.escape="open = false"
      @click.outside="open = false">
   <div class="flex justify-between items-center gap-4 border border-gray-200 rounded-lg px-4 py-3">
-    <div>
+    <div class="flex-1 min-w-0">
       <p class="label-text text-sm text-brand-navy font-medium">Choose contribution tracking</p>
       <p class="text-xs text-brand-text/60 mt-0.5">Define how individual member contributions are attributed and tracked within this project.</p>
     </div>
     <input type="hidden" name="contribution_tracking" :value="value">
     <div class="relative shrink-0">
       <button type="button" @click="open = !open"
-              class="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+              class="inline-flex items-center justify-between gap-1.5 w-32 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
         <span x-text="selected.label"></span>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
           <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />

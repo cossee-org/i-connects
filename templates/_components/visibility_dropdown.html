@@ -9,14 +9,14 @@
      @keydown.escape="open = false"
      @click.outside="open = false">
   <div class="flex justify-between items-center gap-4 border border-gray-200 rounded-lg px-4 py-3">
-    <div>
+    <div class="flex-1 min-w-0">
       <p class="label-text text-sm text-brand-navy font-medium">Choose visibility</p>
       <p class="text-xs text-brand-text/60 mt-0.5">Public projects are discoverable by all platform users.</p>
     </div>
     <input type="hidden" name="is_public" :value="value">
     <div class="relative shrink-0">
       <button type="button" @click="open = !open"
-              class="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+              class="inline-flex items-center justify-between gap-1.5 w-32 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
         {# Lock icon (private) #}
         <template x-if="!value">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0">
