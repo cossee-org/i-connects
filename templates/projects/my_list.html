@@ -206,7 +206,7 @@
             <p class="text-xs text-brand-text/70 line-clamp-2">{{ row.project.abstract }}</p>
           {% endif %}
 
-          <div class="flex flex-col gap-6 mt-auto">
+          <div class="flex flex-col gap-6 mt-6">
             {# Avatar row — up to 5 members, side by side #}
             {% with av=row.members|member_avatars %}
               {% if av.visible %}
