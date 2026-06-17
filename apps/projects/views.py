@@ -18,6 +18,9 @@ from django.views.generic import (
     View,
 )
 
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_GET
+
 from apps.audit.services import AuditAction, log_action
 from apps.core.enums import MemberPrivileges
 
@@ -1026,3 +1029,10 @@ class MyJoinRequestsView(LoginRequiredMixin, ListView):
             .select_related("project")
             .order_by("-created_at")
         )
+
+
+@login_required
+@require_GET
+def my_projects_badge(request):
+    count = Project.objects.filter(privileges__user=request.user).distinct().count()
+    return HttpResponse(str(count) if count else "")
