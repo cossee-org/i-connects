@@ -1,9 +1,12 @@
 {% extends "base.html" %}
-{% load project_tags %}
+{% load static project_tags %}
 
 {% block title %}{{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block topbar_logo %}
+  <a href="{% url 'projects:dashboard' %}" class="shrink-0" aria-label="i-CONNECTS home">
+    <img src="{% static 'img/favicon.png' %}" alt="" class="h-7 w-7" />
+  </a>
   <nav aria-label="Breadcrumb" class="flex items-center min-w-0 overflow-hidden">
     <ol class="flex items-center gap-1.5 text-sm text-brand-navy/70 whitespace-nowrap min-w-0">
       <li class="shrink-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">Projects</a></li>
