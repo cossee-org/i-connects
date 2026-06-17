@@ -373,6 +373,9 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         context["filter_params"] = params.urlencode()
 
         total = context["paginator"].count
+        context["total_project_count"] = (
+            Project.objects.filter(privileges__user=user).distinct().count()
+        )
         context["results_summary"], _ = _build_results_summary(
             total,
             context["current_q"],
