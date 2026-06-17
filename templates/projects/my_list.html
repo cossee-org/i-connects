@@ -193,7 +193,7 @@
 {% endif %}
 
 {% if project_rows %}
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-6">
     {% for row in project_rows %}
       <a href="{% url 'projects:detail' pk=row.project.pk %}"
          class="brand-card p-5 hover:shadow-md transition flex items-start gap-4">
