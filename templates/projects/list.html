@@ -117,7 +117,10 @@
 </form>
 
 {% if results_summary %}
-  <p class="text-sm text-brand-text mb-4">{{ results_summary }}</p>
+  <div class="flex items-center gap-3 mb-4">
+    <p class="text-sm text-brand-text">{{ results_summary }}</p>
+    <a href="{% url 'projects:list' %}" class="text-sm text-brand-coral hover:underline shrink-0">Clear filters</a>
+  </div>
 {% endif %}
 
 {% if project_rows %}
