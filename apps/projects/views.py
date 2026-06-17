@@ -24,6 +24,46 @@ from django.views.decorators.http import require_GET
 from apps.audit.services import AuditAction, log_action
 from apps.core.enums import MemberPrivileges
 
+
+_SORT_LABELS = {
+    "newest": None,
+    "oldest": "oldest first",
+    "name_asc": "name A–Z",
+    "name_desc": "name Z–A",
+}
+
+_STATUS_LABELS = {
+    "PLANNING": "planning",
+    "ACTIVE": "active",
+    "PAUSED": "paused",
+    "COMPLETED": "completed",
+    "INACTIVE": "inactive",
+}
+
+
+def _build_results_summary(count, q, status, sort, visibility=None):
+    """Return a human-readable results summary string, or None if no filters active."""
+    parts = []
+    if visibility:
+        parts.append(visibility)
+    if status:
+        parts.append(_STATUS_LABELS.get(status, status.lower()))
+    if parts:
+        desc = " ".join(parts) + " projects"
+    else:
+        desc = "projects"
+    if q:
+        desc += f' matching “{q}”'
+    sort_label = _SORT_LABELS.get(sort)
+    has_filters = bool(q or status or visibility or sort_label)
+    if not has_filters:
+        return None, count
+    n = f"{count} result{'s' if count != 1 else ''}"
+    summary = f"{n} for {desc}"
+    if sort_label:
+        summary += f", sorted by {sort_label}"
+    return summary, count
+
 from apps.core.enums import JoinRequestStatus
 
 from .forms import (
@@ -208,6 +248,14 @@ class PublicProjectListView(ListView):
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
 
+        total = context["paginator"].count
+        context["results_summary"], _ = _build_results_summary(
+            total,
+            context["current_q"],
+            context["current_status"],
+            context["current_sort"],
+        )
+
         # Build project_rows with member privileges for member name display
         pm = MemberPrivileges.PROJECT_MANAGER.value
         project_ids = [p.id for p in context["projects"]]
@@ -323,6 +371,15 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         params = self.request.GET.copy()
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
+
+        total = context["paginator"].count
+        context["results_summary"], _ = _build_results_summary(
+            total,
+            context["current_q"],
+            context["current_status"],
+            context["current_sort"],
+            context["current_visibility"],
+        )
 
         # --- Dashboard widgets (Ultra Plan §A3) ---------------------------
         # Late-import to keep the projects app free of a hard task dep.
