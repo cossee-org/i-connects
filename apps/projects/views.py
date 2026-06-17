@@ -274,6 +274,7 @@ class PublicProjectListView(ListView):
             {"project": p, "members": members_by_project.get(p.id, [])}
             for p in context["projects"]
         ]
+        context["total_project_count"] = Project.objects.filter(is_public=True).count()
         return context
 
 
