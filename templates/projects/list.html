@@ -6,7 +6,10 @@
 {% block page_header %}{% endblock %}
 
 {% block content %}
-<h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy mb-6">Public projects</h1>
+<div class="flex items-center gap-3 mb-6">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy">Public projects</h1>
+  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_project_count }}</span>
+</div>
 
 {# ── Filter / sort bar ─────────────────────────────────────────────────────── #}
 <form method="get" id="filter-form-pub" class="flex flex-wrap gap-3 items-center mb-6">
@@ -150,7 +153,7 @@
             <p class="text-xs text-brand-text/70 line-clamp-2">{{ row.project.abstract }}</p>
           {% endif %}
 
-          <div class="flex flex-col gap-6 mt-auto">
+          <div class="mt-auto pt-3">
             <p class="text-xs text-brand-text/40">{{ row.project.updated_at|relative_updated }}</p>
           </div>
         </div>
