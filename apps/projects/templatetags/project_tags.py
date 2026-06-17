@@ -48,7 +48,7 @@ def truncate_members(members, char_budget=80):
 
 
 @register.filter
-def member_names(members, short_limit=2):
+def member_names(members, short_limit=3):
     """Return {'full': all names comma-separated, 'short': first short_limit names + overflow count}.
     Members should already be sorted lead-first."""
     members = list(members or [])
@@ -66,7 +66,7 @@ def member_names(members, short_limit=2):
     overflow = len(names) - len(visible)
     short = ", ".join(visible)
     if overflow:
-        short += f" and {overflow} more {'member' if overflow == 1 else 'members'}"
+        short += f" and {overflow} other {'member' if overflow == 1 else 'members'}"
 
     return {"full": full, "short": short}
 
