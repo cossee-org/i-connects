@@ -196,7 +196,7 @@
   <div class="flex flex-col gap-4">
     {% for row in project_rows %}
       <a href="{% url 'projects:detail' pk=row.project.pk %}"
-         class="brand-card p-5 hover:shadow-md transition flex items-start gap-4">
+         class="brand-card p-5 pb-12 hover:shadow-md transition relative flex items-start gap-4">
         <div class="flex-1 min-w-0 flex flex-col gap-1.5">
           <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
 
@@ -212,35 +212,7 @@
             <p class="text-xs text-brand-text/70 line-clamp-2">{{ row.project.abstract }}</p>
           {% endif %}
 
-          <div class="flex items-center justify-between mt-auto pt-3">
-            <p class="text-xs text-brand-text/40">{{ row.project.updated_at|relative_updated }}</p>
-
-            {# Avatar stack — up to 5 members, then "+N" overflow chip #}
-            {% with av=row.members|member_avatars %}
-              <div class="flex flex-row-reverse items-center">
-                {% if av.overflow %}
-                  <span class="w-7 h-7 rounded-full bg-gray-100 border-2 border-white text-gray-500 text-[10px] font-medium inline-flex items-center justify-center -ml-2 shrink-0 z-0">
-                    +{{ av.overflow }}
-                  </span>
-                {% endif %}
-                {% for mp in av.visible reversed %}
-                  {% with u=mp.user initials=u.given_name|first|upper %}
-                    {% if u.gravatar %}
-                      <img src="{{ u.gravatar }}" alt="{{ u.name }}"
-                           class="w-7 h-7 rounded-full border-2 border-white object-cover -ml-2 shrink-0 bg-gray-200"
-                           style="z-index: {{ forloop.revcounter }}">
-                    {% else %}
-                      <span class="w-7 h-7 rounded-full border-2 border-white inline-flex items-center justify-center text-[10px] font-semibold shrink-0 -ml-2 bg-brand-navy/10 text-brand-navy"
-                            title="{{ u.name|default:u.email }}"
-                            style="z-index: {{ forloop.revcounter }}">
-                        {{ u.given_name|first|upper }}{{ u.family_name|first|upper }}
-                      </span>
-                    {% endif %}
-                  {% endwith %}
-                {% endfor %}
-              </div>
-            {% endwith %}
-          </div>
+          <p class="text-xs text-brand-text/40 mt-auto pt-3">{{ row.project.updated_at|relative_updated }}</p>
         </div>
 
         <div class="shrink-0 flex items-center gap-2 pt-0.5">
@@ -251,6 +223,35 @@
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
           {% endif %}
         </div>
+
+        {# Avatar stack — absolute bottom-right, up to 5 members #}
+        {% with av=row.members|member_avatars %}
+          <div class="absolute bottom-4 right-5 flex flex-row-reverse items-center">
+            {% if av.overflow %}
+              <span class="w-7 h-7 rounded-full bg-gray-100 border-2 border-white text-gray-500 text-[10px] font-medium inline-flex items-center justify-center -ml-2 shrink-0"
+                    style="z-index: 0">
+                +{{ av.overflow }}
+              </span>
+            {% endif %}
+            {% for mp in av.visible reversed %}
+              {% with u=mp.user name=u.name|default:u.email %}
+                <span class="relative group/av -ml-2 shrink-0" style="z-index: {{ forloop.revcounter }}">
+                  {% if u.gravatar %}
+                    <img src="{{ u.gravatar }}" alt="{{ name }}"
+                         class="w-7 h-7 rounded-full border-2 border-white object-cover bg-gray-200 block">
+                  {% else %}
+                    <span class="w-7 h-7 rounded-full border-2 border-white inline-flex items-center justify-center text-[10px] font-semibold bg-brand-navy/10 text-brand-navy">
+                      {{ u.given_name|first|upper }}{{ u.family_name|first|upper }}
+                    </span>
+                  {% endif %}
+                  <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded-md bg-gray-800 px-2 py-1 text-[11px] text-white opacity-0 group-hover/av:opacity-100 transition-opacity duration-150">
+                    {{ name }}
+                  </span>
+                </span>
+              {% endwith %}
+            {% endfor %}
+          </div>
+        {% endwith %}
       </a>
     {% endfor %}
   </div>
