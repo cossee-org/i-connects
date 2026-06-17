@@ -18,8 +18,51 @@ from django.views.generic import (
     View,
 )
 
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_GET
+
 from apps.audit.services import AuditAction, log_action
 from apps.core.enums import MemberPrivileges
+
+
+_SORT_LABELS = {
+    "newest": None,
+    "oldest": "oldest first",
+    "name_asc": "name A–Z",
+    "name_desc": "name Z–A",
+}
+
+_STATUS_LABELS = {
+    "PLANNING": "planning",
+    "ACTIVE": "active",
+    "PAUSED": "paused",
+    "COMPLETED": "completed",
+    "INACTIVE": "inactive",
+}
+
+
+def _build_results_summary(count, q, status, sort, visibility=None):
+    """Return a human-readable results summary string, or None if no filters active."""
+    parts = []
+    if visibility:
+        parts.append(visibility)
+    if status:
+        parts.append(_STATUS_LABELS.get(status, status.lower()))
+    if parts:
+        desc = " ".join(parts) + " projects"
+    else:
+        desc = "projects"
+    if q:
+        desc += f' matching “{q}”'
+    sort_label = _SORT_LABELS.get(sort)
+    has_filters = bool(q or status or visibility or sort_label)
+    if not has_filters:
+        return None, count
+    n = f"{count} result{'s' if count != 1 else ''}"
+    summary = f"{n} for {desc}"
+    if sort_label:
+        summary += f", sorted by {sort_label}"
+    return summary, count
 
 from apps.core.enums import JoinRequestStatus
 
@@ -177,36 +220,60 @@ class PublicProjectListView(ListView):
         "name_asc": "name",
         "name_desc": "-name",
     }
-    _VALID_PER_PAGE = {6, 12, 24, 48}
-
-    def get_paginate_by(self, queryset):
-        try:
-            per_page = int(self.request.GET.get("per_page", self.paginate_by))
-        except (TypeError, ValueError):
-            per_page = self.paginate_by
-        return per_page if per_page in self._VALID_PER_PAGE else self.paginate_by
 
     def get_queryset(self):
+        from django.db.models import Q
         qs = Project.objects.filter(is_public=True)
         status = self.request.GET.get("status", "")
         if status:
             qs = qs.filter(status=status)
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q) | Q(abstract__icontains=q))
         sort = self.request.GET.get("sort", "newest")
         order = self._SORT_MAP.get(sort, "-created_at")
         return qs.order_by(order)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context["current_q"] = self.request.GET.get("q", "")
         context["current_sort"] = self.request.GET.get("sort", "newest")
         context["current_status"] = self.request.GET.get("status", "")
-        context["current_per_page"] = self.get_paginate_by(self.get_queryset())
-        context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
         from apps.core.enums import ProjectStatus
-        context["project_statuses"] = ProjectStatus.choices
-        # Build a query string without 'page' for pagination links that preserve filters
+        _STATUS_ORDER = ["PLANNING", "ACTIVE", "PAUSED", "COMPLETED", "INACTIVE"]
+        context["project_statuses"] = [
+            c for key in _STATUS_ORDER for c in ProjectStatus.choices if c[0] == key
+        ]
         params = self.request.GET.copy()
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
+
+        total = context["paginator"].count
+        context["results_summary"], _ = _build_results_summary(
+            total,
+            context["current_q"],
+            context["current_status"],
+            context["current_sort"],
+        )
+
+        # Build project_rows with member privileges for member name display
+        pm = MemberPrivileges.PROJECT_MANAGER.value
+        project_ids = [p.id for p in context["projects"]]
+        all_member_privs = (
+            ProjectPrivilege.objects
+            .filter(project_id__in=project_ids)
+            .select_related("user")
+        )
+        members_by_project: dict[int, list] = {}
+        for mp in all_member_privs:
+            members_by_project.setdefault(mp.project_id, []).append(mp)
+        for pid in members_by_project:
+            members_by_project[pid].sort(key=lambda p: (0 if p.privilege == pm else 1))
+
+        context["project_rows"] = [
+            {"project": p, "members": members_by_project.get(p.id, [])}
+            for p in context["projects"]
+        ]
         return context
 
 
@@ -234,11 +301,20 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         return per_page if per_page in self._VALID_PER_PAGE else self.paginate_by
 
     def get_queryset(self):
+        from django.db.models import Q
         user = self.request.user
         qs = Project.objects.filter(privileges__user=user).distinct()
         status = self.request.GET.get("status", "")
         if status:
             qs = qs.filter(status=status)
+        visibility = self.request.GET.get("visibility", "")
+        if visibility == "public":
+            qs = qs.filter(is_public=True)
+        elif visibility == "private":
+            qs = qs.filter(is_public=False)
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q) | Q(abstract__icontains=q))
         sort = self.request.GET.get("sort", "newest")
         order = self._SORT_MAP.get(sort, "-created_at")
         return qs.order_by(order)
@@ -250,22 +326,63 @@ class MyProjectListView(LoginRequiredMixin, ListView):
             p.project_id: p.privilege
             for p in ProjectPrivilege.objects.filter(user=user)
         }
+
+        # Fetch all member privileges for visible projects in one query.
+        project_ids = [p.id for p in context["projects"]]
+        all_member_privs = (
+            ProjectPrivilege.objects
+            .filter(project_id__in=project_ids)
+            .select_related("user")
+            # Leads (PROJECT_MANAGER) first, then contributors
+            .order_by("project_id", "privilege")
+        )
+        members_by_project: dict[int, list] = {}
+        for mp in all_member_privs:
+            members_by_project.setdefault(mp.project_id, []).append(mp)
+        # Re-sort so PROJECT_MANAGER always comes before CONTRIBUTOR
+        pm = MemberPrivileges.PROJECT_MANAGER.value
+        for pid in members_by_project:
+            members_by_project[pid].sort(
+                key=lambda p: (0 if p.privilege == pm else 1)
+            )
+
         # Templates can't do dict lookups by variable key, so pre-zip here.
         context["project_rows"] = [
-            {"project": p, "privilege": privs_map.get(p.id)}
+            {
+                "project": p,
+                "privilege": privs_map.get(p.id),
+                "members": members_by_project.get(p.id, []),
+            }
             for p in context["projects"]
         ]
 
         # Filter / sort context
+        context["current_q"] = self.request.GET.get("q", "")
         context["current_sort"] = self.request.GET.get("sort", "newest")
         context["current_status"] = self.request.GET.get("status", "")
+        context["current_visibility"] = self.request.GET.get("visibility", "")
         context["current_per_page"] = self.get_paginate_by(self.get_queryset())
         context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
         from apps.core.enums import ProjectStatus
-        context["project_statuses"] = ProjectStatus.choices
+        _STATUS_ORDER = ["PLANNING", "ACTIVE", "PAUSED", "COMPLETED", "INACTIVE"]
+        context["project_statuses"] = [
+            c for key in _STATUS_ORDER for c in ProjectStatus.choices if c[0] == key
+        ]
         params = self.request.GET.copy()
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
+
+        total = context["paginator"].count
+        context["total_project_count"] = (
+            Project.objects.filter(privileges__user=user).distinct().count()
+        )
+        context["results_summary"], _ = _build_results_summary(
+            total,
+            context["current_q"],
+            context["current_status"],
+            context["current_sort"],
+            context["current_visibility"],
+        )
 
         # --- Dashboard widgets (Ultra Plan §A3) ---------------------------
         # Late-import to keep the projects app free of a hard task dep.
@@ -425,10 +542,22 @@ class ProjectCreateView(LoginRequiredMixin, CreateView):
     form_class = ProjectForm
     template_name = "projects/form.html"
 
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["projects/partials/create_form.html"]
+        return ["projects/form.html"]
+
     def form_valid(self, form):
         project = create_project_with_owner(
             user=self.request.user, form_data=form.cleaned_data
         )
+        if self.request.headers.get("HX-Request"):
+            import json
+            response = HttpResponse(status=204)
+            response["HX-Trigger"] = json.dumps(
+                {"project-created": {"url": reverse("projects:detail", kwargs={"pk": project.pk})}}
+            )
+            return response
         messages.success(self.request, f"Project '{project.name}' created.")
         return HttpResponseRedirect(
             reverse("projects:detail", kwargs={"pk": project.pk})
@@ -960,3 +1089,10 @@ class MyJoinRequestsView(LoginRequiredMixin, ListView):
             .select_related("project")
             .order_by("-created_at")
         )
+
+
+@login_required
+@require_GET
+def my_projects_badge(request):
+    count = Project.objects.filter(privileges__user=request.user).distinct().count()
+    return HttpResponse(str(count) if count else "")

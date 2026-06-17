@@ -18,27 +18,26 @@ class ProjectForm(forms.ModelForm):
         fields = [
             "name",
             "description",
-            "keywords",
             "status",
             "is_public",
+            "contribution_tracking",
         ]
         labels = {
-            "name": "Title",
-            "is_public": "Is public?",
+            "name": "Project name",
         }
         widgets = {
-            "name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "name": forms.TextInput(attrs={"class": "input input-sm input-bordered w-full"}),
             "description": forms.Textarea(
-                attrs={"class": "textarea textarea-bordered w-full", "rows": 4}
-            ),
-            "keywords": forms.TextInput(
                 attrs={
-                    "class": "input input-bordered w-full",
-                    "placeholder": "comma, separated, tags",
+                    "class": "textarea textarea-sm textarea-bordered w-full",
+                    "rows": 4,
+                    "maxlength": "350",
+                    "@input": "charCount = $event.target.value.length",
                 }
             ),
-            "status": forms.Select(attrs={"class": "select select-bordered w-full"}),
-            "is_public": forms.CheckboxInput(attrs={"class": "checkbox"}),
+"status": forms.HiddenInput(),
+            "is_public": forms.HiddenInput(),
+            "contribution_tracking": forms.HiddenInput(),
         }
 
 

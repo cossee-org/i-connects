@@ -3,30 +3,27 @@
 
 {% block title %}{{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
-{% block breadcrumbs %}
-  {% if user.is_authenticated %}
-    <nav aria-label="Breadcrumb" class="min-w-0 hidden md:block">
-      <ol class="flex items-center gap-2 text-sm text-brand-navy/80 overflow-hidden whitespace-nowrap">
-        <li class="truncate min-w-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
-        <li aria-hidden="true" class="text-brand-navy/40">/</li>
-        <li class="truncate min-w-0"><span aria-current="page" class="font-medium text-brand-navy truncate">{{ project.name }}</span></li>
-      </ol>
-    </nav>
-  {% endif %}
+{% block topbar_breadcrumb %}
+  <nav aria-label="Breadcrumb" class="flex items-center min-w-0 overflow-hidden">
+    <ol class="flex items-center gap-1.5 text-sm text-brand-navy/70 whitespace-nowrap min-w-0">
+      <li class="shrink-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
+      <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
+      <li class="truncate min-w-0"><span aria-current="page" class="font-semibold text-brand-navy">{{ project.name }}</span></li>
+    </ol>
+  </nav>
 {% endblock %}
 
 {% block page_header %}
   <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
     <div>
-      <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-1">Project</div>
       <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
       <div class="flex flex-wrap gap-2 mt-3">
-        {% include "_components/status_badge.html" with status=project.status %}
         {% if project.is_public %}
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">Public</span>
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
         {% else %}
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-light/60 text-brand-text">Private</span>
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
         {% endif %}
+        {% include "_components/status_badge.html" with status=project.get_status_display %}
         {% if user_privilege %}
           <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">{{ user_privilege|privilege_label }}</span>
         {% endif %}
@@ -75,48 +72,6 @@
 {% block content %}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
   <section class="lg:col-span-2 space-y-5">
-    <div class="brand-card p-6">
-      <h2 class="text-lg font-semibold text-brand-navy mb-3">Overview</h2>
-      {% if project.abstract %}
-        <h3 class="text-sm font-semibold text-brand-navy/80 mt-2">Abstract</h3>
-        <p class="whitespace-pre-line text-brand-text mt-1">{{ project.abstract }}</p>
-      {% endif %}
-      {% if project.description %}
-        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Description</h3>
-        <div class="mt-1" id="proj-desc-wrapper">
-          <p class="whitespace-pre-line text-brand-text line-clamp-3" id="proj-desc-text">{{ project.description }}</p>
-          <button type="button"
-                  id="proj-desc-toggle"
-                  class="text-brand-coral hover:underline text-sm mt-1 hidden"
-                  onclick="(function(){
-                    var p = document.getElementById('proj-desc-text');
-                    var btn = document.getElementById('proj-desc-toggle');
-                    if (p.classList.contains('line-clamp-3')) {
-                      p.classList.remove('line-clamp-3');
-                      btn.textContent = 'Show less';
-                    } else {
-                      p.classList.add('line-clamp-3');
-                      btn.textContent = 'Read more';
-                    }
-                  })()">Read more</button>
-        </div>
-        <script>
-          (function () {
-            var p = document.getElementById('proj-desc-text');
-            var btn = document.getElementById('proj-desc-toggle');
-            if (p.scrollHeight > p.clientHeight) { btn.classList.remove('hidden'); }
-          })();
-        </script>
-      {% endif %}
-      {% if project.keywords %}
-        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Keywords</h3>
-        <p class="text-sm text-brand-text/80 mt-1">{{ project.keywords }}</p>
-      {% endif %}
-      {% if not project.abstract and not project.description and not project.keywords %}
-        <p class="text-sm text-brand-text/60">No description yet.</p>
-      {% endif %}
-    </div>
-
     {% if user_privilege %}
       <div class="brand-card p-6">
         <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
@@ -236,16 +191,49 @@
       </div>
     {% endif %}
 
-    <div class="brand-card p-6">
-      <h2 class="text-lg font-semibold text-brand-navy mb-3">Recent activity</h2>
-      <p class="text-sm text-brand-text/60">Activity feed coming soon.</p>
-      <div class="text-xs text-brand-text/50 mt-3">
-        Created {{ project.created_at|date:"Y-m-d" }} &middot; Updated {{ project.updated_at|date:"Y-m-d H:i" }}
-      </div>
-    </div>
   </section>
 
   <aside class="space-y-5">
+    <div class="brand-card p-6">
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">About</h2>
+      {% if project.abstract %}
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-2">Abstract</h3>
+        <p class="whitespace-pre-line text-sm text-brand-text mt-1">{{ project.abstract }}</p>
+      {% endif %}
+      {% if project.description %}
+        <div class="mt-4" id="proj-desc-wrapper">
+          <p class="whitespace-pre-line text-sm text-brand-text line-clamp-3" id="proj-desc-text">{{ project.description }}</p>
+          <button type="button"
+                  id="proj-desc-toggle"
+                  class="text-brand-coral hover:underline text-sm mt-1 hidden"
+                  onclick="(function(){
+                    var p = document.getElementById('proj-desc-text');
+                    var btn = document.getElementById('proj-desc-toggle');
+                    if (p.classList.contains('line-clamp-3')) {
+                      p.classList.remove('line-clamp-3');
+                      btn.textContent = 'Show less';
+                    } else {
+                      p.classList.add('line-clamp-3');
+                      btn.textContent = 'Read more';
+                    }
+                  })()">Read more</button>
+        </div>
+        <script>
+          (function () {
+            var p = document.getElementById('proj-desc-text');
+            var btn = document.getElementById('proj-desc-toggle');
+            if (p.scrollHeight > p.clientHeight) { btn.classList.remove('hidden'); }
+          })();
+        </script>
+      {% endif %}
+      {% if project.keywords %}
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Keywords</h3>
+        <p class="text-sm text-brand-text/80 mt-1">{{ project.keywords }}</p>
+      {% endif %}
+      {% if not project.abstract and not project.description and not project.keywords %}
+        <p class="text-sm text-brand-text/60">No description yet.</p>
+      {% endif %}
+    </div>
     <div class="brand-card p-6">
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-semibold text-brand-navy">Members</h2>

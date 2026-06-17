@@ -81,4 +81,9 @@ urlpatterns = [
         views.MyJoinRequestsView.as_view(),
         name="my_join_requests",
     ),
+    path(
+        "my-projects/badge/",
+        views.my_projects_badge,
+        name="my_projects_badge",
+    ),
 ]

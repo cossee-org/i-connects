@@ -2,16 +2,14 @@
 
 {% block title %}{{ form_title }} &mdash; i&bull;CONNECTS{% endblock %}
 
-{% block page_header %}
-  {% include "_components/page_header.html" with title=form_title %}
-{% endblock %}
+{% block page_header %}{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto space-y-5">
   <form method="post" class="brand-card p-6">
     {% csrf_token %}
 
-    <h2 class="text-lg font-semibold text-brand-navy mb-4">Project details</h2>
+    <h2 class="text-lg font-semibold text-brand-navy mb-4">{% if object %}Project details{% else %}Create a new project{% endif %}</h2>
 
     {% if form.non_field_errors %}
       <div class="alert alert-error mb-4">{{ form.non_field_errors }}</div>
@@ -20,20 +18,22 @@
     {% include "_components/form_field.html" with field=form.name %}
 
     {% for field in form %}
-      {% if field.name != "name" and field.name != "is_public" %}
+      {% if field.name != "name" and field.name != "is_public" and field.name != "status" %}
         {% include "_components/form_field.html" with field=field %}
       {% endif %}
     {% endfor %}
+    {% include "_components/status_dropdown.html" with status_value=form.status.value %}
 
-    {% include "_components/form_field.html" with field=form.is_public %}
+    {% include "_components/visibility_dropdown.html" with is_public_value=form.is_public.value %}
+    {% include "_components/contribution_tracking_dropdown.html" with contribution_tracking_value=form.contribution_tracking.value %}
 
     <div class="flex gap-2 justify-end mt-6">
       {% if object %}
-        <a href="{% url 'projects:detail' pk=object.pk %}" class="btn btn-ghost">Cancel</a>
+        <a href="{% url 'projects:detail' pk=object.pk %}" class="btn btn-sm btn-ghost">Cancel</a>
       {% else %}
-        <a href="{% url 'projects:my_list' %}" class="btn btn-ghost">Cancel</a>
+        <a href="{% url 'projects:my_list' %}" class="btn btn-sm btn-ghost">Cancel</a>
       {% endif %}
-      <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+      <button type="submit" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
         {{ submit_label }}
       </button>
     </div>
