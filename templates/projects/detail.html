@@ -3,16 +3,15 @@
 
 {% block title %}{{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
-{% block breadcrumbs %}
-  {% if user.is_authenticated %}
-    <nav aria-label="Breadcrumb" class="min-w-0 hidden md:block">
-      <ol class="flex items-center gap-2 text-sm text-brand-navy/80 overflow-hidden whitespace-nowrap">
-        <li class="truncate min-w-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">Projects</a></li>
-        <li aria-hidden="true" class="text-brand-navy/40">/</li>
-        <li class="truncate min-w-0"><span aria-current="page" class="font-medium text-brand-navy truncate">{{ project.name }}</span></li>
-      </ol>
-    </nav>
-  {% endif %}
+{% block topbar_breadcrumb %}
+  <span class="hidden md:block border-l border-brand-navy/20 pl-3 ml-1 self-stretch"></span>
+  <nav aria-label="Breadcrumb" class="hidden md:flex min-w-0 overflow-hidden">
+    <ol class="flex items-center gap-1.5 text-sm text-brand-navy/70 whitespace-nowrap min-w-0">
+      <li class="shrink-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">Projects</a></li>
+      <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
+      <li class="truncate min-w-0"><span aria-current="page" class="font-semibold text-brand-navy">{{ project.name }}</span></li>
+    </ol>
+  </nav>
 {% endblock %}
 
 {% block page_header %}

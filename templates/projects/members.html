@@ -2,14 +2,23 @@
 
 {% block title %}Members &mdash; {{ project.name }}{% endblock %}
 
+{% block topbar_breadcrumb %}
+  <span class="hidden md:block border-l border-brand-navy/20 pl-3 ml-1 self-stretch"></span>
+  <nav aria-label="Breadcrumb" class="hidden md:flex min-w-0 overflow-hidden">
+    <ol class="flex items-center gap-1.5 text-sm text-brand-navy/70 whitespace-nowrap min-w-0">
+      <li class="shrink-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">Projects</a></li>
+      <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
+      <li class="truncate min-w-0 shrink"><a href="{% url 'projects:detail' pk=project.pk %}" class="hover:text-brand-coral truncate">{{ project.name }}</a></li>
+      <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
+      <li class="shrink-0"><span aria-current="page" class="font-semibold text-brand-navy">Members</span></li>
+    </ol>
+  </nav>
+{% endblock %}
+
 {% block page_header %}
   <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
     <div>
-      <a href="{% url 'projects:detail' pk=project.pk %}"
-         class="text-sm text-brand-navy/70 hover:text-brand-coral font-medium">
-        &laquo; Back to {{ project.name }}
-      </a>
-      <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight mt-1">Members</h1>
+      <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight">Members</h1>
       <p class="text-sm text-brand-text/70 mt-1">Manage who belongs to this project and what they can do.</p>
     </div>
     {% if user_privilege == "PROJECT_MANAGER" %}
