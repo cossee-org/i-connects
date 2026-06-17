@@ -48,6 +48,30 @@ def truncate_members(members, char_budget=80):
 
 
 @register.filter
+def member_names(members, short_limit=2):
+    """Return {'full': all names comma-separated, 'short': first short_limit names + overflow count}.
+    Members should already be sorted lead-first."""
+    members = list(members or [])
+    if not members:
+        return {"full": "", "short": ""}
+
+    def get_name(priv):
+        u = priv.user
+        return f"{u.given_name} {u.family_name}".strip() or u.name or u.email
+
+    names = [get_name(m) for m in members]
+    full = ", ".join(names)
+
+    visible = names[:short_limit]
+    overflow = len(names) - len(visible)
+    short = ", ".join(visible)
+    if overflow:
+        short += f" and {overflow} more {'member' if overflow == 1 else 'members'}"
+
+    return {"full": full, "short": short}
+
+
+@register.filter
 def member_avatars(members, limit=5):
     """Return a dict with 'visible' (up to limit ProjectPrivilege objects) and 'overflow' count."""
     members = list(members or [])
