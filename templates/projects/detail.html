@@ -16,7 +16,6 @@
 {% block page_header %}
   <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
     <div>
-      <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-1">Project</div>
       <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
       <div class="flex flex-wrap gap-2 mt-3">
         {% include "_components/status_badge.html" with status=project.get_status_display %}
