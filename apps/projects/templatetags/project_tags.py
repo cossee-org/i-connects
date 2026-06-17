@@ -23,7 +23,7 @@ def privilege_label(value) -> str:
 
 
 @register.filter
-def truncate_members(members, char_budget=42):
+def truncate_members(members, char_budget=80):
     """Render a list of ProjectPrivilege objects as 'Name, Name and N more'."""
     if not members:
         return ""
