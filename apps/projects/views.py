@@ -256,6 +256,11 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         status = self.request.GET.get("status", "")
         if status:
             qs = qs.filter(status=status)
+        visibility = self.request.GET.get("visibility", "")
+        if visibility == "public":
+            qs = qs.filter(is_public=True)
+        elif visibility == "private":
+            qs = qs.filter(is_public=False)
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q) | Q(abstract__icontains=q))
@@ -304,6 +309,7 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         context["current_q"] = self.request.GET.get("q", "")
         context["current_sort"] = self.request.GET.get("sort", "newest")
         context["current_status"] = self.request.GET.get("status", "")
+        context["current_visibility"] = self.request.GET.get("visibility", "")
         context["current_per_page"] = self.get_paginate_by(self.get_queryset())
         context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
         from apps.core.enums import ProjectStatus
