@@ -6,7 +6,10 @@
 {% block page_header %}{% endblock %}
 
 {% block content %}
-<h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy mb-6">My projects</h1>
+<div class="flex items-center gap-3 mb-6">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy">My projects</h1>
+  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ paginator.count }}</span>
+</div>
 
 {# ── Filter / sort bar ────────────────────────────────────────────────────── #}
 <form method="get" id="filter-form-my" class="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-stretch sm:items-center mb-6">
