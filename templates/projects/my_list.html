@@ -200,6 +200,16 @@
         <div class="flex-1 min-w-0 flex flex-col gap-1.5">
           <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
 
+          {# Member names — full list on sm+, truncated to 2 on smaller screens #}
+          {% with mn=row.members|member_names %}
+            {% if mn.full %}
+              <p class="text-xs text-brand-text/60 min-w-0">
+                <span class="hidden sm:inline">{{ mn.full }}</span>
+                <span class="sm:hidden">{{ mn.short }}</span>
+              </p>
+            {% endif %}
+          {% endwith %}
+
           {% if row.project.description %}
             <p class="text-xs text-brand-text/70 line-clamp-2">{{ row.project.description }}</p>
           {% elif row.project.abstract %}
@@ -207,35 +217,6 @@
           {% endif %}
 
           <div class="flex flex-col gap-6 mt-auto">
-            {# Avatar row — up to 5 members, side by side #}
-            {% with av=row.members|member_avatars %}
-              {% if av.visible %}
-                <div class="flex items-center gap-1">
-                  {% for mp in av.visible %}
-                    {% with u=mp.user %}
-                    {% with name=u.name|default:u.email %}
-                      <span class="relative group/av shrink-0">
-                        {% if u.gravatar %}
-                          <img src="{{ u.gravatar }}" alt="{{ name }}"
-                               class="w-6 h-6 rounded-full object-cover bg-gray-200 block">
-                        {% else %}
-                          <span class="w-6 h-6 rounded-full inline-flex items-center justify-center text-[10px] font-semibold bg-brand-navy/10 text-brand-navy">
-                            {{ u.given_name|first|upper }}{{ u.family_name|first|upper }}
-                          </span>
-                        {% endif %}
-                        <span class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded-md bg-gray-800 px-2 py-1 text-[11px] text-white opacity-0 group-hover/av:opacity-100 transition-opacity duration-150">
-                          {{ name }}
-                        </span>
-                      </span>
-                    {% endwith %}
-                    {% endwith %}
-                  {% endfor %}
-                  {% if av.overflow %}
-                    <span class="text-xs text-brand-text/40">+{{ av.overflow }} more</span>
-                  {% endif %}
-                </div>
-              {% endif %}
-            {% endwith %}
             <p class="text-xs text-brand-text/40">{{ row.project.updated_at|relative_updated }}</p>
           </div>
         </div>
