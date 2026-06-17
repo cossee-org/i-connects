@@ -5,7 +5,7 @@
 {% block topbar_breadcrumb %}
   <nav aria-label="Breadcrumb" class="flex items-center min-w-0 overflow-hidden">
     <ol class="flex items-center gap-1.5 text-sm text-brand-navy/70 whitespace-nowrap min-w-0">
-      <li class="shrink-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">Projects</a></li>
+      <li class="shrink-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
       <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
       <li class="truncate min-w-0 shrink"><a href="{% url 'projects:detail' pk=project.pk %}" class="hover:text-brand-coral truncate">{{ project.name }}</a></li>
       <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
