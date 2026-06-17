@@ -48,6 +48,16 @@ def truncate_members(members, char_budget=80):
 
 
 @register.filter
+def member_avatars(members, limit=5):
+    """Return a dict with 'visible' (up to limit ProjectPrivilege objects) and 'overflow' count."""
+    members = list(members or [])
+    return {
+        "visible": members[:limit],
+        "overflow": max(0, len(members) - limit),
+    }
+
+
+@register.filter
 def relative_updated(dt) -> str:
     """Return a human-friendly 'Updated …' string for a datetime."""
     if not dt:

@@ -18,8 +18,51 @@ from django.views.generic import (
     View,
 )
 
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_GET
+
 from apps.audit.services import AuditAction, log_action
 from apps.core.enums import MemberPrivileges
+
+
+_SORT_LABELS = {
+    "newest": None,
+    "oldest": "oldest first",
+    "name_asc": "name A–Z",
+    "name_desc": "name Z–A",
+}
+
+_STATUS_LABELS = {
+    "PLANNING": "planning",
+    "ACTIVE": "active",
+    "PAUSED": "paused",
+    "COMPLETED": "completed",
+    "INACTIVE": "inactive",
+}
+
+
+def _build_results_summary(count, q, status, sort, visibility=None):
+    """Return a human-readable results summary string, or None if no filters active."""
+    parts = []
+    if visibility:
+        parts.append(visibility)
+    if status:
+        parts.append(_STATUS_LABELS.get(status, status.lower()))
+    if parts:
+        desc = " ".join(parts) + " projects"
+    else:
+        desc = "projects"
+    if q:
+        desc += f' matching “{q}”'
+    sort_label = _SORT_LABELS.get(sort)
+    has_filters = bool(q or status or visibility or sort_label)
+    if not has_filters:
+        return None, count
+    n = f"{count} result{'s' if count != 1 else ''}"
+    summary = f"{n} for {desc}"
+    if sort_label:
+        summary += f", sorted by {sort_label}"
+    return summary, count
 
 from apps.core.enums import JoinRequestStatus
 
@@ -205,6 +248,14 @@ class PublicProjectListView(ListView):
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
 
+        total = context["paginator"].count
+        context["results_summary"], _ = _build_results_summary(
+            total,
+            context["current_q"],
+            context["current_status"],
+            context["current_sort"],
+        )
+
         # Build project_rows with member privileges for member name display
         pm = MemberPrivileges.PROJECT_MANAGER.value
         project_ids = [p.id for p in context["projects"]]
@@ -256,6 +307,11 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         status = self.request.GET.get("status", "")
         if status:
             qs = qs.filter(status=status)
+        visibility = self.request.GET.get("visibility", "")
+        if visibility == "public":
+            qs = qs.filter(is_public=True)
+        elif visibility == "private":
+            qs = qs.filter(is_public=False)
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q) | Q(abstract__icontains=q))
@@ -304,6 +360,7 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         context["current_q"] = self.request.GET.get("q", "")
         context["current_sort"] = self.request.GET.get("sort", "newest")
         context["current_status"] = self.request.GET.get("status", "")
+        context["current_visibility"] = self.request.GET.get("visibility", "")
         context["current_per_page"] = self.get_paginate_by(self.get_queryset())
         context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
         from apps.core.enums import ProjectStatus
@@ -314,6 +371,18 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         params = self.request.GET.copy()
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
+
+        total = context["paginator"].count
+        context["total_project_count"] = (
+            Project.objects.filter(privileges__user=user).distinct().count()
+        )
+        context["results_summary"], _ = _build_results_summary(
+            total,
+            context["current_q"],
+            context["current_status"],
+            context["current_sort"],
+            context["current_visibility"],
+        )
 
         # --- Dashboard widgets (Ultra Plan §A3) ---------------------------
         # Late-import to keep the projects app free of a hard task dep.
@@ -1020,3 +1089,10 @@ class MyJoinRequestsView(LoginRequiredMixin, ListView):
             .select_related("project")
             .order_by("-created_at")
         )
+
+
+@login_required
+@require_GET
+def my_projects_badge(request):
+    count = Project.objects.filter(privileges__user=request.user).distinct().count()
+    return HttpResponse(str(count) if count else "")
