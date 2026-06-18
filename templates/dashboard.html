@@ -30,6 +30,45 @@
 </div>
 
 {# ── Main content ──────────────────────────────────────────────────────────── #}
+<div class="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6 items-start">
+
+{# ── Left: Top projects ────────────────────────────────────────────────────── #}
+<aside>
+  <section class="brand-card p-5" aria-labelledby="top-projects-heading">
+    <h2 id="top-projects-heading" class="section-heading flex items-center gap-2 mb-4">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" />
+      </svg>
+      Top projects
+      {% if project_count %}<span class="ml-auto text-xs font-semibold bg-brand-navy/10 text-brand-navy px-2 py-0.5 rounded-full normal-case tracking-normal">{{ project_count }}</span>{% endif %}
+    </h2>
+
+    {% if recent_projects %}
+      <ul class="divide-y divide-brand-light/60">
+        {% for project in recent_projects %}
+          <li>
+            <a href="{% url 'projects:detail' pk=project.pk %}"
+               class="flex items-center justify-between gap-3 py-3 hover:bg-brand-lighter/50 -mx-2 px-2 rounded transition-colors">
+              <span class="text-sm font-medium text-brand-navy truncate">{{ project.name }}</span>
+              {% include "_components/status_badge.html" with status=project.get_status_display %}
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+      {% if project_count > 5 %}
+        <div class="mt-3 pt-3 border-t border-brand-light/60">
+          <a href="{% url 'projects:my_list' %}" class="text-xs text-brand-text/50 hover:text-brand-coral transition-colors">
+            View all {{ project_count }} projects →
+          </a>
+        </div>
+      {% endif %}
+    {% else %}
+      <p class="text-sm text-brand-text/60 italic">You have no projects yet.</p>
+    {% endif %}
+  </section>
+</aside>
+
+{# ── Right: Tasks & approvals ──────────────────────────────────────────────── #}
 <div class="flex flex-col gap-6">
 
   {# Overdue tasks #}
@@ -215,9 +254,10 @@
     </section>
     {% endif %}
 
-  </div>{# end two-column grid #}
+  </div>{# end tasks two-column grid #}
 
-</div>{# end main content #}
+</div>{# end right column #}
+</div>{# end main lg grid #}
 
 <style>
   .section-heading {
