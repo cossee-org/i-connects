@@ -15,7 +15,12 @@
       <div class="alert alert-error mb-4">{{ form.non_field_errors }}</div>
     {% endif %}
 
-    {% include "_components/form_field.html" with field=form.name %}
+    <div x-data="{ nameCharCount: {{ form.name.value|default:''|length }} }">
+      {% include "_components/form_field.html" with field=form.name %}
+      <p class="text-xs text-brand-text/50 -mt-2 mb-3 text-left" :class="nameCharCount > 200 ? 'text-error' : ''">
+        <span x-text="nameCharCount"></span> / 200
+      </p>
+    </div>
 
     <div x-data="{ charCount: {{ form.description.value|default:''|length }} }">
       {% include "_components/form_field.html" with field=form.description %}

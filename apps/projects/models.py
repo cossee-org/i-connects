@@ -19,7 +19,7 @@ class Project(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     # Metadata
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=200)
     description = models.TextField(null=True, blank=True)
     abstract = models.TextField(null=True, blank=True)
     keywords = models.TextField(null=True, blank=True)
