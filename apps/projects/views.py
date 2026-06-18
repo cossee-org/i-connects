@@ -139,7 +139,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             .order_by("-updated_at")
         )
         context["project_count"] = user_projects.count()
-        context["recent_projects"] = user_projects[:5]
+        context["recent_projects"] = list(user_projects)
 
         # --- Task querysets ------------------------------------------------
         user_member_qs = ProjectMember.objects.filter(users=user)
