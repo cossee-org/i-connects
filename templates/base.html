@@ -251,7 +251,6 @@
       </div>
     </main>
 
-    {% if not user.is_authenticated %}
     <footer class="border-t border-brand-light bg-base-100 mt-auto" role="contentinfo">
       <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-brand-text/70">
         <div class="flex items-center gap-2">
@@ -262,10 +261,11 @@
         <div class="flex gap-4">
           <a href="{% url 'core:home' %}" class="hover:text-brand-coral">Home</a>
           <a href="{% url 'projects:list' %}" class="hover:text-brand-coral">Browse projects</a>
+          <a href="{% url 'core:terms_of_use' %}" class="hover:text-brand-coral">Terms of Use</a>
+          <a href="{% url 'core:privacy_policy' %}" class="hover:text-brand-coral">Privacy Policy</a>
         </div>
       </div>
     </footer>
-    {% endif %}
   </div><!-- end main content -->
 
   {% block extra_body %}{% endblock %}
