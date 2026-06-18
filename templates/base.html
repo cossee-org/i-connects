@@ -196,7 +196,11 @@
              x-transition:leave-start="opacity-100 translate-y-0"
              x-transition:leave-end="opacity-0 -translate-y-1"
              @click.outside="topbarMenuOpen = false"
-             class="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-lg border border-brand-light/60 overflow-hidden z-50">
+             class="absolute right-0 top-full mt-1 w-64 bg-white rounded-lg shadow-lg border border-brand-light/60 overflow-hidden z-50">
+          <div class="px-4 py-3 border-b border-brand-light/60">
+            <p class="text-sm font-semibold text-brand-navy truncate">{{ user.name|default:user.email }}</p>
+            {% if user.name %}<p class="text-xs text-brand-text/50 truncate">{{ user.email }}</p>{% endif %}
+          </div>
           <a href="{% url 'accounts:profile' %}"
              class="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-navy hover:bg-brand-lighter transition-colors whitespace-nowrap">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
