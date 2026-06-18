@@ -369,6 +369,7 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         context["project_statuses"] = [
             c for key in _STATUS_ORDER for c in ProjectStatus.choices if c[0] == key
         ]
+        context["create_url"] = reverse("projects:create")
         params = self.request.GET.copy()
         params.pop("page", None)
         context["filter_params"] = params.urlencode()

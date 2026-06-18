@@ -147,18 +147,14 @@
   </div>
 
   {# Row 3: New project #}
-  <button type="button"
-          class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 w-full sm:w-auto sm:ml-auto shrink-0 inline-flex items-center justify-center gap-1.5"
-          hx-get="{% url 'projects:create' %}"
-          hx-target="#new-project-modal-body"
-          hx-swap="innerHTML"
-          onclick="document.getElementById('new-project-modal').showModal()">
+  <a href="{% url 'projects:create' %}"
+     class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 w-full sm:w-auto sm:ml-auto shrink-0 inline-flex items-center justify-center gap-1.5">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
          stroke-width="2" stroke="currentColor" class="w-4 h-4">
       <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
     </svg>
     New project
-  </button>
+  </a>
 
   <noscript>
     <select name="sort">
@@ -249,24 +245,7 @@
     </div>
   {% endif %}
 {% else %}
-  {% include "_components/empty_state.html" with title="No projects yet" body="Create your first project or accept an invitation to join one." cta_label="New project" cta_modal="new-project-modal" %}
+  {% include "_components/empty_state.html" with title="No projects yet" body="Create your first project or accept an invitation to join one." cta_label="New project" cta_href=create_url %}
 {% endif %}
 
-<dialog id="new-project-modal" class="modal" aria-label="Create a new project">
-  <div class="modal-box max-w-lg bg-base-100 border border-brand-light/60 overflow-y-auto max-h-[90vh]">
-    <form method="dialog">
-      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
-    </form>
-    <div id="new-project-modal-body"><!-- filled by HTMX --></div>
-  </div>
-  <form method="dialog" class="modal-backdrop"><button>close</button></form>
-</dialog>
-
-<script>
-  document.body.addEventListener('project-created', function (e) {
-    var modal = document.getElementById('new-project-modal');
-    if (modal && modal.open) modal.close();
-    if (e.detail && e.detail.url) window.location = e.detail.url;
-  });
-</script>
 {% endblock %}
