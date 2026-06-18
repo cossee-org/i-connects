@@ -9,143 +9,87 @@
 
 {% block content %}
 
-{# ── Stats bar ─────────────────────────────────────────────────────────────── #}
-<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" data-tooltip="Tasks currently assigned to you">
-    <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
-    <span class="text-3xl font-bold text-brand-navy">{{ active_task_count }}</span>
-  </div>
-  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if pending_count %}border-l-4 border-warning{% endif %}" data-tooltip="Task completions awaiting your approval">
-    <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Pending approvals</span>
-    <span class="text-3xl font-bold {% if pending_count %}text-warning{% else %}text-brand-navy{% endif %}">{{ pending_count }}</span>
-  </div>
-  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if overdue_count %}border-l-4 border-error{% endif %}" data-tooltip="Tasks past their deadline">
-    <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
-    <span class="text-3xl font-bold {% if overdue_count %}text-error{% else %}text-brand-navy{% endif %}">{{ overdue_count }}</span>
-  </div>
-  <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" data-tooltip="Total projects you belong to">
-    <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
-    <span class="text-3xl font-bold text-brand-navy">{{ project_count }}</span>
-  </div>
-</div>
+<div class="grid grid-cols-1 lg:grid-cols-[12rem_1fr] gap-6 items-start">
 
-{# ── Main content ──────────────────────────────────────────────────────────── #}
-<div class="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6 items-start">
-
-{# ── Left: Top projects ────────────────────────────────────────────────────── #}
-<aside>
-  <section class="brand-card p-5" aria-labelledby="top-projects-heading">
-    <h2 id="top-projects-heading" class="section-heading flex items-center gap-2 mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" />
-      </svg>
-      Top projects
-      {% if project_count %}<span class="ml-auto text-xs font-semibold bg-brand-navy/10 text-brand-navy px-2 py-0.5 rounded-full normal-case tracking-normal">{{ project_count }}</span>{% endif %}
-    </h2>
+  {# ── Left: Top projects (plain scrollable list, no card) ──────────────────── #}
+  <aside class="lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+    <p class="section-heading mb-3">Top projects</p>
 
     {% if recent_projects %}
-      <ul class="divide-y divide-brand-light/60">
+      <ul class="flex flex-col gap-0.5">
         {% for project in recent_projects %}
           <li>
             <a href="{% url 'projects:detail' pk=project.pk %}"
-               class="flex items-center justify-between gap-3 py-3 hover:bg-brand-lighter/50 -mx-2 px-2 rounded transition-colors">
-              <span class="text-sm font-medium text-brand-navy truncate">{{ project.name }}</span>
-              {% include "_components/status_badge.html" with status=project.get_status_display %}
+               class="flex items-center gap-2 px-2 py-2 rounded-md text-sm text-brand-navy hover:bg-brand-lighter transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0 text-brand-text/40">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" />
+              </svg>
+              <span class="truncate">{{ project.name }}</span>
             </a>
           </li>
         {% endfor %}
       </ul>
-      {% if project_count > 5 %}
-        <div class="mt-3 pt-3 border-t border-brand-light/60">
-          <a href="{% url 'projects:my_list' %}" class="text-xs text-brand-text/50 hover:text-brand-coral transition-colors">
-            View all {{ project_count }} projects →
-          </a>
-        </div>
-      {% endif %}
+      <a href="{% url 'projects:my_list' %}"
+         class="mt-3 flex items-center gap-1 px-2 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
+        View all{% if project_count %} ({{ project_count }}){% endif %} →
+      </a>
     {% else %}
-      <p class="text-sm text-brand-text/60 italic">You have no projects yet.</p>
+      <p class="px-2 text-xs text-brand-text/50 italic">No projects yet.</p>
     {% endif %}
-  </section>
-</aside>
+  </aside>
 
-{# ── Right: Tasks & approvals ──────────────────────────────────────────────── #}
-<div class="flex flex-col gap-6">
+  {# ── Right: Stats + tasks ──────────────────────────────────────────────────── #}
+  <div class="flex flex-col gap-6 min-w-0">
 
-  {# Overdue tasks #}
-  {% if overdue_tasks %}
-    <section class="brand-card p-5" aria-labelledby="overdue-heading">
-      <h2 id="overdue-heading" class="section-heading text-error flex items-center gap-2 mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-        </svg>
-        Overdue
-        <span class="ml-auto text-xs font-semibold bg-error/10 text-error px-2 py-0.5 rounded-full normal-case tracking-normal">{{ overdue_tasks|length }}</span>
-      </h2>
-      <ul class="divide-y divide-brand-light/60">
-        {% for task in overdue_tasks %}
-        <li class="py-3 flex items-start justify-between gap-3">
-          <div>
-            <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
-               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
-            <div class="text-xs text-brand-text/60 mt-0.5">
-              {{ task.project.name }}
-              {% if task.deadline %}&middot; <span class="text-error font-medium">due {{ task.deadline|date:"M j, Y" }}</span>{% endif %}
-            </div>
-          </div>
-          <form method="post" action="{% url 'tasks:complete' pk=task.pk %}"
-                hx-post="{% url 'tasks:complete' pk=task.pk %}"
-                hx-target="closest li" hx-swap="outerHTML">
-            {% csrf_token %}
-            <button type="submit"
-                    class="btn btn-xs btn-ghost text-brand-text/50 hover:text-success shrink-0 has-tooltip" data-tooltip="Mark my part done">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                   stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-              </svg>
-            </button>
-          </form>
-        </li>
-        {% endfor %}
-      </ul>
-    </section>
-  {% endif %}
+    {# Stats bar #}
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" data-tooltip="Tasks currently assigned to you">
+        <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
+        <span class="text-3xl font-bold text-brand-navy">{{ active_task_count }}</span>
+      </div>
+      <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if pending_count %}border-l-4 border-warning{% endif %}" data-tooltip="Task completions awaiting your approval">
+        <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Pending approvals</span>
+        <span class="text-3xl font-bold {% if pending_count %}text-warning{% else %}text-brand-navy{% endif %}">{{ pending_count }}</span>
+      </div>
+      <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if overdue_count %}border-l-4 border-error{% endif %}" data-tooltip="Tasks past their deadline">
+        <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
+        <span class="text-3xl font-bold {% if overdue_count %}text-error{% else %}text-brand-navy{% endif %}">{{ overdue_count }}</span>
+      </div>
+      <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" data-tooltip="Total projects you belong to">
+        <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
+        <span class="text-3xl font-bold text-brand-navy">{{ project_count }}</span>
+      </div>
+    </div>
 
-  {# ── Active tasks + Pending approvals side by side ──────────────────────── #}
-  <div class="grid lg:grid-cols-2 gap-6">
-
-    {# Active / due-soon tasks #}
-    <section class="brand-card p-5" aria-labelledby="active-tasks-heading">
-      <h2 id="active-tasks-heading" class="section-heading flex items-center gap-2 mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
-        </svg>
-        My active tasks
-        {% if active_task_count %}<span class="ml-auto text-xs font-semibold bg-brand-navy/10 text-brand-navy px-2 py-0.5 rounded-full normal-case tracking-normal">{{ active_task_count }}</span>{% endif %}
-      </h2>
-
-      {% if due_soon_tasks %}
-        <p class="text-xs font-semibold uppercase tracking-wide text-warning mb-2">Due within 7 days</p>
-        <ul class="divide-y divide-brand-light/60 mb-4">
-          {% for task in due_soon_tasks %}
+    {# Overdue tasks #}
+    {% if overdue_tasks %}
+      <section class="brand-card p-5" aria-labelledby="overdue-heading">
+        <h2 id="overdue-heading" class="section-heading text-error flex items-center gap-2 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+          </svg>
+          Overdue
+          <span class="ml-auto text-xs font-semibold bg-error/10 text-error px-2 py-0.5 rounded-full normal-case tracking-normal">{{ overdue_tasks|length }}</span>
+        </h2>
+        <ul class="divide-y divide-brand-light/60">
+          {% for task in overdue_tasks %}
           <li class="py-3 flex items-start justify-between gap-3">
             <div>
               <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
                  class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
               <div class="text-xs text-brand-text/60 mt-0.5">
                 {{ task.project.name }}
-                {% if task.deadline %}&middot; <span class="text-warning font-medium">due {{ task.deadline|date:"M j" }}</span>{% endif %}
+                {% if task.deadline %}&middot; <span class="text-error font-medium">due {{ task.deadline|date:"M j, Y" }}</span>{% endif %}
               </div>
             </div>
             <form method="post" action="{% url 'tasks:complete' pk=task.pk %}"
                   hx-post="{% url 'tasks:complete' pk=task.pk %}"
                   hx-target="closest li" hx-swap="outerHTML">
               {% csrf_token %}
-              <button type="submit" title="Mark my part done"
-                      class="btn btn-xs btn-ghost text-brand-text/50 hover:text-success shrink-0">
+              <button type="submit"
+                      class="btn btn-xs btn-ghost text-brand-text/50 hover:text-success shrink-0 has-tooltip" data-tooltip="Mark my part done">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                      stroke-width="2" stroke="currentColor" class="w-4 h-4">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
@@ -155,109 +99,154 @@
           </li>
           {% endfor %}
         </ul>
-      {% endif %}
+      </section>
+    {% endif %}
 
-      {% if no_deadline_tasks %}
-        {% if due_soon_tasks %}<p class="text-xs font-semibold uppercase tracking-wide text-brand-text/40 mb-2">No deadline</p>{% endif %}
-        <ul class="divide-y divide-brand-light/60">
-          {% for task in no_deadline_tasks %}
-          <li class="py-3 flex items-start justify-between gap-3">
-            <div>
-              <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
-                 class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
-              <div class="text-xs text-brand-text/60 mt-0.5">{{ task.project.name }}</div>
-            </div>
-            <form method="post" action="{% url 'tasks:complete' pk=task.pk %}"
-                  hx-post="{% url 'tasks:complete' pk=task.pk %}"
-                  hx-target="closest li" hx-swap="outerHTML">
-              {% csrf_token %}
-              <button type="submit" title="Mark my part done"
-                      class="btn btn-xs btn-ghost text-brand-text/50 hover:text-success shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                     stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                </svg>
-              </button>
-            </form>
-          </li>
-          {% endfor %}
-        </ul>
-      {% endif %}
+    {# Active tasks + Pending approvals #}
+    <div class="grid lg:grid-cols-2 gap-6">
 
-      {% if not due_soon_tasks and not no_deadline_tasks and not overdue_tasks %}
-        <p class="text-sm text-brand-text/60 italic">No open tasks assigned to you.</p>
-      {% endif %}
-    </section>
+      <section class="brand-card p-5" aria-labelledby="active-tasks-heading">
+        <h2 id="active-tasks-heading" class="section-heading flex items-center gap-2 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
+          </svg>
+          My active tasks
+          {% if active_task_count %}<span class="ml-auto text-xs font-semibold bg-brand-navy/10 text-brand-navy px-2 py-0.5 rounded-full normal-case tracking-normal">{{ active_task_count }}</span>{% endif %}
+        </h2>
 
-    {# Pending approvals #}
-    {% if is_pm_anywhere %}
-    <section class="brand-card p-5" aria-labelledby="approvals-heading">
-      <h2 id="approvals-heading" class="section-heading flex items-center gap-2 mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
-        </svg>
-        Pending your approval
-        {% if pending_count %}<span class="ml-auto text-xs font-semibold bg-warning/10 text-warning px-2 py-0.5 rounded-full normal-case tracking-normal">{{ pending_count }}</span>{% endif %}
-      </h2>
-
-      {% if pending_logs %}
-        <ul class="divide-y divide-brand-light/60" id="pending-approvals-list">
-          {% for log in pending_logs %}
-          <li class="py-3 flex items-start gap-3" id="log-{{ log.pk }}">
-            <div class="flex-1 min-w-0">
-              <a href="{% url 'tasks:detail' project_pk=log.task.project_id pk=log.task_id %}"
-                 class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ log.task.name }}</a>
-              <div class="text-xs text-brand-text/60 mt-0.5">
-                {{ log.task.project.name }}
-                &middot; {{ log.assigned_to.display_name|default:"—" }}
-                &middot; {{ log.created_at|date:"M j" }}
+        {% if due_soon_tasks %}
+          <p class="text-xs font-semibold uppercase tracking-wide text-warning mb-2">Due within 7 days</p>
+          <ul class="divide-y divide-brand-light/60 mb-4">
+            {% for task in due_soon_tasks %}
+            <li class="py-3 flex items-start justify-between gap-3">
+              <div>
+                <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
+                   class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
+                <div class="text-xs text-brand-text/60 mt-0.5">
+                  {{ task.project.name }}
+                  {% if task.deadline %}&middot; <span class="text-warning font-medium">due {{ task.deadline|date:"M j" }}</span>{% endif %}
+                </div>
               </div>
-            </div>
-            <div class="flex gap-1 shrink-0">
-              <form method="post"
-                    action="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
-                    hx-post="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
-                    hx-target="#log-{{ log.pk }}" hx-swap="outerHTML">
+              <form method="post" action="{% url 'tasks:complete' pk=task.pk %}"
+                    hx-post="{% url 'tasks:complete' pk=task.pk %}"
+                    hx-target="closest li" hx-swap="outerHTML">
                 {% csrf_token %}
-                <input type="hidden" name="approved" value="true">
-                <button type="submit"
-                        class="btn btn-xs bg-success/10 text-success hover:bg-success hover:text-white border-0 has-tooltip" data-tooltip="Approve completion">
+                <button type="submit" title="Mark my part done"
+                        class="btn btn-xs btn-ghost text-brand-text/50 hover:text-success shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                       stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                       stroke-width="2" stroke="currentColor" class="w-4 h-4">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                   </svg>
                 </button>
               </form>
-              <form method="post"
-                    action="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
-                    hx-post="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
-                    hx-target="#log-{{ log.pk }}" hx-swap="outerHTML">
+            </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        {% if no_deadline_tasks %}
+          {% if due_soon_tasks %}<p class="text-xs font-semibold uppercase tracking-wide text-brand-text/40 mb-2">No deadline</p>{% endif %}
+          <ul class="divide-y divide-brand-light/60">
+            {% for task in no_deadline_tasks %}
+            <li class="py-3 flex items-start justify-between gap-3">
+              <div>
+                <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
+                   class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
+                <div class="text-xs text-brand-text/60 mt-0.5">{{ task.project.name }}</div>
+              </div>
+              <form method="post" action="{% url 'tasks:complete' pk=task.pk %}"
+                    hx-post="{% url 'tasks:complete' pk=task.pk %}"
+                    hx-target="closest li" hx-swap="outerHTML">
                 {% csrf_token %}
-                <input type="hidden" name="approved" value="false">
-                <button type="submit"
-                        class="btn btn-xs bg-error/10 text-error hover:bg-error hover:text-white border-0 has-tooltip" data-tooltip="Decline completion">
+                <button type="submit" title="Mark my part done"
+                        class="btn btn-xs btn-ghost text-brand-text/50 hover:text-success shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                       stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                       stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                   </svg>
                 </button>
               </form>
-            </div>
-          </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="text-sm text-brand-text/60 italic">No completions awaiting approval.</p>
+            </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        {% if not due_soon_tasks and not no_deadline_tasks and not overdue_tasks %}
+          <p class="text-sm text-brand-text/60 italic">No open tasks assigned to you.</p>
+        {% endif %}
+      </section>
+
+      {% if is_pm_anywhere %}
+      <section class="brand-card p-5" aria-labelledby="approvals-heading">
+        <h2 id="approvals-heading" class="section-heading flex items-center gap-2 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
+          </svg>
+          Pending your approval
+          {% if pending_count %}<span class="ml-auto text-xs font-semibold bg-warning/10 text-warning px-2 py-0.5 rounded-full normal-case tracking-normal">{{ pending_count }}</span>{% endif %}
+        </h2>
+
+        {% if pending_logs %}
+          <ul class="divide-y divide-brand-light/60" id="pending-approvals-list">
+            {% for log in pending_logs %}
+            <li class="py-3 flex items-start gap-3" id="log-{{ log.pk }}">
+              <div class="flex-1 min-w-0">
+                <a href="{% url 'tasks:detail' project_pk=log.task.project_id pk=log.task_id %}"
+                   class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ log.task.name }}</a>
+                <div class="text-xs text-brand-text/60 mt-0.5">
+                  {{ log.task.project.name }}
+                  &middot; {{ log.assigned_to.display_name|default:"—" }}
+                  &middot; {{ log.created_at|date:"M j" }}
+                </div>
+              </div>
+              <div class="flex gap-1 shrink-0">
+                <form method="post"
+                      action="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
+                      hx-post="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
+                      hx-target="#log-{{ log.pk }}" hx-swap="outerHTML">
+                  {% csrf_token %}
+                  <input type="hidden" name="approved" value="true">
+                  <button type="submit"
+                          class="btn btn-xs bg-success/10 text-success hover:bg-success hover:text-white border-0 has-tooltip" data-tooltip="Approve completion">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                         stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                  </button>
+                </form>
+                <form method="post"
+                      action="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
+                      hx-post="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
+                      hx-target="#log-{{ log.pk }}" hx-swap="outerHTML">
+                  {% csrf_token %}
+                  <input type="hidden" name="approved" value="false">
+                  <button type="submit"
+                          class="btn btn-xs bg-error/10 text-error hover:bg-error hover:text-white border-0 has-tooltip" data-tooltip="Decline completion">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                         stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </form>
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-sm text-brand-text/60 italic">No completions awaiting approval.</p>
+        {% endif %}
+      </section>
       {% endif %}
-    </section>
-    {% endif %}
 
-  </div>{# end tasks two-column grid #}
+    </div>{# end active+approvals grid #}
 
-</div>{# end right column #}
-</div>{# end main lg grid #}
+  </div>{# end right column #}
+
+</div>{# end outer grid #}
 
 <style>
   .section-heading {
