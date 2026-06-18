@@ -10,7 +10,7 @@
 <div class="flex flex-col lg:flex-row items-start">
 
   {# ── Left: Top projects (plain scrollable list, no card) ──────────────────── #}
-  <aside class="home-aside w-full mb-6 lg:mb-0 lg:sticky lg:top-20 lg:overflow-y-auto lg:pr-8 lg:border-r lg:border-brand-light/60"
+  <aside class="home-aside w-full lg:sticky lg:top-20 lg:overflow-y-auto lg:border-r lg:border-brand-light/60"
          x-data="{ showAll: false }">
     <p class="section-heading mb-3">Top projects</p>
 
@@ -23,7 +23,7 @@
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0 text-brand-text/40">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" />
               </svg>
-              <span class="truncate">{{ project.name }}</span>
+              <span>{{ project.name }}</span>
             </a>
           </li>
         {% endfor %}
@@ -40,7 +40,7 @@
   </aside>
 
   {# ── Right: Stats + tasks ──────────────────────────────────────────────────── #}
-  <div class="home-main flex flex-col gap-6 lg:pl-8">
+  <div class="home-main flex flex-col gap-6">
 
     <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy">Home</h1>
 
@@ -254,10 +254,24 @@
 <style>
   [x-cloak] { display: none !important; }
 
-  /* Two-column layout — bypasses Tailwind w-full/lg:w-56 cascade conflict */
+  /* Mobile: main content first, projects list below */
+  .home-aside {
+    order: 2;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(189, 203, 232, 0.6);
+  }
+  .home-main { order: 1; }
+
+  /* Desktop: aside left, main right, with spacing */
   @media (min-width: 1024px) {
-    .home-aside { flex: 0 0 14rem; width: 14rem; }
-    .home-main  { flex: 1 1 0%; min-width: 0; }
+    .home-aside {
+      flex: 0 0 14rem; width: 14rem;
+      padding-right: 2.5rem;
+      order: 0;
+      margin-top: 0; padding-top: 0; border-top: none;
+    }
+    .home-main  { flex: 1 1 0%; min-width: 0; padding-left: 2.5rem; order: 0; }
   }
 
   .section-heading {
