@@ -30,14 +30,18 @@
     </div>
 
     {% for field in form %}
-      {% if field.name != "name" and field.name != "description" and field.name != "is_public" and field.name != "status" %}
+      {% if field.name != "name" and field.name != "description" and field.name != "is_public" and field.name != "status" and field.name != "contribution_tracking" %}
         {% include "_components/form_field.html" with field=field %}
       {% endif %}
     {% endfor %}
     {% include "_components/status_dropdown.html" with status_value=form.status.value %}
 
     {% include "_components/visibility_dropdown.html" with is_public_value=form.is_public.value %}
-    {% include "_components/contribution_tracking_dropdown.html" with contribution_tracking_value=form.contribution_tracking.value %}
+    {% if object %}
+      {% include "_components/contribution_tracking_dropdown.html" with contribution_tracking_value=form.contribution_tracking.value %}
+    {% else %}
+      <input type="hidden" name="contribution_tracking" value="NONE">
+    {% endif %}
 
     <div class="flex gap-2 justify-end mt-6">
       {% if object %}
