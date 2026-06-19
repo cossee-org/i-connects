@@ -1,7 +1,20 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static project_tags %}
 
 {% block title %}Kanban Board &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Scroll affordance: gradient shadows at the board edges when it overflows. */
+  .kanban-scroll-wrap { position: relative; }
+  .kanban-edge {
+    position: absolute; top: 0; bottom: 0;
+    width: 2rem; pointer-events: none; z-index: 10;
+  }
+  .kanban-edge-left  { left: 0;  background: linear-gradient(to right, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0)); }
+  .kanban-edge-right { right: 0; background: linear-gradient(to left,  rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0)); }
+</style>
+{% endblock %}
 
 {% block topbar_breadcrumb %}
   <nav aria-label="Breadcrumb" class="flex items-center min-w-0 overflow-hidden">
@@ -9,44 +22,72 @@
       <li class="shrink-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
       <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
       <li class="truncate min-w-0 shrink"><a href="{% url 'projects:detail' pk=project.pk %}" class="hover:text-brand-coral truncate">{{ project.name }}</a></li>
-      <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
-      <li class="shrink-0"><span aria-current="page" class="font-semibold text-brand-navy">Kanban Board</span></li>
     </ol>
   </nav>
 {% endblock %}
 
 {% block page_header %}
-  {% if is_project_manager %}
-    {% include "_components/page_header.html" with eyebrow=project.name title="Kanban Board" subtitle="Drag tasks between columns to update their status." %}
-  {% else %}
-    {% include "_components/page_header.html" with eyebrow=project.name title="Kanban Board" subtitle="View tasks across the board." %}
-  {% endif %}
+  <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div>
+      <h1 class="page-title font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
+      <div class="flex flex-wrap gap-2 mt-3">
+        {% if project.is_public %}
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
+        {% else %}
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
+        {% endif %}
+        {% include "_components/status_badge.html" with status=project.get_status_display %}
+        {% if user_privilege %}
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">{{ user_privilege|privilege_label }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-2 justify-end shrink-0">
+      {% comment "Milestones button hidden per request" %}
+      <a href="{% url 'tasks:milestone_list' project_pk=project.pk %}" class="btn btn-ghost btn-sm">Milestones</a>
+      {% endcomment %}
+      {% if is_project_manager %}
+        <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
+           class="btn btn-ghost btn-sm">Manage columns</a>
+        {% comment "Import CSV button hidden per request" %}
+        <a href="{% url 'tasks:import' project_pk=project.pk %}" class="btn btn-ghost btn-sm">Import CSV</a>
+        {% endcomment %}
+        <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                hx-get="{% url 'tasks:create' project_pk=project.pk %}"
+                hx-target="#task-modal-body"
+                hx-swap="innerHTML"
+                onclick="document.getElementById('task-modal').showModal()">
+          + New task
+        </button>
+      {% endif %}
+    </div>
+  </header>
 {% endblock %}
 
 {% block content %}
-  <div class="flex flex-wrap items-center justify-end gap-2 -mt-2 mb-4">
-    <a href="{% url 'tasks:milestone_list' project_pk=project.pk %}"
-       class="btn btn-ghost btn-sm">Milestones</a>
-    {% if is_project_manager %}
-      <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
-         class="btn btn-ghost btn-sm">Manage columns</a>
-      <a href="{% url 'tasks:import' project_pk=project.pk %}"
-         class="btn btn-ghost btn-sm">Import CSV</a>
-      <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-              hx-get="{% url 'tasks:create' project_pk=project.pk %}"
-              hx-target="#task-modal-body"
-              hx-swap="innerHTML"
-              onclick="document.getElementById('task-modal').showModal()">
-        + New task
-      </button>
-    {% endif %}
-  </div>
-
   {% if columns %}
-    <div id="kanban-board" class="flex gap-4 overflow-x-auto pb-4">
-      {% for column in columns %}
-        {% include "tasks/task_column.html" with column=column %}
-      {% endfor %}
+    <div class="kanban-scroll-wrap"
+         x-data="{
+           atStart: true,
+           atEnd: true,
+           refresh() {
+             const el = this.$refs.scroller;
+             if (!el) return;
+             const max = el.scrollWidth - el.clientWidth;
+             this.atStart = el.scrollLeft <= 1;
+             this.atEnd = el.scrollLeft >= max - 1;
+           }
+         }"
+         x-init="$nextTick(() => refresh())"
+         @resize.window="refresh()">
+      <div class="kanban-edge kanban-edge-left" x-show="!atStart" x-cloak x-transition.opacity></div>
+      <div id="kanban-board" x-ref="scroller" @scroll="refresh()"
+           class="flex gap-4 overflow-x-auto pb-4">
+        {% for column in columns %}
+          {% include "tasks/task_column.html" with column=column %}
+        {% endfor %}
+      </div>
+      <div class="kanban-edge kanban-edge-right" x-show="!atEnd" x-cloak x-transition.opacity></div>
     </div>
   {% else %}
     <div id="kanban-board" class="hidden"></div>
