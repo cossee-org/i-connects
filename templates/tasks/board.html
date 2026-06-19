@@ -53,8 +53,11 @@
         localStorage.setItem('boardViewMode', next);
         if (next === 'list') {
           htmx.ajax('GET', '{% url "tasks:board_list" project_pk=project.pk %}', {
-            target: '#list-view-container',
-            swap: 'innerHTML'
+            target: '#list-view-container', swap: 'innerHTML'
+          });
+        } else {
+          htmx.ajax('GET', '{% url "tasks:board_kanban" project_pk=project.pk %}', {
+            target: '#board-view-container', swap: 'innerHTML'
           });
         }
       }
@@ -105,6 +108,7 @@
 
   {# ── Board view ── #}
   <div x-show="$store.board.viewMode === 'board'">
+    <div id="board-view-container">
     {% if columns %}
       <div class="kanban-scroll-wrap"
            x-data="{
@@ -134,6 +138,7 @@
       {% url 'tasks:board_columns' project_pk=project.pk as columns_url %}
       {% include "_components/empty_state.html" with title="No columns yet" body="Create a column to start organising tasks on the board." cta_href=columns_url cta_label="Manage columns" %}
     {% endif %}
+    </div>{# end board-view-container #}
   </div>
 
   {# ── List view ── #}
@@ -223,14 +228,13 @@
     }
 
     {% if is_project_manager %}
-    // Drag-and-drop reordering is a Project Lead action (the move endpoint
-    // is Lead-only); members get a read-only board.
+    // Drag-and-drop reordering is a Project Lead action.
 
     function refreshListColumnCount(columnId) {
-      var tbody = document.querySelector('[data-list-column-id="' + columnId + '"]');
+      var container = document.querySelector('[data-list-column-id="' + columnId + '"]');
       var badge = document.querySelector('[data-list-column-count="' + columnId + '"]');
-      if (!tbody || !badge) return;
-      var count = tbody.rows.length;
+      if (!container || !badge) return;
+      var count = container.querySelectorAll('[data-task-id]').length;
       badge.textContent = count + ' task' + (count === 1 ? '' : 's');
     }
 
@@ -264,67 +268,77 @@
       });
     }
 
-    initListSortable();
+    function initKanbanSortable() {
+      document.querySelectorAll('.kanban-column-list').forEach(function (el) {
+        if (el._sortableInit) return;
+        el._sortableInit = true;
+        new Sortable(el, {
+          group: 'kanban',
+          animation: 150,
+          ghostClass: 'opacity-40',
+          onStart: function () {
+            document.dispatchEvent(new CustomEvent('kanban-drag-start'));
+          },
+          onEnd: function (evt) {
+            document.dispatchEvent(new CustomEvent('kanban-drag-end'));
 
-    // Re-init Sortable on the fresh rows after the list view is refreshed.
+            var taskId = evt.item.dataset.taskId;
+            var sourceColumnId = evt.from.dataset.columnId;
+            var newColumnId = evt.to.dataset.columnId;
+            var newIndex = evt.newIndex;
+            refreshColumnCount(sourceColumnId);
+            refreshColumnCount(newColumnId);
+
+            // Update the status badge label and colour instantly.
+            var colHeader = evt.to.closest('.kanban-column');
+            if (colHeader) {
+              var colName = colHeader.querySelector('h2').childNodes[0].textContent.trim();
+              var badge = evt.item.querySelector('.inline-flex.items-center.rounded-full');
+              if (badge && colName) {
+                badge.textContent = colName;
+                var s = colName.toLowerCase();
+                badge.className = badge.className.replace(/bg-\S+\s*text-\S+/g, '').trim();
+                var colours;
+                if (s === 'in progress' || s === 'in_progress' || s === 'active' || s === 'open') {
+                  colours = 'bg-success/10 text-success';
+                } else if (s === 'done' || s === 'completed' || s === 'closed' || s === 'archived') {
+                  colours = 'bg-brand-navy/10 text-brand-navy';
+                } else if (s === 'to do' || s === 'to-do' || s === 'todo' || s === 'pending' || s === 'new' || s === 'draft') {
+                  colours = 'bg-warning/10 text-warning';
+                } else if (s === 'overdue' || s === 'blocked' || s === 'error') {
+                  colours = 'bg-error/10 text-error';
+                } else {
+                  colours = 'bg-brand-light/50 text-brand-text';
+                }
+                badge.classList.add(...colours.split(' '));
+              }
+            }
+
+            htmx.ajax('POST', '/tasks/' + taskId + '/move/', {
+              values: { container_id: newColumnId, order: newIndex },
+              headers: { 'X-CSRFToken': csrfToken },
+              swap: 'none'
+            });
+          }
+        });
+      });
+    }
+
+    initListSortable();
+    initKanbanSortable();
+    {% endif %}
+
+    // Re-init Alpine (and Sortable for managers) after HTMX refreshes view containers.
     document.body.addEventListener('htmx:afterSwap', function (evt) {
-      if (evt.detail && evt.detail.target && evt.detail.target.id === 'list-view-container') {
-        initListSortable();
+      if (!evt.detail || !evt.detail.target) return;
+      var id = evt.detail.target.id;
+      if (id === 'board-view-container') {
+        if (typeof Alpine !== 'undefined') Alpine.initTree(evt.detail.target);
+        {% if is_project_manager %}initKanbanSortable();{% endif %}
+      } else if (id === 'list-view-container') {
+        {% if is_project_manager %}initListSortable();{% endif %}
       }
     });
-
-    document.querySelectorAll('.kanban-column-list').forEach(function (el) {
-      new Sortable(el, {
-        group: 'kanban',
-        animation: 150,
-        ghostClass: 'opacity-40',
-        onStart: function () {
-          document.dispatchEvent(new CustomEvent('kanban-drag-start'));
-        },
-        onEnd: function (evt) {
-          document.dispatchEvent(new CustomEvent('kanban-drag-end'));
-
-          var taskId = evt.item.dataset.taskId;
-          var sourceColumnId = evt.from.dataset.columnId;
-          var newColumnId = evt.to.dataset.columnId;
-          var newIndex = evt.newIndex;
-          refreshColumnCount(sourceColumnId);
-          refreshColumnCount(newColumnId);
-
-          // Update the status badge label and colour instantly.
-          var colHeader = evt.to.closest('.kanban-column');
-          if (colHeader) {
-            var colName = colHeader.querySelector('h2').childNodes[0].textContent.trim();
-            var badge = evt.item.querySelector('.inline-flex.items-center.rounded-full');
-            if (badge && colName) {
-              badge.textContent = colName;
-              var s = colName.toLowerCase();
-              badge.className = badge.className.replace(/bg-\S+\s*text-\S+/g, '').trim();
-              var colours;
-              if (s === 'in progress' || s === 'in_progress' || s === 'active' || s === 'open') {
-                colours = 'bg-success/10 text-success';
-              } else if (s === 'done' || s === 'completed' || s === 'closed' || s === 'archived') {
-                colours = 'bg-brand-navy/10 text-brand-navy';
-              } else if (s === 'to do' || s === 'to-do' || s === 'todo' || s === 'pending' || s === 'new' || s === 'draft') {
-                colours = 'bg-warning/10 text-warning';
-              } else if (s === 'overdue' || s === 'blocked' || s === 'error') {
-                colours = 'bg-error/10 text-error';
-              } else {
-                colours = 'bg-brand-light/50 text-brand-text';
-              }
-              badge.classList.add(...colours.split(' '));
-            }
-          }
-
-          htmx.ajax('POST', '/tasks/' + taskId + '/move/', {
-            values: { container_id: newColumnId, order: newIndex },
-            headers: { 'X-CSRFToken': csrfToken },
-            swap: 'none'
-          });
-        }
-      });
-    });
-    {% endif %}
 
     // Close the modal whenever HTMX swaps a new task card onto the board.
     document.body.addEventListener('task-created', function () {

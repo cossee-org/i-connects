@@ -1,0 +1,32 @@
+{# Kanban board partial — no {% extends %}. Injected into #board-view-container via HTMX. #}
+{% load static project_tags %}
+
+{% if columns %}
+  <div class="kanban-scroll-wrap"
+       x-data="{
+         atStart: true,
+         atEnd: true,
+         refresh() {
+           const el = this.$refs.scroller;
+           if (!el) return;
+           const max = el.scrollWidth - el.clientWidth;
+           this.atStart = el.scrollLeft <= 1;
+           this.atEnd = el.scrollLeft >= max - 1;
+         }
+       }"
+       x-init="$nextTick(() => refresh())"
+       @resize.window="refresh()">
+    <div class="kanban-edge kanban-edge-left" x-show="!atStart" x-cloak x-transition.opacity></div>
+    <div id="kanban-board" x-ref="scroller" @scroll="refresh()"
+         class="flex gap-4 overflow-x-auto pb-4">
+      {% for column in columns %}
+        {% include "tasks/task_column.html" with column=column %}
+      {% endfor %}
+    </div>
+    <div class="kanban-edge kanban-edge-right" x-show="!atEnd" x-cloak x-transition.opacity></div>
+  </div>
+{% else %}
+  <div id="kanban-board" class="hidden"></div>
+  {% url 'tasks:board_columns' project_pk=project.pk as columns_url %}
+  {% include "_components/empty_state.html" with title="No columns yet" body="Create a column to start organising tasks on the board." cta_href=columns_url cta_label="Manage columns" %}
+{% endif %}
