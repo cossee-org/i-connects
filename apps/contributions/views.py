@@ -16,14 +16,32 @@ from django.utils.text import slugify
 from django.views import View
 from django.views.generic import TemplateView
 
+from apps.core.enums import ContributionType
 from apps.projects.models import Project
 from apps.tasks.mixins import ProjectContextMixin
 
 from .services import (
     get_project_contributions,
     get_project_contributions_matrix,
+    get_user_contribution_counts_by_type,
     get_user_contributions,
 )
+
+
+class MyContributionsView(LoginRequiredMixin, TemplateView):
+    """Dedicated page for a user's own contributions across all projects."""
+
+    template_name = "contributions/my_contributions.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["contribution_counts"] = get_user_contribution_counts_by_type(
+            self.request.user
+        )
+        context["contribution_types"] = ContributionType.choices
+        context["recent_contributions"] = get_user_contributions(self.request.user).order_by("-closed_at")[:10]
+        context["contribution_total"] = sum(context["contribution_counts"].values())
+        return context
 
 
 class ProjectContributionsView(LoginRequiredMixin, ProjectContextMixin, TemplateView):

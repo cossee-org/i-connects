@@ -42,6 +42,7 @@ urlpatterns = [
         name="password_change",
     ),
     path("profile/", views.ProfileView.as_view(), name="profile"),
+    path("people/", views.DiscoverPeopleView.as_view(), name="discover_people"),
     path(
         "lockout/unlock/<str:token>/",
         views.lockout_unlock,

@@ -18,7 +18,7 @@ from django.utils.decorators import method_decorator
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.http import require_POST
-from django.views.generic import DetailView, FormView, UpdateView
+from django.views.generic import DetailView, FormView, TemplateView, UpdateView
 
 from apps.audit.services import AuditAction, log_action
 from apps.contributions.services import (
@@ -269,16 +269,6 @@ class ProfileView(LoginRequiredMixin, UpdateView):
     def get_object(self, queryset=None):  # noqa: D401
         return self.request.user
 
-    def get_context_data(self, **kwargs) -> dict:
-        context = super().get_context_data(**kwargs)
-        context["contribution_counts"] = get_user_contribution_counts_by_type(
-            self.request.user
-        )
-        context["contribution_types"] = ContributionType.choices
-        context["recent_contributions"] = get_user_contributions(self.request.user)[:10]
-        context["contribution_total"] = sum(context["contribution_counts"].values())
-        return context
-
     def form_valid(self, form: ProfileForm) -> HttpResponse:
         response = super().form_valid(form)
         log_action(
@@ -318,3 +308,10 @@ class PublicProfileView(LoginRequiredMixin, DetailView):
             and self.request.user.pk == profile_user.pk
         )
         return context
+
+
+# ---------------------------------------------------------------------------
+# Discover people (placeholder – future researcher directory)
+# ---------------------------------------------------------------------------
+class DiscoverPeopleView(LoginRequiredMixin, TemplateView):
+    template_name = "accounts/discover_people.html"
