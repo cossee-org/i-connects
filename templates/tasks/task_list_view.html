@@ -1,0 +1,84 @@
+{# List view partial — included in board.html inside x-show="$store.board.viewMode === 'list'". #}
+{# Reuses the same `columns` queryset as the kanban board; tasks ordered by container_task_order. #}
+{% load project_tags %}
+
+{% if columns %}
+  <div class="space-y-6">
+    {% for column in columns %}
+      {% with tasks=column.tasks.all %}
+      <section>
+        {# Column header #}
+        <div class="flex items-center gap-2 mb-2 px-1">
+          {% include "_components/status_badge.html" with status=column.name %}
+          <span class="text-xs text-brand-text/50">{{ tasks.count }} task{{ tasks.count|pluralize }}</span>
+        </div>
+
+        {% if tasks %}
+          <div class="brand-card overflow-hidden">
+            <table class="w-full text-sm">
+              <tbody class="divide-y divide-brand-light/40">
+                {% for task in tasks %}
+                  <tr class="hover:bg-brand-lighter cursor-pointer transition-colors group"
+                      @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
+
+                    {# Task name + description snippet #}
+                    <td class="px-4 py-3 min-w-0">
+                      <span class="font-medium text-brand-navy group-hover:text-brand-coral transition-colors leading-snug block">{{ task.name }}</span>
+                      {% if task.description %}
+                        <span class="text-xs text-brand-text/55 line-clamp-1 mt-0.5 block">{{ task.description }}</span>
+                      {% endif %}
+                    </td>
+
+                    {# Due date #}
+                    <td class="px-4 py-3 whitespace-nowrap hidden sm:table-cell">
+                      {% if task.deadline %}
+                        <span class="inline-flex items-center gap-1 text-xs text-brand-text/60">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                               stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                          </svg>
+                          {{ task.deadline|date:"M j, Y" }}
+                        </span>
+                      {% endif %}
+                    </td>
+
+                    {# GitHub indicator #}
+                    <td class="px-4 py-3 whitespace-nowrap hidden sm:table-cell w-8">
+                      {% if task.github_url %}
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+                             class="w-3.5 h-3.5 text-brand-text/40" aria-label="Linked to GitHub" role="img" fill="currentColor">
+                          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+                        </svg>
+                      {% endif %}
+                    </td>
+
+                    {# Assignee avatars #}
+                    <td class="px-4 py-3 w-px">
+                      {% if task.assigned_members.all %}
+                        <div class="flex -space-x-1.5" aria-hidden="true">
+                          {% for m in task.assigned_members.all|slice:":4" %}
+                            <div class="w-6 h-6 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold ring-1 ring-white"
+                                 title="{{ m }}">
+                              {{ m|stringformat:"s"|slice:":1"|upper }}
+                            </div>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-sm text-brand-text/40 pl-1 py-1">No tasks in this column.</p>
+        {% endif %}
+      </section>
+      {% endwith %}
+    {% endfor %}
+  </div>
+{% else %}
+  {% url 'tasks:board_columns' project_pk=project.pk as columns_url %}
+  {% include "_components/empty_state.html" with title="No columns yet" body="Create a column to start organising tasks on the board." cta_href=columns_url cta_label="Manage columns" %}
+{% endif %}

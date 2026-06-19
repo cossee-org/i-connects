@@ -40,7 +40,20 @@
     visibility: visible;
     transition: transform 0.25s ease, visibility 0s linear 0s;
   }
+
+  [x-cloak] { display: none !important; }
 </style>
+<script>
+  document.addEventListener('alpine:init', function () {
+    Alpine.store('board', {
+      viewMode: localStorage.getItem('boardViewMode') || 'board',
+      toggle: function () {
+        this.viewMode = this.viewMode === 'board' ? 'list' : 'board';
+        localStorage.setItem('boardViewMode', this.viewMode);
+      }
+    });
+  });
+</script>
 {% endblock %}
 
 {% block page_header %}
@@ -50,6 +63,11 @@
       <h1 class="page-title font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
     </div>
     <div class="flex flex-wrap gap-2 justify-end shrink-0">
+      <button type="button" x-data class="btn btn-ghost btn-sm"
+              @click="$store.board.toggle()"
+              x-text="$store.board.viewMode === 'board' ? 'View as list' : 'View as board'">
+        View as list
+      </button>
       {% if is_project_manager %}
         <button type="button"
                 class="btn btn-ghost btn-sm"
@@ -78,36 +96,43 @@
      @kanban-drag-end.document="$nextTick(() => _dragging = false)"
      @keydown.escape.window="closePane()">
 
-  {# ── Board ── #}
-  {% if columns %}
-    <div class="kanban-scroll-wrap"
-         x-data="{
-           atStart: true,
-           atEnd: true,
-           refresh() {
-             const el = this.$refs.scroller;
-             if (!el) return;
-             const max = el.scrollWidth - el.clientWidth;
-             this.atStart = el.scrollLeft <= 1;
-             this.atEnd = el.scrollLeft >= max - 1;
-           }
-         }"
-         x-init="$nextTick(() => refresh())"
-         @resize.window="refresh()">
-      <div class="kanban-edge kanban-edge-left" x-show="!atStart" x-cloak x-transition.opacity></div>
-      <div id="kanban-board" x-ref="scroller" @scroll="refresh()"
-           class="flex gap-4 overflow-x-auto pb-4">
-        {% for column in columns %}
-          {% include "tasks/task_column.html" with column=column %}
-        {% endfor %}
+  {# ── Board view ── #}
+  <div x-show="$store.board.viewMode === 'board'">
+    {% if columns %}
+      <div class="kanban-scroll-wrap"
+           x-data="{
+             atStart: true,
+             atEnd: true,
+             refresh() {
+               const el = this.$refs.scroller;
+               if (!el) return;
+               const max = el.scrollWidth - el.clientWidth;
+               this.atStart = el.scrollLeft <= 1;
+               this.atEnd = el.scrollLeft >= max - 1;
+             }
+           }"
+           x-init="$nextTick(() => refresh())"
+           @resize.window="refresh()">
+        <div class="kanban-edge kanban-edge-left" x-show="!atStart" x-cloak x-transition.opacity></div>
+        <div id="kanban-board" x-ref="scroller" @scroll="refresh()"
+             class="flex gap-4 overflow-x-auto pb-4">
+          {% for column in columns %}
+            {% include "tasks/task_column.html" with column=column %}
+          {% endfor %}
+        </div>
+        <div class="kanban-edge kanban-edge-right" x-show="!atEnd" x-cloak x-transition.opacity></div>
       </div>
-      <div class="kanban-edge kanban-edge-right" x-show="!atEnd" x-cloak x-transition.opacity></div>
-    </div>
-  {% else %}
-    <div id="kanban-board" class="hidden"></div>
-    {% url 'tasks:board_columns' project_pk=project.pk as columns_url %}
-    {% include "_components/empty_state.html" with title="No columns yet" body="Create a column to start organising tasks on the board." cta_href=columns_url cta_label="Manage columns" %}
-  {% endif %}
+    {% else %}
+      <div id="kanban-board" class="hidden"></div>
+      {% url 'tasks:board_columns' project_pk=project.pk as columns_url %}
+      {% include "_components/empty_state.html" with title="No columns yet" body="Create a column to start organising tasks on the board." cta_href=columns_url cta_label="Manage columns" %}
+    {% endif %}
+  </div>
+
+  {# ── List view ── #}
+  <div x-show="$store.board.viewMode === 'list'" x-cloak>
+    {% include "tasks/task_list_view.html" %}
+  </div>
 
   {# ── Task peek pane: backdrop ── #}
   <div class="task-pane-backdrop"
