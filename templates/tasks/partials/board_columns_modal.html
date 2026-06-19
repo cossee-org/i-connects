@@ -59,6 +59,7 @@
           },
           body: body,
         });
+        document.dispatchEvent(new CustomEvent('column-reordered'));
       },
     });
   })();

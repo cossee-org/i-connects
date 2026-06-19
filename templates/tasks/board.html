@@ -251,6 +251,34 @@
       // Reload so the new card appears in its column with an up-to-date count.
       window.location.reload();
     });
+
+    // Reload the board when the columns modal closes after any changes.
+    (function () {
+      var cm = document.getElementById('columns-modal');
+      if (!cm) return;
+
+      // HTMX-based operations (add, rename, delete) touch elements inside the modal.
+      document.body.addEventListener('htmx:afterRequest', function (evt) {
+        if (!cm.open) return;
+        var elt = evt.detail.elt;
+        var target = evt.detail.target;
+        if ((elt && cm.contains(elt)) || (target && cm.contains(target))) {
+          cm._dirty = true;
+        }
+      });
+
+      // Reorder uses plain fetch; board_columns_modal.html fires this event.
+      document.addEventListener('column-reordered', function () {
+        if (cm.open) cm._dirty = true;
+      });
+
+      cm.addEventListener('close', function () {
+        if (cm._dirty) {
+          cm._dirty = false;
+          window.location.reload();
+        }
+      });
+    })();
   })();
 </script>
 {% endblock %}
