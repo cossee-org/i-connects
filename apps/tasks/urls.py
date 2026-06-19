@@ -15,6 +15,11 @@ urlpatterns = [
         views.BoardView.as_view(),
         name="board",
     ),
+    path(
+        "projects/<int:project_pk>/board/list/",
+        views.BoardListPartialView.as_view(),
+        name="board_list",
+    ),
     # Task CRUD (project-scoped)
     path(
         "projects/<int:project_pk>/tasks/new/",

@@ -48,8 +48,15 @@
     Alpine.store('board', {
       viewMode: localStorage.getItem('boardViewMode') || 'board',
       toggle: function () {
-        this.viewMode = this.viewMode === 'board' ? 'list' : 'board';
-        localStorage.setItem('boardViewMode', this.viewMode);
+        var next = this.viewMode === 'board' ? 'list' : 'board';
+        this.viewMode = next;
+        localStorage.setItem('boardViewMode', next);
+        if (next === 'list') {
+          htmx.ajax('GET', '{% url "tasks:board_list" project_pk=project.pk %}', {
+            target: '#list-view-container',
+            swap: 'innerHTML'
+          });
+        }
       }
     });
   });
@@ -131,7 +138,9 @@
 
   {# ── List view ── #}
   <div x-show="$store.board.viewMode === 'list'" x-cloak>
-    {% include "tasks/task_list_view.html" %}
+    <div id="list-view-container">
+      {% include "tasks/task_list_view.html" %}
+    </div>
   </div>
 
   {# ── Task peek pane: backdrop ── #}
@@ -225,30 +234,43 @@
       badge.textContent = count + ' task' + (count === 1 ? '' : 's');
     }
 
-    document.querySelectorAll('.task-list-tbody').forEach(function (el) {
-      new Sortable(el, {
-        group: 'task-list',
-        animation: 150,
-        handle: '.task-drag-handle',
-        ghostClass: 'opacity-40',
-        onStart: function () {
-          document.dispatchEvent(new CustomEvent('kanban-drag-start'));
-        },
-        onEnd: function (evt) {
-          document.dispatchEvent(new CustomEvent('kanban-drag-end'));
-          var taskId = evt.item.dataset.taskId;
-          var sourceColumnId = evt.from.dataset.listColumnId;
-          var newColumnId = evt.to.dataset.listColumnId;
-          var newIndex = evt.newIndex;
-          refreshListColumnCount(sourceColumnId);
-          refreshListColumnCount(newColumnId);
-          htmx.ajax('POST', '/tasks/' + taskId + '/move/', {
-            values: { container_id: newColumnId, order: newIndex },
-            headers: { 'X-CSRFToken': csrfToken },
-            swap: 'none'
-          });
-        }
+    function initListSortable() {
+      document.querySelectorAll('.task-list-tbody').forEach(function (el) {
+        if (el._sortableInit) return;
+        el._sortableInit = true;
+        new Sortable(el, {
+          group: 'task-list',
+          animation: 150,
+          handle: '.task-drag-handle',
+          ghostClass: 'opacity-40',
+          onStart: function () {
+            document.dispatchEvent(new CustomEvent('kanban-drag-start'));
+          },
+          onEnd: function (evt) {
+            document.dispatchEvent(new CustomEvent('kanban-drag-end'));
+            var taskId = evt.item.dataset.taskId;
+            var sourceColumnId = evt.from.dataset.listColumnId;
+            var newColumnId = evt.to.dataset.listColumnId;
+            var newIndex = evt.newIndex;
+            refreshListColumnCount(sourceColumnId);
+            refreshListColumnCount(newColumnId);
+            htmx.ajax('POST', '/tasks/' + taskId + '/move/', {
+              values: { container_id: newColumnId, order: newIndex },
+              headers: { 'X-CSRFToken': csrfToken },
+              swap: 'none'
+            });
+          }
+        });
       });
+    }
+
+    initListSortable();
+
+    // Re-init Sortable on the fresh rows after the list view is refreshed.
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+      if (evt.detail && evt.detail.target && evt.detail.target.id === 'list-view-container') {
+        initListSortable();
+      }
     });
 
     document.querySelectorAll('.kanban-column-list').forEach(function (el) {

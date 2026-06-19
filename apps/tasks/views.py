@@ -88,6 +88,21 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         return context
 
 
+class BoardListPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
+    """HTMX partial that renders the list view section with fresh data."""
+
+    template_name = "tasks/task_list_view.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["columns"] = (
+            KanbanBoard.objects.filter(project=self.project)
+            .prefetch_related("tasks__assigned_members")
+            .order_by("container_order")
+        )
+        return context
+
+
 # ---------------------------------------------------------------------------
 # Task CRUD
 # ---------------------------------------------------------------------------
