@@ -185,6 +185,24 @@ class TaskCreateView(
         )
 
 
+class TaskDetailPaneView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
+    """HTMX side-pane partial — board peek view, no base layout."""
+
+    template_name = "tasks/task_detail_pane.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        task = get_object_or_404(
+            Task.objects.select_related("container", "milestone", "created_by")
+            .prefetch_related("assigned_members", "comments__author"),
+            project=self.project,
+            pk=kwargs["pk"],
+        )
+        context["task"] = task
+        context["comment_form"] = CommentForm()
+        return context
+
+
 class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
     template_name = "tasks/task_detail.html"
 

@@ -32,6 +32,11 @@ urlpatterns = [
         name="detail",
     ),
     path(
+        "projects/<int:project_pk>/tasks/<int:pk>/pane/",
+        views.TaskDetailPaneView.as_view(),
+        name="detail_pane",
+    ),
+    path(
         "projects/<int:project_pk>/tasks/<int:pk>/edit/",
         views.TaskUpdateView.as_view(),
         name="update",
