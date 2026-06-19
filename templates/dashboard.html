@@ -7,20 +7,23 @@
 
 {% block content %}
 
+<div class="flex items-center justify-between mb-6">
+  <h1 class="page-title font-semibold text-brand-navy">Home</h1>
+  <a href="{% url 'projects:create' %}"
+     class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 inline-flex items-center gap-1.5">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+         stroke-width="2" stroke="currentColor" class="w-4 h-4">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+    New project
+  </a>
+</div>
+
 <div class="flex flex-col lg:flex-row items-start">
 
   {# ── Left: Top projects (plain scrollable list, no card) ──────────────────── #}
   <aside class="home-aside w-full lg:sticky lg:top-20 lg:overflow-y-auto"
          x-data="{ showAll: false }">
-    <h1 class="page-title font-semibold text-brand-navy mb-3">Home</h1>
-    <a href="{% url 'projects:create' %}"
-       class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 w-full inline-flex items-center justify-center gap-1.5 mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-           stroke-width="2" stroke="currentColor" class="w-4 h-4">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-      </svg>
-      New project
-    </a>
     <p class="section-heading mb-3">Top projects</p>
 
     {% if recent_projects %}
@@ -207,20 +210,20 @@
 <style>
   [x-cloak] { display: none !important; }
 
-  /* Mobile: aside first (carries the page h1), main below. */
-  .home-aside { order: 1; }
-  .home-main  { order: 2; width: 100%; }
+  /* Mobile: main content first, projects aside below. */
+  .home-aside { order: 2; }
+  .home-main  { order: 1; width: 100%; }
 
   /* Mobile: render aside as a brand-card */
   @media (max-width: 1023px) {
     .home-aside {
+      margin-top: 1.5rem;
       background-color: var(--fallback-b1, oklch(var(--b1) / 1));
       border: 1px solid rgba(189, 203, 232, 0.6);
       border-radius: 0.5rem;
       box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
       padding: 1.25rem;
     }
-    .home-main { margin-top: 1.5rem; }
   }
 
   /* Desktop: projects aside left, main right, with spacing + divider */
