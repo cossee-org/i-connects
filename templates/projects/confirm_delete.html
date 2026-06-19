@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 
+{% block topbar_breadcrumb %}
+  <a href="{% url 'projects:detail' pk=object.pk %}"
+     class="text-sm font-medium text-brand-navy hover:text-brand-coral truncate min-w-0">
+    {{ object.name }}
+  </a>
+{% endblock %}
+
 {% block title %}Delete {{ object.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block page_header %}
