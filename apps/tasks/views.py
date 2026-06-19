@@ -88,6 +88,36 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         return context
 
 
+class BoardListPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
+    """HTMX partial that renders the list view section with fresh data."""
+
+    template_name = "tasks/task_list_view.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["columns"] = (
+            KanbanBoard.objects.filter(project=self.project)
+            .prefetch_related("tasks__assigned_members")
+            .order_by("container_order")
+        )
+        return context
+
+
+class BoardKanbanPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
+    """HTMX partial that renders the kanban board section with fresh data."""
+
+    template_name = "tasks/task_board_partial.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["columns"] = (
+            KanbanBoard.objects.filter(project=self.project)
+            .prefetch_related("tasks__assigned_members")
+            .order_by("container_order")
+        )
+        return context
+
+
 # ---------------------------------------------------------------------------
 # Task CRUD
 # ---------------------------------------------------------------------------
@@ -183,6 +213,24 @@ class TaskCreateView(
             "tasks:detail",
             kwargs={"project_pk": self.project.pk, "pk": task.pk},
         )
+
+
+class TaskDetailPaneView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
+    """HTMX side-pane partial — board peek view, no base layout."""
+
+    template_name = "tasks/task_detail_pane.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        task = get_object_or_404(
+            Task.objects.select_related("container", "milestone", "created_by")
+            .prefetch_related("assigned_members", "comments__author"),
+            project=self.project,
+            pk=kwargs["pk"],
+        )
+        context["task"] = task
+        context["comment_form"] = CommentForm()
+        return context
 
 
 class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
@@ -719,6 +767,11 @@ class TaskLogApproveView(LoginRequiredMixin, TaskMemberAccessMixin, View):
 
 class BoardColumnListView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
     template_name = "tasks/board_columns.html"
+
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["tasks/partials/board_columns_modal.html"]
+        return super().get_template_names()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

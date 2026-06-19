@@ -15,6 +15,16 @@ urlpatterns = [
         views.BoardView.as_view(),
         name="board",
     ),
+    path(
+        "projects/<int:project_pk>/board/list/",
+        views.BoardListPartialView.as_view(),
+        name="board_list",
+    ),
+    path(
+        "projects/<int:project_pk>/board/kanban/",
+        views.BoardKanbanPartialView.as_view(),
+        name="board_kanban",
+    ),
     # Task CRUD (project-scoped)
     path(
         "projects/<int:project_pk>/tasks/new/",
@@ -30,6 +40,11 @@ urlpatterns = [
         "projects/<int:project_pk>/tasks/<int:pk>/",
         views.TaskDetailView.as_view(),
         name="detail",
+    ),
+    path(
+        "projects/<int:project_pk>/tasks/<int:pk>/pane/",
+        views.TaskDetailPaneView.as_view(),
+        name="detail_pane",
     ),
     path(
         "projects/<int:project_pk>/tasks/<int:pk>/edit/",

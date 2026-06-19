@@ -7,6 +7,21 @@
 
 {% block content %}
 
+<div class="flex items-center justify-between mb-6">
+  <h1 class="page-title font-semibold text-brand-navy">Dashboard</h1>
+  <div class="flex items-center gap-2">
+  <a href="{% url 'projects:my_list' %}" class="btn btn-sm btn-ghost">My projects</a>
+  <a href="{% url 'projects:create' %}"
+     class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 inline-flex items-center gap-1.5">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+         stroke-width="2" stroke="currentColor" class="w-4 h-4">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+    New project
+  </a>
+  </div>
+</div>
+
 <div class="flex flex-col lg:flex-row items-start">
 
   {# ── Left: Top projects (plain scrollable list, no card) ──────────────────── #}
@@ -41,8 +56,6 @@
 
   {# ── Right: Stats + tasks ──────────────────────────────────────────────────── #}
   <div class="home-main flex flex-col gap-6">
-
-    <h1 class="page-title font-semibold text-brand-navy">Home</h1>
 
     {# Stats bar #}
     <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -200,8 +213,7 @@
 <style>
   [x-cloak] { display: none !important; }
 
-  /* Mobile: main content first, projects aside last (stacked at the bottom).
-     Desktop order is set in the media query below (projects left, main right). */
+  /* Mobile: main content first, projects aside below. */
   .home-aside { order: 2; }
   .home-main  { order: 1; width: 100%; }
 
@@ -224,9 +236,6 @@
       flex: 0 0 14rem; width: 14rem;
       padding-right: 2.5rem;
       border-right: 1px solid rgba(189, 203, 232, 0.6);
-      /* Offset so "Top projects" aligns with the first metrics card:
-         h1 line-height (.page-title = 2rem) + column gap (gap-6 = 1.5rem) */
-      margin-top: 3.5rem;
     }
     .home-main { order: 2; flex: 1 1 0%; min-width: 0; padding-left: 2.5rem; }
   }
