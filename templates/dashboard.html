@@ -12,6 +12,7 @@
   {# ── Left: Top projects (plain scrollable list, no card) ──────────────────── #}
   <aside class="home-aside w-full lg:sticky lg:top-20 lg:overflow-y-auto"
          x-data="{ showAll: false }">
+    <h1 class="page-title font-semibold text-brand-navy mb-4">Home</h1>
     <p class="section-heading mb-3">Top projects</p>
 
     {% if recent_projects %}
@@ -41,8 +42,6 @@
 
   {# ── Right: Stats + tasks ──────────────────────────────────────────────────── #}
   <div class="home-main flex flex-col gap-6">
-
-    <h1 class="page-title font-semibold text-brand-navy">Home</h1>
 
     {# Stats bar #}
     <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -200,21 +199,20 @@
 <style>
   [x-cloak] { display: none !important; }
 
-  /* Mobile: main content first, projects aside last (stacked at the bottom).
-     Desktop order is set in the media query below (projects left, main right). */
-  .home-aside { order: 2; }
-  .home-main  { order: 1; width: 100%; }
+  /* Mobile: aside first (carries the page h1), main below. */
+  .home-aside { order: 1; }
+  .home-main  { order: 2; width: 100%; }
 
   /* Mobile: render aside as a brand-card */
   @media (max-width: 1023px) {
     .home-aside {
-      margin-top: 1.5rem;
       background-color: var(--fallback-b1, oklch(var(--b1) / 1));
       border: 1px solid rgba(189, 203, 232, 0.6);
       border-radius: 0.5rem;
       box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
       padding: 1.25rem;
     }
+    .home-main { margin-top: 1.5rem; }
   }
 
   /* Desktop: projects aside left, main right, with spacing + divider */
@@ -224,9 +222,6 @@
       flex: 0 0 14rem; width: 14rem;
       padding-right: 2.5rem;
       border-right: 1px solid rgba(189, 203, 232, 0.6);
-      /* Offset so "Top projects" aligns with the first metrics card:
-         h1 line-height (.page-title = 2rem) + column gap (gap-6 = 1.5rem) */
-      margin-top: 3.5rem;
     }
     .home-main { order: 2; flex: 1 1 0%; min-width: 0; padding-left: 2.5rem; }
   }
