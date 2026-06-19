@@ -37,8 +37,8 @@ from django.views.generic import (
 
 from apps.audit.services import AuditAction, log_action
 from apps.comments.forms import CommentForm
-from apps.core.enums import CompletedAs, TaskStatus
-from apps.projects.models import ProjectMember
+from apps.core.enums import CompletedAs, MemberPrivileges, TaskStatus
+from apps.projects.models import ProjectMember, ProjectPrivilege
 from apps.tasks.forms import (
     KanbanBoardForm,
     MilestoneForm,
@@ -85,6 +85,27 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
             .order_by("container_order")
         )
         context["columns"] = columns
+
+        all_members = list(
+            ProjectMember.objects.filter(project=self.project, deleted=False)
+            .prefetch_related("users", "roles")
+            .order_by("id")
+        )
+        lead_user_ids = set(
+            ProjectPrivilege.objects.filter(
+                project=self.project,
+                privilege=MemberPrivileges.PROJECT_MANAGER,
+            ).values_list("user_id", flat=True)
+        )
+        leads, regulars = [], []
+        for m in all_members:
+            if any(u.id in lead_user_ids for u in m.users.all()):
+                leads.append(m)
+            else:
+                regulars.append(m)
+        context["members"] = all_members
+        context["project_leads"] = leads
+        context["regular_members"] = regulars
         return context
 
 

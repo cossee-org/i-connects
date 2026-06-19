@@ -62,35 +62,121 @@
 {% endblock %}
 
 {% block content %}
-  {% if columns %}
-    <div class="kanban-scroll-wrap"
-         x-data="{
-           atStart: true,
-           atEnd: true,
-           refresh() {
-             const el = this.$refs.scroller;
-             if (!el) return;
-             const max = el.scrollWidth - el.clientWidth;
-             this.atStart = el.scrollLeft <= 1;
-             this.atEnd = el.scrollLeft >= max - 1;
-           }
-         }"
-         x-init="$nextTick(() => refresh())"
-         @resize.window="refresh()">
-      <div class="kanban-edge kanban-edge-left" x-show="!atStart" x-cloak x-transition.opacity></div>
-      <div id="kanban-board" x-ref="scroller" @scroll="refresh()"
-           class="flex gap-4 overflow-x-auto pb-4">
-        {% for column in columns %}
-          {% include "tasks/task_column.html" with column=column %}
-        {% endfor %}
+<div class="flex flex-col lg:flex-row items-start gap-6">
+
+  {# ── Board ── #}
+  <div class="flex-1 min-w-0">
+    {% if columns %}
+      <div class="kanban-scroll-wrap"
+           x-data="{
+             atStart: true,
+             atEnd: true,
+             refresh() {
+               const el = this.$refs.scroller;
+               if (!el) return;
+               const max = el.scrollWidth - el.clientWidth;
+               this.atStart = el.scrollLeft <= 1;
+               this.atEnd = el.scrollLeft >= max - 1;
+             }
+           }"
+           x-init="$nextTick(() => refresh())"
+           @resize.window="refresh()">
+        <div class="kanban-edge kanban-edge-left" x-show="!atStart" x-cloak x-transition.opacity></div>
+        <div id="kanban-board" x-ref="scroller" @scroll="refresh()"
+             class="flex gap-4 overflow-x-auto pb-4">
+          {% for column in columns %}
+            {% include "tasks/task_column.html" with column=column %}
+          {% endfor %}
+        </div>
+        <div class="kanban-edge kanban-edge-right" x-show="!atEnd" x-cloak x-transition.opacity></div>
       </div>
-      <div class="kanban-edge kanban-edge-right" x-show="!atEnd" x-cloak x-transition.opacity></div>
+    {% else %}
+      <div id="kanban-board" class="hidden"></div>
+      {% url 'tasks:board_columns' project_pk=project.pk as columns_url %}
+      {% include "_components/empty_state.html" with title="No columns yet" body="Create a column to start organising tasks on the board." cta_href=columns_url cta_label="Manage columns" %}
+    {% endif %}
+  </div>
+
+  {# ── Right sidebar ── #}
+  <aside class="w-full lg:w-64 shrink-0 space-y-5">
+
+    {# About #}
+    <div class="brand-card p-6">
+      <h2 class="text-lg font-semibold text-brand-navy mb-3">About</h2>
+      {% if project.abstract %}
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-2">Abstract</h3>
+        <p class="whitespace-pre-line text-sm text-brand-text mt-1">{{ project.abstract }}</p>
+      {% endif %}
+      {% if project.description %}
+        <div class="mt-4" id="board-desc-wrapper">
+          <p class="whitespace-pre-line text-sm text-brand-text line-clamp-3" id="board-desc-text">{{ project.description }}</p>
+          <button type="button"
+                  id="board-desc-toggle"
+                  class="text-brand-coral hover:underline text-sm mt-1 hidden"
+                  onclick="(function(){
+                    var p = document.getElementById('board-desc-text');
+                    var btn = document.getElementById('board-desc-toggle');
+                    if (p.classList.contains('line-clamp-3')) {
+                      p.classList.remove('line-clamp-3');
+                      btn.textContent = 'Show less';
+                    } else {
+                      p.classList.add('line-clamp-3');
+                      btn.textContent = 'Read more';
+                    }
+                  })()">Read more</button>
+        </div>
+        <script>
+          (function () {
+            var p = document.getElementById('board-desc-text');
+            var btn = document.getElementById('board-desc-toggle');
+            if (p && btn && p.scrollHeight > p.clientHeight) { btn.classList.remove('hidden'); }
+          })();
+        </script>
+      {% endif %}
+      {% if project.keywords %}
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Keywords</h3>
+        <p class="text-sm text-brand-text/80 mt-1">{{ project.keywords }}</p>
+      {% endif %}
+      {% if not project.abstract and not project.description and not project.keywords %}
+        <p class="text-sm text-brand-text/60">No description yet.</p>
+      {% endif %}
     </div>
-  {% else %}
-    <div id="kanban-board" class="hidden"></div>
-    {% url 'tasks:board_columns' project_pk=project.pk as columns_url %}
-    {% include "_components/empty_state.html" with title="No columns yet" body="Create a column to start organising tasks on the board." cta_href=columns_url cta_label="Manage columns" %}
-  {% endif %}
+
+    {# Contributors #}
+    <div class="brand-card p-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold text-brand-navy">Contributors</h2>
+        <a href="{% url 'projects:members' pk=project.pk %}" class="text-xs font-medium text-brand-navy hover:text-brand-coral">
+          View all
+        </a>
+      </div>
+      {% if members %}
+        {% if project_leads %}
+          <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">
+            {% if project_leads|length > 1 %}Project Leads{% else %}Project Lead{% endif %}
+          </h3>
+          <ul class="divide-y divide-brand-light/60 mb-3">
+            {% for m in project_leads %}
+              {% include "projects/partials/member_list_item.html" with m=m %}
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% if regular_members %}
+          <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">Members</h3>
+          <ul class="divide-y divide-brand-light/60">
+            {% for m in regular_members %}
+              {% include "projects/partials/member_list_item.html" with m=m %}
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% else %}
+        <p class="text-sm text-brand-text/60">No members yet.</p>
+      {% endif %}
+    </div>
+
+  </aside>
+
+</div>
 
   {# Task create/edit modal #}
   <dialog id="task-modal" class="modal" aria-label="Task editor">
