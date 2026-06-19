@@ -216,6 +216,41 @@
     {% if is_project_manager %}
     // Drag-and-drop reordering is a Project Lead action (the move endpoint
     // is Lead-only); members get a read-only board.
+
+    function refreshListColumnCount(columnId) {
+      var tbody = document.querySelector('[data-list-column-id="' + columnId + '"]');
+      var badge = document.querySelector('[data-list-column-count="' + columnId + '"]');
+      if (!tbody || !badge) return;
+      var count = tbody.rows.length;
+      badge.textContent = count + ' task' + (count === 1 ? '' : 's');
+    }
+
+    document.querySelectorAll('.task-list-tbody').forEach(function (el) {
+      new Sortable(el, {
+        group: 'task-list',
+        animation: 150,
+        handle: '.task-drag-handle',
+        ghostClass: 'opacity-40',
+        onStart: function () {
+          document.dispatchEvent(new CustomEvent('kanban-drag-start'));
+        },
+        onEnd: function (evt) {
+          document.dispatchEvent(new CustomEvent('kanban-drag-end'));
+          var taskId = evt.item.dataset.taskId;
+          var sourceColumnId = evt.from.dataset.listColumnId;
+          var newColumnId = evt.to.dataset.listColumnId;
+          var newIndex = evt.newIndex;
+          refreshListColumnCount(sourceColumnId);
+          refreshListColumnCount(newColumnId);
+          htmx.ajax('POST', '/tasks/' + taskId + '/move/', {
+            values: { container_id: newColumnId, order: newIndex },
+            headers: { 'X-CSRFToken': csrfToken },
+            swap: 'none'
+          });
+        }
+      });
+    });
+
     document.querySelectorAll('.kanban-column-list').forEach(function (el) {
       new Sortable(el, {
         group: 'kanban',

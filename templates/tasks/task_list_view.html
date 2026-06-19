@@ -10,16 +10,31 @@
         {# Column header #}
         <div class="flex items-center gap-2 mb-2 px-1">
           {% include "_components/status_badge.html" with status=column.name %}
-          <span class="text-xs text-brand-text/50">{{ tasks.count }} task{{ tasks.count|pluralize }}</span>
+          <span class="text-xs text-brand-text/50"
+                data-list-column-count="{{ column.pk }}">{{ tasks.count }} task{{ tasks.count|pluralize }}</span>
         </div>
 
         {% if tasks %}
           <div class="brand-card overflow-hidden">
             <table class="w-full text-sm">
-              <tbody class="divide-y divide-brand-light/40">
+              <tbody class="task-list-tbody divide-y divide-brand-light/40"
+                     data-list-column-id="{{ column.pk }}">
                 {% for task in tasks %}
-                  <tr class="hover:bg-brand-lighter cursor-pointer transition-colors group"
+                  <tr data-task-id="{{ task.pk }}"
+                      class="hover:bg-brand-lighter cursor-pointer transition-colors group"
                       @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
+
+                    {# Drag handle (managers only) #}
+                    {% if is_project_manager %}
+                    <td class="pl-3 pr-1 py-3 w-6">
+                      <span class="task-drag-handle block cursor-grab text-brand-text/25 hover:text-brand-text/60 transition-colors opacity-0 group-hover:opacity-100"
+                            @click.stop aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+                          <path d="M7 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm6-9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm0 4.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z" />
+                        </svg>
+                      </span>
+                    </td>
+                    {% endif %}
 
                     {# Task name + description snippet #}
                     <td class="px-4 py-3 w-full min-w-0">
