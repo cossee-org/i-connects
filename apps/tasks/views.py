@@ -738,6 +738,11 @@ class TaskLogApproveView(LoginRequiredMixin, TaskMemberAccessMixin, View):
 class BoardColumnListView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
     template_name = "tasks/board_columns.html"
 
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["tasks/partials/board_columns_modal.html"]
+        return super().get_template_names()
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["columns"] = KanbanBoard.objects.filter(project=self.project)

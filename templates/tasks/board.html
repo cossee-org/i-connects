@@ -46,29 +46,19 @@
 {% block page_header %}
   <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
     <div>
+      <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">Tasks</p>
       <h1 class="page-title font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
-      <div class="flex flex-wrap gap-2 mt-3">
-        {% if project.is_public %}
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
-        {% else %}
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
-        {% endif %}
-        {% include "_components/status_badge.html" with status=project.get_status_display %}
-        {% if user_privilege %}
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">{{ user_privilege|privilege_label }}</span>
-        {% endif %}
-      </div>
     </div>
     <div class="flex flex-wrap gap-2 justify-end shrink-0">
-      {% comment "Milestones button hidden per request" %}
-      <a href="{% url 'tasks:milestone_list' project_pk=project.pk %}" class="btn btn-ghost btn-sm">Milestones</a>
-      {% endcomment %}
       {% if is_project_manager %}
-        <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
-           class="btn btn-ghost btn-sm">Manage columns</a>
-        {% comment "Import CSV button hidden per request" %}
-        <a href="{% url 'tasks:import' project_pk=project.pk %}" class="btn btn-ghost btn-sm">Import CSV</a>
-        {% endcomment %}
+        <button type="button"
+                class="btn btn-ghost btn-sm"
+                hx-get="{% url 'tasks:board_columns' project_pk=project.pk %}"
+                hx-target="#columns-modal-body"
+                hx-swap="innerHTML"
+                onclick="document.getElementById('columns-modal').showModal()">
+          Manage columns
+        </button>
         <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
                 hx-get="{% url 'tasks:create' project_pk=project.pk %}"
                 hx-target="#task-modal-body"
@@ -140,6 +130,25 @@
       </div>
     </div>
   </aside>
+
+  {# ── Manage columns modal ── #}
+  <dialog id="columns-modal" class="modal" aria-label="Manage columns">
+    <div class="modal-box max-w-lg bg-base-100 border border-brand-light/60">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
+      </form>
+      <div id="columns-modal-body">
+        <div class="flex items-center justify-center h-24 gap-2 text-brand-text/40 text-sm">
+          <svg class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          Loading…
+        </div>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
 
   {# ── Task create/edit modal ── #}
   <dialog id="task-modal" class="modal" aria-label="Task editor">
