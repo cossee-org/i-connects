@@ -2,13 +2,6 @@
 
 {% block title %}Invite to {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
-{% block topbar_breadcrumb %}
-  <a href="{% url 'projects:detail' pk=project.pk %}"
-     class="text-sm font-medium text-brand-navy hover:text-brand-coral truncate min-w-0">
-    {{ project.name }}
-  </a>
-{% endblock %}
-
 {% block page_header %}
   <header class="mb-6">
     <h1 class="page-title font-semibold text-brand-navy leading-tight">

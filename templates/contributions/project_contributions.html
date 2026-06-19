@@ -1,13 +1,6 @@
 {% extends "base.html" %}
 {% load contribution_tags %}
 
-{% block topbar_breadcrumb %}
-  <a href="{% url 'projects:detail' pk=project.pk %}"
-     class="text-sm font-medium text-brand-navy hover:text-brand-coral truncate min-w-0">
-    {{ project.name }}
-  </a>
-{% endblock %}
-
 {% block title %}Contributions &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block breadcrumbs %}

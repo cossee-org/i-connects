@@ -188,7 +188,37 @@
       </a>
     {% endblock %}
 
-    {% block topbar_breadcrumb %}{% endblock %}
+    {% block topbar_breadcrumb %}
+    {% if project %}
+      <nav class="flex items-center gap-1.5 text-sm min-w-0 overflow-hidden" aria-label="Breadcrumb">
+        {% if user_privilege %}
+          <a href="{% url 'projects:my_list' %}" class="text-brand-navy/60 hover:text-brand-navy shrink-0 whitespace-nowrap">My projects</a>
+        {% else %}
+          <a href="{% url 'projects:list' %}" class="text-brand-navy/60 hover:text-brand-navy shrink-0 whitespace-nowrap">Discover projects</a>
+        {% endif %}
+        <span class="text-brand-navy/30 shrink-0">/</span>
+        <a href="{% url 'projects:detail' pk=project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral truncate min-w-0">{{ project.name }}</a>
+      </nav>
+    {% elif request.resolver_match.url_name == 'dashboard' %}
+      <span class="text-sm font-medium text-brand-navy whitespace-nowrap">Home</span>
+    {% elif request.resolver_match.url_name == 'my_list' and request.resolver_match.app_name == 'projects' %}
+      <a href="{% url 'projects:my_list' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">My projects</a>
+    {% elif request.resolver_match.url_name == 'my_contributions' %}
+      <a href="{% url 'contributions:my_contributions' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">My contributions</a>
+    {% elif request.resolver_match.url_name == 'list' and request.resolver_match.app_name == 'projects' %}
+      <a href="{% url 'projects:list' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Discover projects</a>
+    {% elif request.resolver_match.url_name == 'discover_people' %}
+      <a href="{% url 'accounts:discover_people' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Discover people</a>
+    {% elif request.resolver_match.url_name == 'my_invitations' %}
+      <a href="{% url 'projects:my_invitations' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Invitations</a>
+    {% elif request.resolver_match.app_name == 'forms_builder' %}
+      <a href="{% url 'forms_builder:form_list' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Forms</a>
+    {% elif request.resolver_match.app_name == 'notifications' %}
+      <a href="{% url 'notifications:list' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Notifications</a>
+    {% elif request.resolver_match.url_name == 'profile' or request.resolver_match.url_name == 'edit_profile' %}
+      <span class="text-sm font-medium text-brand-navy whitespace-nowrap">My profile</span>
+    {% endif %}
+    {% endblock %}
 
     <div class="ml-auto flex items-center gap-1">
 
