@@ -25,7 +25,12 @@
     </div>
   {% endif %}
 
-  {% include "_components/form_field.html" with field=form.name %}
+  <div x-data="{ nameCharCount: {{ form.name.value|default:''|length }} }">
+    {% include "_components/form_field.html" with field=form.name %}
+    <p class="text-xs text-brand-text/50 -mt-2 mb-3 text-left" :class="nameCharCount > 200 ? 'text-error' : ''">
+      <span x-text="nameCharCount"></span> / 200
+    </p>
+  </div>
   <div x-data="{ charCount: {{ form.description.value|default:''|length }} }">
     {% include "_components/form_field.html" with field=form.description %}
     <p class="text-xs text-brand-text/50 -mt-2 mb-3 text-left" :class="charCount > 350 ? 'text-error' : ''">
@@ -34,7 +39,7 @@
   </div>
 {% include "_components/status_dropdown.html" with status_value=form.status.value %}
   {% include "_components/visibility_dropdown.html" with is_public_value=form.is_public.value %}
-  {% include "_components/contribution_tracking_dropdown.html" with contribution_tracking_value=form.contribution_tracking.value %}
+  <input type="hidden" name="contribution_tracking" value="NONE">
 
   <div class="flex gap-2 justify-end mt-6">
     <button type="button" class="btn btn-sm btn-ghost"

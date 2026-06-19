@@ -61,6 +61,44 @@
     @media (min-width: 1024px) {
       .app-main-authenticated.sidebar-open { padding-left: 14rem; }
     }
+
+    /* ── Top bar tooltips (open downward) ── */
+    .topbar-tooltip { position: relative; }
+    .topbar-tooltip::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      color: #f8fafc;
+      font-size: 0.7rem;
+      font-weight: 400;
+      line-height: 1.4;
+      padding: 4px 9px;
+      border-radius: 5px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      z-index: 60;
+      box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
+    }
+    .topbar-tooltip::before {
+      content: "";
+      position: absolute;
+      top: calc(100% + 1px);
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-bottom-color: #1e293b;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      z-index: 60;
+    }
+    .topbar-tooltip:hover::after,
+    .topbar-tooltip:hover::before { opacity: 1; }
   </style>
 
   {% comment %}Vendored locally so the UI works in environments whose network policy blocks external hosts.{% endcomment %}
@@ -78,6 +116,7 @@
         mobile: window.innerWidth < 1024,
         sidebarReady: false,
         userMenuOpen: false,
+        topbarMenuOpen: false,
         init() {
           this.$watch('sidebarOpen', v => localStorage.setItem('sidebarOpen', v));
           const mq = window.matchMedia('(max-width: 1023px)');
@@ -112,6 +151,72 @@
     {% endblock %}
 
     {% block topbar_breadcrumb %}{% endblock %}
+
+    <div class="ml-auto flex items-center gap-1">
+
+      <!-- Create project -->
+      <a href="{% url 'projects:create' %}"
+         class="topbar-tooltip inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-white border border-gray-300 text-brand-navy hover:bg-gray-50 transition-colors shrink-0"
+         data-tooltip="New project">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 shrink-0">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+        </svg>
+        <span class="hidden sm:inline">New project</span>
+      </a>
+
+      <!-- My projects -->
+      <a href="{% url 'projects:my_list' %}"
+         class="topbar-tooltip inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-white border border-gray-300 text-brand-navy hover:bg-gray-50 transition-colors shrink-0"
+         data-tooltip="My projects">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" />
+        </svg>
+        <span class="hidden sm:inline">My projects</span>
+      </a>
+
+      <!-- Avatar dropdown -->
+      <div class="relative">
+        <button @click="topbarMenuOpen = !topbarMenuOpen"
+                class="topbar-tooltip flex items-center px-2 py-1.5 rounded-md hover:bg-brand-lighter transition-colors"
+                :aria-expanded="topbarMenuOpen"
+                data-tooltip="{{ user.name|default:user.email }}">
+          <div class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">{{ user.name|default:user.email|slice:":1"|upper }}</div>
+        </button>
+
+        <div x-cloak x-show="topbarMenuOpen"
+             x-transition:enter="transition ease-out duration-150"
+             x-transition:enter-start="opacity-0 -translate-y-1"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-100"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 -translate-y-1"
+             @click.outside="topbarMenuOpen = false"
+             class="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-brand-light/60 overflow-hidden z-50">
+          <div class="px-4 py-3 border-b border-brand-light/60">
+            <p class="text-sm font-semibold text-brand-navy truncate">{{ user.name|default:user.email }}</p>
+            {% if user.name %}<p class="text-xs text-brand-text/50 truncate">{{ user.email }}</p>{% endif %}
+          </div>
+          <a href="{% url 'accounts:profile' %}"
+             class="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-navy hover:bg-brand-lighter transition-colors whitespace-nowrap">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+            </svg>
+            My profile
+          </a>
+          <div class="border-t border-brand-light/60"></div>
+          <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}
+            <button type="submit"
+                    class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-brand-text/60 hover:text-brand-coral hover:bg-brand-lighter transition-colors whitespace-nowrap">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" />
+              </svg>
+              Sign out
+            </button>
+          </form>
+        </div>
+      </div>
+
+    </div>
   </header>
 
   <!-- ── MOBILE OVERLAY ── -->
@@ -131,10 +236,12 @@
     <nav class="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1" aria-label="Primary">
       <a href="{% url 'projects:dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>
-        Dashboard
+        Home
       </a>
       <a href="{% url 'projects:my_list' %}" class="sidebar-link {% if request.resolver_match.url_name == 'my_list' %}active{% endif %}">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" /></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" />
+        </svg>
         My projects
       </a>
       <a href="{% url 'projects:list' %}" class="sidebar-link {% if request.resolver_match.url_name == 'list' and request.resolver_match.app_name == 'projects' %}active{% endif %}">
@@ -251,7 +358,6 @@
       </div>
     </main>
 
-    {% if not user.is_authenticated %}
     <footer class="border-t border-brand-light bg-base-100 mt-auto" role="contentinfo">
       <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-brand-text/70">
         <div class="flex items-center gap-2">
@@ -262,10 +368,11 @@
         <div class="flex gap-4">
           <a href="{% url 'core:home' %}" class="hover:text-brand-coral">Home</a>
           <a href="{% url 'projects:list' %}" class="hover:text-brand-coral">Browse projects</a>
+          <a href="{% url 'core:terms_of_use' %}" class="hover:text-brand-coral">Terms of Use</a>
+          <a href="{% url 'core:privacy_policy' %}" class="hover:text-brand-coral">Privacy Policy</a>
         </div>
       </div>
     </footer>
-    {% endif %}
   </div><!-- end main content -->
 
   {% block extra_body %}{% endblock %}
