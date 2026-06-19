@@ -14,17 +14,7 @@
   {# ── Left: Top projects (plain scrollable list, no card) ──────────────────── #}
   <aside class="home-aside w-full lg:sticky lg:top-20 lg:overflow-y-auto lg:border-r lg:border-brand-light/60"
          x-data="{ showAll: false }">
-    <div class="flex items-center justify-between mb-3">
-      <p class="section-heading">Top projects</p>
-      <a href="{% url 'projects:create' %}"
-         class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 shrink-0 inline-flex items-center gap-1.5">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="2" stroke="currentColor" class="w-4 h-4">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-        </svg>
-        New project
-      </a>
-    </div>
+    <p class="section-heading mb-3">Top projects</p>
 
     {% if recent_projects %}
       <ul class="flex flex-col gap-0.5">
@@ -264,17 +254,19 @@
 <style>
   [x-cloak] { display: none !important; }
 
-  /* Mobile: render as a brand-card (bg-base-100 border rounded-lg shadow-sm) */
-  .home-aside { margin-bottom: 1.5rem; }
+  /* Mobile: render as a brand-card at the bottom (below the main content) */
   .home-main  { width: 100%; }
   @media (max-width: 1023px) {
     .home-aside {
+      order: 2;
+      margin-top: 1.5rem;
       background-color: var(--fallback-b1, oklch(var(--b1) / 1));
       border: 1px solid rgba(189, 203, 232, 0.6);
       border-radius: 0.5rem;
       box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
       padding: 1.25rem;
     }
+    .home-main { order: 1; }
   }
 
   /* Desktop: aside left, main right, with spacing */
@@ -282,7 +274,6 @@
     .home-aside {
       flex: 0 0 14rem; width: 14rem;
       padding-right: 2.5rem;
-      margin-bottom: 0;
     }
     .home-main { flex: 1 1 0%; min-width: 0; padding-left: 2.5rem; }
   }
