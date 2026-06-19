@@ -3,6 +3,19 @@
 
 {% block title %}Kanban Board &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
+{% block extra_head %}
+<style>
+  /* Scroll affordance: gradient shadows at the board edges when it overflows. */
+  .kanban-scroll-wrap { position: relative; }
+  .kanban-edge {
+    position: absolute; top: 0; bottom: 0;
+    width: 2rem; pointer-events: none; z-index: 10;
+  }
+  .kanban-edge-left  { left: 0;  background: linear-gradient(to right, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0)); }
+  .kanban-edge-right { right: 0; background: linear-gradient(to left,  rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0)); }
+</style>
+{% endblock %}
+
 {% block topbar_breadcrumb %}
   <nav aria-label="Breadcrumb" class="flex items-center min-w-0 overflow-hidden">
     <ol class="flex items-center gap-1.5 text-sm text-brand-navy/70 whitespace-nowrap min-w-0">
@@ -53,10 +66,28 @@
 
 {% block content %}
   {% if columns %}
-    <div id="kanban-board" class="flex gap-4 overflow-x-auto pb-4">
-      {% for column in columns %}
-        {% include "tasks/task_column.html" with column=column %}
-      {% endfor %}
+    <div class="kanban-scroll-wrap"
+         x-data="{
+           atStart: true,
+           atEnd: true,
+           refresh() {
+             const el = this.$refs.scroller;
+             if (!el) return;
+             const max = el.scrollWidth - el.clientWidth;
+             this.atStart = el.scrollLeft <= 1;
+             this.atEnd = el.scrollLeft >= max - 1;
+           }
+         }"
+         x-init="$nextTick(() => refresh())"
+         @resize.window="refresh()">
+      <div class="kanban-edge kanban-edge-left" x-show="!atStart" x-cloak x-transition.opacity></div>
+      <div id="kanban-board" x-ref="scroller" @scroll="refresh()"
+           class="flex gap-4 overflow-x-auto pb-4">
+        {% for column in columns %}
+          {% include "tasks/task_column.html" with column=column %}
+        {% endfor %}
+      </div>
+      <div class="kanban-edge kanban-edge-right" x-show="!atEnd" x-cloak x-transition.opacity></div>
     </div>
   {% else %}
     <div id="kanban-board" class="hidden"></div>

@@ -101,3 +101,19 @@ def test_board_header_shows_project_tags_and_buttons(client, user):
     # Action buttons live in the header (manager view).
     assert "Manage columns" in content
     assert "New task" in content
+
+
+@pytest.mark.django_db
+def test_board_has_scroll_shadow_markup(client, user):
+    """The board wraps its scroller with edge-shadow overlays (shown via JS
+    when the columns overflow horizontally)."""
+    project = _make_project(user)  # seeds default kanban columns
+    client.force_login(user)
+
+    response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "kanban-scroll-wrap" in content
+    assert "kanban-edge-left" in content
+    assert "kanban-edge-right" in content
