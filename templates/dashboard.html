@@ -9,6 +9,8 @@
 
 <div class="flex items-center justify-between mb-6">
   <h1 class="page-title font-semibold text-brand-navy">Home</h1>
+  <div class="flex items-center gap-2">
+  <a href="{% url 'projects:my_list' %}" class="btn btn-sm btn-ghost">My projects</a>
   <a href="{% url 'projects:create' %}"
      class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 inline-flex items-center gap-1.5">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -17,6 +19,7 @@
     </svg>
     New project
   </a>
+  </div>
 </div>
 
 <div class="flex flex-col lg:flex-row items-start">
