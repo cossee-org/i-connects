@@ -518,6 +518,8 @@ class ProjectDetailView(DetailView):
         context["is_project_manager"] = (
             context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER
         )
+        # Drives the project section tabs in the top bar (members only).
+        context["is_project_member"] = context["user_privilege"] is not None
 
         # Task summary — only meaningful for members, but the queries are
         # cheap enough to run for any viewer who can see the project.

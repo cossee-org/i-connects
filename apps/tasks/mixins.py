@@ -71,6 +71,10 @@ class ProjectContextMixin:
         context["project"] = self.project
         context["project_member"] = self.project_member
         context["is_project_manager"] = self.is_project_manager
+        # Drives the project section tabs in the top bar (members only).
+        context["is_project_member"] = (
+            self.project_member is not None or self.is_project_manager
+        )
         return context
 
 

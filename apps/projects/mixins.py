@@ -31,7 +31,10 @@ class ProjectContextMixin:
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["project"] = self.project
-        context["user_privilege"] = _get_user_privilege(self.request.user, self.project)
+        user_privilege = _get_user_privilege(self.request.user, self.project)
+        context["user_privilege"] = user_privilege
+        # Drives the project section tabs in the top bar (members only).
+        context["is_project_member"] = user_privilege is not None
         return context
 
 
