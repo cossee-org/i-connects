@@ -5,14 +5,14 @@
 
 {% block extra_head %}
 <style>
-  /* Scroll affordance: gradient shadows at the board edges when it overflows. */
+  /* Scroll affordance: thin border at the board edge when content is clipped. */
   .kanban-scroll-wrap { position: relative; }
   .kanban-edge {
     position: absolute; top: 0; bottom: 0;
-    width: 2rem; pointer-events: none; z-index: 10;
+    width: 2px; pointer-events: none; z-index: 10;
   }
-  .kanban-edge-left  { left: 0;  background: linear-gradient(to right, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0)); }
-  .kanban-edge-right { right: 0; background: linear-gradient(to left,  rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0)); }
+  .kanban-edge-left  { left: 0;  background-color: rgba(189, 203, 232, 0.9); }
+  .kanban-edge-right { right: 0; background-color: rgba(189, 203, 232, 0.9); }
 </style>
 {% endblock %}
 
