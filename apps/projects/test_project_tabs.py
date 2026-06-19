@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from django.urls import reverse
 
-from apps.core.enums import ProjectStatus
+from apps.core.enums import MemberPrivileges, ProjectStatus
 from apps.projects.services import create_project_with_owner
 
 
@@ -81,3 +81,23 @@ def test_my_projects_cards_link_to_board(client, user):
 
     assert response.status_code == 200
     assert reverse("tasks:board", kwargs={"project_pk": project.pk}) in content
+
+
+@pytest.mark.django_db
+def test_board_header_shows_project_tags_and_buttons(client, user):
+    """The Tasks (board) header carries the About-page tags (visibility,
+    status, membership) and the Manage columns / New task action buttons."""
+    project = _make_project(user)  # public + ACTIVE; owner is a PM
+    client.force_login(user)
+
+    response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    # Tags copied from the About subpage.
+    assert "border border-gray-300 text-gray-500" in content  # visibility pill
+    assert project.get_status_display() in content  # status badge ("Active")
+    assert MemberPrivileges.PROJECT_MANAGER.label in content  # membership badge
+    # Action buttons live in the header (manager view).
+    assert "Manage columns" in content
+    assert "New task" in content
