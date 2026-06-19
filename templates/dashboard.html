@@ -254,7 +254,8 @@
 <style>
   [x-cloak] { display: none !important; }
 
-  /* Main content first; projects aside last (bottom on mobile, right on desktop) */
+  /* Mobile: main content first, projects aside last (stacked at the bottom).
+     Desktop order is set in the media query below (projects left, main right). */
   .home-aside { order: 2; }
   .home-main  { order: 1; width: 100%; }
 
@@ -270,17 +271,18 @@
     }
   }
 
-  /* Desktop: main left, aside right, with spacing + divider */
+  /* Desktop: projects aside left, main right, with spacing + divider */
   @media (min-width: 1024px) {
     .home-aside {
+      order: 1;
       flex: 0 0 14rem; width: 14rem;
-      padding-left: 2.5rem;
-      border-left: 1px solid rgba(189, 203, 232, 0.6);
-      /* Offset so "Your Top Projects" aligns with the first metrics card:
+      padding-right: 2.5rem;
+      border-right: 1px solid rgba(189, 203, 232, 0.6);
+      /* Offset so "Top projects" aligns with the first metrics card:
          h1 line-height (sm:text-3xl = 2.25rem) + column gap (gap-6 = 1.5rem) */
       margin-top: 3.75rem;
     }
-    .home-main { flex: 1 1 0%; min-width: 0; padding-right: 2.5rem; }
+    .home-main { order: 2; flex: 1 1 0%; min-width: 0; padding-left: 2.5rem; }
   }
 
   .section-heading {
