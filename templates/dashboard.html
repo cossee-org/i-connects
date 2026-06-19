@@ -12,7 +12,15 @@
   {# ── Left: Top projects (plain scrollable list, no card) ──────────────────── #}
   <aside class="home-aside w-full lg:sticky lg:top-20 lg:overflow-y-auto"
          x-data="{ showAll: false }">
-    <h1 class="page-title font-semibold text-brand-navy mb-4">Home</h1>
+    <h1 class="page-title font-semibold text-brand-navy mb-3">Home</h1>
+    <a href="{% url 'projects:create' %}"
+       class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 w-full inline-flex items-center justify-center gap-1.5 mb-4">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="2" stroke="currentColor" class="w-4 h-4">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+      </svg>
+      New project
+    </a>
     <p class="section-heading mb-3">Top projects</p>
 
     {% if recent_projects %}
