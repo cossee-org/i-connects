@@ -9,29 +9,27 @@
       <li class="shrink-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
       <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
       <li class="truncate min-w-0 shrink"><a href="{% url 'projects:detail' pk=project.pk %}" class="hover:text-brand-coral truncate">{{ project.name }}</a></li>
-      <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
-      <li class="shrink-0"><span aria-current="page" class="font-semibold text-brand-navy">Kanban Board</span></li>
     </ol>
   </nav>
 {% endblock %}
 
 {% block page_header %}
-  {% if is_project_manager %}
-    {% include "_components/page_header.html" with eyebrow=project.name title="Kanban Board" subtitle="Drag tasks between columns to update their status." %}
-  {% else %}
-    {% include "_components/page_header.html" with eyebrow=project.name title="Kanban Board" subtitle="View tasks across the board." %}
-  {% endif %}
+  {% include "_components/page_header.html" with title=project.name %}
 {% endblock %}
 
 {% block content %}
   <div class="flex flex-wrap items-center justify-end gap-2 -mt-2 mb-4">
+    {% comment "Milestones button hidden per request" %}
     <a href="{% url 'tasks:milestone_list' project_pk=project.pk %}"
        class="btn btn-ghost btn-sm">Milestones</a>
+    {% endcomment %}
     {% if is_project_manager %}
       <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
          class="btn btn-ghost btn-sm">Manage columns</a>
+      {% comment "Import CSV button hidden per request" %}
       <a href="{% url 'tasks:import' project_pk=project.pk %}"
          class="btn btn-ghost btn-sm">Import CSV</a>
+      {% endcomment %}
       <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
               hx-get="{% url 'tasks:create' project_pk=project.pk %}"
               hx-target="#task-modal-body"
