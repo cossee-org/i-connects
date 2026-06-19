@@ -1,60 +1,195 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static project_tags %}
 
 {% block title %}Kanban Board &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
-{% block topbar_breadcrumb %}
-  <nav aria-label="Breadcrumb" class="flex items-center min-w-0 overflow-hidden">
-    <ol class="flex items-center gap-1.5 text-sm text-brand-navy/70 whitespace-nowrap min-w-0">
-      <li class="shrink-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
-      <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
-      <li class="truncate min-w-0 shrink"><a href="{% url 'projects:detail' pk=project.pk %}" class="hover:text-brand-coral truncate">{{ project.name }}</a></li>
-      <li aria-hidden="true" class="text-brand-navy/30 shrink-0">/</li>
-      <li class="shrink-0"><span aria-current="page" class="font-semibold text-brand-navy">Kanban Board</span></li>
-    </ol>
-  </nav>
+{% block extra_head %}
+<style>
+  /* Scroll affordance: thin border at the board edge when content is clipped. */
+  .kanban-scroll-wrap { position: relative; }
+  .kanban-edge {
+    position: absolute; top: 0; bottom: 0;
+    width: 2px; pointer-events: none; z-index: 10;
+  }
+  .kanban-edge-left  { left: 0;  background-color: rgba(189, 203, 232, 0.9); }
+  .kanban-edge-right { right: 0; background-color: rgba(189, 203, 232, 0.9); }
+
+  /* Task peek side pane */
+  .task-pane-backdrop {
+    position: fixed; inset: 0; z-index: 40;
+    background: rgba(0, 0, 0, 0.18);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .task-pane-backdrop.is-open { opacity: 1; pointer-events: auto; }
+
+  .task-pane-drawer {
+    position: fixed; top: 3.5rem; right: 0; bottom: 0;
+    width: min(30rem, 100vw);
+    z-index: 50;
+    background: #fff;
+    border-left: 1px solid rgb(226 232 240 / 0.8);
+    box-shadow: -6px 0 24px rgb(0 0 0 / 0.07);
+    display: flex; flex-direction: column; overflow: hidden;
+    transform: translateX(100%);
+    visibility: hidden;
+    transition: transform 0.25s ease, visibility 0s linear 0.25s;
+  }
+  .task-pane-drawer.is-open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 0.25s ease, visibility 0s linear 0s;
+  }
+
+  [x-cloak] { display: none !important; }
+</style>
+<script>
+  document.addEventListener('alpine:init', function () {
+    Alpine.store('board', {
+      viewMode: localStorage.getItem('boardViewMode') || 'board',
+      toggle: function () {
+        var next = this.viewMode === 'board' ? 'list' : 'board';
+        this.viewMode = next;
+        localStorage.setItem('boardViewMode', next);
+        if (next === 'list') {
+          htmx.ajax('GET', '{% url "tasks:board_list" project_pk=project.pk %}', {
+            target: '#list-view-container', swap: 'innerHTML'
+          });
+        } else {
+          htmx.ajax('GET', '{% url "tasks:board_kanban" project_pk=project.pk %}', {
+            target: '#board-view-container', swap: 'innerHTML'
+          });
+        }
+      }
+    });
+  });
+</script>
 {% endblock %}
 
 {% block page_header %}
-  {% if is_project_manager %}
-    {% include "_components/page_header.html" with eyebrow=project.name title="Kanban Board" subtitle="Drag tasks between columns to update their status." %}
-  {% else %}
-    {% include "_components/page_header.html" with eyebrow=project.name title="Kanban Board" subtitle="View tasks across the board." %}
-  {% endif %}
+  <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div>
+      <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">Tasks</p>
+      <h1 class="page-title font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
+    </div>
+    <div class="flex flex-wrap gap-2 justify-end shrink-0">
+      <button type="button" x-data class="btn btn-ghost btn-sm"
+              @click="$store.board.toggle()"
+              x-text="$store.board.viewMode === 'board' ? 'View as a list' : 'View as a board'">
+        View as a list
+      </button>
+      {% if is_project_manager %}
+        <button type="button"
+                class="btn btn-ghost btn-sm"
+                hx-get="{% url 'tasks:board_columns' project_pk=project.pk %}"
+                hx-target="#columns-modal-body"
+                hx-swap="innerHTML"
+                onclick="document.getElementById('columns-modal').showModal()">
+          Manage columns
+        </button>
+        <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                hx-get="{% url 'tasks:create' project_pk=project.pk %}"
+                hx-target="#task-modal-body"
+                hx-swap="innerHTML"
+                onclick="document.getElementById('task-modal').showModal()">
+          + New task
+        </button>
+      {% endif %}
+    </div>
+  </header>
 {% endblock %}
 
 {% block content %}
-  <div class="flex flex-wrap items-center justify-end gap-2 -mt-2 mb-4">
-    <a href="{% url 'tasks:milestone_list' project_pk=project.pk %}"
-       class="btn btn-ghost btn-sm">Milestones</a>
-    {% if is_project_manager %}
-      <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
-         class="btn btn-ghost btn-sm">Manage columns</a>
-      <a href="{% url 'tasks:import' project_pk=project.pk %}"
-         class="btn btn-ghost btn-sm">Import CSV</a>
-      <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-              hx-get="{% url 'tasks:create' project_pk=project.pk %}"
-              hx-target="#task-modal-body"
-              hx-swap="innerHTML"
-              onclick="document.getElementById('task-modal').showModal()">
-        + New task
-      </button>
+<div x-data="taskPaneData()"
+     @open-task-pane="if (!_dragging) openPane($event.detail.url)"
+     @kanban-drag-start.document="_dragging = true"
+     @kanban-drag-end.document="$nextTick(() => _dragging = false)"
+     @keydown.escape.window="closePane()">
+
+  {# ── Board view ── #}
+  <div x-show="$store.board.viewMode === 'board'">
+    <div id="board-view-container">
+    {% if columns %}
+      <div class="kanban-scroll-wrap"
+           x-data="{
+             atStart: true,
+             atEnd: true,
+             refresh() {
+               const el = this.$refs.scroller;
+               if (!el) return;
+               const max = el.scrollWidth - el.clientWidth;
+               this.atStart = el.scrollLeft <= 1;
+               this.atEnd = el.scrollLeft >= max - 1;
+             }
+           }"
+           x-init="$nextTick(() => refresh())"
+           @resize.window="refresh()">
+        <div class="kanban-edge kanban-edge-left" x-show="!atStart" x-cloak x-transition.opacity></div>
+        <div id="kanban-board" x-ref="scroller" @scroll="refresh()"
+             class="flex gap-4 overflow-x-auto pb-4">
+          {% for column in columns %}
+            {% include "tasks/task_column.html" with column=column %}
+          {% endfor %}
+        </div>
+        <div class="kanban-edge kanban-edge-right" x-show="!atEnd" x-cloak x-transition.opacity></div>
+      </div>
+    {% else %}
+      <div id="kanban-board" class="hidden"></div>
+      {% url 'tasks:board_columns' project_pk=project.pk as columns_url %}
+      {% include "_components/empty_state.html" with title="No columns yet" body="Create a column to start organising tasks on the board." cta_href=columns_url cta_label="Manage columns" %}
     {% endif %}
+    </div>{# end board-view-container #}
   </div>
 
-  {% if columns %}
-    <div id="kanban-board" class="flex gap-4 overflow-x-auto pb-4">
-      {% for column in columns %}
-        {% include "tasks/task_column.html" with column=column %}
-      {% endfor %}
+  {# ── List view ── #}
+  <div x-show="$store.board.viewMode === 'list'" x-cloak>
+    <div id="list-view-container">
+      {% include "tasks/task_list_view.html" %}
     </div>
-  {% else %}
-    <div id="kanban-board" class="hidden"></div>
-    {% url 'tasks:board_columns' project_pk=project.pk as columns_url %}
-    {% include "_components/empty_state.html" with title="No columns yet" body="Create a column to start organising tasks on the board." cta_href=columns_url cta_label="Manage columns" %}
-  {% endif %}
+  </div>
 
-  {# Task create/edit modal #}
+  {# ── Task peek pane: backdrop ── #}
+  <div class="task-pane-backdrop"
+       :class="{ 'is-open': paneOpen }"
+       @click="closePane()"
+       aria-hidden="true"></div>
+
+  {# ── Task peek pane: drawer ── #}
+  <aside class="task-pane-drawer"
+         :class="{ 'is-open': paneOpen }"
+         :aria-hidden="String(!paneOpen)"
+         aria-label="Task details">
+    <div id="task-pane-body" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+      <div class="flex items-center justify-center h-32 gap-2 text-brand-text/40 text-sm">
+        <svg class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+        Loading…
+      </div>
+    </div>
+  </aside>
+
+  {# ── Manage columns modal ── #}
+  <dialog id="columns-modal" class="modal" aria-label="Manage columns">
+    <div class="modal-box max-w-lg bg-base-100 border border-brand-light/60">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
+      </form>
+      <div id="columns-modal-body">
+        <div class="flex items-center justify-center h-24 gap-2 text-brand-text/40 text-sm">
+          <svg class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          Loading…
+        </div>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  {# ── Task create/edit modal ── #}
   <dialog id="task-modal" class="modal" aria-label="Task editor">
     <div class="modal-box max-w-2xl bg-base-100 border border-brand-light/60">
       <form method="dialog">
@@ -65,26 +200,88 @@
     <form method="dialog" class="modal-backdrop"><button>close</button></form>
   </dialog>
 
-  <script>
-    (function initKanban() {
-      var csrfToken = '{{ csrf_token }}';
+</div>{# end x-data wrapper #}
 
-      function refreshColumnCount(columnId) {
-        if (!columnId) return;
-        var list = document.querySelector('[data-column-id="' + columnId + '"]');
-        var badge = document.querySelector('[data-column-count="' + columnId + '"]');
-        if (list && badge) badge.textContent = list.children.length;
+<script>
+  function taskPaneData() {
+    return {
+      paneOpen: false,
+      _dragging: false,
+      openPane(url) {
+        this.paneOpen = true;
+        htmx.ajax('GET', url, { target: '#task-pane-body', swap: 'innerHTML' });
+      },
+      closePane() {
+        this.paneOpen = false;
       }
+    };
+  }
 
-      {% if is_project_manager %}
-      // Drag-and-drop reordering is a Project Lead action (the move endpoint
-      // is Lead-only); members get a read-only board.
+  (function initKanban() {
+    var csrfToken = '{{ csrf_token }}';
+
+    function refreshColumnCount(columnId) {
+      if (!columnId) return;
+      var list = document.querySelector('[data-column-id="' + columnId + '"]');
+      var badge = document.querySelector('[data-column-count="' + columnId + '"]');
+      if (list && badge) badge.textContent = list.children.length;
+    }
+
+    {% if is_project_manager %}
+    // Drag-and-drop reordering is a Project Lead action.
+
+    function refreshListColumnCount(columnId) {
+      var container = document.querySelector('[data-list-column-id="' + columnId + '"]');
+      var badge = document.querySelector('[data-list-column-count="' + columnId + '"]');
+      if (!container || !badge) return;
+      var count = container.querySelectorAll('[data-task-id]').length;
+      badge.textContent = count + ' task' + (count === 1 ? '' : 's');
+    }
+
+    function initListSortable() {
+      document.querySelectorAll('.task-list-tbody').forEach(function (el) {
+        if (el._sortableInit) return;
+        el._sortableInit = true;
+        new Sortable(el, {
+          group: 'task-list',
+          animation: 150,
+          handle: '.task-drag-handle',
+          ghostClass: 'opacity-40',
+          onStart: function () {
+            document.dispatchEvent(new CustomEvent('kanban-drag-start'));
+          },
+          onEnd: function (evt) {
+            document.dispatchEvent(new CustomEvent('kanban-drag-end'));
+            var taskId = evt.item.dataset.taskId;
+            var sourceColumnId = evt.from.dataset.listColumnId;
+            var newColumnId = evt.to.dataset.listColumnId;
+            var newIndex = evt.newIndex;
+            refreshListColumnCount(sourceColumnId);
+            refreshListColumnCount(newColumnId);
+            htmx.ajax('POST', '/tasks/' + taskId + '/move/', {
+              values: { container_id: newColumnId, order: newIndex },
+              headers: { 'X-CSRFToken': csrfToken },
+              swap: 'none'
+            });
+          }
+        });
+      });
+    }
+
+    function initKanbanSortable() {
       document.querySelectorAll('.kanban-column-list').forEach(function (el) {
+        if (el._sortableInit) return;
+        el._sortableInit = true;
         new Sortable(el, {
           group: 'kanban',
           animation: 150,
           ghostClass: 'opacity-40',
+          onStart: function () {
+            document.dispatchEvent(new CustomEvent('kanban-drag-start'));
+          },
           onEnd: function (evt) {
+            document.dispatchEvent(new CustomEvent('kanban-drag-end'));
+
             var taskId = evt.item.dataset.taskId;
             var sourceColumnId = evt.from.dataset.columnId;
             var newColumnId = evt.to.dataset.columnId;
@@ -125,15 +322,59 @@
           }
         });
       });
-      {% endif %}
+    }
 
-      // Close the modal whenever HTMX swaps a new task card onto the board.
-      document.body.addEventListener('task-created', function () {
-        var modal = document.getElementById('task-modal');
-        if (modal && modal.open) modal.close();
-        // Reload so the new card appears in its column with an up-to-date count.
-        window.location.reload();
+    initListSortable();
+    initKanbanSortable();
+    {% endif %}
+
+    // Re-init Alpine (and Sortable for managers) after HTMX refreshes view containers.
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+      if (!evt.detail || !evt.detail.target) return;
+      var id = evt.detail.target.id;
+      if (id === 'board-view-container') {
+        if (typeof Alpine !== 'undefined') Alpine.initTree(evt.detail.target);
+        {% if is_project_manager %}initKanbanSortable();{% endif %}
+      } else if (id === 'list-view-container') {
+        {% if is_project_manager %}initListSortable();{% endif %}
+      }
+    });
+
+    // Close the modal whenever HTMX swaps a new task card onto the board.
+    document.body.addEventListener('task-created', function () {
+      var modal = document.getElementById('task-modal');
+      if (modal && modal.open) modal.close();
+      // Reload so the new card appears in its column with an up-to-date count.
+      window.location.reload();
+    });
+
+    // Reload the board when the columns modal closes after any changes.
+    (function () {
+      var cm = document.getElementById('columns-modal');
+      if (!cm) return;
+
+      // HTMX-based operations (add, rename, delete) touch elements inside the modal.
+      document.body.addEventListener('htmx:afterRequest', function (evt) {
+        if (!cm.open) return;
+        var elt = evt.detail.elt;
+        var target = evt.detail.target;
+        if ((elt && cm.contains(elt)) || (target && cm.contains(target))) {
+          cm._dirty = true;
+        }
+      });
+
+      // Reorder uses plain fetch; board_columns_modal.html fires this event.
+      document.addEventListener('column-reordered', function () {
+        if (cm.open) cm._dirty = true;
+      });
+
+      cm.addEventListener('close', function () {
+        if (cm._dirty) {
+          cm._dirty = false;
+          window.location.reload();
+        }
       });
     })();
-  </script>
+  })();
+</script>
 {% endblock %}

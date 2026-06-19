@@ -7,6 +7,21 @@
 
 {% block content %}
 
+<div class="flex items-center justify-between mb-6">
+  <h1 class="page-title font-semibold text-brand-navy">Dashboard</h1>
+  <div class="flex items-center gap-2">
+  <a href="{% url 'projects:my_list' %}" class="btn btn-sm btn-ghost">My projects</a>
+  <a href="{% url 'projects:create' %}"
+     class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 inline-flex items-center gap-1.5">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+         stroke-width="2" stroke="currentColor" class="w-4 h-4">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+    New project
+  </a>
+  </div>
+</div>
+
 <div class="flex flex-col lg:flex-row items-start">
 
   {# ── Left: Top projects (plain scrollable list, no card) ──────────────────── #}
@@ -18,7 +33,7 @@
       <ul class="flex flex-col gap-0.5">
         {% for project in recent_projects %}
           <li {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
-            <a href="{% url 'projects:detail' pk=project.pk %}"
+            <a href="{% url 'tasks:board' project_pk=project.pk %}"
                class="flex items-center gap-2 px-2 py-2 rounded-md text-sm text-brand-navy hover:bg-brand-lighter transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0 text-brand-text/40">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" />
@@ -41,8 +56,6 @@
 
   {# ── Right: Stats + tasks ──────────────────────────────────────────────────── #}
   <div class="home-main flex flex-col gap-6">
-
-    <h1 class="text-2xl sm:text-3xl font-semibold text-brand-navy">Home</h1>
 
     {# Stats bar #}
     <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -132,18 +145,6 @@
                   {% if task.deadline %}&middot; <span class="text-warning font-medium">due {{ task.deadline|date:"M j" }}</span>{% endif %}
                 </div>
               </div>
-              <form method="post" action="{% url 'tasks:complete' pk=task.pk %}"
-                    hx-post="{% url 'tasks:complete' pk=task.pk %}"
-                    hx-target="closest li" hx-swap="outerHTML">
-                {% csrf_token %}
-                <button type="submit" title="Mark my part done"
-                        class="btn btn-xs btn-ghost text-brand-text/50 hover:text-success shrink-0">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                       stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                  </svg>
-                </button>
-              </form>
             </li>
             {% endfor %}
           </ul>
@@ -159,18 +160,6 @@
                    class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
                 <div class="text-xs text-brand-text/60 mt-0.5">{{ task.project.name }}</div>
               </div>
-              <form method="post" action="{% url 'tasks:complete' pk=task.pk %}"
-                    hx-post="{% url 'tasks:complete' pk=task.pk %}"
-                    hx-target="closest li" hx-swap="outerHTML">
-                {% csrf_token %}
-                <button type="submit" title="Mark my part done"
-                        class="btn btn-xs btn-ghost text-brand-text/50 hover:text-success shrink-0">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                       stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                  </svg>
-                </button>
-              </form>
             </li>
             {% endfor %}
           </ul>
@@ -206,36 +195,6 @@
                   &middot; {{ log.created_at|date:"M j" }}
                 </div>
               </div>
-              <div class="flex gap-1 shrink-0">
-                <form method="post"
-                      action="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
-                      hx-post="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
-                      hx-target="#log-{{ log.pk }}" hx-swap="outerHTML">
-                  {% csrf_token %}
-                  <input type="hidden" name="approved" value="true">
-                  <button type="submit"
-                          class="btn btn-xs bg-success/10 text-success hover:bg-success hover:text-white border-0 has-tooltip" data-tooltip="Approve completion">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                         stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                    </svg>
-                  </button>
-                </form>
-                <form method="post"
-                      action="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
-                      hx-post="{% url 'tasks:approve_log' pk=log.task_id log_pk=log.pk %}"
-                      hx-target="#log-{{ log.pk }}" hx-swap="outerHTML">
-                  {% csrf_token %}
-                  <input type="hidden" name="approved" value="false">
-                  <button type="submit"
-                          class="btn btn-xs bg-error/10 text-error hover:bg-error hover:text-white border-0 has-tooltip" data-tooltip="Decline completion">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                         stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </form>
-              </div>
             </li>
             {% endfor %}
           </ul>
@@ -254,7 +213,7 @@
 <style>
   [x-cloak] { display: none !important; }
 
-  /* Main content first; projects aside last (bottom on mobile, right on desktop) */
+  /* Mobile: main content first, projects aside below. */
   .home-aside { order: 2; }
   .home-main  { order: 1; width: 100%; }
 
@@ -270,17 +229,15 @@
     }
   }
 
-  /* Desktop: main left, aside right, with spacing + divider */
+  /* Desktop: projects aside left, main right, with spacing + divider */
   @media (min-width: 1024px) {
     .home-aside {
+      order: 1;
       flex: 0 0 14rem; width: 14rem;
-      padding-left: 2.5rem;
-      border-left: 1px solid rgba(189, 203, 232, 0.6);
-      /* Offset so "Your Top Projects" aligns with the first metrics card:
-         h1 line-height (sm:text-3xl = 2.25rem) + column gap (gap-6 = 1.5rem) */
-      margin-top: 3.75rem;
+      padding-right: 2.5rem;
+      border-right: 1px solid rgba(189, 203, 232, 0.6);
     }
-    .home-main { flex: 1 1 0%; min-width: 0; padding-right: 2.5rem; }
+    .home-main { order: 2; flex: 1 1 0%; min-width: 0; padding-left: 2.5rem; }
   }
 
   .section-heading {

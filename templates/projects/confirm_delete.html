@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 
+{% block topbar_breadcrumb %}
+  <nav class="flex items-center gap-1.5 text-sm min-w-0 overflow-hidden" aria-label="Breadcrumb">
+    <a href="{% url 'projects:my_list' %}" class="text-brand-navy/60 hover:text-brand-navy shrink-0 whitespace-nowrap">My projects</a>
+    <span class="text-brand-navy/30 shrink-0">/</span>
+    <a href="{% url 'projects:detail' pk=object.pk %}" class="font-medium text-brand-navy hover:text-brand-coral truncate min-w-0">{{ object.name }}</a>
+  </nav>
+{% endblock %}
+
 {% block title %}Delete {{ object.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block page_header %}

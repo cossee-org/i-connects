@@ -28,6 +28,13 @@
     .sidebar-link:hover { background: rgb(226 232 240 / 0.6); color: rgb(31 41 99); }
     .sidebar-link.active { background: rgb(226 232 240 / 0.8); color: rgb(31 41 99); font-weight: 600; }
 
+    /* Page-title heading — sized between the original (text-2xl/3xl) and the
+       smaller variant (text-xl/2xl). Line-heights match text-xl / text-2xl. */
+    .page-title { font-size: 1.375rem; line-height: 1.75rem; }
+    @media (min-width: 640px) {
+      .page-title { font-size: 1.6875rem; line-height: 2rem; }
+    }
+
     /* ── Top bar ── */
     .app-topbar {
       position: fixed; top: 0; left: 0; right: 0;
@@ -61,6 +68,37 @@
     @media (min-width: 1024px) {
       .app-main-authenticated.sidebar-open { padding-left: 14rem; }
     }
+
+    /* ── Project section tabs (secondary nav under the topbar) ── */
+    .project-subnav {
+      position: sticky; top: 3.5rem; z-index: 30;
+      background: #f1f5f9;
+      border-bottom: 1px solid rgb(226 232 240 / 0.7);
+    }
+    .project-subnav-inner {
+      display: flex; align-items: stretch; gap: 0.25rem;
+      padding-left: 1rem; padding-right: 1rem;
+      overflow-x: auto;
+    }
+    @media (min-width: 640px) {
+      .project-subnav-inner { padding-left: 1.5rem; padding-right: 1.5rem; }
+    }
+    @media (min-width: 1024px) {
+      .project-subnav-inner { padding-left: 2rem; padding-right: 2rem; }
+    }
+    .project-tab {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.75rem;
+      font-size: 0.875rem; font-weight: 500;
+      color: rgb(31 41 99 / 0.6);
+      white-space: nowrap;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.15s ease, border-color 0.15s ease;
+    }
+    .project-tab:hover { color: rgb(31 41 99); }
+    .project-tab.active { color: rgb(31 41 99); font-weight: 600; border-bottom-color: #f03d30; }
+    .project-tab svg { width: 1rem; height: 1rem; flex-shrink: 0; opacity: 0.7; }
 
     /* ── Top bar tooltips (open downward) ── */
     .topbar-tooltip { position: relative; }
@@ -150,28 +188,56 @@
       </a>
     {% endblock %}
 
-    {% block topbar_breadcrumb %}{% endblock %}
+    {% block topbar_breadcrumb %}
+    {% if project %}
+      <nav class="flex items-center gap-1.5 text-sm min-w-0 overflow-hidden" aria-label="Breadcrumb">
+        {% if user_privilege %}
+          <a href="{% url 'projects:my_list' %}" class="text-brand-navy/60 hover:text-brand-navy shrink-0 whitespace-nowrap">My projects</a>
+        {% else %}
+          <a href="{% url 'projects:list' %}" class="text-brand-navy/60 hover:text-brand-navy shrink-0 whitespace-nowrap">Discover projects</a>
+        {% endif %}
+        <span class="text-brand-navy/30 shrink-0">/</span>
+        <a href="{% url 'projects:detail' pk=project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral truncate min-w-0">{{ project.name }}</a>
+      </nav>
+    {% elif request.resolver_match.url_name == 'dashboard' %}
+      <span class="text-sm font-medium text-brand-navy whitespace-nowrap">Dashboard</span>
+    {% elif request.resolver_match.url_name == 'my_list' and request.resolver_match.app_name == 'projects' %}
+      <a href="{% url 'projects:my_list' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">My projects</a>
+    {% elif request.resolver_match.url_name == 'my_contributions' %}
+      <a href="{% url 'contributions:my_contributions' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">My contributions</a>
+    {% elif request.resolver_match.url_name == 'list' and request.resolver_match.app_name == 'projects' %}
+      <a href="{% url 'projects:list' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Discover projects</a>
+    {% elif request.resolver_match.url_name == 'discover_people' %}
+      <a href="{% url 'accounts:discover_people' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Discover people</a>
+    {% elif request.resolver_match.url_name == 'my_invitations' %}
+      <a href="{% url 'projects:my_invitations' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Invitations</a>
+    {% elif request.resolver_match.app_name == 'forms_builder' %}
+      <a href="{% url 'forms_builder:form_list' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Forms</a>
+    {% elif request.resolver_match.app_name == 'notifications' %}
+      <a href="{% url 'notifications:list' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Notifications</a>
+    {% elif request.resolver_match.url_name == 'profile' or request.resolver_match.url_name == 'edit_profile' %}
+      <span class="text-sm font-medium text-brand-navy whitespace-nowrap">My profile</span>
+    {% endif %}
+    {% endblock %}
 
     <div class="ml-auto flex items-center gap-1">
 
       <!-- Create project -->
       <a href="{% url 'projects:create' %}"
-         class="topbar-tooltip inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-white border border-gray-300 text-brand-navy hover:bg-gray-50 transition-colors shrink-0"
-         data-tooltip="New project">
+         class="topbar-tooltip inline-flex items-center p-1.5 rounded-md bg-white border border-gray-300 text-brand-navy hover:bg-gray-50 transition-colors shrink-0"
+         data-tooltip="New project" aria-label="New project">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 shrink-0">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
         </svg>
-        <span class="hidden sm:inline">New project</span>
       </a>
 
       <!-- My projects -->
       <a href="{% url 'projects:my_list' %}"
-         class="topbar-tooltip inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-white border border-gray-300 text-brand-navy hover:bg-gray-50 transition-colors shrink-0"
-         data-tooltip="My projects">
+         class="topbar-tooltip inline-flex items-center p-1.5 rounded-md bg-white border border-gray-300 text-brand-navy hover:bg-gray-50 transition-colors shrink-0"
+         data-tooltip="My projects" aria-label="My projects">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0">
           <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" />
         </svg>
-        <span class="hidden sm:inline">My projects</span>
       </a>
 
       <!-- Avatar dropdown -->
@@ -193,11 +259,11 @@
              @click.outside="topbarMenuOpen = false"
              class="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-brand-light/60 overflow-hidden z-50">
           <div class="px-4 py-3 border-b border-brand-light/60">
-            <p class="text-sm font-semibold text-brand-navy truncate">{{ user.name|default:user.email }}</p>
-            {% if user.name %}<p class="text-xs text-brand-text/50 truncate">{{ user.email }}</p>{% endif %}
+            <p class="text-xs font-semibold text-brand-navy truncate">{{ user.name|default:user.email }}</p>
+            {% if user.name %}<p class="text-xs text-brand-text/50 truncate" style="font-size: 11px;">{{ user.email }}</p>{% endif %}
           </div>
           <a href="{% url 'accounts:profile' %}"
-             class="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-navy hover:bg-brand-lighter transition-colors whitespace-nowrap">
+             class="flex items-center gap-2 px-4 py-2.5 text-xs text-brand-navy hover:bg-brand-lighter transition-colors whitespace-nowrap">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
               <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
             </svg>
@@ -206,7 +272,7 @@
           <div class="border-t border-brand-light/60"></div>
           <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}
             <button type="submit"
-                    class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-brand-text/60 hover:text-brand-coral hover:bg-brand-lighter transition-colors whitespace-nowrap">
+                    class="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-brand-text/60 hover:text-brand-coral hover:bg-brand-lighter transition-colors whitespace-nowrap">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" />
               </svg>
@@ -236,7 +302,7 @@
     <nav class="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1" aria-label="Primary">
       <a href="{% url 'projects:dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>
-        Home
+        Dashboard
       </a>
       <a href="{% url 'projects:my_list' %}" class="sidebar-link {% if request.resolver_match.url_name == 'my_list' %}active{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
@@ -244,9 +310,9 @@
         </svg>
         My projects
       </a>
-      <a href="{% url 'projects:list' %}" class="sidebar-link {% if request.resolver_match.url_name == 'list' and request.resolver_match.app_name == 'projects' %}active{% endif %}">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 15.803 7.5 7.5 0 0 0 15.803 15.803Z" /></svg>
-        Public projects
+      <a href="{% url 'contributions:my_contributions' %}" class="sidebar-link {% if request.resolver_match.url_name == 'my_contributions' and request.resolver_match.app_name == 'contributions' %}active{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" /></svg>
+        My contributions
       </a>
       <a href="{% url 'projects:my_invitations' %}" class="sidebar-link {% if request.resolver_match.url_name == 'my_invitations' %}active{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
@@ -262,16 +328,21 @@
         <span hx-get="{% url 'notifications:badge' %}" hx-trigger="load, every 60s" hx-swap="innerHTML"
               class="ml-auto text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center pointer-events-none empty:hidden"></span>
       </a>
-      <a href="{% url 'audit:my_activity' %}" class="sidebar-link {% if request.resolver_match.url_name == 'my_activity' %}active{% endif %}">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" /></svg>
-        My activity
-      </a>
-      {% if user.role == 'ADMIN' %}
+{% if user.role == 'ADMIN' %}
       <a href="{% url 'core:admin_console' %}" class="sidebar-link {% if request.resolver_match.url_name == 'admin_console' %}active{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
         Admin console
       </a>
       {% endif %}
+      <div class="border-t border-brand-light/60 my-1"></div>
+      <a href="{% url 'projects:list' %}" class="sidebar-link {% if request.resolver_match.url_name == 'list' and request.resolver_match.app_name == 'projects' %}active{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 15.803 7.5 7.5 0 0 0 15.803 15.803Z" /></svg>
+        Discover projects
+      </a>
+      <a href="{% url 'accounts:discover_people' %}" class="sidebar-link {% if request.resolver_match.url_name == 'discover_people' and request.resolver_match.app_name == 'accounts' %}active{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
+        Discover people
+      </a>
     </nav>
 
     <!-- User section with dropdown menu -->
@@ -351,6 +422,9 @@
 
     <main id="main-content" tabindex="-1" class="flex-1 min-w-0" role="main">
       {% block sidebar %}{% endblock %}
+      {% if user.is_authenticated and project and is_project_member %}
+        {% include "_components/project_tabs.html" %}
+      {% endif %}
       <div class="{% block main_wrapper %}container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl{% endblock %}">
         {% block breadcrumbs %}{% endblock %}
         {% block page_header %}{% endblock %}

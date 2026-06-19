@@ -71,6 +71,21 @@ class ProjectContextMixin:
         context["project"] = self.project
         context["project_member"] = self.project_member
         context["is_project_manager"] = self.is_project_manager
+        # Drives the project section tabs in the top bar (members only).
+        context["is_project_member"] = (
+            self.project_member is not None or self.is_project_manager
+        )
+        # Current user's privilege (for the project header membership badge).
+        user = self.request.user
+        if user.is_authenticated:
+            priv = (
+                ProjectPrivilege.objects.filter(user=user, project=self.project)
+                .order_by("-created_at")
+                .first()
+            )
+            context["user_privilege"] = priv.privilege if priv else None
+        else:
+            context["user_privilege"] = None
         return context
 
 
