@@ -264,20 +264,25 @@
 <style>
   [x-cloak] { display: none !important; }
 
-  /* Mobile: projects list first (natural DOM order), bottom border separator */
-  .home-aside {
-    padding-bottom: 1.5rem;
-    margin-bottom: 1.5rem;
-    border-bottom: 1px solid rgba(189, 203, 232, 0.6);
+  /* Mobile: render as a brand-card (bg-base-100 border rounded-lg shadow-sm) */
+  .home-aside { margin-bottom: 1.5rem; }
+  .home-main  { width: 100%; }
+  @media (max-width: 1023px) {
+    .home-aside {
+      background-color: var(--fallback-b1, oklch(var(--b1) / 1));
+      border: 1px solid rgba(189, 203, 232, 0.6);
+      border-radius: 0.5rem;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      padding: 1.25rem;
+    }
   }
-  .home-main { width: 100%; }
 
   /* Desktop: aside left, main right, with spacing */
   @media (min-width: 1024px) {
     .home-aside {
       flex: 0 0 14rem; width: 14rem;
       padding-right: 2.5rem;
-      padding-bottom: 0; margin-bottom: 0; border-bottom: none;
+      margin-bottom: 0;
     }
     .home-main { flex: 1 1 0%; min-width: 0; padding-left: 2.5rem; }
   }
