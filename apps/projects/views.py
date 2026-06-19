@@ -139,7 +139,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             .order_by("-updated_at")
         )
         context["project_count"] = user_projects.count()
-        context["recent_projects"] = user_projects[:5]
+        context["recent_projects"] = list(user_projects)
 
         # --- Task querysets ------------------------------------------------
         user_member_qs = ProjectMember.objects.filter(users=user)
@@ -369,6 +369,7 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         context["project_statuses"] = [
             c for key in _STATUS_ORDER for c in ProjectStatus.choices if c[0] == key
         ]
+        context["create_url"] = reverse("projects:create")
         params = self.request.GET.copy()
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
