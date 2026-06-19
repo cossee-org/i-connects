@@ -10,7 +10,7 @@
 <div class="flex flex-col lg:flex-row items-start">
 
   {# ── Left: Top projects (plain scrollable list, no card) ──────────────────── #}
-  <aside class="home-aside w-full lg:sticky lg:top-20 lg:overflow-y-auto lg:border-r lg:border-brand-light/60"
+  <aside class="home-aside w-full lg:sticky lg:top-20 lg:overflow-y-auto"
          x-data="{ showAll: false }">
     <p class="section-heading mb-3">Your Top Projects</p>
 
@@ -254,11 +254,13 @@
 <style>
   [x-cloak] { display: none !important; }
 
-  /* Mobile: render as a brand-card at the bottom (below the main content) */
-  .home-main  { width: 100%; }
+  /* Main content first; projects aside last (bottom on mobile, right on desktop) */
+  .home-aside { order: 2; }
+  .home-main  { order: 1; width: 100%; }
+
+  /* Mobile: render aside as a brand-card */
   @media (max-width: 1023px) {
     .home-aside {
-      order: 2;
       margin-top: 1.5rem;
       background-color: var(--fallback-b1, oklch(var(--b1) / 1));
       border: 1px solid rgba(189, 203, 232, 0.6);
@@ -266,16 +268,16 @@
       box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
       padding: 1.25rem;
     }
-    .home-main { order: 1; }
   }
 
-  /* Desktop: aside left, main right, with spacing */
+  /* Desktop: main left, aside right, with spacing + divider */
   @media (min-width: 1024px) {
     .home-aside {
       flex: 0 0 14rem; width: 14rem;
-      padding-right: 2.5rem;
+      padding-left: 2.5rem;
+      border-left: 1px solid rgba(189, 203, 232, 0.6);
     }
-    .home-main { flex: 1 1 0%; min-width: 0; padding-left: 2.5rem; }
+    .home-main { flex: 1 1 0%; min-width: 0; padding-right: 2.5rem; }
   }
 
   .section-heading {
