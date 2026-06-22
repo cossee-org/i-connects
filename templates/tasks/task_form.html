@@ -45,6 +45,9 @@
       {% include "_components/form_field.html" with field=form.description %}
     </div>
 
+    {% include "_components/form_field.html" with field=form.start_date %}
+    {% include "_components/form_field.html" with field=form.deadline %}
+
     {# Status (container) — upward Alpine dropdown matching project-form style #}
     <div class="md:col-span-2">
       <div class="form-control w-full mb-3"
@@ -99,9 +102,6 @@
         {% endif %}
       </div>
     </div>
-
-    {% include "_components/form_field.html" with field=form.start_date %}
-    {% include "_components/form_field.html" with field=form.deadline %}
 
     {# Completion mode — upward Alpine dropdown with simplified per-option descriptions #}
     <div class="md:col-span-2">
