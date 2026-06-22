@@ -62,6 +62,7 @@ THIRD_PARTY_APPS = [
     "django_celery_beat",
     "crispy_forms",
     "crispy_bootstrap5",
+    "django_countries",
 ]
 
 LOCAL_APPS = [
