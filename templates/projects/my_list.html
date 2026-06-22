@@ -225,7 +225,10 @@
           {% endif %}
           {% include "_components/status_badge.html" with status=row.project.get_status_display %}
           {% if row.privilege %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">{{ row.privilege|privilege_label }}</span>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+              {% if row.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+              {{ row.privilege|privilege_label }}
+            </span>
           {% endif %}
         </div>
       </a>
