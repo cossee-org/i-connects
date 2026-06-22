@@ -14,11 +14,16 @@
       </span>
     </div>
 
-    {% if my_privilege %}
-      <div>
+    <div class="flex items-center gap-2 flex-wrap">
+      {% if project.is_public %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
+      {% else %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
+      {% endif %}
+      {% if my_privilege %}
         <span class="badge badge-primary badge-sm">{{ my_privilege|privilege_label }}</span>
-      </div>
-    {% endif %}
+      {% endif %}
+    </div>
 
     {% if project.abstract %}
       <p class="text-sm text-base-content/70 line-clamp-3">{{ project.abstract }}</p>
