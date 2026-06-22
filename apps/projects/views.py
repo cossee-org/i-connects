@@ -983,18 +983,35 @@ class RequestToJoinView(LoginRequiredMixin, View):
             )
         except JoinRequestError as exc:
             messages.error(request, str(exc))
-        else:
-            messages.success(
-                request,
-                f"Your request to join '{project.name}' was sent to the project leads.",
-            )
+            redirect_url = reverse("projects:detail", pk=project.pk)
+            if is_htmx:
+                response = HttpResponse(status=204)
+                response["HX-Redirect"] = redirect_url
+                return response
+            return redirect(redirect_url)
 
-        redirect_url = reverse("projects:detail", pk=project.pk)
+        messages.success(
+            request,
+            f"Your request to join '{project.name}' was sent to the project leads.",
+        )
+
         if is_htmx:
-            response = HttpResponse(status=204)
-            response["HX-Redirect"] = redirect_url
+            pending = JoinRequest.objects.filter(
+                project=project,
+                user=request.user,
+                status=JoinRequestStatus.PENDING,
+            ).first()
+            response = render(
+                request,
+                "projects/partials/join_action.html",
+                {"pending_join_request": pending, "project": project},
+            )
+            response["HX-Retarget"] = "#join-action"
+            response["HX-Reswap"] = "innerHTML"
+            response["HX-Trigger"] = "closejoinmodal"
             return response
-        return redirect(redirect_url)
+
+        return redirect("projects:detail", pk=project.pk)
 
 
 class ProjectJoinRequestListView(
@@ -1075,14 +1092,35 @@ class CancelJoinRequestView(LoginRequiredMixin, View):
         join_request = get_object_or_404(
             JoinRequest, pk=join_request_pk, user=request.user
         )
+        project = join_request.project
+        is_htmx = bool(request.headers.get("HX-Request"))
+
         try:
             cancel_join_request(join_request=join_request, user=request.user)
         except JoinRequestError as exc:
             messages.error(request, str(exc))
-            return redirect("projects:my_join_requests")
+            if is_htmx:
+                pending = JoinRequest.objects.filter(
+                    project=project,
+                    user=request.user,
+                    status=JoinRequestStatus.PENDING,
+                ).first()
+                return render(
+                    request,
+                    "projects/partials/join_action.html",
+                    {"pending_join_request": pending, "project": project},
+                )
+            return redirect("projects:detail", pk=project.pk)
+
+        if is_htmx:
+            return render(
+                request,
+                "projects/partials/join_action.html",
+                {"pending_join_request": None, "project": project},
+            )
 
         messages.info(request, "Join request cancelled.")
-        return redirect("projects:my_join_requests")
+        return redirect("projects:detail", pk=project.pk)
 
 
 class MyJoinRequestsView(LoginRequiredMixin, ListView):
