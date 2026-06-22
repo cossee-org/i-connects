@@ -412,22 +412,21 @@
       </header>
     {% endif %}
 
-    {# Flash messages #}
-    {% if messages %}
-      <div class="px-4 sm:px-6 lg:px-8 pt-4 space-y-2" role="status" aria-live="polite">
-        {% for message in messages %}
-          <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %} shadow-sm"
-               {% if message.tags == 'error' %}role="alert"{% endif %}>
-            <span>{{ message }}</span>
-          </div>
-        {% endfor %}
-      </div>
-    {% endif %}
-
     <main id="main-content" tabindex="-1" class="flex-1 min-w-0" role="main">
       {% block sidebar %}{% endblock %}
       {% if user.is_authenticated and project and is_project_member %}
         {% include "_components/project_tabs.html" %}
+      {% endif %}
+      {# Flash messages #}
+      {% if messages %}
+        <div class="px-4 sm:px-6 lg:px-8 pt-4 space-y-2" role="status" aria-live="polite">
+          {% for message in messages %}
+            <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% else %}alert-info{% endif %} shadow-sm"
+                 {% if message.tags == 'error' %}role="alert"{% endif %}>
+              <span>{{ message }}</span>
+            </div>
+          {% endfor %}
+        </div>
       {% endif %}
       <div class="{% block main_wrapper %}container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl{% endblock %}">
         {% block breadcrumbs %}{% endblock %}
