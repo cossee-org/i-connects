@@ -198,7 +198,7 @@ class TaskCreateView(
         context["form_action"] = reverse(
             "tasks:create", kwargs={"project_pk": self.project.pk}
         )
-        context["form_title"] = "New task"
+        context["form_title"] = "Create a new task"
         next_url = self.request.GET.get("next") or self.request.POST.get("next")
         if next_url and url_has_allowed_host_and_scheme(
             next_url,

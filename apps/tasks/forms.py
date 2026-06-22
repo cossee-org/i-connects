@@ -6,7 +6,7 @@ import json
 
 from django import forms
 from django.db.models import Min
-from django.utils.html import format_html, format_html_join
+from django.utils.html import format_html
 
 from apps.core.enums import CompletedAs, ContributionType, TaskStatus
 from apps.projects.models import ProjectMember
@@ -49,31 +49,25 @@ class MemberMultiSelect(forms.SelectMultiple):
     def render(self, name, value, attrs=None, renderer=None):
         selected = {str(v) for v in (value or [])}
         all_ids = []
-        rows = []
+        members_data = []
         for option_value, option_label in self.choices:
             val = str(option_value)
             all_ids.append(val)
-            rows.append((name, val, option_label))
+            members_data.append({"id": val, "label": str(option_label)})
 
-        options_html = format_html_join(
-            "",
-            (
-                '<label class="label cursor-pointer justify-start gap-2 py-1">'
-                '<input type="checkbox" name="{}" value="{}" '
-                'class="checkbox checkbox-sm" x-model="ids">'
-                '<span class="label-text">{}</span>'
-                "</label>"
-            ),
-            rows,
-        )
-
-        x_data = json.dumps({"ids": sorted(selected), "allIds": all_ids})
+        x_data = json.dumps({
+            "ids": sorted(selected),
+            "allIds": all_ids,
+            "search": "",
+            "members": members_data,
+        })
 
         # Built on the native <details>/<summary> disclosure widget so the
         # toggle works in every browser (notably Safari, where click handlers
         # on <div>/<button> proxies are unreliable) — and even if Alpine fails
         # to load. Alpine only manages the checkbox state + summary label; the
         # checkboxes are real form inputs, so submission works regardless.
+        # The dropdown opens upward (bottom-full) for better readability in modals.
         return format_html(
             '<details x-data="{}" class="dropdown w-full">'
             '<summary class="select select-bordered w-full flex items-center justify-between '
@@ -84,20 +78,31 @@ class MemberMultiSelect(forms.SelectMultiple):
             'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
             '<path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>'
             "</summary>"
-            '<div class="dropdown-content absolute left-0 top-full z-30 bg-base-100 rounded-box shadow '
-            'border border-base-300 w-full mt-1 p-2 max-h-64 overflow-y-auto">'
-            '<label class="label cursor-pointer justify-start gap-2 py-1">'
+            '<div class="dropdown-content absolute left-0 bottom-full z-30 bg-base-100 rounded-box shadow '
+            'border border-base-300 w-full mb-1 p-2 max-h-64 overflow-y-auto">'
+            '<input type="text" x-model="search" placeholder="Search members…" '
+            '@click.stop '
+            'class="input input-sm input-bordered w-full mb-2">'
+            '<label class="label cursor-pointer justify-start gap-2 py-1" x-show="!search">'
             '<input type="checkbox" class="checkbox checkbox-sm" '
             ':checked="allIds.length && ids.length === allIds.length" '
             '@change="ids = $event.target.checked ? [...allIds] : []">'
             '<span class="label-text font-semibold">All</span>'
             "</label>"
-            '<div class="divider my-0"></div>'
-            "{}"
+            '<div class="divider my-0" x-show="!search"></div>'
+            '<template x-for="member in members.filter('
+            "m => !search || m.label.toLowerCase().includes(search.toLowerCase())"
+            ')" :key="member.id">'
+            '<label class="label cursor-pointer justify-start gap-2 py-1">'
+            '<input type="checkbox" name="{}" :value="member.id" x-model="ids" '
+            'class="checkbox checkbox-sm">'
+            '<span class="label-text" x-text="member.label"></span>'
+            "</label>"
+            "</template>"
             "</div>"
             "</details>",
             x_data,
-            options_html,
+            name,
         )
 
 
@@ -137,7 +142,11 @@ class TaskForm(forms.ModelForm):
             "completion_mode",
         ]
         widgets = {
-            "name": forms.TextInput(attrs={"class": _daisy_input}),
+            "name": forms.TextInput(attrs={
+                "class": _daisy_input,
+                "maxlength": "255",
+                "@input": "nameCharCount = $event.target.value.length",
+            }),
             "description": forms.Textarea(attrs={"class": _daisy_textarea, "rows": 4}),
             "container": forms.Select(attrs={"class": _daisy_select}),
             "assigned_members": MemberMultiSelect(),
@@ -149,6 +158,7 @@ class TaskForm(forms.ModelForm):
     def __init__(self, *args, project=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.project = project
+        self.fields["name"].label = "Task name"
         self.fields["reviewers"].label = "Reviewer"
         self.fields["completion_mode"].label = "Completion mode"
         self.fields["container"].label = "Status"
