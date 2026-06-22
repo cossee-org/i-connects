@@ -147,6 +147,10 @@ class TaskCreateView(
         container_id = self.request.GET.get("container")
         if container_id:
             initial["container"] = container_id
+        else:
+            first = KanbanBoard.objects.filter(project=self.project).order_by("container_order").first()
+            if first:
+                initial["container"] = first.pk
         return initial
 
     def form_valid(self, form):
