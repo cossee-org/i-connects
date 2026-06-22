@@ -317,7 +317,14 @@ class ProfileForm(forms.ModelForm):
             "department": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "institution": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "city": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
-            "country": CountrySelectWidget(attrs={"class": "select select-bordered w-full"}),
+            "country": CountrySelectWidget(
+                layout=(
+                    "{widget}"
+                    '<img class="country-select-flag inline-block h-4 w-auto mt-2"'
+                    ' id="{flag_id}" src="{country.flag}">'
+                ),
+                attrs={"class": "select select-bordered w-full"},
+            ),
             "email_project_activity_frequency": forms.Select(
                 attrs={"class": "select select-bordered w-full"}
             ),
