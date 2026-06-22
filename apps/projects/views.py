@@ -677,6 +677,10 @@ class ProjectMemberListView(
         context["viewer_is_last_pm"] = is_last_project_manager(
             project=self.project, user=self.request.user
         )
+        if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
+            context["pending_join_request_count"] = JoinRequest.objects.filter(
+                project=self.project, status=JoinRequestStatus.PENDING
+            ).count()
         return context
 
 

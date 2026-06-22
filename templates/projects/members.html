@@ -5,14 +5,26 @@
 {% block page_header %}
   <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
     <div>
-      <h1 class="page-title font-semibold text-brand-navy leading-tight">Members</h1>
+      <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">{{ project.name }}</p>
+      <h1 class="page-title font-semibold text-brand-navy leading-tight">Contributors</h1>
       <p class="text-sm text-brand-text/70 mt-1">Manage who belongs to this project and what they can do.</p>
     </div>
     {% if user_privilege == "PROJECT_MANAGER" %}
-      <a href="{% url 'projects:invite' pk=project.pk %}"
-         class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-        Invite member
-      </a>
+      <div class="flex flex-wrap gap-2 justify-end">
+        <a href="{% url 'projects:join_requests' pk=project.pk %}"
+           class="btn btn-sm btn-ghost relative">
+          Join requests
+          {% if pending_join_request_count %}
+            <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
+              {{ pending_join_request_count }}
+            </span>
+          {% endif %}
+        </a>
+        <a href="{% url 'projects:invite' pk=project.pk %}"
+           class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+          Invite member
+        </a>
+      </div>
     {% endif %}
   </header>
 {% endblock %}
