@@ -62,7 +62,7 @@
       <div class="relative w-full">
         <input type="hidden" name="container" :value="value">
         <button type="button" @click="open = !open"
-                class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm shadow-sm"
+                class="w-full h-12 inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 text-sm shadow-sm"
                 :class="selected ? 'text-gray-900' : 'text-gray-400'">
           <span x-text="selected ? selected.label : 'Select status'"></span>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
@@ -113,7 +113,7 @@
       <div class="relative w-full">
         <input type="hidden" name="completion_mode" :value="value">
         <button type="button" @click="open = !open"
-                class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+                class="w-full h-12 inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 text-sm text-gray-600 shadow-sm">
           <span x-text="selected.label"></span>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
