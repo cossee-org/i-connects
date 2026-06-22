@@ -36,24 +36,9 @@
         </a>
         <a href="{% url 'projects:update' pk=project.pk %}" class="btn btn-sm btn-primary">Edit</a>
       {% elif user.is_authenticated and not user_privilege %}
-        {% if pending_join_request %}
-          <span class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-brand-light/60 text-brand-text">
-            Request pending ({{ pending_join_request.get_requested_privilege_display }})
-          </span>
-          <form method="post" action="{% url 'projects:cancel_join_request' join_request_pk=pending_join_request.pk %}">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-sm btn-ghost">Cancel request</button>
-          </form>
-        {% else %}
-          <a href="{% url 'projects:request_to_join' pk=project.pk %}?privilege=CONTRIBUTOR"
-             class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-            Request to join as member
-          </a>
-          <a href="{% url 'projects:request_to_join' pk=project.pk %}?privilege=PROJECT_MANAGER"
-             class="btn btn-sm btn-outline">
-            Request to join as lead
-          </a>
-        {% endif %}
+        <div id="join-action" class="flex flex-wrap gap-2">
+          {% include "projects/partials/join_action.html" %}
+        </div>
       {% endif %}
     </div>
   </header>
@@ -349,4 +334,15 @@
   </div>
 </div>
 {% endif %}
+
+<dialog id="join-request-modal" class="modal" aria-label="Request to join project"
+        x-on:closejoinmodal.window="$el.close()">
+  <div class="modal-box max-w-lg bg-base-100 border border-brand-light/60">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
+    </form>
+    <div id="join-request-modal-body"><!-- filled by HTMX --></div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
 {% endblock %}
