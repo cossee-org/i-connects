@@ -45,9 +45,6 @@
       {% include "_components/form_field.html" with field=form.description %}
     </div>
 
-    {% include "_components/form_field.html" with field=form.start_date %}
-    {% include "_components/form_field.html" with field=form.deadline %}
-
     {# Status (container) — upward Alpine dropdown matching project-form style #}
     <div class="md:col-span-2">
       <div class="form-control w-full mb-3"
@@ -63,7 +60,6 @@
         <div class="relative flex justify-between items-center gap-4 border border-gray-200 rounded-lg px-4 py-3">
           <div class="flex-1 min-w-0">
             <p class="label-text text-sm text-brand-navy font-medium">Status</p>
-            <p class="text-xs text-brand-text/60 mt-0.5">The Kanban column this task belongs to.</p>
           </div>
           <input type="hidden" name="container" :value="value">
           <div class="shrink-0 relative">
@@ -159,6 +155,9 @@
         {% endif %}
       </div>
     </div>
+
+    {% include "_components/form_field.html" with field=form.start_date %}
+    {% include "_components/form_field.html" with field=form.deadline %}
 
     <div class="md:col-span-2">
       {% include "_components/form_field.html" with field=form.assigned_members %}
