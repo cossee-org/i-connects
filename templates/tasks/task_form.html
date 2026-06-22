@@ -29,22 +29,129 @@
   {% endif %}
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+
+    {# Task name with 255-char counter #}
     <div class="md:col-span-2">
-      {% include "_components/form_field.html" with field=form.name %}
+      <div x-data="{ nameCharCount: {{ form.name.value|default:''|length }} }">
+        {% include "_components/form_field.html" with field=form.name %}
+        <p class="text-xs text-brand-text/50 -mt-2 mb-3 text-left"
+           :class="nameCharCount > 255 ? 'text-error' : ''">
+          <span x-text="nameCharCount"></span> / 255
+        </p>
+      </div>
     </div>
+
     <div class="md:col-span-2">
       {% include "_components/form_field.html" with field=form.description %}
     </div>
-    <div class="md:col-span-2">
-      {% include "_components/form_field.html" with field=form.container %}
+
+    {# Status and Completion mode — same row, no bounding box #}
+    <div class="form-control w-full mb-3"
+         x-data="{
+           open: false,
+           options: [{% for val, label in form.container.field.choices %}{% if val %}{value: '{{ val }}', label: '{{ label|escapejs }}'},{% endif %}{% endfor %}],
+           value: '{{ form.container.value|default:'' }}',
+           get selected() { return this.options.find(o => String(o.value) === String(this.value)) || null },
+           pick(val) { this.value = val; this.open = false; }
+         }"
+         @keydown.escape="open = false"
+         @click.outside="open = false">
+      <label class="label py-0.5 pb-1">
+        <span class="label-text text-sm text-brand-navy font-medium">Status <span class="text-brand-coral" aria-hidden="true">*</span></span>
+      </label>
+      <div class="relative w-full">
+        <input type="hidden" name="container" :value="value">
+        <button type="button" @click="open = !open"
+                class="w-full h-12 inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 text-sm shadow-sm"
+                :class="selected ? 'text-gray-900' : 'text-gray-400'">
+          <span x-text="selected ? selected.label : 'Select status'"></span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+               class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+            <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+          </svg>
+        </button>
+        <div x-cloak x-show="open"
+             x-transition:enter="transition ease-out duration-100"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-75"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95"
+             class="absolute left-0 right-0 bottom-full bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30 mb-1">
+          <template x-for="opt in options" :key="opt.value">
+            <button type="button" @click="pick(opt.value)"
+                    class="w-full text-left px-4 py-1.5 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                    :class="String(opt.value) === String(value) ? 'font-semibold bg-gray-50' : 'font-normal'">
+              <span x-text="opt.label"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+      {% if form.container.errors %}
+        <label class="label pt-1">
+          <span class="label-text-alt text-error">{{ form.container.errors|join:" " }}</span>
+        </label>
+      {% endif %}
     </div>
+
+    <div class="form-control w-full mb-3"
+         x-data="{
+           open: false,
+           options: [
+             {value: 'INDIVIDUAL', label: 'Individual'},
+             {value: 'TEAM',       label: 'Team'}
+           ],
+           value: '{{ form.completion_mode.value|default:'INDIVIDUAL' }}',
+           get selected() { return this.options.find(o => o.value === this.value) || this.options[0] },
+           pick(val) { this.value = val; this.open = false; }
+         }"
+         @keydown.escape="open = false"
+         @click.outside="open = false">
+      <label class="label py-0.5 pb-1">
+        <span class="label-text text-sm text-brand-navy font-medium">Completion mode</span>
+      </label>
+      <div class="relative w-full">
+        <input type="hidden" name="completion_mode" :value="value">
+        <button type="button" @click="open = !open"
+                class="w-full h-12 inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 text-sm text-gray-600 shadow-sm">
+          <span x-text="selected.label"></span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+               class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+            <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+          </svg>
+        </button>
+        <div x-cloak x-show="open"
+             x-transition:enter="transition ease-out duration-100"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-75"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95"
+             class="absolute left-0 right-0 bottom-full bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30 mb-1">
+          <template x-for="opt in options" :key="opt.value">
+            <button type="button" @click="pick(opt.value)"
+                    class="w-full text-left px-4 py-1.5 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                    :class="opt.value === value ? 'font-semibold bg-gray-50' : 'font-normal'">
+              <span x-text="opt.label"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+      {% if form.completion_mode.errors %}
+        <label class="label pt-1">
+          <span class="label-text-alt text-error">{{ form.completion_mode.errors|join:" " }}</span>
+        </label>
+      {% endif %}
+    </div>
+
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
-    <div class="md:col-span-2">
-      {% include "_components/form_field.html" with field=form.completion_mode %}
-    </div>
+
     <div class="md:col-span-2">
       {% include "_components/form_field.html" with field=form.assigned_members %}
+    </div>
+    <div class="md:col-span-2">
+      {% include "_components/form_field.html" with field=form.reviewers %}
     </div>
   </div>
 
