@@ -163,6 +163,7 @@ class TaskForm(forms.ModelForm):
         self.fields["reviewers"].label = "Reviewers"
         self.fields["completion_mode"].label = "Completion mode"
         self.fields["container"].label = "Status"
+        self.fields["container"].required = True
         # Prompt text shown for the unselected (blank) choice.
         self.fields["container"].empty_label = "Select status"
         # Show only the container's name in the dropdown (e.g. "In Progress"),
