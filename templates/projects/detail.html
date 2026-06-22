@@ -226,7 +226,7 @@
     </div>
     <div class="brand-card p-6">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-semibold text-brand-navy">Members</h2>
+        <h2 class="text-lg font-semibold text-brand-navy">Contributors</h2>
         {% if user_privilege %}
           <a href="{% url 'projects:members' pk=project.pk %}" class="text-xs font-medium text-brand-navy hover:text-brand-coral">
             View all
@@ -245,7 +245,7 @@
           </ul>
         {% endif %}
         {% if regular_members %}
-          <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">Members</h3>
+          <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">Contributors</h3>
           <ul class="divide-y divide-brand-light/60">
             {% for m in regular_members %}
               {% include "projects/partials/member_list_item.html" with m=m %}
@@ -253,7 +253,7 @@
           </ul>
         {% endif %}
       {% else %}
-        <p class="text-sm text-brand-text/60">No members yet.</p>
+        <p class="text-sm text-brand-text/60">No contributors yet.</p>
       {% endif %}
     </div>
 
