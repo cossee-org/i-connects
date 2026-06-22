@@ -321,7 +321,7 @@ class ProfileForm(forms.ModelForm):
                 layout=(
                     "{widget}"
                     '<img class="country-select-flag inline-block h-4 w-auto mt-2"'
-                    ' style="align-self:flex-start"'
+                    ' style="align-self:flex-end"'
                     ' id="{flag_id}" src="{country.flag}">'
                 ),
                 attrs={"class": "select select-bordered w-full"},
