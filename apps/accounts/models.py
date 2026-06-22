@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
+from django_countries.fields import CountryField
 
 from apps.core.enums import EmailFrequency, UserRole, WidgetSize
 
@@ -60,6 +61,8 @@ class User(AbstractUser):
     position = models.CharField(max_length=255, null=True, blank=True)
     department = models.CharField(max_length=255, null=True, blank=True)
     institution = models.CharField(max_length=255, null=True, blank=True)
+    city = models.CharField(max_length=255, null=True, blank=True)
+    country = CountryField(blank=True, blank_label="(Select country)")
     language = models.CharField(max_length=16, default="en-US")
     gravatar = models.CharField(max_length=255, null=True, blank=True)
     tooltips = models.BooleanField(default=True)

@@ -24,6 +24,8 @@ class UserAdmin(BaseUserAdmin):
                     "position",
                     "department",
                     "institution",
+                    "city",
+                    "country",
                     "language",
                     "gravatar",
                     "tooltips",
