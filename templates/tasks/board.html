@@ -69,8 +69,9 @@
 {% block page_header %}
   <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
     <div>
-      <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">Tasks</p>
-      <h1 class="page-title font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
+      <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">{{ project.name }}</p>
+      <h1 class="page-title font-semibold text-brand-navy leading-tight">Tasks</h1>
+      <p class="text-sm text-brand-text/70 mt-1">Manage and track work for this project.</p>
     </div>
     <div class="flex flex-wrap gap-2 justify-end shrink-0">
       <button type="button" x-data class="btn btn-ghost btn-sm"
