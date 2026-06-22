@@ -942,6 +942,8 @@ class RequestToJoinView(LoginRequiredMixin, View):
             user=self.request.user, project=project
         ).exists()
 
+    _modal_template = "projects/partials/join_request_form_modal.html"
+
     def get(self, request, pk):
         project = self._get_project(pk)
         if self._already_member(project):
@@ -961,21 +963,16 @@ class RequestToJoinView(LoginRequiredMixin, View):
             request.GET.get("privilege")
         )
         form = JoinRequestForm(initial_privilege=initial_privilege)
-        return render(
-            request,
-            self.template_name,
-            {"form": form, "project": project},
-        )
+        template = self._modal_template if request.headers.get("HX-Request") else self.template_name
+        return render(request, template, {"form": form, "project": project})
 
     def post(self, request, pk):
         project = self._get_project(pk)
+        is_htmx = bool(request.headers.get("HX-Request"))
         form = JoinRequestForm(request.POST)
         if not form.is_valid():
-            return render(
-                request,
-                self.template_name,
-                {"form": form, "project": project},
-            )
+            template = self._modal_template if is_htmx else self.template_name
+            return render(request, template, {"form": form, "project": project})
 
         try:
             create_join_request(
@@ -986,13 +983,18 @@ class RequestToJoinView(LoginRequiredMixin, View):
             )
         except JoinRequestError as exc:
             messages.error(request, str(exc))
-            return redirect("projects:detail", pk=project.pk)
+        else:
+            messages.success(
+                request,
+                f"Your request to join '{project.name}' was sent to the project leads.",
+            )
 
-        messages.success(
-            request,
-            f"Your request to join '{project.name}' was sent to the project managers.",
-        )
-        return redirect("projects:detail", pk=project.pk)
+        redirect_url = reverse("projects:detail", pk=project.pk)
+        if is_htmx:
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = redirect_url
+            return response
+        return redirect(redirect_url)
 
 
 class ProjectJoinRequestListView(
