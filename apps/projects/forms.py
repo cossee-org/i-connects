@@ -139,6 +139,7 @@ class JoinRequestForm(forms.ModelForm):
                     "class": "textarea textarea-bordered w-full",
                     "rows": 4,
                     "placeholder": "Tell the project team why you'd like to join (optional).",
+                    "maxlength": "500",
                 }
             ),
         }
@@ -146,6 +147,7 @@ class JoinRequestForm(forms.ModelForm):
     def __init__(self, *args, initial_privilege=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["message"].required = False
+        self.fields["message"].max_length = 500
         if initial_privilege and not self.is_bound:
             self.fields["requested_privilege"].initial = initial_privilege
 

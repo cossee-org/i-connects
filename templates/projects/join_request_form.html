@@ -28,6 +28,7 @@
 
     {% include "_components/form_field.html" with field=form.requested_privilege %}
     {% include "_components/form_field.html" with field=form.message %}
+    <p class="text-xs text-brand-text/50 -mt-3 mb-2 text-right">Max 500 characters</p>
 
     <div class="flex gap-2 justify-end mt-6">
       <a href="{% url 'projects:detail' pk=project.pk %}" class="btn btn-ghost">Cancel</a>
