@@ -18,7 +18,9 @@
     <div>
       <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-1">{{ project.name }}</div>
       <h1 class="page-title font-semibold text-brand-navy leading-tight">{{ task.name }}</h1>
-      <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">{{ task.container.name }}</p>
+      <div class="mt-2">
+        {% include "_components/status_badge.html" with status=task.container.name %}
+      </div>
     </div>
     <div class="flex flex-wrap gap-2 justify-end">
       {% if is_project_manager %}
@@ -40,43 +42,19 @@
 
 {% block content %}
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-    <section class="lg:col-span-2 brand-card p-6">
-      <div class="flex items-start justify-between gap-3">
+
+    <div class="lg:col-span-2 space-y-4">
+
+      <section class="brand-card p-6">
         <h2 class="text-lg font-semibold text-brand-navy mb-3">Description</h2>
-      </div>
-
-      <div class="prose max-w-none text-brand-text">
-        {{ task.description|default:"(no description)"|linebreaks }}
-      </div>
-
-      <dialog id="delete-task-modal" class="modal" aria-label="Delete task confirmation">
-        <div class="modal-box max-w-xl bg-base-100 border border-error/40">
-          <form method="dialog">
-            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
-          </form>
-          <h2 class="text-lg font-semibold text-error">Delete &ldquo;{{ task.name }}&rdquo;?</h2>
-          <p class="mt-3 text-brand-text">
-            Are you sure you want to delete the task <strong>{{ task.name }}</strong>?
-            This will remove the task and all of its task log entries. This action
-            cannot be undone.
-          </p>
-          <form method="post" action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
-                class="flex gap-2 justify-end mt-6">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ delete_redirect_url }}">
-            <button type="button" class="btn btn-ghost"
-                    onclick="document.getElementById('delete-task-modal').close()">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-outline btn-error">Delete task</button>
-          </form>
+        <div class="prose max-w-none text-brand-text">
+          {{ task.description|default:"(no description)"|linebreaks }}
         </div>
-        <form method="dialog" class="modal-backdrop"><button>close</button></form>
-      </dialog>
+      </section>
 
       {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done %}
 
-<div class="mt-8">
+      <section class="brand-card p-6">
         <h2 class="text-lg font-semibold text-brand-navy mb-3">Comments</h2>
         <div id="task-comments" class="flex flex-col gap-4">
           {% for comment in task.comments.all %}
@@ -86,34 +64,34 @@
           {% endfor %}
         </div>
         {% include "comments/comment_form.html" with task=task form=comment_form %}
-      </div>
-    </section>
+      </section>
+
+    </div>
 
     <aside class="brand-panel p-4 space-y-5">
-      {# Keyboard-accessible alternative to SortableJS drag-drop. #}
       <div>
         <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Status</h3>
         <div class="text-sm text-brand-navy font-medium">{{ task.container.name }}</div>
         {% if is_project_manager %}
-        <details class="mt-2">
-          <summary class="btn btn-ghost btn-xs">Change status</summary>
-          <form method="post" action="{% url 'tasks:change_column' pk=task.pk %}" class="mt-2">
-            {% csrf_token %}
-            <label for="change-column-select-{{ task.pk }}" class="sr-only">Destination column</label>
-            <select id="change-column-select-{{ task.pk }}"
-                    name="container_id"
-                    class="select select-bordered select-sm w-full"
-                    required>
-              {% for col in task.project.containers.all %}
-                <option value="{{ col.pk }}" {% if col.pk == task.container_id %}disabled{% endif %}>{{ col.name }}{% if col.pk == task.container_id %} (current){% endif %}</option>
-              {% endfor %}
-            </select>
-            <button type="submit"
-                    class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 mt-2">
-              Move
-            </button>
-          </form>
-        </details>
+          <details class="mt-2">
+            <summary class="btn btn-ghost btn-xs">Change status</summary>
+            <form method="post" action="{% url 'tasks:change_column' pk=task.pk %}" class="mt-2">
+              {% csrf_token %}
+              <label for="change-column-select-{{ task.pk }}" class="sr-only">Destination column</label>
+              <select id="change-column-select-{{ task.pk }}"
+                      name="container_id"
+                      class="select select-bordered select-sm w-full"
+                      required>
+                {% for col in task.project.containers.all %}
+                  <option value="{{ col.pk }}" {% if col.pk == task.container_id %}disabled{% endif %}>{{ col.name }}{% if col.pk == task.container_id %} (current){% endif %}</option>
+                {% endfor %}
+              </select>
+              <button type="submit"
+                      class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 mt-2">
+                Move
+              </button>
+            </form>
+          </details>
         {% endif %}
       </div>
 
@@ -121,21 +99,37 @@
         <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Assignees</h3>
         {% include "tasks/partials/task_assignees.html" with task=task %}
         {% if is_project_manager %}
-        <details class="mt-2">
-          <summary class="btn btn-ghost btn-xs">Change assignees</summary>
-          <form class="mt-2"
-                hx-post="{% url 'tasks:assign' pk=task.pk %}"
-                hx-target="#task-assignees-{{ task.pk }}"
-                hx-swap="outerHTML">
-            {% csrf_token %}
-            {{ assign_form.assigned_members }}
-            <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 mt-2" type="submit">Save</button>
-          </form>
-        </details>
+          <details class="mt-2">
+            <summary class="btn btn-ghost btn-xs">Change assignees</summary>
+            <form class="mt-2"
+                  hx-post="{% url 'tasks:assign' pk=task.pk %}"
+                  hx-target="#task-assignees-{{ task.pk }}"
+                  hx-swap="outerHTML">
+              {% csrf_token %}
+              {{ assign_form.assigned_members }}
+              <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 mt-2" type="submit">Save</button>
+            </form>
+          </details>
         {% endif %}
       </div>
 
-{% if task.github_url %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Reviewers</h3>
+        <div class="flex flex-wrap items-center gap-2">
+          {% for m in task.reviewers.all %}
+            <span class="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-base-100 border border-brand-light text-xs text-brand-text">
+              <span aria-hidden="true" class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
+                {{ m.display_name|slice:":1"|upper }}
+              </span>
+              {{ m.display_name }}
+            </span>
+          {% empty %}
+            <span class="text-sm text-brand-text/60">No reviewers assigned.</span>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if task.github_url %}
         <div>
           <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">GitHub</h3>
           {% with gh=task.github_url|github_link %}
@@ -160,9 +154,16 @@
       {% endif %}
 
       <div>
-        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Details</h3>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Created by</h3>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <span class="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-base-100 border border-brand-light text-xs text-brand-text">
+            <span aria-hidden="true" class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
+              {{ task.created_by.display_name|slice:":1"|upper }}
+            </span>
+            {{ task.created_by.display_name }}
+          </span>
+        </div>
         <ul class="text-sm text-brand-text space-y-1">
-          <li><span class="text-brand-text/60">Created by:</span> {{ task.created_by.display_name }}</li>
           {% if task.start_date %}<li><span class="text-brand-text/60">Starts:</span> {{ task.start_date|date:"M j, Y" }}</li>{% endif %}
           {% if task.deadline %}
             <li class="inline-flex items-center gap-1">
@@ -177,7 +178,33 @@
         </ul>
       </div>
     </aside>
+
   </div>
+
+  <dialog id="delete-task-modal" class="modal" aria-label="Delete task confirmation">
+    <div class="modal-box max-w-xl bg-base-100 border border-error/40">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
+      </form>
+      <h2 class="text-lg font-semibold text-error">Delete &ldquo;{{ task.name }}&rdquo;?</h2>
+      <p class="mt-3 text-brand-text">
+        Are you sure you want to delete the task <strong>{{ task.name }}</strong>?
+        This will remove the task and all of its task log entries. This action
+        cannot be undone.
+      </p>
+      <form method="post" action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
+            class="flex gap-2 justify-end mt-6">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ delete_redirect_url }}">
+        <button type="button" class="btn btn-ghost"
+                onclick="document.getElementById('delete-task-modal').close()">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-outline btn-error">Delete task</button>
+      </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
 
   <dialog id="task-modal" class="modal" aria-label="Task editor">
     <div class="modal-box max-w-2xl bg-base-100 border border-brand-light/60">
