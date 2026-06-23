@@ -1,10 +1,10 @@
 {# Side-pane partial — no {% extends %}. Injected via HTMX into #task-pane-body. #}
 {% load static %}
 
-<div class="flex flex-col flex-1 min-h-0">
+<div>
 
   {# ── Header ── #}
-  <div class="flex items-center justify-between px-4 py-3 border-b border-brand-light/60 shrink-0 gap-2">
+  <div class="sticky top-0 z-10 bg-white flex items-center justify-between px-4 py-3 border-b border-brand-light/60 gap-2">
     <div class="flex items-center gap-2 min-w-0 overflow-hidden">
       {% include "_components/status_badge.html" with status=task.container.name %}
       {% if task.deadline %}
@@ -55,8 +55,8 @@
     </div>
   </div>
 
-  {# ── Body (scrollable) ── #}
-  <div class="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-5">
+  {# ── Body ── #}
+  <div class="px-5 py-5 space-y-5">
 
     {# ── Section 1: Title + Description ── #}
     <h2 class="text-lg font-semibold text-brand-navy leading-snug mt-3">{{ task.name }}</h2>
