@@ -62,9 +62,9 @@
   {# ── Body (scrollable) ── #}
   <div class="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-5">
 
+    {# ── Section 1: Title + Description ── #}
     <h2 class="text-lg font-semibold text-brand-navy leading-snug mt-3">{{ task.name }}</h2>
 
-    {# Description #}
     {% if task.description %}
       <div class="prose prose-sm max-w-none text-brand-text">
         {{ task.description|linebreaks }}
@@ -73,42 +73,75 @@
       <p class="text-sm text-brand-text/50 italic">No description.</p>
     {% endif %}
 
-    {# Meta #}
-    <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-      <dt class="text-brand-text/60">Created by</dt>
-      <dd class="text-brand-navy">{{ task.created_by.display_name }}</dd>
-      {% if task.start_date %}
-        <dt class="text-brand-text/60">Start date</dt>
-        <dd class="text-brand-navy">{{ task.start_date|date:"M j, Y" }}</dd>
-      {% endif %}
-      {% if task.deadline %}
-        <dt class="text-brand-text/60">Due date</dt>
-        <dd class="text-brand-navy">{{ task.deadline|date:"M j, Y" }}</dd>
-      {% endif %}
-      {% if task.milestone %}
-        <dt class="text-brand-text/60">Milestone</dt>
-        <dd class="text-brand-navy">{{ task.milestone.name }}</dd>
-      {% endif %}
-      {% if task.github_url %}
-        <dt class="text-brand-text/60">GitHub</dt>
-        <dd class="min-w-0">
-          <a href="{{ task.github_url }}" target="_blank" rel="noopener"
-             class="text-brand-navy hover:text-brand-coral font-medium break-all">
-            {{ task.github_url }}
-          </a>
-        </dd>
-      {% endif %}
-    </dl>
+    <hr class="border-brand-light/60">
 
-    {# Assignees #}
-    {% if task.assigned_members.all %}
-      <div>
-        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Assignees</h3>
-        {% include "tasks/partials/task_assignees.html" with task=task %}
-      </div>
+    {# ── Section 2: People + Meta ── #}
+
+    {% if task.start_date or task.deadline or task.milestone or task.github_url %}
+      <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+        {% if task.start_date %}
+          <dt class="text-brand-text/60">Start date</dt>
+          <dd class="text-brand-navy">{{ task.start_date|date:"M j, Y" }}</dd>
+        {% endif %}
+        {% if task.deadline %}
+          <dt class="text-brand-text/60">Due date</dt>
+          <dd class="text-brand-navy">{{ task.deadline|date:"M j, Y" }}</dd>
+        {% endif %}
+        {% if task.milestone %}
+          <dt class="text-brand-text/60">Milestone</dt>
+          <dd class="text-brand-navy">{{ task.milestone.name }}</dd>
+        {% endif %}
+        {% if task.github_url %}
+          <dt class="text-brand-text/60">GitHub</dt>
+          <dd class="min-w-0">
+            <a href="{{ task.github_url }}" target="_blank" rel="noopener"
+               class="text-brand-navy hover:text-brand-coral font-medium break-all">
+              {{ task.github_url }}
+            </a>
+          </dd>
+        {% endif %}
+      </dl>
     {% endif %}
 
-    {# Comments #}
+    {# Assignees #}
+    <div>
+      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Assignees</h3>
+      {% include "tasks/partials/task_assignees.html" with task=task %}
+    </div>
+
+    {# Reviewers #}
+    <div>
+      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Reviewers</h3>
+      <div class="flex flex-wrap items-center gap-2">
+        {% for m in task.reviewers.all %}
+          <span class="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-base-100 border border-brand-light text-xs text-brand-text">
+            <span aria-hidden="true" class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
+              {{ m.display_name|slice:":1"|upper }}
+            </span>
+            {{ m.display_name }}
+          </span>
+        {% empty %}
+          <span class="text-sm text-brand-text/60">No reviewers assigned.</span>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Created by #}
+    <div>
+      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Created by</h3>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-base-100 border border-brand-light text-xs text-brand-text">
+          <span aria-hidden="true" class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
+            {{ task.created_by.display_name|slice:":1"|upper }}
+          </span>
+          {{ task.created_by.display_name }}
+        </span>
+      </div>
+    </div>
+
+    <hr class="border-brand-light/60">
+
+    {# ── Section 3: Comments ── #}
     <div>
       <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-3">
         Comments{% if task.comments.count %} ({{ task.comments.count }}){% endif %}
