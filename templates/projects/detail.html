@@ -95,6 +95,9 @@
           </p>
         </div>
         <div class="flex flex-wrap gap-2">
+          <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-sm btn-ghost">
+            View board
+          </a>
           {% if is_project_manager %}
             {% if has_kanban_columns %}
               <button type="button"
@@ -112,9 +115,6 @@
               </a>
             {% endif %}
           {% endif %}
-          <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-sm btn-ghost">
-            View board
-          </a>
         </div>
       </div>
 
