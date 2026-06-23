@@ -343,6 +343,33 @@
       }
     });
 
+    // Remove a deleted task card/row from the board instantly.
+    document.addEventListener('task-deleted', function (evt) {
+      var id = evt.detail && evt.detail.id;
+      if (!id) return;
+      var card = document.getElementById('task-card-' + id);
+      if (card) {
+        var colList = card.closest('[data-column-id]');
+        card.remove();
+        if (colList) {
+          var badge = document.querySelector('[data-column-count="' + colList.dataset.columnId + '"]');
+          if (badge) badge.textContent = colList.children.length;
+        }
+      }
+      var row = document.querySelector('.task-list-tbody [data-task-id="' + id + '"]');
+      if (row) {
+        var tbody = row.closest('[data-list-column-id]');
+        row.remove();
+        if (tbody) {
+          var lBadge = document.querySelector('[data-list-column-count="' + tbody.dataset.listColumnId + '"]');
+          if (lBadge) {
+            var n = tbody.querySelectorAll('[data-task-id]').length;
+            lBadge.textContent = n + ' task' + (n === 1 ? '' : 's');
+          }
+        }
+      }
+    });
+
     // Close the modal whenever HTMX swaps a new task card onto the board.
     document.body.addEventListener('task-created', function () {
       var modal = document.getElementById('task-modal');

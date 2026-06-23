@@ -20,15 +20,11 @@
     </div>
     <div class="flex items-center gap-1 shrink-0">
       {% if is_project_manager %}
-        <form method="post"
-              action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
-              hx-post="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
-              hx-swap="none"
-              hx-confirm="Delete this task? This cannot be undone."
-              hx-on::after-request="if(event.detail.successful){ closePane(); htmx.trigger(document.body, 'task-updated'); }">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-ghost btn-xs text-error">Delete</button>
-        </form>
+        <button type="button"
+                class="btn btn-ghost btn-xs text-error"
+                onclick="document.getElementById('task-delete-modal-{{ task.pk }}').showModal()">
+          Delete
+        </button>
         <button type="button"
                 class="btn btn-ghost btn-xs"
                 hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
@@ -173,4 +169,49 @@
     </div>
 
   </div>
+
+  {# ── Delete confirmation modal ── #}
+  <dialog id="task-delete-modal-{{ task.pk }}" class="modal">
+    <div class="modal-box max-w-sm bg-base-100 border border-brand-light/60">
+      <div class="flex flex-col items-center text-center gap-3 pt-2 pb-1">
+        <div class="w-12 h-12 rounded-full bg-error/10 flex items-center justify-center shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-6 h-6 text-error">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-base font-semibold text-brand-navy">Delete task?</h3>
+          <p class="text-sm text-brand-text/70 mt-1 break-words">
+            <span class="font-medium text-brand-navy">{{ task.name }}</span>
+          </p>
+          <p class="text-sm text-brand-text/60 mt-2">This action cannot be undone.</p>
+        </div>
+      </div>
+      <div class="flex gap-2 justify-end mt-5">
+        <button type="button"
+                class="btn btn-ghost btn-sm"
+                onclick="document.getElementById('task-delete-modal-{{ task.pk }}').close()">
+          Cancel
+        </button>
+        <form method="post"
+              action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
+              hx-post="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
+              hx-swap="none"
+              hx-on::after-request="if(event.detail.successful){
+                document.getElementById('task-delete-modal-{{ task.pk }}').close();
+                closePane();
+                document.dispatchEvent(new CustomEvent('task-deleted', { detail: { id: {{ task.pk }} } }));
+              }">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm bg-error hover:bg-error/90 text-white border-0">
+            Delete task
+          </button>
+        </form>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
 </div>
