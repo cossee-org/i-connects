@@ -299,12 +299,12 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
 
         from_pane = self.request.GET.get("from_pane")
         if from_pane == "board":
-            return {"url": f"{board_url}?open_task={task_pk}", "label": "Kanban board"}
+            return {"url": f"{board_url}?open_task={task_pk}", "label": "Tasks"}
         if from_pane == "project":
-            return {"url": f"{project_url}?open_task={task_pk}", "label": self.project.name}
+            return {"url": f"{project_url}?open_task={task_pk}", "label": "Project"}
 
-        board = {"url": board_url, "label": "Kanban board"}
-        project = {"url": project_url, "label": self.project.name}
+        board = {"url": board_url, "label": "Tasks"}
+        project = {"url": project_url, "label": "Project"}
         referer = self.request.META.get("HTTP_REFERER", "")
         if not referer:
             return board
