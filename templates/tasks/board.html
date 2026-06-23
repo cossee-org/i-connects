@@ -210,6 +210,8 @@
       _dragging: false,
       openPane(url) {
         this.paneOpen = true;
+        const body = document.getElementById('task-pane-body');
+        body.dataset.paneUrl = url;
         htmx.ajax('GET', url, { target: '#task-pane-body', swap: 'innerHTML' });
       },
       closePane() {
