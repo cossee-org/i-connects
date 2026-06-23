@@ -69,39 +69,40 @@
       <p class="text-sm text-brand-text/50 italic">No description.</p>
     {% endif %}
 
-    <hr class="border-brand-light/60">
-
     {# Completion status #}
     {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done %}
 
-    <hr class="border-brand-light/60">
-
     {# ── Section 2: People + Meta ── #}
 
-    {% if task.start_date or task.deadline or task.milestone or task.github_url %}
-      <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-        {% if task.start_date %}
-          <dt class="text-xs uppercase tracking-wider text-brand-coral font-semibold">Start date</dt>
-          <dd class="text-brand-navy">{{ task.start_date|date:"M j, Y" }}</dd>
-        {% endif %}
-        {% if task.deadline %}
-          <dt class="text-xs uppercase tracking-wider text-brand-coral font-semibold pt-2">Due date</dt>
-          <dd class="text-brand-navy pt-2">{{ task.deadline|date:"M j, Y" }}</dd>
-        {% endif %}
-        {% if task.milestone %}
-          <dt class="text-brand-text/60">Milestone</dt>
-          <dd class="text-brand-navy">{{ task.milestone.name }}</dd>
-        {% endif %}
-        {% if task.github_url %}
-          <dt class="text-brand-text/60">GitHub</dt>
-          <dd class="min-w-0">
-            <a href="{{ task.github_url }}" target="_blank" rel="noopener"
-               class="text-brand-navy hover:text-brand-coral font-medium break-all">
-              {{ task.github_url }}
-            </a>
-          </dd>
-        {% endif %}
-      </dl>
+    {% if task.start_date %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Start date</h3>
+        <p class="text-sm text-brand-navy font-medium">{{ task.start_date|date:"M j, Y" }}</p>
+      </div>
+    {% endif %}
+
+    {% if task.deadline %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Due date</h3>
+        <p class="text-sm text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</p>
+      </div>
+    {% endif %}
+
+    {% if task.milestone %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Milestone</h3>
+        <p class="text-sm text-brand-navy font-medium">{{ task.milestone.name }}</p>
+      </div>
+    {% endif %}
+
+    {% if task.github_url %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">GitHub</h3>
+        <a href="{{ task.github_url }}" target="_blank" rel="noopener"
+           class="text-sm text-brand-navy hover:text-brand-coral font-medium break-all">
+          {{ task.github_url }}
+        </a>
+      </div>
     {% endif %}
 
     {# Assignees #}
@@ -139,8 +140,6 @@
         </span>
       </div>
     </div>
-
-    <hr class="border-brand-light/60">
 
     {# ── Section 3: Comments ── #}
     <div>

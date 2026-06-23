@@ -21,7 +21,7 @@
       {% include "_components/status_badge.html" with status=task.container.name %}
     </div>
     {% if is_project_manager %}
-      <div class="flex flex-wrap gap-2 mt-1">
+      <div class="flex flex-wrap gap-2 mt-1 justify-end">
         <button type="button" class="btn btn-sm btn-primary"
                 hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
                 hx-target="#task-modal-body"
