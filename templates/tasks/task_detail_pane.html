@@ -34,7 +34,7 @@
           Edit
         </button>
       {% endif %}
-      <a href="{% url 'tasks:detail' project_pk=project.pk pk=task.pk %}"
+      <a href="{{ full_page_url }}"
          class="btn btn-ghost btn-xs btn-square"
          title="Open full page" aria-label="Open full task page">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"

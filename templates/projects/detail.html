@@ -340,6 +340,14 @@
   function taskPaneData() {
     return {
       paneOpen: false,
+      init() {
+        var params = new URLSearchParams(window.location.search);
+        var openTask = params.get('open_task');
+        if (openTask && /^\d+$/.test(openTask)) {
+          this.openPane('/projects/{{ project.pk }}/tasks/' + openTask + '/pane/');
+          history.replaceState(null, '', window.location.pathname);
+        }
+      },
       openPane(url) {
         this.paneOpen = true;
         var body = document.getElementById('task-pane-body');
