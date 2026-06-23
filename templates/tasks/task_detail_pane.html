@@ -6,6 +6,15 @@
   {# ── Header ── #}
   <div class="sticky top-0 z-10 bg-white flex items-center justify-between px-4 py-3 border-b border-brand-light/60 gap-2">
     <div class="flex items-center gap-2 min-w-0 overflow-hidden">
+      <a href="{{ full_page_url }}"
+         class="btn btn-ghost btn-xs btn-square shrink-0"
+         title="Open full page" aria-label="Open full task page">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+        </svg>
+      </a>
       {% include "_components/status_badge.html" with status=task.container.name %}
       {% if task.deadline %}
         <span class="inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0">
@@ -34,15 +43,6 @@
           Edit
         </button>
       {% endif %}
-      <a href="{{ full_page_url }}"
-         class="btn btn-ghost btn-xs btn-square"
-         title="Open full page" aria-label="Open full task page">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-        </svg>
-      </a>
       <button type="button"
               class="btn btn-ghost btn-xs btn-circle"
               aria-label="Close pane"
