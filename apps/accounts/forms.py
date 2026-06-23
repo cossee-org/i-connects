@@ -12,6 +12,7 @@ from django import forms
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django_countries.widgets import CountrySelectWidget
 
 User = get_user_model()
 
@@ -290,6 +291,8 @@ class ProfileForm(forms.ModelForm):
             "position",
             "department",
             "institution",
+            "city",
+            "country",
             # Email notifications
             "email_project_activity_frequency",
             "email_overdue_task_frequency",
@@ -302,6 +305,8 @@ class ProfileForm(forms.ModelForm):
             "position": "Position",
             "department": "Department",
             "institution": "Institution / Employer",
+            "city": "City",
+            "country": "Country",
         }
         widgets = {
             "given_name": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
@@ -311,6 +316,16 @@ class ProfileForm(forms.ModelForm):
             "position": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "department": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
             "institution": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "city": forms.TextInput(attrs={"class": "input input-bordered w-full"}),
+            "country": CountrySelectWidget(
+                layout=(
+                    "{widget}"
+                    '<img class="country-select-flag inline-block h-4 w-auto mt-2"'
+                    ' style="align-self:flex-end"'
+                    ' id="{flag_id}" src="{country.flag}">'
+                ),
+                attrs={"class": "select select-bordered w-full"},
+            ),
             "email_project_activity_frequency": forms.Select(
                 attrs={"class": "select select-bordered w-full"}
             ),

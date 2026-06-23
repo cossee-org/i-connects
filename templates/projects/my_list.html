@@ -191,7 +191,7 @@
 {% if project_rows %}
   <div class="flex flex-col gap-4">
     {% for row in project_rows %}
-      <a href="{% url 'tasks:board' project_pk=row.project.pk %}"
+      <a href="{% url 'projects:detail' pk=row.project.pk %}"
          class="brand-card p-5 hover:shadow-md transition flex items-start gap-4">
         <div class="flex-1 min-w-0 flex flex-col gap-1.5">
           <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
@@ -218,11 +218,17 @@
         </div>
 
         <div class="shrink-0 flex items-center gap-2 pt-0.5">
-          {% include "_components/status_badge.html" with status=row.project.get_status_display %}
           {% if row.project.is_public %}
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
           {% else %}
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
+          {% endif %}
+          {% include "_components/status_badge.html" with status=row.project.get_status_display %}
+          {% if row.privilege %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+              {% if row.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+              {{ row.privilege|privilege_label }}
+            </span>
           {% endif %}
         </div>
       </a>

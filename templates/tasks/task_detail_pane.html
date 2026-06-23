@@ -1,11 +1,20 @@
 {# Side-pane partial — no {% extends %}. Injected via HTMX into #task-pane-body. #}
 {% load static %}
 
-<div class="flex flex-col h-full">
+<div>
 
   {# ── Header ── #}
-  <div class="flex items-center justify-between px-4 py-3 border-b border-brand-light/60 shrink-0 gap-2">
+  <div class="sticky top-0 z-10 bg-white flex items-center justify-between px-4 py-3 border-b border-brand-light/60 gap-2">
     <div class="flex items-center gap-2 min-w-0 overflow-hidden">
+      <a href="{{ full_page_url }}"
+         class="btn btn-ghost btn-xs btn-square shrink-0"
+         title="Open full page" aria-label="Open full task page">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+        </svg>
+      </a>
       {% include "_components/status_badge.html" with status=task.container.name %}
       {% if task.deadline %}
         <span class="inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0">
@@ -21,6 +30,11 @@
     <div class="flex items-center gap-1 shrink-0">
       {% if is_project_manager %}
         <button type="button"
+                class="btn btn-ghost btn-xs text-error"
+                onclick="document.getElementById('task-delete-modal-{{ task.pk }}').showModal()">
+          Delete
+        </button>
+        <button type="button"
                 class="btn btn-ghost btn-xs"
                 hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
                 hx-target="#task-modal-body"
@@ -29,15 +43,6 @@
           Edit
         </button>
       {% endif %}
-      <a href="{% url 'tasks:detail' project_pk=project.pk pk=task.pk %}"
-         class="btn btn-ghost btn-xs btn-square"
-         title="Open full page" aria-label="Open full task page">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-        </svg>
-      </a>
       <button type="button"
               class="btn btn-ghost btn-xs btn-circle"
               aria-label="Close pane"
@@ -50,12 +55,12 @@
     </div>
   </div>
 
-  {# ── Body (scrollable) ── #}
-  <div class="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-5">
+  {# ── Body ── #}
+  <div class="px-5 py-5 space-y-5">
 
-    <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ task.name }}</h2>
+    {# ── Section 1: Title + Description ── #}
+    <h2 class="text-lg font-semibold text-brand-navy leading-snug mt-3">{{ task.name }}</h2>
 
-    {# Description #}
     {% if task.description %}
       <div class="prose prose-sm max-w-none text-brand-text">
         {{ task.description|linebreaks }}
@@ -64,44 +69,79 @@
       <p class="text-sm text-brand-text/50 italic">No description.</p>
     {% endif %}
 
-    {# Meta #}
-    <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-      <dt class="text-brand-text/60">Column</dt>
-      <dd class="text-brand-navy font-medium">{{ task.container.name }}</dd>
-      <dt class="text-brand-text/60">Created by</dt>
-      <dd class="text-brand-navy">{{ task.created_by.display_name }}</dd>
-      {% if task.start_date %}
-        <dt class="text-brand-text/60">Start date</dt>
-        <dd class="text-brand-navy">{{ task.start_date|date:"M j, Y" }}</dd>
-      {% endif %}
-      {% if task.deadline %}
-        <dt class="text-brand-text/60">Due date</dt>
-        <dd class="text-brand-navy">{{ task.deadline|date:"M j, Y" }}</dd>
-      {% endif %}
-      {% if task.milestone %}
-        <dt class="text-brand-text/60">Milestone</dt>
-        <dd class="text-brand-navy">{{ task.milestone.name }}</dd>
-      {% endif %}
-      {% if task.github_url %}
-        <dt class="text-brand-text/60">GitHub</dt>
-        <dd class="min-w-0">
-          <a href="{{ task.github_url }}" target="_blank" rel="noopener"
-             class="text-brand-navy hover:text-brand-coral font-medium break-all">
-            {{ task.github_url }}
-          </a>
-        </dd>
-      {% endif %}
-    </dl>
+    {# Completion status #}
+    {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done %}
 
-    {# Assignees #}
-    {% if task.assigned_members.all %}
+    {# ── Section 2: People + Meta ── #}
+
+    {% if task.start_date %}
       <div>
-        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Assignees</h3>
-        {% include "tasks/partials/task_assignees.html" with task=task %}
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Start date</h3>
+        <p class="text-sm text-brand-navy font-medium">{{ task.start_date|date:"M j, Y" }}</p>
       </div>
     {% endif %}
 
-    {# Comments #}
+    {% if task.deadline %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Due date</h3>
+        <p class="text-sm text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</p>
+      </div>
+    {% endif %}
+
+    {% if task.milestone %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Milestone</h3>
+        <p class="text-sm text-brand-navy font-medium">{{ task.milestone.name }}</p>
+      </div>
+    {% endif %}
+
+    {% if task.github_url %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">GitHub</h3>
+        <a href="{{ task.github_url }}" target="_blank" rel="noopener"
+           class="text-sm text-brand-navy hover:text-brand-coral font-medium break-all">
+          {{ task.github_url }}
+        </a>
+      </div>
+    {% endif %}
+
+    {# Assignees #}
+    <div>
+      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Assignees</h3>
+      {% include "tasks/partials/task_assignees.html" with task=task %}
+    </div>
+
+    {# Reviewers #}
+    <div>
+      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Reviewers</h3>
+      <div class="flex flex-wrap items-center gap-2">
+        {% for m in task.reviewers.all %}
+          <span class="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-base-100 border border-brand-light text-xs text-brand-text">
+            <span aria-hidden="true" class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
+              {{ m.display_name|slice:":1"|upper }}
+            </span>
+            {{ m.display_name }}
+          </span>
+        {% empty %}
+          <span class="text-sm text-brand-text/60">No reviewers assigned.</span>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Created by #}
+    <div>
+      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Created by</h3>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-base-100 border border-brand-light text-xs text-brand-text">
+          <span aria-hidden="true" class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
+            {{ task.created_by.display_name|slice:":1"|upper }}
+          </span>
+          {{ task.created_by.display_name }}
+        </span>
+      </div>
+    </div>
+
+    {# ── Section 3: Comments ── #}
     <div>
       <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-3">
         Comments{% if task.comments.count %} ({{ task.comments.count }}){% endif %}
@@ -133,4 +173,38 @@
     </div>
 
   </div>
+
+  {# ── Delete confirmation modal ── #}
+  <dialog id="task-delete-modal-{{ task.pk }}" class="modal" aria-label="Delete task confirmation">
+    <div class="modal-box max-w-xl bg-base-100 border border-error/40">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
+      </form>
+      <h2 class="text-lg font-semibold text-error">Delete &ldquo;{{ task.name }}&rdquo;?</h2>
+      <p class="mt-3 text-brand-text">
+        Are you sure you want to delete the task <strong>{{ task.name }}</strong>?
+        This will remove the task and all of its task log entries. This action
+        cannot be undone.
+      </p>
+      <form method="post"
+            action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
+            hx-post="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
+            hx-swap="none"
+            hx-on::after-request="if(event.detail.successful){
+              document.getElementById('task-delete-modal-{{ task.pk }}').close();
+              document.dispatchEvent(new CustomEvent('close-task-pane'));
+              document.dispatchEvent(new CustomEvent('task-deleted', { detail: { id: {{ task.pk }} } }));
+            }"
+            class="flex gap-2 justify-end mt-6">
+        {% csrf_token %}
+        <button type="button" class="btn btn-ghost"
+                onclick="document.getElementById('task-delete-modal-{{ task.pk }}').close()">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-outline btn-error">Delete task</button>
+      </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
 </div>

@@ -1,0 +1,31 @@
+{# Join request form partial — loaded into #join-request-modal-body via HTMX. #}
+<form method="post"
+      action="{% url 'projects:request_to_join' pk=project.pk %}"
+      hx-post="{% url 'projects:request_to_join' pk=project.pk %}"
+      hx-target="this"
+      hx-swap="outerHTML">
+  {% csrf_token %}
+
+  <h3 class="text-lg font-semibold text-brand-navy mb-1">Request to join {{ project.name }}</h3>
+  <p class="text-sm text-brand-text/70 mb-4">
+    Your request will be sent to the project leads. They can approve or decline it.
+  </p>
+
+  {% if form.non_field_errors %}
+    <div class="alert alert-error mb-4">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  {% include "_components/form_field.html" with field=form.requested_privilege %}
+  {% include "_components/form_field.html" with field=form.message %}
+  <p class="text-xs text-brand-text/50 -mt-3 mb-2 text-right">Max 500 characters</p>
+
+  <div class="flex gap-2 justify-end mt-6">
+    <button type="button" class="btn btn-ghost"
+            onclick="document.getElementById('join-request-modal').close()">
+      Cancel
+    </button>
+    <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+      Send request
+    </button>
+  </div>
+</form>
