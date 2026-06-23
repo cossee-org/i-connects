@@ -228,12 +228,30 @@ class TaskDetailPaneView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            .prefetch_related("assigned_members", "comments__author"),
+            .prefetch_related("assigned_members", "reviewers", "task_logs", "comments__author"),
             project=self.project,
             pk=kwargs["pk"],
         )
         context["task"] = task
         context["comment_form"] = CommentForm()
+        context["status_block"] = _task_status_context(
+            task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+        from_pane = "board"
+        referer = self.request.META.get("HTTP_REFERER", "")
+        if referer:
+            parsed = urlparse(referer)
+            try:
+                match = resolve(parsed.path)
+                view_name = f"{match.namespace}:{match.url_name}" if match.namespace else match.url_name
+                if view_name == "projects:detail" and match.kwargs.get("pk") == self.project.pk:
+                    from_pane = "project"
+            except Resolver404:
+                pass
+        detail_url = reverse("tasks:detail", kwargs={"project_pk": self.project.pk, "pk": kwargs["pk"]})
+        context["full_page_url"] = f"{detail_url}?from_pane={from_pane}"
         return context
 
 
@@ -244,7 +262,7 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            .prefetch_related("assigned_members", "task_logs__comments__author", "comments__author", "activities__actor", "activities__member")
+            .prefetch_related("assigned_members", "reviewers", "task_logs__comments__author", "comments__author", "activities__actor", "activities__member")
             .filter(project=self.project),
             pk=kwargs["pk"],
         )
@@ -275,15 +293,23 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         Returns ``{"url": ..., "label": ...}`` for either the originating
         Project view or Kanban board. Falls back to the Kanban board when
         the Referer is missing, off-host, or points elsewhere.
+
+        When ``?from_pane=board`` or ``?from_pane=project`` is present the
+        task was opened from the side pane, so append ``?open_task=<pk>`` to
+        the return URL so the originating page can re-open the pane.
         """
-        board = {
-            "url": reverse("tasks:board", kwargs={"project_pk": self.project.pk}),
-            "label": "Kanban board",
-        }
-        project = {
-            "url": reverse("projects:detail", kwargs={"pk": self.project.pk}),
-            "label": self.project.name,
-        }
+        task_pk = self.kwargs["pk"]
+        board_url = reverse("tasks:board", kwargs={"project_pk": self.project.pk})
+        project_url = reverse("projects:detail", kwargs={"pk": self.project.pk})
+
+        from_pane = self.request.GET.get("from_pane")
+        if from_pane == "board":
+            return {"url": f"{board_url}?open_task={task_pk}", "label": "Tasks"}
+        if from_pane == "project":
+            return {"url": f"{project_url}?open_task={task_pk}", "label": "Project"}
+
+        board = {"url": board_url, "label": "Tasks"}
+        project = {"url": project_url, "label": "Project"}
         referer = self.request.META.get("HTTP_REFERER", "")
         if not referer:
             return board

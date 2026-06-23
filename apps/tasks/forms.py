@@ -159,9 +159,10 @@ class TaskForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.project = project
         self.fields["name"].label = "Task name"
-        self.fields["assigned_members"].label = "Contributors"
+        self.fields["assigned_members"].label = "Assignees"
         self.fields["reviewers"].label = "Reviewers"
         self.fields["completion_mode"].label = "Completion mode"
+        self.fields["deadline"].label = "Due date"
         self.fields["container"].label = "Status"
         self.fields["container"].required = True
         # Prompt text shown for the unselected (blank) choice.

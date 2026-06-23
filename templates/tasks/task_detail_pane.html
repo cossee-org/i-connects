@@ -6,6 +6,15 @@
   {# ── Header ── #}
   <div class="sticky top-0 z-10 bg-white flex items-center justify-between px-4 py-3 border-b border-brand-light/60 gap-2">
     <div class="flex items-center gap-2 min-w-0 overflow-hidden">
+      <a href="{{ full_page_url }}"
+         class="btn btn-ghost btn-xs btn-square shrink-0"
+         title="Open full page" aria-label="Open full task page">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+        </svg>
+      </a>
       {% include "_components/status_badge.html" with status=task.container.name %}
       {% if task.deadline %}
         <span class="inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0">
@@ -34,15 +43,6 @@
           Edit
         </button>
       {% endif %}
-      <a href="{% url 'tasks:detail' project_pk=project.pk pk=task.pk %}"
-         class="btn btn-ghost btn-xs btn-square"
-         title="Open full page" aria-label="Open full task page">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-        </svg>
-      </a>
       <button type="button"
               class="btn btn-ghost btn-xs btn-circle"
               aria-label="Close pane"
@@ -69,34 +69,40 @@
       <p class="text-sm text-brand-text/50 italic">No description.</p>
     {% endif %}
 
-    <hr class="border-brand-light/60">
+    {# Completion status #}
+    {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done %}
 
     {# ── Section 2: People + Meta ── #}
 
-    {% if task.start_date or task.deadline or task.milestone or task.github_url %}
-      <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-        {% if task.start_date %}
-          <dt class="text-brand-text/60">Start date</dt>
-          <dd class="text-brand-navy">{{ task.start_date|date:"M j, Y" }}</dd>
-        {% endif %}
-        {% if task.deadline %}
-          <dt class="text-brand-text/60">Due date</dt>
-          <dd class="text-brand-navy">{{ task.deadline|date:"M j, Y" }}</dd>
-        {% endif %}
-        {% if task.milestone %}
-          <dt class="text-brand-text/60">Milestone</dt>
-          <dd class="text-brand-navy">{{ task.milestone.name }}</dd>
-        {% endif %}
-        {% if task.github_url %}
-          <dt class="text-brand-text/60">GitHub</dt>
-          <dd class="min-w-0">
-            <a href="{{ task.github_url }}" target="_blank" rel="noopener"
-               class="text-brand-navy hover:text-brand-coral font-medium break-all">
-              {{ task.github_url }}
-            </a>
-          </dd>
-        {% endif %}
-      </dl>
+    {% if task.start_date %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Start date</h3>
+        <p class="text-sm text-brand-navy font-medium">{{ task.start_date|date:"M j, Y" }}</p>
+      </div>
+    {% endif %}
+
+    {% if task.deadline %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Due date</h3>
+        <p class="text-sm text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</p>
+      </div>
+    {% endif %}
+
+    {% if task.milestone %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Milestone</h3>
+        <p class="text-sm text-brand-navy font-medium">{{ task.milestone.name }}</p>
+      </div>
+    {% endif %}
+
+    {% if task.github_url %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">GitHub</h3>
+        <a href="{{ task.github_url }}" target="_blank" rel="noopener"
+           class="text-sm text-brand-navy hover:text-brand-coral font-medium break-all">
+          {{ task.github_url }}
+        </a>
+      </div>
     {% endif %}
 
     {# Assignees #}
@@ -135,8 +141,6 @@
       </div>
     </div>
 
-    <hr class="border-brand-light/60">
-
     {# ── Section 3: Comments ── #}
     <div>
       <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-3">
@@ -171,43 +175,34 @@
   </div>
 
   {# ── Delete confirmation modal ── #}
-  <dialog id="task-delete-modal-{{ task.pk }}" class="modal">
-    <div class="modal-box max-w-xs p-5 bg-base-100 border border-brand-light/60">
-      <div class="flex items-start gap-3">
-        <div class="w-8 h-8 rounded-full bg-error/10 flex items-center justify-center shrink-0 mt-0.5">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-               stroke-width="1.8" stroke="currentColor" class="w-4 h-4 text-error">
-            <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-          </svg>
-        </div>
-        <div class="min-w-0">
-          <h3 class="text-sm font-semibold text-brand-navy">Delete task?</h3>
-          <p class="text-xs text-brand-text/70 mt-0.5 break-words">{{ task.name }}</p>
-          <p class="text-xs text-brand-text/50 mt-1">This action cannot be undone.</p>
-        </div>
-      </div>
-      <div class="flex gap-2 justify-end mt-4">
-        <button type="button"
-                class="btn btn-ghost btn-sm"
+  <dialog id="task-delete-modal-{{ task.pk }}" class="modal" aria-label="Delete task confirmation">
+    <div class="modal-box max-w-xl bg-base-100 border border-error/40">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
+      </form>
+      <h2 class="text-lg font-semibold text-error">Delete &ldquo;{{ task.name }}&rdquo;?</h2>
+      <p class="mt-3 text-brand-text">
+        Are you sure you want to delete the task <strong>{{ task.name }}</strong>?
+        This will remove the task and all of its task log entries. This action
+        cannot be undone.
+      </p>
+      <form method="post"
+            action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
+            hx-post="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
+            hx-swap="none"
+            hx-on::after-request="if(event.detail.successful){
+              document.getElementById('task-delete-modal-{{ task.pk }}').close();
+              document.dispatchEvent(new CustomEvent('close-task-pane'));
+              document.dispatchEvent(new CustomEvent('task-deleted', { detail: { id: {{ task.pk }} } }));
+            }"
+            class="flex gap-2 justify-end mt-6">
+        {% csrf_token %}
+        <button type="button" class="btn btn-ghost"
                 onclick="document.getElementById('task-delete-modal-{{ task.pk }}').close()">
           Cancel
         </button>
-        <form method="post"
-              action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
-              hx-post="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
-              hx-swap="none"
-              hx-on::after-request="if(event.detail.successful){
-                document.getElementById('task-delete-modal-{{ task.pk }}').close();
-                document.dispatchEvent(new CustomEvent('close-task-pane'));
-                document.dispatchEvent(new CustomEvent('task-deleted', { detail: { id: {{ task.pk }} } }));
-              }">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-sm bg-error hover:bg-error/90 text-white border-0">
-            Delete task
-          </button>
-        </form>
-      </div>
+        <button type="submit" class="btn btn-outline btn-error">Delete task</button>
+      </form>
     </div>
     <form method="dialog" class="modal-backdrop"><button>close</button></form>
   </dialog>
