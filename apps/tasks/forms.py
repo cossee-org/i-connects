@@ -162,6 +162,7 @@ class TaskForm(forms.ModelForm):
         self.fields["assigned_members"].label = "Assignees"
         self.fields["reviewers"].label = "Reviewers"
         self.fields["completion_mode"].label = "Completion mode"
+        self.fields["deadline"].label = "Due date"
         self.fields["container"].label = "Status"
         self.fields["container"].required = True
         # Prompt text shown for the unselected (blank) choice.

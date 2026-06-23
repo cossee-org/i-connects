@@ -76,11 +76,11 @@
     {% if task.start_date or task.deadline or task.milestone or task.github_url %}
       <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
         {% if task.start_date %}
-          <dt class="text-brand-text/60">Start date</dt>
+          <dt class="text-xs uppercase tracking-wider text-brand-coral font-semibold">Start date</dt>
           <dd class="text-brand-navy">{{ task.start_date|date:"M j, Y" }}</dd>
         {% endif %}
         {% if task.deadline %}
-          <dt class="text-brand-text/60">Due date</dt>
+          <dt class="text-xs uppercase tracking-wider text-brand-coral font-semibold">Due date</dt>
           <dd class="text-brand-navy">{{ task.deadline|date:"M j, Y" }}</dd>
         {% endif %}
         {% if task.milestone %}
@@ -98,6 +98,11 @@
         {% endif %}
       </dl>
     {% endif %}
+
+    <hr class="border-brand-light/60">
+
+    {# Completion status #}
+    {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done %}
 
     {# Assignees #}
     <div>

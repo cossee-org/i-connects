@@ -228,12 +228,17 @@ class TaskDetailPaneView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            .prefetch_related("assigned_members", "comments__author"),
+            .prefetch_related("assigned_members", "reviewers", "task_logs", "comments__author"),
             project=self.project,
             pk=kwargs["pk"],
         )
         context["task"] = task
         context["comment_form"] = CommentForm()
+        context["status_block"] = _task_status_context(
+            task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
         from_pane = "board"
         referer = self.request.META.get("HTTP_REFERER", "")
         if referer:
