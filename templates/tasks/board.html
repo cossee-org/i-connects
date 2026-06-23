@@ -103,6 +103,7 @@
 {% block content %}
 <div x-data="taskPaneData()"
      @open-task-pane="if (!_dragging) openPane($event.detail.url)"
+     @close-task-pane.document="closePane()"
      @kanban-drag-start.document="_dragging = true"
      @kanban-drag-end.document="$nextTick(() => _dragging = false)"
      @keydown.escape.window="closePane()">

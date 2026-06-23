@@ -199,7 +199,7 @@
               hx-swap="none"
               hx-on::after-request="if(event.detail.successful){
                 document.getElementById('task-delete-modal-{{ task.pk }}').close();
-                closePane();
+                document.dispatchEvent(new CustomEvent('close-task-pane'));
                 document.dispatchEvent(new CustomEvent('task-deleted', { detail: { id: {{ task.pk }} } }));
               }">
           {% csrf_token %}
