@@ -16,7 +16,7 @@ class CommentForm(forms.ModelForm):
                 attrs={
                     "class": "textarea textarea-bordered w-full",
                     "rows": 2,
-                    "placeholder": "Add a comment (markdown supported)",
+                    "placeholder": "Add a comment",
                 }
             ),
         }
