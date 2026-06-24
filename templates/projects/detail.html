@@ -276,29 +276,6 @@
         <p class="text-sm text-brand-text/60">No description yet.</p>
       {% endif %}
     </div>
-
-    <div class="brand-panel p-6">
-      <h2 class="text-lg font-semibold text-brand-navy mb-3">Quick actions</h2>
-      <ul class="space-y-2 text-sm">
-        <li>
-          <a href="{% url 'tasks:board' project_pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
-            Kanban board &rarr;
-          </a>
-        </li>
-        <li>
-          <a href="{% url 'projects:members' pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
-            Manage members &rarr;
-          </a>
-        </li>
-        {% if user_privilege == "PROJECT_MANAGER" %}
-          <li>
-            <a href="{% url 'projects:invite' pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
-              Invite collaborator &rarr;
-            </a>
-          </li>
-        {% endif %}
-      </ul>
-    </div>
   </aside>
 </div>
 
