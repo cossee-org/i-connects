@@ -60,18 +60,6 @@
               {% if task.deadline %}&middot; <span class="text-error font-medium">due {{ task.deadline|date:"M j, Y" }}</span>{% endif %}
             </div>
           </div>
-          <form method="post" action="{% url 'tasks:complete' pk=task.pk %}"
-                hx-post="{% url 'tasks:complete' pk=task.pk %}"
-                hx-target="closest li" hx-swap="outerHTML">
-            {% csrf_token %}
-            <button type="submit"
-                    class="btn btn-xs btn-ghost text-brand-text/50 hover:text-success shrink-0 has-tooltip" data-tooltip="Mark my part done">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                   stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-              </svg>
-            </button>
-          </form>
         </li>
         {% endfor %}
       </ul>
