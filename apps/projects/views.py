@@ -341,7 +341,14 @@ class MyProjectListView(LoginRequiredMixin, ListView):
             qs = qs.filter(is_public=False)
         q = self.request.GET.get("q", "").strip()
         if q:
-            qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q) | Q(abstract__icontains=q))
+            qs = qs.filter(
+                Q(name__icontains=q)
+                | Q(description__icontains=q)
+                | Q(abstract__icontains=q)
+                | Q(privileges__user__given_name__icontains=q)
+                | Q(privileges__user__family_name__icontains=q)
+                | Q(privileges__user__email__icontains=q)
+            ).distinct()
         sort = self.request.GET.get("sort", "newest")
         order = self._SORT_MAP.get(sort, "-created_at")
         return qs.order_by(order)
@@ -541,9 +548,22 @@ class ProjectDetailView(DetailView):
                 ).first()
             )
             if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
+                pending_jrs = list(
+                    JoinRequest.objects.filter(
+                        project=project, status=JoinRequestStatus.PENDING
+                    ).select_related("user").order_by("-created_at")[:20]
+                )
+                context["pending_join_requests"] = pending_jrs
                 context["pending_join_request_count"] = JoinRequest.objects.filter(
                     project=project, status=JoinRequestStatus.PENDING
                 ).count()
+                context["pending_invitation_count"] = Invitation.objects.filter(
+                    project=project
+                ).count()
+            else:
+                context["pending_join_requests"] = []
+                context["pending_join_request_count"] = 0
+                context["pending_invitation_count"] = 0
         else:
             context["user_privilege"] = None
             context["pending_join_request"] = None
@@ -559,15 +579,20 @@ class ProjectDetailView(DetailView):
         # cheap enough to run for any viewer who can see the project.
         from apps.core.enums import TaskStatus
         from apps.tasks.models import KanbanBoard, Task
+        from django.utils import timezone
 
+        context["today"] = timezone.now()
         task_qs = Task.objects.filter(project=project)
         context["task_count"] = task_qs.count()
-        context["open_task_count"] = task_qs.filter(
-            status=TaskStatus.NOT_COMPLETED
+        context["overdue_count"] = task_qs.filter(
+            deadline__lt=context["today"],
         ).count()
-        context["recent_tasks"] = (
+        context["contributor_count"] = ProjectPrivilege.objects.filter(
+            project=project
+        ).values("user").distinct().count()
+        context["tasks"] = (
             task_qs.select_related("container")
-            .order_by("status", "deadline", "-updated_at")[:5]
+            .order_by("-updated_at")[:20]
         )
         context["has_kanban_columns"] = KanbanBoard.objects.filter(
             project=project
@@ -608,7 +633,7 @@ class ProjectCreateView(LoginRequiredMixin, CreateView):
         return context
 
 
-class ProjectUpdateView(ProjectManagerRequiredMixin, UpdateView):
+class ProjectUpdateView(ProjectManagerRequiredMixin, ProjectContextMixin, UpdateView):
     model = Project
     form_class = ProjectForm
     template_name = "projects/form.html"

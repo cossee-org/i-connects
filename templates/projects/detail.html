@@ -5,6 +5,21 @@
 
 {% block extra_head %}
 <style>
+  .stat-card-selected {
+    background-color: #1f2963;
+    border-color: #1f2963;
+  }
+  .stat-card-selected .stat-label { color: rgba(255, 255, 255, 0.65); }
+  .stat-card-selected .stat-number { color: #ffffff; }
+
+  .section-heading {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgb(31 41 99 / 0.8);
+  }
+
   .task-pane-backdrop {
     position: fixed; inset: 0; z-index: 40;
     background: rgba(0, 0, 0, 0.18);
@@ -52,28 +67,13 @@
         {% endif %}
       </div>
     </div>
+    {% if user.is_authenticated and not user_privilege %}
     <div class="flex flex-wrap gap-2 justify-end">
-      {% if user_privilege == "PROJECT_MANAGER" %}
-        <a href="{% url 'projects:join_requests' pk=project.pk %}"
-           class="btn btn-sm btn-ghost relative">
-          Join requests
-          {% if pending_join_request_count %}
-            <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
-              {{ pending_join_request_count }}
-            </span>
-          {% endif %}
-        </a>
-        <a href="{% url 'projects:invite' pk=project.pk %}"
-           class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-          Invite member
-        </a>
-        <a href="{% url 'projects:update' pk=project.pk %}" class="btn btn-sm btn-primary">Edit</a>
-      {% elif user.is_authenticated and not user_privilege %}
-        <div id="join-action" class="flex flex-wrap gap-2">
-          {% include "projects/partials/join_action.html" %}
-        </div>
-      {% endif %}
+      <div id="join-action" class="flex flex-wrap gap-2">
+        {% include "projects/partials/join_action.html" %}
+      </div>
     </div>
+    {% endif %}
   </header>
 {% endblock %}
 
@@ -84,130 +84,249 @@
      @close-task-pane.document="closePane()"
      @keydown.escape.window="closePane()">
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-  <section class="lg:col-span-2 space-y-5">
-    <div class="brand-card p-6">
-      <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
-        <div>
-          <h2 class="text-lg font-semibold text-brand-navy">Tasks</h2>
-          <p class="text-xs text-brand-text/60 mt-0.5">
-            {{ open_task_count }} open &middot; {{ task_count }} total
-          </p>
+<div class="flex flex-col gap-5" x-data="{ selected: null }">
+
+  {# ── Stat bar ── #}
+  <div class="flex flex-row flex-wrap gap-4">
+    <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
+         style="flex: 1 1 140px"
+         @click="selected = selected === 'tasks' ? null : 'tasks'"
+         :class="selected === 'tasks' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Tasks</span>
+      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ task_count }}</span>
+    </div>
+    <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
+         style="flex: 1 1 140px"
+         @click="selected = selected === 'overdue' ? null : 'overdue'"
+         :class="selected === 'overdue' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
+      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ overdue_count }}</span>
+    </div>
+    {% if user_privilege == "PROJECT_MANAGER" %}
+    <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
+         style="flex: 1 1 140px"
+         @click="selected = selected === 'join-requests' ? null : 'join-requests'"
+         :class="selected === 'join-requests' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Join requests</span>
+      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ pending_join_request_count }}</span>
+    </div>
+    {% endif %}
+    <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
+         style="flex: 1 1 140px"
+         @click="selected = selected === 'contributors' ? null : 'contributors'"
+         :class="selected === 'contributors' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Contributors</span>
+      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ contributor_count }}</span>
+    </div>
+  </div>
+
+  {# ── Tasks ── #}
+  <section class="brand-card p-5" aria-labelledby="proj-tasks-heading"
+           x-data="{ showAll: false }"
+           x-show="selected === null || selected === 'tasks' || selected === 'overdue'"
+           x-cloak>
+    <div class="flex items-center justify-between mb-4">
+      <h2 id="proj-tasks-heading" class="section-heading flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
+        </svg>
+        Tasks
+      </h2>
+      {% if is_project_manager %}
+        <div class="flex items-center gap-2">
+          <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-sm btn-ghost">View all tasks</a>
+          {% if has_kanban_columns %}
+            <button type="button"
+                    class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                    hx-get="{% url 'tasks:create' project_pk=project.pk %}"
+                    hx-target="#task-modal-body"
+                    hx-swap="innerHTML"
+                    onclick="document.getElementById('task-modal').showModal()">
+              + New task
+            </button>
+          {% else %}
+            <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
+               class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+              Set up columns
+            </a>
+          {% endif %}
         </div>
-        <div class="flex flex-wrap gap-2">
-          <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-sm btn-ghost">
-            View tasks
-          </a>
-          {% if is_project_manager %}
-            {% if has_kanban_columns %}
+      {% else %}
+        <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-sm btn-ghost">View all tasks</a>
+      {% endif %}
+    </div>
+
+    {% if tasks %}
+      <ul class="divide-y divide-brand-light/60">
+        {% for task in tasks %}
+          <li class="py-2.5 flex items-center justify-between gap-3"
+              data-overdue="{% if task.deadline and task.deadline < today %}1{% else %}0{% endif %}"
+              x-show="(selected !== 'overdue' || $el.dataset.overdue === '1') && ({{ forloop.counter }} <= 5 || showAll)"
+              x-cloak>
+            <div class="min-w-0 flex-1">
+              <a href="{% url 'tasks:detail' project_pk=project.pk pk=task.pk %}"
+                 class="text-sm font-medium text-brand-navy hover:text-brand-coral truncate block"
+                 @click.prevent="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
+                {{ task.name }}
+              </a>
+              <div class="text-xs text-brand-text/60 mt-0.5 flex flex-wrap items-center gap-2">
+                <span>{{ task.container.name }}</span>
+                {% if task.deadline %}
+                  <span aria-hidden="true">&middot;</span>
+                  <span {% if task.deadline <= today %}class="text-error"{% endif %}>Due {{ task.deadline|date:"M j, Y" }}</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              {% if is_project_manager %}
               <button type="button"
-                      class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                      hx-get="{% url 'tasks:create' project_pk=project.pk %}"
+                      class="btn btn-ghost btn-xs"
+                      aria-label="Edit task {{ task.name }}"
+                      hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
                       hx-target="#task-modal-body"
                       hx-swap="innerHTML"
                       onclick="document.getElementById('task-modal').showModal()">
-                + New task
+                Edit
               </button>
-            {% else %}
-              <a href="{% url 'tasks:board_columns' project_pk=project.pk %}"
-                 class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-                Set up columns
-              </a>
-            {% endif %}
-          {% endif %}
-        </div>
+              <button type="button"
+                      class="btn btn-ghost btn-xs text-error"
+                      aria-label="Delete task {{ task.name }}"
+                      onclick="document.getElementById('delete-task-modal-{{ task.pk }}').showModal()">
+                Delete
+              </button>
+              {% endif %}
+            </div>
+          </li>
+          <dialog id="delete-task-modal-{{ task.pk }}" class="modal" aria-label="Delete task confirmation">
+            <div class="modal-box max-w-xl bg-base-100 border border-error/40">
+              <form method="dialog">
+                <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
+              </form>
+              <h2 class="text-lg font-semibold text-error">Delete &ldquo;{{ task.name }}&rdquo;?</h2>
+              <p class="mt-3 text-brand-text">
+                Are you sure you want to delete the task <strong>{{ task.name }}</strong>?
+                This will remove the task and all of its task log entries. This action
+                cannot be undone.
+              </p>
+              <form method="post" action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
+                    class="flex gap-2 justify-end mt-6">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{% url 'projects:detail' pk=project.pk %}">
+                <button type="button" class="btn btn-ghost"
+                        onclick="document.getElementById('delete-task-modal-{{ task.pk }}').close()">
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-outline btn-error">Delete task</button>
+              </form>
+            </div>
+            <form method="dialog" class="modal-backdrop"><button>close</button></form>
+          </dialog>
+        {% endfor %}
+      </ul>
+      {% if task_count > 5 %}
+      <div class="mt-3">
+        <button x-show="selected !== 'overdue'" x-cloak @click="showAll = !showAll"
+                class="flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
+          <span x-text="showAll ? 'Show less' : 'Show all {{ task_count }} tasks'">Show all {{ task_count }} tasks</span>
+        </button>
       </div>
-
-      {% if recent_tasks %}
-        <ul class="divide-y divide-brand-light/60">
-          {% for task in recent_tasks %}
-            <li class="py-2.5 flex items-center justify-between gap-3">
-              <div class="min-w-0 flex-1">
-                <a href="{% url 'tasks:detail' project_pk=project.pk pk=task.pk %}"
-                   class="text-sm font-medium text-brand-navy hover:text-brand-coral truncate block"
-                   @click.prevent="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
-                  {{ task.name }}
-                </a>
-                <div class="text-xs text-brand-text/60 mt-0.5 flex flex-wrap items-center gap-2">
-                  <span>{{ task.container.name }}</span>
-                  {% if task.deadline %}
-                    <span aria-hidden="true">&middot;</span>
-                    <span>Due {{ task.deadline|date:"M j, Y" }}</span>
-                  {% endif %}
-                </div>
-              </div>
-              <div class="flex items-center gap-1 shrink-0">
-                {% include "_components/status_badge.html" with status=task.container.name %}
-                {% if is_project_manager %}
-                <button type="button"
-                        class="btn btn-ghost btn-xs"
-                        aria-label="Edit task {{ task.name }}"
-                        hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
-                        hx-target="#task-modal-body"
-                        hx-swap="innerHTML"
-                        onclick="document.getElementById('task-modal').showModal()">
-                  Edit
-                </button>
-                <button type="button"
-                        class="btn btn-ghost btn-xs text-error"
-                        aria-label="Delete task {{ task.name }}"
-                        onclick="document.getElementById('delete-task-modal-{{ task.pk }}').showModal()">
-                  Delete
-                </button>
-                {% endif %}
-              </div>
-            </li>
-            <dialog id="delete-task-modal-{{ task.pk }}" class="modal" aria-label="Delete task confirmation">
-              <div class="modal-box max-w-xl bg-base-100 border border-error/40">
-                <form method="dialog">
-                  <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
-                </form>
-                <h2 class="text-lg font-semibold text-error">Delete &ldquo;{{ task.name }}&rdquo;?</h2>
-                <p class="mt-3 text-brand-text">
-                  Are you sure you want to delete the task <strong>{{ task.name }}</strong>?
-                  This will remove the task and all of its task log entries. This action
-                  cannot be undone.
-                </p>
-                <form method="post" action="{% url 'tasks:delete' project_pk=project.pk pk=task.pk %}"
-                      class="flex gap-2 justify-end mt-6">
-                  {% csrf_token %}
-                  <input type="hidden" name="next" value="{% url 'projects:detail' pk=project.pk %}">
-                  <button type="button" class="btn btn-ghost"
-                          onclick="document.getElementById('delete-task-modal-{{ task.pk }}').close()">
-                    Cancel
-                  </button>
-                  <button type="submit" class="btn btn-outline btn-error">Delete task</button>
-                </form>
-              </div>
-              <form method="dialog" class="modal-backdrop"><button>close</button></form>
-            </dialog>
-          {% endfor %}
-        </ul>
-        {% if task_count > recent_tasks|length %}
-          <div class="mt-3">
-            <a href="{% url 'tasks:board' project_pk=project.pk %}"
-               class="text-sm font-medium text-brand-navy hover:text-brand-coral">
-              View all {{ task_count }} tasks &rarr;
-            </a>
-          </div>
-        {% endif %}
-      {% else %}
-        {% if has_kanban_columns %}
-          <p class="text-sm text-brand-text/60">
-            No tasks yet. Create the first one to get started.
-          </p>
-        {% else %}
-          <p class="text-sm text-brand-text/60">
-            No kanban columns yet. Set up columns before adding tasks.
-          </p>
-        {% endif %}
       {% endif %}
-    </div>
+    {% else %}
+      {% if has_kanban_columns %}
+        <p class="text-sm text-brand-text/60 italic">No open tasks.</p>
+      {% else %}
+        <p class="text-sm text-brand-text/60 italic">No kanban columns yet. Set up columns before adding tasks.</p>
+      {% endif %}
+    {% endif %}
   </section>
 
-  <aside class="space-y-5">
-    <div class="brand-card p-6">
-      <h2 class="text-lg font-semibold text-brand-navy mb-3">About</h2>
+  {# ── Join Requests (PM only) ── #}
+  {% if user_privilege == "PROJECT_MANAGER" %}
+  <section class="brand-card p-5" aria-labelledby="proj-join-requests-heading"
+           x-data="{ showAll: false }"
+           x-show="selected === null || selected === 'join-requests'"
+           x-cloak>
+    <h2 id="proj-join-requests-heading" class="section-heading flex items-center gap-2 mb-4">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+      </svg>
+      Join Requests
+    </h2>
+    {% if pending_join_requests %}
+      <ul class="divide-y divide-brand-light/60">
+        {% for jr in pending_join_requests %}
+        <li class="py-3 flex items-start justify-between gap-3"
+            {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
+          <div class="flex-1 min-w-0">
+            <span class="font-medium text-brand-navy text-sm">{{ jr.user.name|default:jr.user.email }}</span>
+            <span class="text-xs text-brand-text/60 ml-1">{{ jr.user.email }}</span>
+            {% if jr.message %}
+            <div class="text-xs text-brand-text/60 mt-0.5">{{ jr.message }}</div>
+            {% endif %}
+          </div>
+          <a href="{% url 'projects:join_requests' pk=project.pk %}"
+             class="btn btn-xs btn-ghost shrink-0">Review</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if pending_join_request_count > 5 %}
+      <button @click="showAll = !showAll"
+              class="mt-3 flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
+        <span x-text="showAll ? 'Show less' : 'Show all {{ pending_join_request_count }} requests'">Show all {{ pending_join_request_count }} requests</span>
+      </button>
+      {% endif %}
+    {% else %}
+      <p class="text-sm text-brand-text/60 italic">No pending join requests.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {# ── Contributors ── #}
+  <section class="brand-card p-5" aria-labelledby="proj-contributors-heading"
+           x-show="selected === null || selected === 'contributors'"
+           x-cloak>
+    <div class="flex items-center justify-between mb-4">
+      <h2 id="proj-contributors-heading" class="section-heading flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+        </svg>
+        Contributors
+      </h2>
+      <a href="{% url 'projects:members' pk=project.pk %}" class="btn btn-sm btn-ghost">View all contributors</a>
+    </div>
+    {% if members %}
+      {% if project_leads %}
+        <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">
+          {% if project_leads|length > 1 %}Project Leads{% else %}Project Lead{% endif %}
+        </h3>
+        <ul class="space-y-1 mb-3">
+          {% for m in project_leads %}
+            {% include "projects/partials/member_list_item.html" with m=m %}
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if regular_members %}
+        <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">Members</h3>
+        <ul class="space-y-1">
+          {% for m in regular_members %}
+            {% include "projects/partials/member_list_item.html" with m=m %}
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% else %}
+      <p class="text-sm text-brand-text/60 italic">No contributors yet.</p>
+    {% endif %}
+  </section>
+
+  {# ── About ── #}
+  <div class="brand-card p-6">
+    <h2 class="text-lg font-semibold text-brand-navy mb-3">About</h2>
       {% if project.abstract %}
         <h3 class="text-sm font-semibold text-brand-navy/80 mt-2">Abstract</h3>
         <p class="whitespace-pre-line text-sm text-brand-text mt-1">{{ project.abstract }}</p>
@@ -217,7 +336,7 @@
           <p class="whitespace-pre-line text-sm text-brand-text line-clamp-3" id="proj-desc-text">{{ project.description }}</p>
           <button type="button"
                   id="proj-desc-toggle"
-                  class="text-brand-coral hover:underline text-sm mt-1 hidden"
+                  class="text-brand-text/50 hover:text-brand-text hover:underline text-sm mt-1 hidden"
                   onclick="(function(){
                     var p = document.getElementById('proj-desc-text');
                     var btn = document.getElementById('proj-desc-toggle');
@@ -246,61 +365,8 @@
         <p class="text-sm text-brand-text/60">No description yet.</p>
       {% endif %}
     </div>
-    <div class="brand-card p-6">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-semibold text-brand-navy">Contributors</h2>
-        <a href="{% url 'projects:members' pk=project.pk %}" class="text-xs font-medium text-brand-navy hover:text-brand-coral">
-          View all
-        </a>
-      </div>
-      {% if members %}
-        {% if project_leads %}
-          <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">
-            {% if project_leads|length > 1 %}Project Leads{% else %}Project Lead{% endif %}
-          </h3>
-          <ul class="space-y-1 mb-3">
-            {% for m in project_leads %}
-              {% include "projects/partials/member_list_item.html" with m=m %}
-            {% endfor %}
-          </ul>
-        {% endif %}
-        {% if regular_members %}
-          <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">Members</h3>
-          <ul class="space-y-1">
-            {% for m in regular_members %}
-              {% include "projects/partials/member_list_item.html" with m=m %}
-            {% endfor %}
-          </ul>
-        {% endif %}
-      {% else %}
-        <p class="text-sm text-brand-text/60">No contributors yet.</p>
-      {% endif %}
-    </div>
 
-    <div class="brand-panel p-6">
-      <h2 class="text-lg font-semibold text-brand-navy mb-3">Quick actions</h2>
-      <ul class="space-y-2 text-sm">
-        <li>
-          <a href="{% url 'tasks:board' project_pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
-            Kanban board &rarr;
-          </a>
-        </li>
-        <li>
-          <a href="{% url 'projects:members' pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
-            Manage members &rarr;
-          </a>
-        </li>
-        {% if user_privilege == "PROJECT_MANAGER" %}
-          <li>
-            <a href="{% url 'projects:invite' pk=project.pk %}" class="text-brand-navy hover:text-brand-coral font-medium">
-              Invite collaborator &rarr;
-            </a>
-          </li>
-        {% endif %}
-      </ul>
-    </div>
-  </aside>
-</div>
+</div>{# end x-data selected #}
 
 <dialog id="task-modal" class="modal" aria-label="Task editor">
   <div class="modal-box max-w-2xl bg-base-100 border border-brand-light/60">

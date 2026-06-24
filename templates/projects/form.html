@@ -2,7 +2,13 @@
 
 {% block title %}{{ form_title }} &mdash; i&bull;CONNECTS{% endblock %}
 
-{% block page_header %}{% endblock %}
+{% block page_header %}
+{% if object %}
+  <header class="mb-6">
+    <h1 class="page-title font-semibold text-brand-navy leading-tight">Settings</h1>
+  </header>
+{% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto space-y-5">
@@ -53,7 +59,7 @@
 
   {% if object %}
     <div class="brand-card p-6 border-error/40">
-      <h2 class="text-lg font-semibold text-brand-navy mb-1">Deletion and archiving</h2>
+      <h2 class="text-lg font-semibold text-brand-navy mb-4">Deletion and archiving</h2>
       <p class="text-sm text-brand-text/70 mb-4">
         Archive this project to hide it from active lists while keeping its data,
         or permanently delete it to remove the project and everything in it.
