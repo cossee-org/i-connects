@@ -49,6 +49,16 @@ urlpatterns = [
         views.user_invite_search,
         name="invite_user_search",
     ),
+    path(
+        "projects/<int:pk>/invitation-requests/",
+        views.ProjectInvitationListView.as_view(),
+        name="project_invitations",
+    ),
+    path(
+        "projects/<int:pk>/invitations/<int:invitation_pk>/cancel/",
+        views.CancelInvitationView.as_view(),
+        name="cancel_invitation",
+    ),
     path("invites/", views.MyInvitationsView.as_view(), name="my_invitations"),
     path(
         "invites/<str:code>/",

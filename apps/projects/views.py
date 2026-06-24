@@ -696,7 +696,36 @@ class ProjectMemberListView(
             context["pending_join_request_count"] = JoinRequest.objects.filter(
                 project=self.project, status=JoinRequestStatus.PENDING
             ).count()
+            context["pending_invitation_count"] = Invitation.objects.filter(
+                project=self.project
+            ).count()
         return context
+
+
+class ProjectInvitationListView(
+    ProjectManagerRequiredMixin, ProjectContextMixin, ListView
+):
+    """PM-facing list of pending (unsent/unanswered) invitations for a project."""
+
+    template_name = "projects/invitation_requests.html"
+    context_object_name = "invitations"
+
+    def get_queryset(self):
+        return (
+            Invitation.objects.filter(project=self.project)
+            .select_related("invited_user")
+            .order_by("-created_at")
+        )
+
+
+class CancelInvitationView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, pk, invitation_pk):
+        invitation = get_object_or_404(Invitation, pk=invitation_pk, project=self.project)
+        invitation.delete()
+        messages.success(request, "Invitation cancelled.")
+        return redirect("projects:project_invitations", pk=self.project.pk)
 
 
 class UpdateMemberPrivilegeView(

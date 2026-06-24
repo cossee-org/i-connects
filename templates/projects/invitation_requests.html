@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Invitation requests &mdash; {{ project.name }}{% endblock %}
+
+{% block page_header %}
+  <a href="{% url 'projects:members' pk=project.pk %}"
+     class="inline-flex items-center gap-1.5 text-sm text-brand-navy/70 hover:text-brand-coral font-medium mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+         stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+    </svg>
+    Contributors
+  </a>
+  <header class="mb-6">
+    <h1 class="page-title font-semibold text-brand-navy leading-tight">
+      Pending invitation requests
+    </h1>
+    <p class="text-sm text-brand-text/70 mt-1">Invitations that have been sent but not yet accepted or declined.</p>
+  </header>
+{% endblock %}
+
+{% block content %}
+{% if invitations %}
+  <div class="brand-card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th scope="col">Invited</th>
+            <th scope="col">Privilege</th>
+            <th scope="col">Sent by</th>
+            <th scope="col">Date</th>
+            <th scope="col" class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for invitation in invitations %}
+            <tr class="hover:bg-brand-lighter/40 align-middle">
+              <td>
+                {% if invitation.invited_user %}
+                  <div class="font-medium text-brand-navy">{{ invitation.invited_user.name|default:invitation.invited_user.email }}</div>
+                  <div class="text-xs text-brand-text/60">{{ invitation.email }}</div>
+                {% else %}
+                  <div class="font-medium text-brand-navy">{{ invitation.email }}</div>
+                {% endif %}
+              </td>
+              <td>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                  {% if invitation.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                  {{ invitation.get_privilege_display }}
+                </span>
+              </td>
+              <td class="text-sm text-brand-text/70">{{ invitation.added_by }}</td>
+              <td class="text-sm text-brand-text/70">{{ invitation.created_at|date:"Y-m-d" }}</td>
+              <td class="text-right">
+                <form method="post"
+                      action="{% url 'projects:cancel_invitation' pk=project.pk invitation_pk=invitation.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-ghost text-error hover:bg-error/10">
+                    Cancel
+                  </button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% else %}
+  {% include "_components/empty_state.html" with title="No pending invitations" body="All invitations have been accepted, declined, or cancelled." %}
+{% endif %}
+{% endblock %}
