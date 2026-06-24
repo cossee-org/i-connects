@@ -106,9 +106,6 @@
             <span class="text-xs text-brand-text/60 ml-1">{{ jr.user.email }}</span>
             <div class="text-xs text-brand-text/60 mt-0.5 flex items-center gap-2">
               <span>{{ jr.project.name }}</span>
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-light/60 text-brand-text">
-                {{ jr.get_requested_privilege_display }}
-              </span>
             </div>
           </div>
           <a href="{% url 'projects:join_requests' pk=jr.project.pk %}"
