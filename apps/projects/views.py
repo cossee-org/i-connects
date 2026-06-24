@@ -548,6 +548,12 @@ class ProjectDetailView(DetailView):
                 ).first()
             )
             if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
+                pending_jrs = list(
+                    JoinRequest.objects.filter(
+                        project=project, status=JoinRequestStatus.PENDING
+                    ).select_related("user").order_by("-created_at")[:20]
+                )
+                context["pending_join_requests"] = pending_jrs
                 context["pending_join_request_count"] = JoinRequest.objects.filter(
                     project=project, status=JoinRequestStatus.PENDING
                 ).count()
@@ -555,6 +561,7 @@ class ProjectDetailView(DetailView):
                     project=project
                 ).count()
             else:
+                context["pending_join_requests"] = []
                 context["pending_join_request_count"] = 0
                 context["pending_invitation_count"] = 0
         else:
@@ -587,9 +594,10 @@ class ProjectDetailView(DetailView):
         context["contributor_count"] = ProjectPrivilege.objects.filter(
             project=project
         ).values("user").distinct().count()
-        context["recent_tasks"] = (
-            task_qs.select_related("container")
-            .order_by("-updated_at")[:5]
+        context["open_tasks"] = (
+            task_qs.filter(status=TaskStatus.NOT_COMPLETED)
+            .select_related("container")
+            .order_by("-updated_at")[:20]
         )
         context["has_kanban_columns"] = KanbanBoard.objects.filter(
             project=project
