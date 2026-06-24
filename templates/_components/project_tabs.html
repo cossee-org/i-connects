@@ -37,7 +37,6 @@
       </svg>
       Join requests
     </a>
-    {% endif %}
     <a href="{% url 'projects:update' pk=project.pk %}"
        class="project-tab{% if am == 'projects' and un == 'update' %} active{% endif %}"
        {% if am == 'projects' and un == 'update' %}aria-current="page"{% endif %}>
