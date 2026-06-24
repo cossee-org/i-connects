@@ -66,12 +66,9 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
         </button>
       {% else %}
         <button
+          type="button"
           class="btn btn-xs btn-ghost text-error hover:bg-error/10"
-          hx-post="{% url 'projects:remove_member' pk=project.pk member_pk=row.member.pk %}"
-          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-          hx-target="#member-row-{{ row.member.pk }}"
-          hx-swap="outerHTML"
-          hx-confirm="Remove this member from the project?"
+          onclick="openRemoveMemberModal('{% url 'projects:remove_member' pk=project.pk member_pk=row.member.pk %}', '{{ row.user.name|default:row.user.email|escapejs }}', 'member-row-{{ row.member.pk }}')"
           title="Remove member"
         >
           Remove

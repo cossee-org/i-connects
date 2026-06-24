@@ -58,4 +58,48 @@
     {% include "_components/empty_state.html" with title="No members yet" body="This project does not have any members." %}
   {% endif %}
 {% endif %}
+
+<dialog id="remove-member-modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg text-brand-navy">Remove member</h3>
+    <p class="py-4 text-sm text-brand-text/80">
+      Remove <strong id="remove-member-name"></strong> from this project? This cannot be undone.
+    </p>
+    <div class="modal-action">
+      <form method="dialog">
+        <button class="btn btn-ghost">Cancel</button>
+      </form>
+      <button id="remove-member-confirm"
+              class="btn bg-error hover:bg-error/90 text-white border-0">
+        Remove
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  var modal = document.getElementById('remove-member-modal');
+  var confirmBtn = document.getElementById('remove-member-confirm');
+
+  window.openRemoveMemberModal = function (url, name, targetId) {
+    document.getElementById('remove-member-name').textContent = name;
+    modal._removeUrl = url;
+    modal._removeTarget = targetId;
+    modal.showModal();
+  };
+
+  confirmBtn.addEventListener('click', function () {
+    htmx.ajax('POST', modal._removeUrl, {
+      target: '#' + modal._removeTarget,
+      swap: 'outerHTML',
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    });
+    modal.close();
+  });
+}());
+</script>
 {% endblock %}
