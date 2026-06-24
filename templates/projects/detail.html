@@ -203,37 +203,6 @@
       {% endif %}
     </div>
     <div class="brand-card p-6">
-      <h2 class="text-lg font-semibold text-brand-navy mb-3">Contributors</h2>
-      {% if members %}
-        {% if project_leads %}
-          <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">
-            {% if project_leads|length > 1 %}Project Leads{% else %}Project Lead{% endif %}
-          </h3>
-          <ul class="space-y-1 mb-3">
-            {% for m in project_leads %}
-              {% include "projects/partials/member_list_item.html" with m=m %}
-            {% endfor %}
-          </ul>
-        {% endif %}
-        {% if regular_members %}
-          <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">Members</h3>
-          <ul class="space-y-1">
-            {% for m in regular_members %}
-              {% include "projects/partials/member_list_item.html" with m=m %}
-            {% endfor %}
-          </ul>
-        {% endif %}
-        <div class="mt-3">
-          <a href="{% url 'projects:members' pk=project.pk %}"
-             class="text-sm font-medium text-brand-navy hover:text-brand-coral">
-            View all contributors &rarr;
-          </a>
-        </div>
-      {% else %}
-        <p class="text-sm text-brand-text/60">No contributors yet.</p>
-      {% endif %}
-    </div>
-    <div class="brand-card p-6">
       <h2 class="text-lg font-semibold text-brand-navy mb-3">About</h2>
       {% if project.abstract %}
         <h3 class="text-sm font-semibold text-brand-navy/80 mt-2">Abstract</h3>
