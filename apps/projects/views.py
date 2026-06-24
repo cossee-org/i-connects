@@ -566,7 +566,9 @@ class ProjectDetailView(DetailView):
         # cheap enough to run for any viewer who can see the project.
         from apps.core.enums import TaskStatus
         from apps.tasks.models import KanbanBoard, Task
+        from django.utils import timezone
 
+        context["today"] = timezone.now().date()
         task_qs = Task.objects.filter(project=project)
         context["task_count"] = task_qs.count()
         context["open_task_count"] = task_qs.filter(

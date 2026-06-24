@@ -111,7 +111,7 @@
                   <span>{{ task.container.name }}</span>
                   {% if task.deadline %}
                     <span aria-hidden="true">&middot;</span>
-                    <span>Due {{ task.deadline|date:"M j, Y" }}</span>
+                    <span {% if task.deadline <= today %}class="text-error"{% endif %}>due {{ task.deadline|date:"M j, Y" }}</span>
                   {% endif %}
                 </div>
               </div>
