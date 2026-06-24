@@ -3,6 +3,14 @@
 {% block title %}Join requests &mdash; {{ project.name }}{% endblock %}
 
 {% block page_header %}
+  <a href="{% url 'projects:members' pk=project.pk %}"
+     class="inline-flex items-center gap-1 text-xs text-brand-text/60 hover:text-brand-navy mb-3">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+         stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+    </svg>
+    Contributors
+  </a>
   <header class="mb-6">
     <h1 class="page-title font-semibold text-brand-navy leading-tight">
       Pending join requests

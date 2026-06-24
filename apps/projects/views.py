@@ -193,6 +193,21 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["pending_count"] = len(pending_logs)
         context["is_pm_anywhere"] = bool(pm_project_ids)
 
+        # --- Pending join requests (PM only) ----------------------------------
+        if pm_project_ids:
+            pending_join_requests = list(
+                JoinRequest.objects.filter(
+                    project_id__in=pm_project_ids,
+                    status=JoinRequestStatus.PENDING,
+                )
+                .select_related("user", "project")
+                .order_by("created_at")
+            )
+        else:
+            pending_join_requests = []
+        context["pending_join_requests"] = pending_join_requests
+        context["pending_join_request_count"] = len(pending_join_requests)
+
         # --- Notifications -------------------------------------------------
         context["recent_notifications"] = list(
             Notification.objects.unread_for_user(user)
