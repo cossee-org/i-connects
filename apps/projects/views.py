@@ -1315,6 +1315,9 @@ def incoming_join_requests_badge(request):
 @login_required
 @require_GET
 def my_invitations_badge(request):
-    email = (request.user.email or "").lower()
-    count = Invitation.objects.filter(email__iexact=email).count()
+    pm_project_ids = ProjectPrivilege.objects.filter(
+        user=request.user,
+        privilege=MemberPrivileges.PROJECT_MANAGER,
+    ).values_list("project_id", flat=True)
+    count = Invitation.objects.filter(project_id__in=pm_project_ids).count()
     return HttpResponse(str(count) if count else "")
