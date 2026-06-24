@@ -206,6 +206,45 @@
 
     </div>{# end active+approvals grid #}
 
+    {% if is_pm_anywhere %}
+    <section class="brand-card p-5" aria-labelledby="join-requests-heading">
+      <h2 id="join-requests-heading" class="section-heading flex items-center gap-2 mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+        </svg>
+        Join requests
+        {% if pending_join_request_count %}<span class="ml-auto text-xs font-semibold bg-brand-coral/10 text-brand-coral px-2 py-0.5 rounded-full normal-case tracking-normal">{{ pending_join_request_count }}</span>{% endif %}
+      </h2>
+
+      {% if pending_join_requests %}
+        <ul class="divide-y divide-brand-light/60">
+          {% for jr in pending_join_requests %}
+          <li class="py-3 flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <span class="font-medium text-brand-navy text-sm">{{ jr.user.name|default:jr.user.email }}</span>
+              <span class="text-xs text-brand-text/60 ml-1">{{ jr.user.email }}</span>
+              <div class="text-xs text-brand-text/60 mt-0.5 flex items-center gap-2">
+                <a href="{% url 'projects:join_requests' pk=jr.project.pk %}"
+                   class="hover:text-brand-navy">{{ jr.project.name }}</a>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                  {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                  {{ jr.get_requested_privilege_display }}
+                </span>
+              </div>
+            </div>
+            <a href="{% url 'projects:join_requests' pk=jr.project.pk %}"
+               class="text-xs font-medium text-brand-navy hover:text-brand-coral shrink-0">Review</a>
+          </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-sm text-brand-text/60 italic">No pending join requests.</p>
+      {% endif %}
+    </section>
+    {% endif %}
+
   </div>{# end right column #}
 
 </div>{# end outer grid #}

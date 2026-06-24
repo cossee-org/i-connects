@@ -23,7 +23,9 @@
         <tbody>
           {% for inv in invitations %}
             <tr class="hover:bg-brand-lighter/40">
-              <td class="font-medium text-brand-navy">{{ inv.project.name }}</td>
+              <td class="font-medium text-brand-navy">
+                <a href="{% url 'projects:detail' pk=inv.project.pk %}" class="hover:text-brand-coral hover:underline">{{ inv.project.name }}</a>
+              </td>
               <td class="text-sm text-brand-text/80">{{ inv.added_by }}</td>
               <td>
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
