@@ -522,6 +522,13 @@ class ProjectDetailView(DetailView):
                     status=JoinRequestStatus.PENDING,
                 ).first()
             )
+            user_email = (self.request.user.email or "").lower()
+            context["pending_invitation"] = (
+                Invitation.objects.filter(
+                    project=project,
+                    email__iexact=user_email,
+                ).first()
+            )
             if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
                 context["pending_join_request_count"] = JoinRequest.objects.filter(
                     project=project, status=JoinRequestStatus.PENDING
@@ -529,6 +536,7 @@ class ProjectDetailView(DetailView):
         else:
             context["user_privilege"] = None
             context["pending_join_request"] = None
+            context["pending_invitation"] = None
 
         context["is_project_manager"] = (
             context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER
@@ -1321,26 +1329,3 @@ def my_projects_badge(request):
     return HttpResponse(str(count) if count else "")
 
 
-@login_required
-@require_GET
-def incoming_join_requests_badge(request):
-    pm_project_ids = ProjectPrivilege.objects.filter(
-        user=request.user,
-        privilege=MemberPrivileges.PROJECT_MANAGER,
-    ).values_list("project_id", flat=True)
-    count = JoinRequest.objects.filter(
-        project_id__in=pm_project_ids,
-        status=JoinRequestStatus.PENDING,
-    ).count()
-    return HttpResponse(str(count) if count else "")
-
-
-@login_required
-@require_GET
-def my_invitations_badge(request):
-    pm_project_ids = ProjectPrivilege.objects.filter(
-        user=request.user,
-        privilege=MemberPrivileges.PROJECT_MANAGER,
-    ).values_list("project_id", flat=True)
-    count = Invitation.objects.filter(project_id__in=pm_project_ids).count()
-    return HttpResponse(str(count) if count else "")
