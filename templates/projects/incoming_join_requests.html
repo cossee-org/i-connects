@@ -48,6 +48,7 @@
                 <form method="post" class="inline"
                       action="{% url 'projects:approve_join_request' pk=jr.project.pk join_request_pk=jr.pk %}">
                   {% csrf_token %}
+                  <input type="hidden" name="next" value="incoming">
                   <button type="submit"
                           class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
                     Approve
@@ -56,6 +57,7 @@
                 <form method="post" class="inline"
                       action="{% url 'projects:decline_join_request' pk=jr.project.pk join_request_pk=jr.pk %}">
                   {% csrf_token %}
+                  <input type="hidden" name="next" value="incoming">
                   <button type="submit" class="btn btn-sm btn-outline btn-error">Decline</button>
                 </form>
               </td>

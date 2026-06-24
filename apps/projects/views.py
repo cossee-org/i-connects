@@ -1074,6 +1074,8 @@ class ApproveJoinRequestView(
         messages.success(request, "Join request approved.")
         if request.headers.get("HX-Request"):
             return HttpResponse("")
+        if request.POST.get("next") == "incoming":
+            return redirect("projects:incoming_join_requests")
         return redirect("projects:join_requests", pk=self.project.pk)
 
 
@@ -1101,6 +1103,8 @@ class DeclineJoinRequestView(
         messages.info(request, "Join request declined.")
         if request.headers.get("HX-Request"):
             return HttpResponse("")
+        if request.POST.get("next") == "incoming":
+            return redirect("projects:incoming_join_requests")
         return redirect("projects:join_requests", pk=self.project.pk)
 
 
