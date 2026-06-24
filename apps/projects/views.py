@@ -173,8 +173,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["overdue_tasks"] = overdue
         context["due_soon_tasks"] = due_soon
         context["no_deadline_tasks"] = no_deadline
+        context["all_open_tasks"] = all_active
         context["active_task_count"] = len(all_active)
         context["overdue_count"] = len(overdue)
+        context["now"] = now
 
         # --- Pending approvals (PM only) -----------------------------------
         if pm_project_ids:
