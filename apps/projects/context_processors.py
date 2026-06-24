@@ -10,14 +10,15 @@ def sidebar_counts(request):
     from .models import Invitation, JoinRequest, ProjectPrivilege
     from apps.core.enums import JoinRequestStatus
 
+    user_email = (request.user.email or "").lower()
+    pending_invitations_count = Invitation.objects.filter(
+        email__iexact=user_email
+    ).count()
+
     pm_project_ids = ProjectPrivilege.objects.filter(
         user=request.user,
         privilege=MemberPrivileges.PROJECT_MANAGER,
     ).values_list("project_id", flat=True)
-
-    pending_invitations_count = Invitation.objects.filter(
-        project_id__in=pm_project_ids
-    ).count()
 
     incoming_join_requests_count = JoinRequest.objects.filter(
         project_id__in=pm_project_ids,
