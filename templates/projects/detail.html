@@ -69,6 +69,31 @@
      @close-task-pane.document="closePane()"
      @keydown.escape.window="closePane()">
 
+<div class="flex flex-row flex-wrap gap-4 mb-5">
+  <div class="brand-card p-4 flex flex-col gap-1" style="flex: 1 1 140px">
+    <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
+    <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ open_task_count }}</span>
+  </div>
+  <div class="brand-card p-4 flex flex-col gap-1" style="flex: 1 1 140px">
+    <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
+    <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ overdue_count }}</span>
+  </div>
+  <div class="brand-card p-4 flex flex-col gap-1" style="flex: 1 1 140px">
+    <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Contributors</span>
+    <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ contributor_count }}</span>
+  </div>
+  {% if user_privilege == "PROJECT_MANAGER" %}
+  <div class="brand-card p-4 flex flex-col gap-1" style="flex: 1 1 140px">
+    <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Join requests</span>
+    <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ pending_join_request_count }}</span>
+  </div>
+  <div class="brand-card p-4 flex flex-col gap-1" style="flex: 1 1 140px">
+    <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Invitations</span>
+    <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ pending_invitation_count }}</span>
+  </div>
+  {% endif %}
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
   <section class="lg:col-span-2 space-y-5">
     <div class="brand-card p-6">

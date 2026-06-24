@@ -551,6 +551,12 @@ class ProjectDetailView(DetailView):
                 context["pending_join_request_count"] = JoinRequest.objects.filter(
                     project=project, status=JoinRequestStatus.PENDING
                 ).count()
+                context["pending_invitation_count"] = Invitation.objects.filter(
+                    project=project
+                ).count()
+            else:
+                context["pending_join_request_count"] = 0
+                context["pending_invitation_count"] = 0
         else:
             context["user_privilege"] = None
             context["pending_join_request"] = None
@@ -574,6 +580,13 @@ class ProjectDetailView(DetailView):
         context["open_task_count"] = task_qs.filter(
             status=TaskStatus.NOT_COMPLETED
         ).count()
+        context["overdue_count"] = task_qs.filter(
+            status=TaskStatus.NOT_COMPLETED,
+            deadline__lt=context["today"],
+        ).count()
+        context["contributor_count"] = ProjectPrivilege.objects.filter(
+            project=project
+        ).values("user").distinct().count()
         context["recent_tasks"] = (
             task_qs.select_related("container")
             .order_by("-updated_at")[:5]
