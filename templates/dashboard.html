@@ -19,41 +19,41 @@
          style="flex: 1 1 160px"
          data-tooltip="Tasks currently assigned to you"
          @click="selected = selected === 'open-tasks' ? null : 'open-tasks'"
-         :class="selected === 'open-tasks' ? 'ring-2 ring-brand-navy/40' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
-      <span class="text-3xl font-bold text-brand-navy self-end">{{ active_task_count }}</span>
+         :class="selected === 'open-tasks' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
+      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ active_task_count }}</span>
     </div>
     <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
          style="flex: 1 1 160px"
          data-tooltip="Tasks past their deadline"
          @click="selected = selected === 'overdue' ? null : 'overdue'"
-         :class="selected === 'overdue' ? 'ring-2 ring-brand-navy/40' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
-      <span class="text-3xl font-bold text-brand-navy self-end">{{ overdue_count }}</span>
+         :class="selected === 'overdue' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
+      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ overdue_count }}</span>
     </div>
     <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
          style="flex: 1 1 160px"
          data-tooltip="Pending requests to join your projects"
          @click="selected = selected === 'join-requests' ? null : 'join-requests'"
-         :class="selected === 'join-requests' ? 'ring-2 ring-brand-navy/40' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Join requests</span>
-      <span class="text-3xl font-bold text-brand-navy self-end">{{ pending_join_request_count }}</span>
+         :class="selected === 'join-requests' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Join requests</span>
+      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ pending_join_request_count }}</span>
     </div>
     <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
          style="flex: 1 1 160px"
          data-tooltip="Invitations sent to you"
          @click="selected = selected === 'invitations' ? null : 'invitations'"
-         :class="selected === 'invitations' ? 'ring-2 ring-brand-navy/40' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Invitations</span>
-      <span class="text-3xl font-bold text-brand-navy self-end">{{ invitation_request_count }}</span>
+         :class="selected === 'invitations' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Invitations</span>
+      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ invitation_request_count }}</span>
     </div>
     <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
          style="flex: 1 1 160px"
          data-tooltip="Total projects you belong to"
          @click="selected = selected === 'projects' ? null : 'projects'"
-         :class="selected === 'projects' ? 'ring-2 ring-brand-navy/40' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
-      <span class="text-3xl font-bold text-brand-navy self-end">{{ project_count }}</span>
+         :class="selected === 'projects' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
+      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ project_count }}</span>
     </div>
   </div>
 
@@ -241,6 +241,13 @@
 
 <style>
   [x-cloak] { display: none !important; }
+
+  .stat-card-selected {
+    background-color: #1f2963;
+    border-color: #1f2963;
+  }
+  .stat-card-selected .stat-label { color: rgba(255, 255, 255, 0.65); }
+  .stat-card-selected .stat-number { color: #ffffff; }
 
   .section-heading {
     font-size: 0.75rem;
