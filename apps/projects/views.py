@@ -584,19 +584,14 @@ class ProjectDetailView(DetailView):
         context["today"] = timezone.now().date()
         task_qs = Task.objects.filter(project=project)
         context["task_count"] = task_qs.count()
-        context["open_task_count"] = task_qs.filter(
-            status=TaskStatus.NOT_COMPLETED
-        ).count()
         context["overdue_count"] = task_qs.filter(
-            status=TaskStatus.NOT_COMPLETED,
             deadline__lt=context["today"],
         ).count()
         context["contributor_count"] = ProjectPrivilege.objects.filter(
             project=project
         ).values("user").distinct().count()
-        context["open_tasks"] = (
-            task_qs.filter(status=TaskStatus.NOT_COMPLETED)
-            .select_related("container")
+        context["tasks"] = (
+            task_qs.select_related("container")
             .order_by("-updated_at")[:20]
         )
         context["has_kanban_columns"] = KanbanBoard.objects.filter(
