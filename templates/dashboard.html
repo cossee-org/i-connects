@@ -101,11 +101,11 @@
         <li class="py-3 flex items-start justify-between gap-3"
             {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
           <div class="flex-1 min-w-0">
-            <span class="font-medium text-brand-navy text-sm">{{ jr.user.name|default:jr.user.email }}</span>
+            <a href="{% url 'projects:join_requests' pk=jr.project.pk %}"
+               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ jr.user.name|default:jr.user.email }}</a>
             <span class="text-xs text-brand-text/60 ml-1">{{ jr.user.email }}</span>
             <div class="text-xs text-brand-text/60 mt-0.5 flex items-center gap-2">
-              <a href="{% url 'projects:join_requests' pk=jr.project.pk %}"
-                 class="hover:text-brand-navy">{{ jr.project.name }}</a>
+              <span>{{ jr.project.name }}</span>
               <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-light/60 text-brand-text">
                 {{ jr.get_requested_privilege_display }}
               </span>
