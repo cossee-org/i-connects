@@ -112,7 +112,7 @@
             </div>
           </div>
           <a href="{% url 'projects:join_requests' pk=jr.project.pk %}"
-             class="text-xs font-medium text-brand-navy hover:text-brand-coral shrink-0">Review</a>
+             class="text-xs font-medium text-brand-navy hover:text-brand-coral shrink-0 self-end">Review</a>
         </li>
         {% endfor %}
       </ul>
@@ -154,8 +154,8 @@
               &middot; {{ inv.created_at|date:"M j, Y" }}
             </div>
           </div>
-          <a href="{% url 'projects:accept_or_decline' code=inv.invitation_code %}"
-             class="text-xs font-medium text-brand-navy hover:text-brand-coral shrink-0">View</a>
+          <a href="{% url 'projects:detail' pk=inv.project.pk %}"
+             class="text-xs font-medium text-brand-navy hover:text-brand-coral shrink-0 self-end">View</a>
         </li>
         {% endfor %}
       </ul>
