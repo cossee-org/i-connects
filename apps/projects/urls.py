@@ -106,4 +106,14 @@ urlpatterns = [
         views.my_projects_badge,
         name="my_projects_badge",
     ),
+    path(
+        "joins/incoming/badge/",
+        views.incoming_join_requests_badge,
+        name="incoming_join_requests_badge",
+    ),
+    path(
+        "invites/badge/",
+        views.my_invitations_badge,
+        name="my_invitations_badge",
+    ),
 ]

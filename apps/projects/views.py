@@ -1296,3 +1296,25 @@ class IncomingJoinRequestsView(LoginRequiredMixin, ListView):
 def my_projects_badge(request):
     count = Project.objects.filter(privileges__user=request.user).distinct().count()
     return HttpResponse(str(count) if count else "")
+
+
+@login_required
+@require_GET
+def incoming_join_requests_badge(request):
+    pm_project_ids = ProjectPrivilege.objects.filter(
+        user=request.user,
+        privilege=MemberPrivileges.PROJECT_MANAGER,
+    ).values_list("project_id", flat=True)
+    count = JoinRequest.objects.filter(
+        project_id__in=pm_project_ids,
+        status=JoinRequestStatus.PENDING,
+    ).count()
+    return HttpResponse(str(count) if count else "")
+
+
+@login_required
+@require_GET
+def my_invitations_badge(request):
+    email = (request.user.email or "").lower()
+    count = Invitation.objects.filter(email__iexact=email).count()
+    return HttpResponse(str(count) if count else "")
