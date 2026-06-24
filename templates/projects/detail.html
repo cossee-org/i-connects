@@ -54,19 +54,6 @@
     </div>
     <div class="flex flex-wrap gap-2 justify-end">
       {% if user_privilege == "PROJECT_MANAGER" %}
-        <a href="{% url 'projects:join_requests' pk=project.pk %}"
-           class="btn btn-sm btn-ghost relative">
-          Join requests
-          {% if pending_join_request_count %}
-            <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
-              {{ pending_join_request_count }}
-            </span>
-          {% endif %}
-        </a>
-        <a href="{% url 'projects:invite' pk=project.pk %}"
-           class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-          Invite member
-        </a>
         <a href="{% url 'projects:update' pk=project.pk %}" class="btn btn-sm btn-primary">Edit</a>
       {% elif user.is_authenticated and not user_privilege %}
         <div id="join-action" class="flex flex-wrap gap-2">
