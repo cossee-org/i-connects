@@ -881,8 +881,13 @@ def user_invite_search(request, pk):
     existing_member_ids = list(
         ProjectPrivilege.objects.filter(project=project).values_list("user_id", flat=True)
     )
+    already_invited_ids = list(
+        Invitation.objects.filter(project=project, invited_user__isnull=False)
+        .values_list("invited_user_id", flat=True)
+    )
     qs = (
         User.objects.exclude(pk__in=existing_member_ids)
+        .exclude(pk__in=already_invited_ids)
         .filter(
             Q(name__icontains=q)
             | Q(given_name__icontains=q)

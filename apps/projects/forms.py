@@ -81,8 +81,12 @@ class InvitationForm(forms.ModelForm):
             existing_member_ids = ProjectPrivilege.objects.filter(
                 project=project
             ).values_list("user_id", flat=True)
+            already_invited_ids = Invitation.objects.filter(
+                project=project, invited_user__isnull=False
+            ).values_list("invited_user_id", flat=True)
             self.fields["invited_user"].queryset = (
                 User.objects.exclude(pk__in=existing_member_ids)
+                .exclude(pk__in=already_invited_ids)
                 .order_by("name", "email")
             )
         else:
@@ -105,14 +109,27 @@ class InvitationForm(forms.ModelForm):
         if invited_user is not None:
             # Email is sourced from the user account when invited_user is set.
             cleaned["email"] = (invited_user.email or "").lower()
-            if self.project is not None and ProjectPrivilege.objects.filter(
-                project=self.project, user=invited_user
-            ).exists():
-                raise forms.ValidationError(
-                    "That user is already a member of this project."
-                )
+            if self.project is not None:
+                if ProjectPrivilege.objects.filter(
+                    project=self.project, user=invited_user
+                ).exists():
+                    raise forms.ValidationError(
+                        "That user is already a member of this project."
+                    )
+                if Invitation.objects.filter(
+                    project=self.project, invited_user=invited_user
+                ).exists():
+                    raise forms.ValidationError(
+                        "That user has already been invited to this project."
+                    )
         else:
             cleaned["email"] = email.lower()
+            if self.project is not None and Invitation.objects.filter(
+                project=self.project, email=cleaned["email"]
+            ).exists():
+                raise forms.ValidationError(
+                    "An invitation has already been sent to that email address."
+                )
         return cleaned
 
 
