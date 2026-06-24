@@ -173,8 +173,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["overdue_tasks"] = overdue
         context["due_soon_tasks"] = due_soon
         context["no_deadline_tasks"] = no_deadline
+        context["all_open_tasks"] = all_active
         context["active_task_count"] = len(all_active)
         context["overdue_count"] = len(overdue)
+        context["now"] = now
 
         # --- Pending approvals (PM only) -----------------------------------
         if pm_project_ids:
@@ -207,6 +209,15 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             pending_join_requests = []
         context["pending_join_requests"] = pending_join_requests
         context["pending_join_request_count"] = len(pending_join_requests)
+
+        # --- Invitation requests (invitations addressed to the current user) ---
+        invitation_requests = list(
+            Invitation.objects.filter(email__iexact=(user.email or "").lower())
+            .select_related("project")
+            .order_by("-created_at")
+        )
+        context["invitation_requests"] = invitation_requests
+        context["invitation_request_count"] = len(invitation_requests)
 
         # --- Notifications -------------------------------------------------
         context["recent_notifications"] = list(
