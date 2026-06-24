@@ -1,30 +1,73 @@
-{% extends "base.html" %}
+{# Modal fragment — loaded via HTMX into #invite-modal-body. #}
+<div class="modal-box max-w-lg bg-base-100 border border-brand-light/60">
+  <button type="button"
+          class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+          onclick="document.getElementById('invite-modal').close()"
+          aria-label="Close">&times;</button>
 
-{% block title %}Invite to {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+  <h3 class="font-bold text-lg text-brand-navy mb-1">Invite someone to {{ project.name }}</h3>
+  <p class="text-sm text-brand-text/70 mb-4">Search for an existing i&bull;CONNECTS user below.</p>
 
-{% block page_header %}
-  <header class="mb-6">
-    <h1 class="page-title font-semibold text-brand-navy leading-tight">
-      Invite someone to {{ project.name }}
-    </h1>
-    <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">
-      Pick an existing i-connects user, or invite someone new by email. The recipient will be able to accept or decline.
-    </p>
-  </header>
-{% endblock %}
-
-{% block content %}
-<div class="max-w-xl mx-auto">
-  <form method="post" class="brand-card p-6">
+  <form method="post"
+        action="{% url 'projects:invite' pk=project.pk %}"
+        hx-post="{% url 'projects:invite' pk=project.pk %}"
+        hx-target="#invite-modal-body"
+        hx-swap="innerHTML">
     {% csrf_token %}
 
     {% if form.non_field_errors %}
-      <div class="alert alert-error mb-4">{{ form.non_field_errors }}</div>
+      <div class="alert alert-error mb-4 text-sm">{{ form.non_field_errors }}</div>
     {% endif %}
 
-    {% include "_components/form_field.html" with field=form.invited_user %}
-    <div class="text-xs text-brand-text/60 mb-4 -mt-2">— or —</div>
-    {% include "_components/form_field.html" with field=form.email %}
+    {# Hidden fields submitted with the form #}
+    {{ form.invited_user }}
+    {{ form.email }}
+
+    {# Email field — toggles between search input and selected-user card #}
+    <div class="form-control w-full mb-3">
+      <label class="label pb-1" for="user-search-input">
+        <span class="label-text text-brand-navy font-medium">
+          Email <span class="text-error" aria-hidden="true">*</span>
+        </span>
+      </label>
+
+      {# Search block — hidden once a user is selected #}
+      <div id="user-search-block" {% if selected_user_label %}class="hidden"{% endif %}>
+        <input type="text"
+               id="user-search-input"
+               name="q"
+               placeholder="Search by name or email…"
+               class="input input-bordered w-full"
+               autocomplete="off"
+               hx-get="{% url 'projects:invite_user_search' pk=project.pk %}"
+               hx-trigger="input changed delay:300ms"
+               hx-target="#user-search-results">
+        <div id="user-search-results" class="mt-1"></div>
+      </div>
+
+      {# Selected-user card — shown once a user is picked; replaces the search block #}
+      <div id="selected-user-display"
+           class="{% if not selected_user_label %}hidden {% endif %}flex items-center gap-3 px-3 py-2.5 border border-brand-light rounded-lg bg-brand-lighter text-sm text-brand-navy">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0 text-brand-text/50">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+        </svg>
+        <span id="selected-user-label" class="flex-1 truncate font-medium">{{ selected_user_label }}</span>
+        <button type="button"
+                class="shrink-0 text-xs text-brand-text/50 hover:text-brand-coral font-medium"
+                onclick="clearInviteSelection()">
+          Change
+        </button>
+      </div>
+
+      {% if form.invited_user.errors %}
+        <label class="label pt-1">
+          <span class="label-text-alt text-error">{{ form.invited_user.errors|join:" " }}</span>
+        </label>
+      {% endif %}
+    </div>
+
     {% include "_components/form_field.html" with field=form.privilege %}
 
     {% if form.roles.field.queryset.exists %}
@@ -44,11 +87,39 @@
     {% endif %}
 
     <div class="flex gap-2 justify-end mt-6">
-      <a href="{% url 'projects:members' pk=project.pk %}" class="btn btn-ghost">Cancel</a>
-      <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+      <button type="button"
+              class="btn btn-ghost"
+              onclick="document.getElementById('invite-modal').close()">
+        Cancel
+      </button>
+      <button type="submit"
+              class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
         Send invitation
       </button>
     </div>
   </form>
 </div>
-{% endblock %}
+<form method="dialog" class="modal-backdrop">
+  <button>close</button>
+</form>
+
+<script>
+function selectInviteUser(pk, label) {
+  document.getElementById('id_invited_user').value = pk;
+  document.getElementById('user-search-results').innerHTML = '';
+  document.getElementById('selected-user-label').textContent = label;
+  document.getElementById('user-search-block').classList.add('hidden');
+  document.getElementById('selected-user-display').classList.remove('hidden');
+}
+
+function clearInviteSelection() {
+  document.getElementById('id_invited_user').value = '';
+  document.getElementById('selected-user-display').classList.add('hidden');
+  document.getElementById('selected-user-label').textContent = '';
+  var searchBlock = document.getElementById('user-search-block');
+  searchBlock.classList.remove('hidden');
+  var input = document.getElementById('user-search-input');
+  input.value = '';
+  input.focus();
+}
+</script>

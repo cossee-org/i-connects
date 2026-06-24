@@ -3,14 +3,13 @@
 {% block title %}Members &mdash; {{ project.name }}{% endblock %}
 
 {% block page_header %}
-  <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+  <header class="mb-6">
     <div>
       <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">{{ project.name }}</p>
       <h1 class="page-title font-semibold text-brand-navy leading-tight">Contributors</h1>
-      <p class="text-sm text-brand-text/70 mt-1">Manage who belongs to this project and what they can do.</p>
     </div>
     {% if user_privilege == "PROJECT_MANAGER" %}
-      <div class="flex flex-wrap gap-2 justify-end">
+      <div class="flex flex-wrap gap-2 mt-4 justify-end">
         <a href="{% url 'projects:join_requests' pk=project.pk %}"
            class="btn btn-sm btn-ghost relative">
           Join requests
@@ -20,10 +19,22 @@
             </span>
           {% endif %}
         </a>
-        <a href="{% url 'projects:invite' pk=project.pk %}"
-           class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-          Invite member
+        <a href="{% url 'projects:project_invitations' pk=project.pk %}"
+           class="btn btn-sm btn-ghost relative">
+          Invitation requests
+          {% if pending_invitation_count %}
+            <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
+              {{ pending_invitation_count }}
+            </span>
+          {% endif %}
         </a>
+        <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                hx-get="{% url 'projects:invite' pk=project.pk %}"
+                hx-target="#invite-modal-body"
+                hx-swap="innerHTML"
+                onclick="document.getElementById('invite-modal').showModal()">
+          Invite member
+        </button>
       </div>
     {% endif %}
   </header>
@@ -59,4 +70,51 @@
     {% include "_components/empty_state.html" with title="No members yet" body="This project does not have any members." %}
   {% endif %}
 {% endif %}
+
+<dialog id="invite-modal" class="modal" aria-label="Invite member">
+  <div id="invite-modal-body"><!-- filled by HTMX --></div>
+</dialog>
+
+<dialog id="remove-member-modal" class="modal">
+  <div class="modal-box border border-error/40">
+    <h3 class="text-lg font-semibold text-error">Remove member</h3>
+    <p class="mt-3 text-brand-text">
+      Remove <strong id="remove-member-name"></strong> from this project? This cannot be undone.
+    </p>
+    <div class="flex gap-2 justify-end mt-6">
+      <form method="dialog" class="contents">
+        <button class="btn btn-ghost">Cancel</button>
+      </form>
+      <button id="remove-member-confirm" class="btn btn-outline btn-error">
+        Remove
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  var modal = document.getElementById('remove-member-modal');
+  var confirmBtn = document.getElementById('remove-member-confirm');
+
+  window.openRemoveMemberModal = function (url, name, targetId) {
+    document.getElementById('remove-member-name').textContent = name;
+    modal._removeUrl = url;
+    modal._removeTarget = targetId;
+    modal.showModal();
+  };
+
+  confirmBtn.addEventListener('click', function () {
+    htmx.ajax('POST', modal._removeUrl, {
+      target: '#' + modal._removeTarget,
+      swap: 'outerHTML',
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    });
+    modal.close();
+  });
+}());
+</script>
 {% endblock %}

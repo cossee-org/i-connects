@@ -1,0 +1,18 @@
+{# HTMX fragment — dropped into #user-search-results. #}
+{% if users_data %}
+  <ul class="border border-brand-light/60 rounded-lg overflow-hidden shadow-sm bg-base-100">
+    {% for item in users_data %}
+      <li class="{% if not forloop.last %}border-b border-brand-light/60{% endif %}">
+        <button type="button"
+                class="w-full text-left px-3 py-2.5 text-sm text-brand-navy hover:bg-brand-lighter transition-colors"
+                data-pk="{{ item.user.pk }}"
+                data-label="{{ item.label }}"
+                onclick="selectInviteUser(this.dataset.pk, this.dataset.label)">
+          {{ item.label }}
+        </button>
+      </li>
+    {% endfor %}
+  </ul>
+{% elif q %}
+  <p class="text-sm text-brand-text/60 mt-1 px-1">No users found for "{{ q }}".</p>
+{% endif %}

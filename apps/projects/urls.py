@@ -44,6 +44,21 @@ urlpatterns = [
         views.InviteCreateView.as_view(),
         name="invite",
     ),
+    path(
+        "projects/<int:pk>/invite/search/",
+        views.user_invite_search,
+        name="invite_user_search",
+    ),
+    path(
+        "projects/<int:pk>/invitation-requests/",
+        views.ProjectInvitationListView.as_view(),
+        name="project_invitations",
+    ),
+    path(
+        "projects/<int:pk>/invitations/<int:invitation_pk>/cancel/",
+        views.CancelInvitationView.as_view(),
+        name="cancel_invitation",
+    ),
     path("invites/", views.MyInvitationsView.as_view(), name="my_invitations"),
     path(
         "invites/<str:code>/",
@@ -60,6 +75,11 @@ urlpatterns = [
         "projects/<int:pk>/join-requests/",
         views.ProjectJoinRequestListView.as_view(),
         name="join_requests",
+    ),
+    path(
+        "projects/<int:pk>/join-requests/<int:join_request_pk>/review/",
+        views.ReviewJoinRequestView.as_view(),
+        name="review_join_request",
     ),
     path(
         "projects/<int:pk>/join-requests/<int:join_request_pk>/approve/",
@@ -80,6 +100,11 @@ urlpatterns = [
         "joins/",
         views.MyJoinRequestsView.as_view(),
         name="my_join_requests",
+    ),
+    path(
+        "joins/incoming/",
+        views.IncomingJoinRequestsView.as_view(),
+        name="incoming_join_requests",
     ),
     path(
         "my-projects/badge/",
