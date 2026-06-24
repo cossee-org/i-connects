@@ -581,7 +581,7 @@ class ProjectDetailView(DetailView):
         from apps.tasks.models import KanbanBoard, Task
         from django.utils import timezone
 
-        context["today"] = timezone.now().date()
+        context["today"] = timezone.now()
         task_qs = Task.objects.filter(project=project)
         context["task_count"] = task_qs.count()
         context["overdue_count"] = task_qs.filter(
