@@ -341,7 +341,14 @@ class MyProjectListView(LoginRequiredMixin, ListView):
             qs = qs.filter(is_public=False)
         q = self.request.GET.get("q", "").strip()
         if q:
-            qs = qs.filter(Q(name__icontains=q) | Q(description__icontains=q) | Q(abstract__icontains=q))
+            qs = qs.filter(
+                Q(name__icontains=q)
+                | Q(description__icontains=q)
+                | Q(abstract__icontains=q)
+                | Q(privileges__user__given_name__icontains=q)
+                | Q(privileges__user__family_name__icontains=q)
+                | Q(privileges__user__email__icontains=q)
+            ).distinct()
         sort = self.request.GET.get("sort", "newest")
         order = self._SORT_MAP.get(sort, "-created_at")
         return qs.order_by(order)
