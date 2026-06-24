@@ -44,6 +44,11 @@ urlpatterns = [
         views.InviteCreateView.as_view(),
         name="invite",
     ),
+    path(
+        "projects/<int:pk>/invite/search/",
+        views.user_invite_search,
+        name="invite_user_search",
+    ),
     path("invites/", views.MyInvitationsView.as_view(), name="my_invitations"),
     path(
         "invites/<str:code>/",

@@ -825,8 +825,62 @@ class RemoveMemberView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
 # ---------------------------------------------------------------------------
 
 
+@login_required
+@require_GET
+def user_invite_search(request, pk):
+    """Return an HTML fragment of users matching ``?q=`` for the invite modal search."""
+    from django.contrib.auth import get_user_model
+    from django.db.models import Q
+
+    project = get_object_or_404(Project, pk=pk)
+    if not ProjectPrivilege.objects.filter(
+        project=project,
+        user=request.user,
+        privilege=MemberPrivileges.PROJECT_MANAGER,
+    ).exists():
+        return HttpResponse(status=403)
+
+    q = request.GET.get("q", "").strip()
+    if not q:
+        return render(
+            request,
+            "projects/partials/user_search_results.html",
+            {"users_data": [], "q": q},
+        )
+
+    User = get_user_model()
+    existing_member_ids = list(
+        ProjectPrivilege.objects.filter(project=project).values_list("user_id", flat=True)
+    )
+    qs = (
+        User.objects.exclude(pk__in=existing_member_ids)
+        .filter(
+            Q(name__icontains=q)
+            | Q(given_name__icontains=q)
+            | Q(family_name__icontains=q)
+            | Q(email__icontains=q)
+        )
+        .order_by("name", "email")[:10]
+    )
+
+    users_data = []
+    for u in qs:
+        if u.given_name or u.family_name:
+            full_name = f"{u.given_name} {u.family_name}".strip()
+        else:
+            full_name = u.name
+        label = f"{full_name} ({u.email})" if full_name else u.email
+        users_data.append({"user": u, "label": label})
+
+    return render(
+        request,
+        "projects/partials/user_search_results.html",
+        {"users_data": users_data, "q": q},
+    )
+
+
 class InviteCreateView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
-    """GET renders the invite form; POST sends the invitation."""
+    """GET renders the invite modal fragment; POST sends the invitation."""
 
     template_name = "projects/invite_form.html"
 
@@ -841,10 +895,27 @@ class InviteCreateView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
     def post(self, request, pk):
         form = InvitationForm(request.POST, project=self.project)
         if not form.is_valid():
+            selected_user_label = ""
+            user_pk = request.POST.get("invited_user")
+            if user_pk:
+                from django.contrib.auth import get_user_model
+                try:
+                    u = get_user_model().objects.get(pk=user_pk)
+                    if u.given_name or u.family_name:
+                        full_name = f"{u.given_name} {u.family_name}".strip()
+                    else:
+                        full_name = u.name
+                    selected_user_label = f"{full_name} ({u.email})" if full_name else u.email
+                except get_user_model().DoesNotExist:
+                    pass
             return render(
                 request,
                 self.template_name,
-                {"form": form, "project": self.project},
+                {
+                    "form": form,
+                    "project": self.project,
+                    "selected_user_label": selected_user_label,
+                },
             )
         added_by = (
             request.user.get_full_name() or request.user.name or request.user.email
@@ -863,6 +934,12 @@ class InviteCreateView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
             or form.cleaned_data["email"]
         )
         messages.success(request, f"Invitation sent to {recipient_label}.")
+        if request.headers.get("HX-Request"):
+            response = HttpResponse()
+            response["HX-Redirect"] = reverse(
+                "projects:members", kwargs={"pk": self.project.pk}
+            )
+            return response
         return HttpResponseRedirect(
             reverse("projects:members", kwargs={"pk": self.project.pk})
         )

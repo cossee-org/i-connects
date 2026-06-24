@@ -19,10 +19,13 @@
             </span>
           {% endif %}
         </a>
-        <a href="{% url 'projects:invite' pk=project.pk %}"
-           class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+        <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                hx-get="{% url 'projects:invite' pk=project.pk %}"
+                hx-target="#invite-modal-body"
+                hx-swap="innerHTML"
+                onclick="document.getElementById('invite-modal').showModal()">
           Invite member
-        </a>
+        </button>
       </div>
     {% endif %}
   </header>
@@ -58,6 +61,10 @@
     {% include "_components/empty_state.html" with title="No members yet" body="This project does not have any members." %}
   {% endif %}
 {% endif %}
+
+<dialog id="invite-modal" class="modal" aria-label="Invite member">
+  <div id="invite-modal-body"><!-- filled by HTMX --></div>
+</dialog>
 
 <dialog id="remove-member-modal" class="modal">
   <div class="modal-box">

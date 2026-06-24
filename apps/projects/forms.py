@@ -52,10 +52,7 @@ class InvitationForm(forms.ModelForm):
     invited_user = forms.ModelChoiceField(
         queryset=None,
         required=False,
-        widget=forms.Select(
-            attrs={"class": "select select-bordered w-full"}
-        ),
-        help_text="Pick someone who already has an account, or leave blank and use the email field below.",
+        widget=forms.HiddenInput(),
     )
 
     roles = forms.ModelMultipleChoiceField(
@@ -68,12 +65,7 @@ class InvitationForm(forms.ModelForm):
         model = Invitation
         fields = ["invited_user", "email", "privilege", "roles"]
         widgets = {
-            "email": forms.EmailInput(
-                attrs={
-                    "class": "input input-bordered w-full",
-                    "placeholder": "collaborator@example.org",
-                }
-            ),
+            "email": forms.HiddenInput(),
             "privilege": forms.Select(attrs={"class": "select select-bordered w-full"}),
         }
 
