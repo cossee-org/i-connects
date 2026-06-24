@@ -51,19 +51,10 @@
               </td>
               <td class="text-sm text-brand-text/70">{{ jr.created_at|date:"Y-m-d H:i" }}</td>
               <td class="text-right">
-                <form method="post" class="inline"
-                      action="{% url 'projects:approve_join_request' pk=project.pk join_request_pk=jr.pk %}">
-                  {% csrf_token %}
-                  <button type="submit"
-                          class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-                    Approve
-                  </button>
-                </form>
-                <form method="post" class="inline"
-                      action="{% url 'projects:decline_join_request' pk=project.pk join_request_pk=jr.pk %}">
-                  {% csrf_token %}
-                  <button type="submit" class="btn btn-sm btn-outline btn-error">Decline</button>
-                </form>
+                <a href="{% url 'projects:review_join_request' pk=project.pk join_request_pk=jr.pk %}"
+                   class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+                  Review
+                </a>
               </td>
             </tr>
           {% endfor %}

@@ -77,6 +77,11 @@ urlpatterns = [
         name="join_requests",
     ),
     path(
+        "projects/<int:pk>/join-requests/<int:join_request_pk>/review/",
+        views.ReviewJoinRequestView.as_view(),
+        name="review_join_request",
+    ),
+    path(
         "projects/<int:pk>/join-requests/<int:join_request_pk>/approve/",
         views.ApproveJoinRequestView.as_view(),
         name="approve_join_request",

@@ -1144,6 +1144,29 @@ class RequestToJoinView(LoginRequiredMixin, View):
         return redirect("projects:detail", pk=project.pk)
 
 
+class ReviewJoinRequestView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
+    """GET — show approve/decline review page for a single join request."""
+
+    template_name = "projects/review_join_request.html"
+
+    def get(self, request, pk, join_request_pk):
+        join_request = get_object_or_404(
+            JoinRequest,
+            pk=join_request_pk,
+            project=self.project,
+            status=JoinRequestStatus.PENDING,
+        )
+        return render(
+            request,
+            self.template_name,
+            {
+                "join_request": join_request,
+                "project": self.project,
+                "source": request.GET.get("source", ""),
+            },
+        )
+
+
 class ProjectJoinRequestListView(
     ProjectManagerRequiredMixin, ProjectContextMixin, ListView
 ):
