@@ -574,7 +574,7 @@ class ProjectDetailView(DetailView):
         ).count()
         context["recent_tasks"] = (
             task_qs.select_related("container")
-            .order_by("status", "deadline", "-updated_at")[:5]
+            .order_by("-updated_at")[:5]
         )
         context["has_kanban_columns"] = KanbanBoard.objects.filter(
             project=project
