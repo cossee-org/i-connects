@@ -1154,6 +1154,28 @@ class MyJoinRequestsView(LoginRequiredMixin, ListView):
         )
 
 
+class IncomingJoinRequestsView(LoginRequiredMixin, ListView):
+    template_name = "projects/incoming_join_requests.html"
+    context_object_name = "join_requests"
+
+    def get_queryset(self):
+        from apps.core.enums import MemberPrivileges
+
+        pm_project_ids = ProjectPrivilege.objects.filter(
+            user=self.request.user,
+            privilege=MemberPrivileges.PROJECT_MANAGER,
+        ).values_list("project_id", flat=True)
+
+        return (
+            JoinRequest.objects.filter(
+                project_id__in=pm_project_ids,
+                status=JoinRequestStatus.PENDING,
+            )
+            .select_related("user", "project")
+            .order_by("created_at")
+        )
+
+
 @login_required
 @require_GET
 def my_projects_badge(request):

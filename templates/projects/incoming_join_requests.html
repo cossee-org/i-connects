@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Join requests &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with title="Join requests" subtitle="Pending requests to join your projects." %}
+{% endblock %}
+
+{% block content %}
+{% if join_requests %}
+  <div class="brand-card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th scope="col">User</th>
+            <th scope="col">Project</th>
+            <th scope="col">Requested as</th>
+            <th scope="col">Message</th>
+            <th scope="col">Submitted</th>
+            <th scope="col" class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for jr in join_requests %}
+            <tr class="hover:bg-brand-lighter/40 align-top">
+              <td>
+                <div class="font-medium text-brand-navy">{{ jr.user.name|default:jr.user.email }}</div>
+                <div class="text-xs text-brand-text/60">{{ jr.user.email }}</div>
+              </td>
+              <td>
+                <a href="{% url 'projects:join_requests' pk=jr.project.pk %}"
+                   class="font-medium text-brand-navy hover:text-brand-coral text-sm">
+                  {{ jr.project.name }}
+                </a>
+              </td>
+              <td>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                  {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                  {{ jr.get_requested_privilege_display }}
+                </span>
+              </td>
+              <td class="max-w-xs text-sm text-brand-text/80 whitespace-pre-line">
+                {{ jr.message|default:"—" }}
+              </td>
+              <td class="text-sm text-brand-text/70">{{ jr.created_at|date:"Y-m-d H:i" }}</td>
+              <td class="text-right">
+                <form method="post" class="inline"
+                      action="{% url 'projects:approve_join_request' pk=jr.project.pk join_request_pk=jr.pk %}">
+                  {% csrf_token %}
+                  <button type="submit"
+                          class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+                    Approve
+                  </button>
+                </form>
+                <form method="post" class="inline"
+                      action="{% url 'projects:decline_join_request' pk=jr.project.pk join_request_pk=jr.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline btn-error">Decline</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% else %}
+  {% include "_components/empty_state.html" with title="No pending requests" body="When someone asks to join one of your projects, it will appear here." %}
+{% endif %}
+{% endblock %}
