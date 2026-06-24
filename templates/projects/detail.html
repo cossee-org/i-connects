@@ -90,8 +90,8 @@
   </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-  <section class="lg:col-span-2 space-y-5">
+<div>
+  <section class="space-y-5">
     <div class="brand-card p-6">
       <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <div>
@@ -233,9 +233,6 @@
         <p class="text-sm text-brand-text/60">No contributors yet.</p>
       {% endif %}
     </div>
-  </section>
-
-  <aside class="space-y-5">
     <div class="brand-card p-6">
       <h2 class="text-lg font-semibold text-brand-navy mb-3">About</h2>
       {% if project.abstract %}
@@ -276,7 +273,7 @@
         <p class="text-sm text-brand-text/60">No description yet.</p>
       {% endif %}
     </div>
-  </aside>
+  </section>
 </div>
 
 <dialog id="task-modal" class="modal" aria-label="Task editor">
