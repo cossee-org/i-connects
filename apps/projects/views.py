@@ -208,6 +208,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["pending_join_requests"] = pending_join_requests
         context["pending_join_request_count"] = len(pending_join_requests)
 
+        # --- Invitation requests (invitations addressed to the current user) ---
+        invitation_request_count = Invitation.objects.filter(
+            email__iexact=(user.email or "").lower()
+        ).count()
+        context["invitation_request_count"] = invitation_request_count
+
         # --- Notifications -------------------------------------------------
         context["recent_notifications"] = list(
             Notification.objects.unread_for_user(user)
