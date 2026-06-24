@@ -23,48 +23,49 @@
     {{ form.invited_user }}
     {{ form.email }}
 
-    {# User search #}
+    {# Email field — toggles between search input and selected-user card #}
     <div class="form-control w-full mb-3">
       <label class="label pb-1" for="user-search-input">
         <span class="label-text text-brand-navy font-medium">
           Email <span class="text-error" aria-hidden="true">*</span>
         </span>
       </label>
-      <input type="text"
-             id="user-search-input"
-             name="q"
-             placeholder="Search by name or email…"
-             class="input input-bordered w-full"
-             autocomplete="off"
-             hx-get="{% url 'projects:invite_user_search' pk=project.pk %}"
-             hx-trigger="input changed delay:300ms"
-             hx-target="#user-search-results">
-      <div id="user-search-results" class="mt-1"></div>
+
+      {# Search block — hidden once a user is selected #}
+      <div id="user-search-block" {% if selected_user_label %}class="hidden"{% endif %}>
+        <input type="text"
+               id="user-search-input"
+               name="q"
+               placeholder="Search by name or email…"
+               class="input input-bordered w-full"
+               autocomplete="off"
+               hx-get="{% url 'projects:invite_user_search' pk=project.pk %}"
+               hx-trigger="input changed delay:300ms"
+               hx-target="#user-search-results">
+        <div id="user-search-results" class="mt-1"></div>
+      </div>
+
+      {# Selected-user card — shown once a user is picked; replaces the search block #}
+      <div id="selected-user-display"
+           class="{% if not selected_user_label %}hidden {% endif %}flex items-center gap-3 px-3 py-2.5 border border-brand-light rounded-lg bg-brand-lighter text-sm text-brand-navy">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0 text-brand-text/50">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+        </svg>
+        <span id="selected-user-label" class="flex-1 truncate font-medium">{{ selected_user_label }}</span>
+        <button type="button"
+                class="shrink-0 text-xs text-brand-text/50 hover:text-brand-coral font-medium"
+                onclick="clearInviteSelection()">
+          Change
+        </button>
+      </div>
+
       {% if form.invited_user.errors %}
         <label class="label pt-1">
           <span class="label-text-alt text-error">{{ form.invited_user.errors|join:" " }}</span>
         </label>
       {% endif %}
-    </div>
-
-    {# Selected user chip — shown after a user is picked (or on re-render with errors) #}
-    <div id="selected-user-display"
-         class="{% if not selected_user_label %}hidden {% endif %}mb-3 flex items-center gap-2 px-3 py-2 bg-brand-lighter rounded-md text-sm text-brand-navy">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0 text-brand-text/50">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-      </svg>
-      <span id="selected-user-label" class="flex-1 truncate">{{ selected_user_label }}</span>
-      <button type="button"
-              class="shrink-0 text-brand-text/40 hover:text-error"
-              onclick="clearInviteSelection()"
-              aria-label="Clear selection">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="2" stroke="currentColor" class="w-4 h-4">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-        </svg>
-      </button>
     </div>
 
     {% include "_components/form_field.html" with field=form.privilege %}
@@ -105,9 +106,9 @@
 <script>
 function selectInviteUser(pk, label) {
   document.getElementById('id_invited_user').value = pk;
-  document.getElementById('user-search-input').value = '';
   document.getElementById('user-search-results').innerHTML = '';
   document.getElementById('selected-user-label').textContent = label;
+  document.getElementById('user-search-block').classList.add('hidden');
   document.getElementById('selected-user-display').classList.remove('hidden');
 }
 
@@ -115,5 +116,10 @@ function clearInviteSelection() {
   document.getElementById('id_invited_user').value = '';
   document.getElementById('selected-user-display').classList.add('hidden');
   document.getElementById('selected-user-label').textContent = '';
+  var searchBlock = document.getElementById('user-search-block');
+  searchBlock.classList.remove('hidden');
+  var input = document.getElementById('user-search-input');
+  input.value = '';
+  input.focus();
 }
 </script>
