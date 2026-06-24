@@ -2,7 +2,13 @@
 
 {% block title %}{{ form_title }} &mdash; i&bull;CONNECTS{% endblock %}
 
-{% block page_header %}{% endblock %}
+{% block page_header %}
+{% if object %}
+  <header class="mb-6">
+    <h1 class="page-title font-semibold text-brand-navy leading-tight">{{ object.name }}</h1>
+  </header>
+{% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto space-y-5">

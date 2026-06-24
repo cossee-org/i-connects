@@ -615,7 +615,7 @@ class ProjectCreateView(LoginRequiredMixin, CreateView):
         return context
 
 
-class ProjectUpdateView(ProjectManagerRequiredMixin, UpdateView):
+class ProjectUpdateView(ProjectManagerRequiredMixin, ProjectContextMixin, UpdateView):
     model = Project
     form_class = ProjectForm
     template_name = "projects/form.html"

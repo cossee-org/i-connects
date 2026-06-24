@@ -52,15 +52,13 @@
         {% endif %}
       </div>
     </div>
+    {% if user.is_authenticated and not user_privilege %}
     <div class="flex flex-wrap gap-2 justify-end">
-      {% if user_privilege == "PROJECT_MANAGER" %}
-        <a href="{% url 'projects:update' pk=project.pk %}" class="btn btn-sm btn-primary">Edit</a>
-      {% elif user.is_authenticated and not user_privilege %}
-        <div id="join-action" class="flex flex-wrap gap-2">
-          {% include "projects/partials/join_action.html" %}
-        </div>
-      {% endif %}
+      <div id="join-action" class="flex flex-wrap gap-2">
+        {% include "projects/partials/join_action.html" %}
+      </div>
     </div>
+    {% endif %}
   </header>
 {% endblock %}
 
