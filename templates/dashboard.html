@@ -11,48 +11,73 @@
   <h1 class="page-title font-semibold text-brand-navy">Dashboard</h1>
 </div>
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-6" x-data="{ selected: 'open-tasks' }">
 
   {# Stats bar #}
   <div class="flex flex-row flex-wrap gap-4">
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" style="flex: 1 1 160px" data-tooltip="Tasks currently assigned to you">
+    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
+         style="flex: 1 1 160px"
+         data-tooltip="Tasks currently assigned to you"
+         @click="selected = 'open-tasks'"
+         :class="selected === 'open-tasks' ? 'ring-2 ring-brand-navy/40' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
       <span class="text-3xl font-bold text-brand-navy self-end">{{ active_task_count }}</span>
     </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" style="flex: 1 1 160px" data-tooltip="Tasks past their deadline">
+    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
+         style="flex: 1 1 160px"
+         data-tooltip="Tasks past their deadline"
+         @click="selected = 'overdue'"
+         :class="selected === 'overdue' ? 'ring-2 ring-brand-navy/40' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
       <span class="text-3xl font-bold text-brand-navy self-end">{{ overdue_count }}</span>
     </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" style="flex: 1 1 160px" data-tooltip="Pending requests to join your projects">
+    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
+         style="flex: 1 1 160px"
+         data-tooltip="Pending requests to join your projects"
+         @click="selected = 'join-requests'"
+         :class="selected === 'join-requests' ? 'ring-2 ring-brand-navy/40' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Join requests</span>
       <span class="text-3xl font-bold text-brand-navy self-end">{{ pending_join_request_count }}</span>
     </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" style="flex: 1 1 160px" data-tooltip="Invitations sent to you">
+    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
+         style="flex: 1 1 160px"
+         data-tooltip="Invitations sent to you"
+         @click="selected = 'invitations'"
+         :class="selected === 'invitations' ? 'ring-2 ring-brand-navy/40' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Invitations</span>
       <span class="text-3xl font-bold text-brand-navy self-end">{{ invitation_request_count }}</span>
     </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" style="flex: 1 1 160px" data-tooltip="Total projects you belong to">
+    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
+         style="flex: 1 1 160px"
+         data-tooltip="Total projects you belong to"
+         @click="selected = 'projects'"
+         :class="selected === 'projects' ? 'ring-2 ring-brand-navy/40' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
       <span class="text-3xl font-bold text-brand-navy self-end">{{ project_count }}</span>
     </div>
   </div>
 
-  {# Open Tasks (includes overdue) #}
-  <section class="brand-card p-5" aria-labelledby="active-tasks-heading" x-data="{ showAll: false }">
+  {# Open Tasks (includes overdue filter) #}
+  <section class="brand-card p-5" aria-labelledby="active-tasks-heading"
+           x-data="{ showAll: false }"
+           x-show="selected === 'open-tasks' || selected === 'overdue'"
+           x-cloak>
     <h2 id="active-tasks-heading" class="section-heading flex items-center gap-2 mb-4">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
       </svg>
-      Open Tasks
+      <span x-text="selected === 'overdue' ? 'Overdue Tasks' : 'Open Tasks'">Open Tasks</span>
     </h2>
 
     {% if all_open_tasks %}
       <ul class="divide-y divide-brand-light/60">
         {% for task in all_open_tasks %}
         <li class="py-3 flex items-start gap-3"
-            {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
+            data-overdue="{% if task.deadline and task.deadline < now %}1{% else %}0{% endif %}"
+            x-show="(selected !== 'overdue' || $el.dataset.overdue === '1') && ({{ forloop.counter }} <= 5 || showAll)"
+            x-cloak>
           <div>
             <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
                class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
@@ -71,8 +96,12 @@
         </li>
         {% endfor %}
       </ul>
+      {% if overdue_count == 0 %}
+      <p x-show="selected === 'overdue'" x-cloak
+         class="text-sm text-brand-text/60 italic">No overdue tasks.</p>
+      {% endif %}
       {% if active_task_count > 5 %}
-      <button @click="showAll = !showAll"
+      <button x-show="selected !== 'overdue'" @click="showAll = !showAll"
               class="mt-3 flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
         <span x-text="showAll ? 'Show less' : 'Show all {{ active_task_count }} tasks'">Show all {{ active_task_count }} tasks</span>
       </button>
@@ -82,8 +111,12 @@
     {% endif %}
   </section>
 
+  {# Join Requests #}
   {% if is_pm_anywhere %}
-  <section class="brand-card p-5" aria-labelledby="join-requests-heading" x-data="{ showAll: false }">
+  <section class="brand-card p-5" aria-labelledby="join-requests-heading"
+           x-data="{ showAll: false }"
+           x-show="selected === 'join-requests'"
+           x-cloak>
     <h2 id="join-requests-heading" class="section-heading flex items-center gap-2 mb-4">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
@@ -122,7 +155,10 @@
   {% endif %}
 
   {# Invitations #}
-  <section class="brand-card p-5" aria-labelledby="invitations-heading" x-data="{ showAll: false }">
+  <section class="brand-card p-5" aria-labelledby="invitations-heading"
+           x-data="{ showAll: false }"
+           x-show="selected === 'invitations'"
+           x-cloak>
     <h2 id="invitations-heading" class="section-heading flex items-center gap-2 mb-4">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
@@ -161,7 +197,10 @@
   </section>
 
   {# Projects #}
-  <section class="brand-card p-5" aria-labelledby="projects-heading" x-data="{ showAll: false }">
+  <section class="brand-card p-5" aria-labelledby="projects-heading"
+           x-data="{ showAll: false }"
+           x-show="selected === 'projects'"
+           x-cloak>
     <h2 id="projects-heading" class="section-heading flex items-center gap-2 mb-4">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
