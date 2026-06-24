@@ -14,24 +14,24 @@
 <div class="flex flex-col gap-6">
 
   {# Stats bar #}
-  <div class="grid grid-cols-5 gap-4">
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" data-tooltip="Tasks currently assigned to you">
+  <div class="flex flex-row gap-4">
+    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" style="flex:1" data-tooltip="Tasks currently assigned to you">
       <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
       <span class="text-3xl font-bold text-brand-navy">{{ active_task_count }}</span>
     </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if overdue_count %}border-l-4 border-error{% endif %}" data-tooltip="Tasks past their deadline">
+    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if overdue_count %}border-l-4 border-error{% endif %}" style="flex:1" data-tooltip="Tasks past their deadline">
       <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
       <span class="text-3xl font-bold {% if overdue_count %}text-error{% else %}text-brand-navy{% endif %}">{{ overdue_count }}</span>
     </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" data-tooltip="Total projects you belong to">
+    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip" style="flex:1" data-tooltip="Total projects you belong to">
       <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
       <span class="text-3xl font-bold text-brand-navy">{{ project_count }}</span>
     </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if pending_join_request_count %}border-l-4 border-brand-coral{% endif %}" data-tooltip="Pending requests to join your projects">
+    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if pending_join_request_count %}border-l-4 border-brand-coral{% endif %}" style="flex:1" data-tooltip="Pending requests to join your projects">
       <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Join requests</span>
       <span class="text-3xl font-bold {% if pending_join_request_count %}text-brand-coral{% else %}text-brand-navy{% endif %}">{{ pending_join_request_count }}</span>
     </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if invitation_request_count %}border-l-4 border-brand-navy{% endif %}" data-tooltip="Invitations sent to you">
+    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip {% if invitation_request_count %}border-l-4 border-brand-navy{% endif %}" style="flex:1" data-tooltip="Invitations sent to you">
       <span class="text-xs font-medium uppercase tracking-wide text-brand-text/50">Invitations</span>
       <span class="text-3xl font-bold text-brand-navy">{{ invitation_request_count }}</span>
     </div>
