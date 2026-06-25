@@ -10,6 +10,11 @@ app_name = "contributions"
 
 urlpatterns = [
     path(
+        "contributions/",
+        views.ContributionsView.as_view(),
+        name="contributions",
+    ),
+    path(
         "my/contributions/",
         views.MyContributionsView.as_view(),
         name="my_contributions",

@@ -28,6 +28,12 @@ from .services import (
 )
 
 
+class ContributionsView(LoginRequiredMixin, TemplateView):
+    """Top-level contributions page (placeholder)."""
+
+    template_name = "contributions/contributions.html"
+
+
 class MyContributionsView(LoginRequiredMixin, TemplateView):
     """Dedicated page for a user's own contributions across all projects."""
 
