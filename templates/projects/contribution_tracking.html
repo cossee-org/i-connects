@@ -10,7 +10,5 @@
 {% endblock %}
 
 {% block content %}
-<div class="brand-card p-10 flex flex-col items-center justify-center gap-2 text-center min-h-[16rem]">
-  <p class="text-sm text-brand-text/50 italic">Contribution Tracking coming soon.</p>
-</div>
+{% include "_components/empty_state.html" with title="Coming soon" body="Contribution Tracking is on the way. Check back later." %}
 {% endblock %}
