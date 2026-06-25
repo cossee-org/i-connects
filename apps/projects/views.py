@@ -1200,9 +1200,14 @@ class ReviewJoinRequestView(ProjectManagerRequiredMixin, ProjectContextMixin, Vi
             project=self.project,
             status=JoinRequestStatus.PENDING,
         )
+        template = (
+            "projects/partials/review_join_request_modal.html"
+            if request.headers.get("HX-Request")
+            else self.template_name
+        )
         return render(
             request,
-            self.template_name,
+            template,
             {
                 "join_request": join_request,
                 "project": self.project,
