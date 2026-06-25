@@ -194,8 +194,7 @@
       <a href="{% url 'projects:list' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Discover projects</a>
     {% elif request.resolver_match.url_name == 'discover_people' %}
       <a href="{% url 'accounts:discover_people' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Discover people</a>
-    {% elif request.resolver_match.url_name == 'profile' or request.resolver_match.url_name == 'edit_profile' %}
-      <span class="text-sm font-medium text-brand-navy whitespace-nowrap">My profile</span>
+    {% comment %}hidden: profile breadcrumb{% endcomment %}
     {% endif %}
     {% endblock %}
 
