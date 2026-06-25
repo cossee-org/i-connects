@@ -746,6 +746,24 @@ class ProjectMemberListView(
         return context
 
 
+class ContributionTrackingView(
+    ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
+):
+    template_name = "projects/contribution_tracking.html"
+
+
+class WikiView(
+    ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
+):
+    template_name = "projects/wiki.html"
+
+
+class ProjectFormsView(
+    ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
+):
+    template_name = "projects/forms.html"
+
+
 class ProjectInvitationListView(
     ProjectManagerRequiredMixin, ProjectContextMixin, ListView
 ):
@@ -1200,9 +1218,14 @@ class ReviewJoinRequestView(ProjectManagerRequiredMixin, ProjectContextMixin, Vi
             project=self.project,
             status=JoinRequestStatus.PENDING,
         )
+        template = (
+            "projects/partials/review_join_request_modal.html"
+            if request.headers.get("HX-Request")
+            else self.template_name
+        )
         return render(
             request,
-            self.template_name,
+            template,
             {
                 "join_request": join_request,
                 "project": self.project,

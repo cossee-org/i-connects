@@ -3,56 +3,9 @@
 {% block title %}Forms &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block page_header %}
-  {% include "_components/page_header.html" with title="Forms" subtitle="Forms you own and their most recent versions." %}
+  {% include "_components/page_header.html" with title="Forms" %}
 {% endblock %}
 
 {% block content %}
-<div class="flex flex-wrap items-center justify-end gap-2 mb-5">
-  <a href="{% url 'forms_builder:form_create' %}"
-     class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-    New form
-  </a>
-</div>
-
-{% if rows %}
-  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-    {% for row in rows %}
-      <div class="brand-card p-5 flex flex-col">
-        <div class="flex items-start justify-between gap-3">
-          <h2 class="text-lg font-semibold text-brand-navy leading-snug">
-            <a href="{% url 'forms_builder:version_list' pk=row.form.pk %}"
-               class="hover:text-brand-coral">
-              {{ row.latest.name|default:"Untitled form" }}
-            </a>
-          </h2>
-          {% if row.latest %}
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy shrink-0">
-              v{{ row.latest.version }}
-            </span>
-          {% endif %}
-        </div>
-
-        {% if row.latest.description %}
-          <p class="text-sm text-brand-text/70 mt-3 line-clamp-2">{{ row.latest.description }}</p>
-        {% endif %}
-
-        <div class="flex items-center justify-between mt-auto pt-4 text-xs text-brand-text/60">
-          <span>Updated {{ row.form.updated_at|date:"M j, Y" }}</span>
-        </div>
-
-        <div class="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-brand-light/60">
-          <a href="{% url 'forms_builder:version_list' pk=row.form.pk %}"
-             class="btn btn-ghost btn-xs text-brand-navy">View</a>
-          <a href="{% url 'forms_builder:form_update' pk=row.form.pk %}"
-             class="btn btn-ghost btn-xs text-brand-navy">Edit</a>
-          <a href="{% url 'forms_builder:form_delete' pk=row.form.pk %}"
-             class="btn btn-ghost btn-xs text-error">Delete</a>
-        </div>
-      </div>
-    {% endfor %}
-  </div>
-{% else %}
-  {% url 'forms_builder:form_create' as create_url %}
-  {% include "_components/empty_state.html" with title="No forms yet" body="Create a form to start collecting structured data in your projects." cta_href=create_url cta_label="Create form" %}
-{% endif %}
+  {% include "_components/empty_state.html" with title="Coming soon" body="Forms are on the way. Check back later." %}
 {% endblock %}

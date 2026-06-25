@@ -596,14 +596,27 @@ def _task_status_context(task, *, project_member, is_project_manager):
 def _respond_status_block(request, task, *, project_member, is_project_manager):
     """Render the status block for HTMX, or redirect to the task for full GETs."""
     if request.headers.get("HX-Request"):
-        return render(
-            request,
-            "tasks/partials/task_status_block.html",
-            _task_status_context(
-                task, project_member=project_member, is_project_manager=is_project_manager
-            ),
+        pane_mode = request.POST.get("pane_mode") == "1"
+        ctx = _task_status_context(
+            task, project_member=project_member, is_project_manager=is_project_manager
         )
+        ctx["pane_mode"] = pane_mode
+        return render(request, "tasks/partials/task_status_block.html", ctx)
     return redirect("tasks:detail", project_pk=task.project_id, pk=task.pk)
+
+
+class TaskStatusBlockView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """GET endpoint that re-renders the status block partial (e.g. after edits)."""
+
+    def get(self, request, *args, **kwargs):
+        pane_mode = request.GET.get("pane") == "1"
+        ctx = _task_status_context(
+            self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+        ctx["pane_mode"] = pane_mode
+        return render(request, "tasks/partials/task_status_block.html", ctx)
 
 
 class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):

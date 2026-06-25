@@ -20,6 +20,20 @@
     color: rgb(31 41 99 / 0.8);
   }
 
+  .proj-grid {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+  }
+  @media (max-width: 768px) {
+    .proj-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  @media (max-width: 480px) {
+    .proj-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .task-pane-backdrop {
     position: fixed; inset: 0; z-index: 40;
     background: rgba(0, 0, 0, 0.18);
@@ -84,19 +98,18 @@
      @close-task-pane.document="closePane()"
      @keydown.escape.window="closePane()">
 
-<div class="flex flex-col gap-5" x-data="{ selected: null }">
+<div x-data="{ selected: null }">
 
-  {# ── Stat bar ── #}
-  <div class="flex flex-row flex-wrap gap-4">
+  <div class="proj-grid grid gap-4">
+
+    {# ── Stat cards (row 1) ── #}
     <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
-         style="flex: 1 1 140px"
          @click="selected = selected === 'tasks' ? null : 'tasks'"
          :class="selected === 'tasks' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Tasks</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ task_count }}</span>
     </div>
     <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
-         style="flex: 1 1 140px"
          @click="selected = selected === 'overdue' ? null : 'overdue'"
          :class="selected === 'overdue' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
@@ -104,21 +117,104 @@
     </div>
     {% if user_privilege == "PROJECT_MANAGER" %}
     <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
-         style="flex: 1 1 140px"
          @click="selected = selected === 'join-requests' ? null : 'join-requests'"
          :class="selected === 'join-requests' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Join requests</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ pending_join_request_count }}</span>
     </div>
+    {% else %}
+    <div></div>
     {% endif %}
     <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
-         style="flex: 1 1 140px"
          @click="selected = selected === 'contributors' ? null : 'contributors'"
          :class="selected === 'contributors' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Contributors</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ contributor_count }}</span>
     </div>
-  </div>
+
+    {# ── Content row 2: single full-width column ── #}
+    <div class="flex flex-col gap-4" style="grid-column: 1 / -1">
+
+  {# ── About ── #}
+  <section class="brand-card p-6" aria-labelledby="proj-about-heading">
+    <h2 id="proj-about-heading" class="text-lg font-semibold text-brand-navy mb-3">About</h2>
+      {% if project.abstract %}
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-2">Abstract</h3>
+        <p class="whitespace-pre-line text-sm text-brand-text mt-1">{{ project.abstract }}</p>
+      {% endif %}
+      {% if project.description %}
+        <div class="mt-4" id="proj-desc-wrapper">
+          <p class="whitespace-pre-line text-sm text-brand-text line-clamp-3" id="proj-desc-text">{{ project.description }}</p>
+          <button type="button"
+                  id="proj-desc-toggle"
+                  class="text-brand-text/50 hover:text-brand-text hover:underline text-sm mt-1 hidden"
+                  onclick="(function(){
+                    var p = document.getElementById('proj-desc-text');
+                    var btn = document.getElementById('proj-desc-toggle');
+                    if (p.classList.contains('line-clamp-3')) {
+                      p.classList.remove('line-clamp-3');
+                      btn.textContent = 'Show less';
+                    } else {
+                      p.classList.add('line-clamp-3');
+                      btn.textContent = 'Read more';
+                    }
+                  })()">Read more</button>
+        </div>
+        <script>
+          (function () {
+            var p = document.getElementById('proj-desc-text');
+            var btn = document.getElementById('proj-desc-toggle');
+            if (p.scrollHeight > p.clientHeight) { btn.classList.remove('hidden'); }
+          })();
+        </script>
+      {% endif %}
+      {% if project.keywords %}
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Keywords</h3>
+        <p class="text-sm text-brand-text/80 mt-1">{{ project.keywords }}</p>
+      {% endif %}
+      {% if not project.abstract and not project.description and not project.keywords %}
+        <p class="text-sm text-brand-text/60">No description yet.</p>
+      {% endif %}
+  </section>
+
+  {# ── Contributors ── #}
+  <section class="brand-card p-5" aria-labelledby="proj-contributors-heading"
+           x-show="selected === null || selected === 'contributors'"
+           x-cloak>
+    <div class="flex items-center justify-between mb-4">
+      <h2 id="proj-contributors-heading" class="section-heading flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+        </svg>
+        Contributors
+      </h2>
+      <a href="{% url 'projects:members' pk=project.pk %}" class="btn btn-sm btn-ghost">View all</a>
+    </div>
+    {% if members %}
+      {% if project_leads %}
+        <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">
+          {% if project_leads|length > 1 %}Project Leads{% else %}Project Lead{% endif %}
+        </h3>
+        <ul class="space-y-1 mb-3">
+          {% for m in project_leads %}
+            {% include "projects/partials/member_list_item.html" with m=m %}
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if regular_members %}
+        <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">Members</h3>
+        <ul class="space-y-1">
+          {% for m in regular_members %}
+            {% include "projects/partials/member_list_item.html" with m=m %}
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% else %}
+      <p class="text-sm text-brand-text/60 italic">No contributors yet.</p>
+    {% endif %}
+  </section>
 
   {# ── Tasks ── #}
   <section class="brand-card p-5" aria-labelledby="proj-tasks-heading"
@@ -136,7 +232,7 @@
       </h2>
       {% if is_project_manager %}
         <div class="flex items-center gap-2">
-          <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-sm btn-ghost">View all tasks</a>
+          <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-sm btn-ghost">View board</a>
           {% if has_kanban_columns %}
             <button type="button"
                     class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
@@ -154,7 +250,7 @@
           {% endif %}
         </div>
       {% else %}
-        <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-sm btn-ghost">View all tasks</a>
+        <a href="{% url 'tasks:board' project_pk=project.pk %}" class="btn btn-sm btn-ghost">View board</a>
       {% endif %}
     </div>
 
@@ -285,86 +381,9 @@
   </section>
   {% endif %}
 
-  {# ── Contributors ── #}
-  <section class="brand-card p-5" aria-labelledby="proj-contributors-heading"
-           x-show="selected === null || selected === 'contributors'"
-           x-cloak>
-    <div class="flex items-center justify-between mb-4">
-      <h2 id="proj-contributors-heading" class="section-heading flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-        </svg>
-        Contributors
-      </h2>
-      <a href="{% url 'projects:members' pk=project.pk %}" class="btn btn-sm btn-ghost">View all contributors</a>
     </div>
-    {% if members %}
-      {% if project_leads %}
-        <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">
-          {% if project_leads|length > 1 %}Project Leads{% else %}Project Lead{% endif %}
-        </h3>
-        <ul class="space-y-1 mb-3">
-          {% for m in project_leads %}
-            {% include "projects/partials/member_list_item.html" with m=m %}
-          {% endfor %}
-        </ul>
-      {% endif %}
-      {% if regular_members %}
-        <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">Members</h3>
-        <ul class="space-y-1">
-          {% for m in regular_members %}
-            {% include "projects/partials/member_list_item.html" with m=m %}
-          {% endfor %}
-        </ul>
-      {% endif %}
-    {% else %}
-      <p class="text-sm text-brand-text/60 italic">No contributors yet.</p>
-    {% endif %}
-  </section>
 
-  {# ── About ── #}
-  <div class="brand-card p-6">
-    <h2 class="text-lg font-semibold text-brand-navy mb-3">About</h2>
-      {% if project.abstract %}
-        <h3 class="text-sm font-semibold text-brand-navy/80 mt-2">Abstract</h3>
-        <p class="whitespace-pre-line text-sm text-brand-text mt-1">{{ project.abstract }}</p>
-      {% endif %}
-      {% if project.description %}
-        <div class="mt-4" id="proj-desc-wrapper">
-          <p class="whitespace-pre-line text-sm text-brand-text line-clamp-3" id="proj-desc-text">{{ project.description }}</p>
-          <button type="button"
-                  id="proj-desc-toggle"
-                  class="text-brand-text/50 hover:text-brand-text hover:underline text-sm mt-1 hidden"
-                  onclick="(function(){
-                    var p = document.getElementById('proj-desc-text');
-                    var btn = document.getElementById('proj-desc-toggle');
-                    if (p.classList.contains('line-clamp-3')) {
-                      p.classList.remove('line-clamp-3');
-                      btn.textContent = 'Show less';
-                    } else {
-                      p.classList.add('line-clamp-3');
-                      btn.textContent = 'Read more';
-                    }
-                  })()">Read more</button>
-        </div>
-        <script>
-          (function () {
-            var p = document.getElementById('proj-desc-text');
-            var btn = document.getElementById('proj-desc-toggle');
-            if (p.scrollHeight > p.clientHeight) { btn.classList.remove('hidden'); }
-          })();
-        </script>
-      {% endif %}
-      {% if project.keywords %}
-        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Keywords</h3>
-        <p class="text-sm text-brand-text/80 mt-1">{{ project.keywords }}</p>
-      {% endif %}
-      {% if not project.abstract and not project.description and not project.keywords %}
-        <p class="text-sm text-brand-text/60">No description yet.</p>
-      {% endif %}
-    </div>
+  </div>{# end grid #}
 
 </div>{# end x-data selected #}
 

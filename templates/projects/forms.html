@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Forms &mdash; {{ project.name }}{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6">
+    <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">{{ project.name }}</p>
+    <h1 class="page-title font-semibold text-brand-navy leading-tight">Forms</h1>
+  </header>
+{% endblock %}
+
+{% block content %}
+{% include "_components/empty_state.html" with title="Coming soon" body="Forms are on the way. Check back later." %}
+{% endblock %}
