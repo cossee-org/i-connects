@@ -70,7 +70,7 @@
   <header class="mb-6">
     <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">{{ project.name }}</p>
     <h1 class="page-title font-semibold text-brand-navy leading-tight">Tasks</h1>
-    <div class="flex flex-wrap gap-2 mt-3">
+    <div class="flex flex-wrap gap-2 mt-3 justify-end">
       <button type="button" x-data class="btn btn-ghost btn-sm"
               @click="$store.board.toggle()"
               x-text="$store.board.viewMode === 'board' ? 'View as list' : 'View as board'">
