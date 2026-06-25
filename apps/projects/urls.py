@@ -29,6 +29,21 @@ urlpatterns = [
         name="members",
     ),
     path(
+        "projects/<int:pk>/contribution-tracking/",
+        views.ContributionTrackingView.as_view(),
+        name="contribution_tracking",
+    ),
+    path(
+        "projects/<int:pk>/wiki/",
+        views.WikiView.as_view(),
+        name="wiki",
+    ),
+    path(
+        "projects/<int:pk>/forms/",
+        views.ProjectFormsView.as_view(),
+        name="project_forms",
+    ),
+    path(
         "projects/<int:pk>/members/<int:member_pk>/privilege/",
         views.UpdateMemberPrivilegeView.as_view(),
         name="update_privilege",

@@ -147,7 +147,12 @@ class TaskForm(forms.ModelForm):
                 "maxlength": "255",
                 "@input": "nameCharCount = $event.target.value.length",
             }),
-            "description": forms.Textarea(attrs={"class": _daisy_textarea, "rows": 4}),
+            "description": forms.Textarea(attrs={
+                "class": _daisy_textarea,
+                "rows": 4,
+                "maxlength": "5000",
+                "@input": "descCharCount = $event.target.value.length",
+            }),
             "container": forms.Select(attrs={"class": _daisy_select}),
             "assigned_members": MemberMultiSelect(),
             "reviewers": MemberMultiSelect(),

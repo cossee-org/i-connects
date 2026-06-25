@@ -15,7 +15,6 @@
     <h1 class="page-title font-semibold text-brand-navy leading-tight">
       Pending join requests
     </h1>
-    <p class="text-sm text-brand-text/70 mt-1">Approve or decline people who want to join this project.</p>
   </header>
 {% endblock %}
 
@@ -51,10 +50,14 @@
               </td>
               <td class="text-sm text-brand-text/70">{{ jr.created_at|date:"Y-m-d H:i" }}</td>
               <td class="text-right">
-                <a href="{% url 'projects:review_join_request' pk=project.pk join_request_pk=jr.pk %}"
-                   class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+                <button type="button"
+                        class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                        hx-get="{% url 'projects:review_join_request' pk=project.pk join_request_pk=jr.pk %}"
+                        hx-target="#review-modal-body"
+                        hx-swap="innerHTML"
+                        onclick="document.getElementById('review-modal').showModal()">
                   Review
-                </a>
+                </button>
               </td>
             </tr>
           {% endfor %}
@@ -65,4 +68,8 @@
 {% else %}
   {% include "_components/empty_state.html" with title="No pending requests" body="When someone asks to join this project, they will appear here." %}
 {% endif %}
+
+<dialog id="review-modal" class="modal" aria-label="Review join request">
+  <div id="review-modal-body"><!-- filled by HTMX --></div>
+</dialog>
 {% endblock %}

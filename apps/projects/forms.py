@@ -35,7 +35,7 @@ class ProjectForm(forms.ModelForm):
                 attrs={
                     "class": "textarea textarea-sm textarea-bordered w-full",
                     "rows": 4,
-                    "maxlength": "350",
+                    "maxlength": "2500",
                     "@input": "charCount = $event.target.value.length",
                 }
             ),

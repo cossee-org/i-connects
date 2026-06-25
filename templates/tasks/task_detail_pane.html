@@ -15,17 +15,6 @@
                 d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
         </svg>
       </a>
-      {% include "_components/status_badge.html" with status=task.container.name %}
-      {% if task.deadline %}
-        <span class="inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-               stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-          {{ task.deadline|date:"M j, Y" }}
-        </span>
-      {% endif %}
     </div>
     <div class="flex items-center gap-1 shrink-0">
       {% if is_project_manager %}
@@ -56,7 +45,7 @@
   </div>
 
   {# ── Body ── #}
-  <div class="px-5 py-5 space-y-5">
+  <div class="px-5 pt-5 pb-12 space-y-5">
 
     {# ── Section 1: Title + Description ── #}
     <h2 class="text-lg font-semibold text-brand-navy leading-snug mt-3">{{ task.name }}</h2>
@@ -69,10 +58,18 @@
       <p class="text-sm text-brand-text/50 italic">No description.</p>
     {% endif %}
 
+    {# Status #}
     {# Completion status #}
-    {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done %}
+    {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
 
     {# ── Section 2: People + Meta ── #}
+
+    {% if task.deadline %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Due date</h3>
+        <p class="text-sm text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</p>
+      </div>
+    {% endif %}
 
     {% if task.start_date %}
       <div>
@@ -81,12 +78,11 @@
       </div>
     {% endif %}
 
-    {% if task.deadline %}
-      <div>
-        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Due date</h3>
-        <p class="text-sm text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</p>
-      </div>
-    {% endif %}
+    {# Status #}
+    <div>
+      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Status</h3>
+      <p class="text-sm text-brand-navy font-medium">{{ task.container.name }}</p>
+    </div>
 
     {% if task.milestone %}
       <div>

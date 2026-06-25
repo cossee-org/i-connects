@@ -42,8 +42,13 @@
       </div>
     </div>
 
-    <div class="md:col-span-2">
+    <div class="md:col-span-2"
+         x-data="{ descCharCount: {{ form.description.value|default:''|length }} }">
       {% include "_components/form_field.html" with field=form.description %}
+      <p class="text-xs text-brand-text/50 -mt-2 mb-3 text-left"
+         :class="descCharCount > 5000 ? 'text-error' : ''">
+        <span x-text="descCharCount"></span> / 5000
+      </p>
     </div>
 
     {# Status and Completion mode — same row, no bounding box #}

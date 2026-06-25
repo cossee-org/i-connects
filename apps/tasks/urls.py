@@ -78,6 +78,11 @@ urlpatterns = [
         name="undo",
     ),
     path(
+        "tasks/<int:pk>/status-block/",
+        views.TaskStatusBlockView.as_view(),
+        name="status_block",
+    ),
+    path(
         "tasks/<int:pk>/close/",
         views.TaskCloseView.as_view(),
         name="close",
