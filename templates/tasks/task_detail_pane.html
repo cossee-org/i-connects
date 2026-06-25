@@ -62,13 +62,14 @@
     {# Completion status #}
     {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
 
-    {# Status #}
-    <div>
-      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Status</h3>
-      <p class="text-sm text-brand-navy font-medium">{{ task.container.name }}</p>
-    </div>
-
     {# ── Section 2: People + Meta ── #}
+
+    {% if task.deadline %}
+      <div>
+        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Due date</h3>
+        <p class="text-sm text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</p>
+      </div>
+    {% endif %}
 
     {% if task.start_date %}
       <div>
@@ -77,12 +78,11 @@
       </div>
     {% endif %}
 
-    {% if task.deadline %}
-      <div>
-        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Due date</h3>
-        <p class="text-sm text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</p>
-      </div>
-    {% endif %}
+    {# Status #}
+    <div>
+      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Status</h3>
+      <p class="text-sm text-brand-navy font-medium">{{ task.container.name }}</p>
+    </div>
 
     {% if task.milestone %}
       <div>
