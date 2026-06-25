@@ -5,8 +5,7 @@
           onclick="document.getElementById('invite-modal').close()"
           aria-label="Close">&times;</button>
 
-  <h3 class="font-bold text-lg text-brand-navy mb-1">Invite someone to {{ project.name }}</h3>
-  <p class="text-sm text-brand-text/70 mb-4">Search for an existing i&bull;CONNECTS user below.</p>
+  <h3 class="font-bold text-lg text-brand-navy mb-4">Invite someone to {{ project.name }}</h3>
 
   <form method="post"
         action="{% url 'projects:invite' pk=project.pk %}"
