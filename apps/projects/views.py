@@ -758,6 +758,12 @@ class WikiView(
     template_name = "projects/wiki.html"
 
 
+class ProjectFormsView(
+    ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
+):
+    template_name = "projects/forms.html"
+
+
 class ProjectInvitationListView(
     ProjectManagerRequiredMixin, ProjectContextMixin, ListView
 ):

@@ -39,6 +39,11 @@ urlpatterns = [
         name="wiki",
     ),
     path(
+        "projects/<int:pk>/forms/",
+        views.ProjectFormsView.as_view(),
+        name="project_forms",
+    ),
+    path(
         "projects/<int:pk>/members/<int:member_pk>/privilege/",
         views.UpdateMemberPrivilegeView.as_view(),
         name="update_privilege",
