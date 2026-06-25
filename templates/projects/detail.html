@@ -20,6 +20,17 @@
     color: rgb(31 41 99 / 0.8);
   }
 
+  .proj-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  @media (max-width: 768px) {
+    .proj-grid {
+      grid-template-columns: 1fr;
+    }
+    .proj-grid-left  { grid-column: span 1 !important; }
+    .proj-grid-right { grid-column: span 1 !important; }
+  }
+
   .task-pane-backdrop {
     position: fixed; inset: 0; z-index: 40;
     background: rgba(0, 0, 0, 0.18);
@@ -84,19 +95,18 @@
      @close-task-pane.document="closePane()"
      @keydown.escape.window="closePane()">
 
-<div class="flex flex-col gap-5" x-data="{ selected: null }">
+<div x-data="{ selected: null }">
 
-  {# ── Stat bar ── #}
-  <div class="flex flex-row flex-wrap gap-4">
+  <div class="proj-grid grid gap-4">
+
+    {# ── Stat cards (row 1) ── #}
     <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
-         style="flex: 1 1 140px"
          @click="selected = selected === 'tasks' ? null : 'tasks'"
          :class="selected === 'tasks' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Tasks</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ task_count }}</span>
     </div>
     <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
-         style="flex: 1 1 140px"
          @click="selected = selected === 'overdue' ? null : 'overdue'"
          :class="selected === 'overdue' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
@@ -104,17 +114,17 @@
     </div>
     {% if user_privilege == "PROJECT_MANAGER" %}
     <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
-         style="flex: 1 1 140px"
          @click="selected = selected === 'join-requests' ? null : 'join-requests'"
          :class="selected === 'join-requests' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
       <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Join requests</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ pending_join_request_count }}</span>
     </div>
+    {% else %}
+    <div></div>
     {% endif %}
-  </div>
 
-  <div class="flex flex-col lg:flex-row gap-5 items-start">
-    <div class="flex flex-col gap-5 flex-1 min-w-0">
+    {# ── Content row 2: left spans 2 cols, right spans 1 col ── #}
+    <div class="proj-grid-left flex flex-col gap-4" style="grid-column: span 2">
 
   {# ── Tasks ── #}
   <section class="brand-card p-5" aria-labelledby="proj-tasks-heading"
@@ -282,7 +292,7 @@
   {% endif %}
 
     </div>
-    <div class="flex flex-col gap-5 flex-none" style="width: 33.333%">
+    <div class="proj-grid-right flex flex-col gap-4">
 
   {# ── About ── #}
   <section class="brand-card p-6" aria-labelledby="proj-about-heading">
@@ -364,7 +374,8 @@
   </section>
 
     </div>
-  </div>
+
+  </div>{# end grid #}
 
 </div>{# end x-data selected #}
 
