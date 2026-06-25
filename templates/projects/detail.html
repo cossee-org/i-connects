@@ -115,10 +115,6 @@
       <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ overdue_count }}</span>
     </div>
-    <div class="brand-card p-4 flex flex-col gap-1">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Contributors</span>
-      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ contributor_count }}</span>
-    </div>
     {% if user_privilege == "PROJECT_MANAGER" %}
     <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
          @click="selected = selected === 'join-requests' ? null : 'join-requests'"
@@ -129,9 +125,14 @@
     {% else %}
     <div></div>
     {% endif %}
+    <a href="{% url 'projects:members' pk=project.pk %}"
+       class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow hover:ring-1 hover:ring-brand-navy/20">
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Contributors</span>
+      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ contributor_count }}</span>
+    </a>
 
     {# ── Content row 2: single full-width column ── #}
-    <div class="flex flex-col gap-4" style="grid-column: span 4">
+    <div class="flex flex-col gap-4" style="grid-column: 1 / -1">
 
   {# ── About ── #}
   <section class="brand-card p-6" aria-labelledby="proj-about-heading">
