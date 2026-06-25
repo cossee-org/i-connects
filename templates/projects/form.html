@@ -60,13 +60,13 @@
   {% if object %}
     <div class="brand-card p-6 border-error/40">
       <h2 class="text-lg font-semibold text-brand-navy mb-4">Deletion and archiving</h2>
-      <p class="text-sm text-brand-text/70 mb-4">
+      <p class="text-xs text-brand-text/60 mb-4">
         Archive this project to hide it from active lists while keeping its data,
         or permanently delete it to remove the project and everything in it.
       </p>
       <div class="flex flex-wrap gap-2 justify-end">
-        <button type="button" class="btn btn-outline" disabled title="Archiving is coming soon">Archive project</button>
-        <a href="{% url 'projects:delete' pk=object.pk %}" class="btn btn-outline btn-error">Permanently delete project</a>
+        <button type="button" class="btn btn-sm btn-outline" disabled title="Archiving is coming soon">Archive project</button>
+        <a href="{% url 'projects:delete' pk=object.pk %}" class="btn btn-sm btn-outline btn-error">Permanently delete project</a>
       </div>
     </div>
   {% endif %}
