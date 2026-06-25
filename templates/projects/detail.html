@@ -118,12 +118,11 @@
       <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Contributors</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ contributor_count }}</span>
     </div>
-    <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
+    <div class="brand-card p-4 flex flex-col items-center justify-center cursor-pointer transition-shadow"
          style="flex: 1 1 140px"
          @click="selected = selected === 'about' ? null : 'about'"
          :class="selected === 'about' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">About</span>
-      <span class="stat-number text-3xl font-bold text-brand-navy self-end">&mdash;</span>
+      <span class="stat-number text-2xl font-bold text-brand-navy">About</span>
     </div>
   </div>
 
@@ -335,7 +334,7 @@
   <section class="brand-card p-6" aria-labelledby="proj-about-heading"
            x-show="selected === null || selected === 'about'"
            x-cloak>
-    <h2 id="proj-about-heading" class="text-2xl font-bold text-brand-navy text-center mb-4">About</h2>
+    <h2 id="proj-about-heading" class="text-lg font-semibold text-brand-navy mb-3">About</h2>
       {% if project.abstract %}
         <h3 class="text-sm font-semibold text-brand-navy/80 mt-2">Abstract</h3>
         <p class="whitespace-pre-line text-sm text-brand-text mt-1">{{ project.abstract }}</p>
