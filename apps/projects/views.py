@@ -746,6 +746,18 @@ class ProjectMemberListView(
         return context
 
 
+class ContributionTrackingView(
+    ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
+):
+    template_name = "projects/contribution_tracking.html"
+
+
+class WikiView(
+    ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
+):
+    template_name = "projects/wiki.html"
+
+
 class ProjectInvitationListView(
     ProjectManagerRequiredMixin, ProjectContextMixin, ListView
 ):

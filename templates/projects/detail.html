@@ -95,22 +95,9 @@
      @close-task-pane.document="closePane()"
      @keydown.escape.window="closePane()">
 
-<div x-data="{ selected: null, tab: 'overview' }">
+<div x-data="{ selected: null }">
 
-  {# ── Tab navigation ── #}
-  <div class="flex gap-1 border-b border-brand-light mb-4">
-    <button @click="tab = 'overview'"
-            :class="tab === 'overview' ? 'border-b-2 border-brand-coral text-brand-coral font-semibold' : 'text-brand-text/60 hover:text-brand-navy'"
-            class="px-4 py-2 text-sm transition-colors -mb-px">Overview</button>
-    <button @click="tab = 'contribution-tracking'"
-            :class="tab === 'contribution-tracking' ? 'border-b-2 border-brand-coral text-brand-coral font-semibold' : 'text-brand-text/60 hover:text-brand-navy'"
-            class="px-4 py-2 text-sm transition-colors -mb-px">Contribution Tracking</button>
-    <button @click="tab = 'wiki'"
-            :class="tab === 'wiki' ? 'border-b-2 border-brand-coral text-brand-coral font-semibold' : 'text-brand-text/60 hover:text-brand-navy'"
-            class="px-4 py-2 text-sm transition-colors -mb-px">Wiki</button>
-  </div>
-
-  <div class="proj-grid grid gap-4" x-show="tab === 'overview'" x-cloak>
+  <div class="proj-grid grid gap-4">
 
     {# ── Stat cards (row 1) ── #}
     <div class="brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow"
@@ -390,17 +377,7 @@
 
   </div>{# end grid #}
 
-  {# ── Contribution Tracking tab ── #}
-  <div x-show="tab === 'contribution-tracking'" x-cloak class="brand-card p-10 flex flex-col items-center justify-center gap-2 text-center min-h-[12rem]">
-    <p class="text-sm text-brand-text/50 italic">Contribution Tracking coming soon.</p>
-  </div>
-
-  {# ── Wiki tab ── #}
-  <div x-show="tab === 'wiki'" x-cloak class="brand-card p-10 flex flex-col items-center justify-center gap-2 text-center min-h-[12rem]">
-    <p class="text-sm text-brand-text/50 italic">Wiki coming soon.</p>
-  </div>
-
-</div>{# end x-data #}
+</div>{# end x-data selected #}
 
 <dialog id="task-modal" class="modal" aria-label="Task editor">
   <div class="modal-box max-w-2xl bg-base-100 border border-brand-light/60">
