@@ -16,6 +16,6 @@ class TaskImportForm(forms.Form):
         ),
         help_text=(
             "Columns: name (required), description, deadline (YYYY-MM-DD), "
-            "contribution_type, column, assignee_emails (comma-separated)."
+            "contribution_type, column, assignee_emails (comma-separated), priority."
         ),
     )

@@ -1,9 +1,12 @@
 {# Single task card. Draggable between columns; click opens the side pane. #}
 <li data-task-id="{{ task.pk }}"
     id="task-card-{{ task.pk }}"
-    class="task-card brand-card p-3 hover:shadow-md cursor-pointer mb-2 bg-white"
+    class="task-card brand-card p-3 hover:shadow-md cursor-pointer mb-2 bg-white{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
     @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
 
+  {% if task.is_priority %}
+    <div class="mb-1">{% include "_components/priority_flag.html" %}</div>
+  {% endif %}
   <span class="font-medium text-brand-navy text-sm leading-tight block">{{ task.name }}</span>
 
   {% if task.description %}

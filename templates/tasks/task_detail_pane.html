@@ -50,6 +50,10 @@
     {# ── Section 1: Title + Description ── #}
     <h2 class="text-lg font-semibold text-brand-navy leading-snug mt-3">{{ task.name }}</h2>
 
+    {% if task.is_priority %}
+      <div>{% include "_components/priority_flag.html" %}</div>
+    {% endif %}
+
     {% if task.description %}
       <div class="prose prose-sm max-w-none text-brand-text">
         {{ task.description|linebreaks }}

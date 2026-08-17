@@ -33,7 +33,7 @@
                 {% endif %}
 
                 {# Task content card #}
-                <div class="brand-card flex-1 flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors min-w-0"
+                <div class="brand-card flex-1 flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors min-w-0{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
                      @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
 
                   {# Name + description #}
@@ -43,6 +43,11 @@
                       <span class="text-xs text-brand-text/55 line-clamp-1 mt-0.5 block">{{ task.description }}</span>
                     {% endif %}
                   </div>
+
+                  {# High priority flag #}
+                  {% if task.is_priority %}
+                    <span class="shrink-0">{% include "_components/priority_flag.html" %}</span>
+                  {% endif %}
 
                   {# Due date #}
                   {% if task.deadline %}

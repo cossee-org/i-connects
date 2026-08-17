@@ -153,6 +153,16 @@
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
 
+    <div class="md:col-span-2 mb-3">
+      <label class="label cursor-pointer justify-start gap-2 py-0" for="{{ form.is_priority.id_for_label }}">
+        {{ form.is_priority }}
+        <span class="label-text text-sm text-brand-navy font-medium">{{ form.is_priority.label }}</span>
+      </label>
+      {% if form.is_priority.errors %}
+        <span class="label-text-alt text-error">{{ form.is_priority.errors|join:" " }}</span>
+      {% endif %}
+    </div>
+
     <div class="md:col-span-2">
       {% include "_components/form_field.html" with field=form.assigned_members %}
     </div>

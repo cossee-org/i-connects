@@ -140,6 +140,7 @@ class TaskForm(forms.ModelForm):
             "deadline",
             "contribution_type",
             "completion_mode",
+            "is_priority",
         ]
         widgets = {
             "name": forms.TextInput(attrs={
@@ -158,6 +159,7 @@ class TaskForm(forms.ModelForm):
             "reviewers": MemberMultiSelect(),
             "contribution_type": forms.Select(attrs={"class": _daisy_select}),
             "completion_mode": forms.Select(attrs={"class": _daisy_select}),
+            "is_priority": forms.CheckboxInput(attrs={"class": "checkbox checkbox-sm"}),
         }
 
     def __init__(self, *args, project=None, **kwargs):
@@ -168,6 +170,7 @@ class TaskForm(forms.ModelForm):
         self.fields["reviewers"].label = "Reviewers"
         self.fields["completion_mode"].label = "Completion mode"
         self.fields["deadline"].label = "Due date"
+        self.fields["is_priority"].label = "Mark as high priority"
         self.fields["container"].label = "Status"
         self.fields["container"].required = True
         # Prompt text shown for the unselected (blank) choice.
