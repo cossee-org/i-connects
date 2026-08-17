@@ -52,10 +52,6 @@
   </div>
 </div>
 
-{% if not calendar_has_tasks and calendar_view != 'day' %}
-  {% include "_components/empty_state.html" with title="No dated tasks in this range" body="Tasks show up here once they have a start date or deadline set." %}
-{% endif %}
-
 {% if calendar_view == 'year' %}
   {% include "tasks/partials/calendar_year.html" %}
 {% elif calendar_view == 'week' %}
