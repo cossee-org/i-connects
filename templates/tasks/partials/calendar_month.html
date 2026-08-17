@@ -1,4 +1,8 @@
 {# Full month grid — included by task_calendar_view.html when calendar_view == 'month'. #}
+{# Each week is {"days": [...7 CalendarDay...], "lanes": [[bar, ...], ...]}: `lanes` are #}
+{# lane-stacked range bars (tasks with both start_date and deadline, spanning >1 day), #}
+{# rendered as a full-width strip above that week's day cells; `days[].tasks` are #}
+{# single-day tasks, rendered as pills inside their own cell. #}
 <div class="grid grid-cols-7 gap-px bg-brand-light/40 border border-brand-light/60 rounded-lg overflow-hidden text-xs">
   <div class="bg-brand-lighter px-2 py-1.5 font-semibold text-brand-text/60 uppercase tracking-wide">Mon</div>
   <div class="bg-brand-lighter px-2 py-1.5 font-semibold text-brand-text/60 uppercase tracking-wide">Tue</div>
@@ -9,7 +13,19 @@
   <div class="bg-brand-lighter px-2 py-1.5 font-semibold text-brand-text/60 uppercase tracking-wide">Sun</div>
 
   {% for week in calendar_weeks %}
-    {% for day in week %}
+    {% if week.lanes %}
+      <div class="col-span-7 bg-white px-1.5 pt-1 flex flex-col gap-1">
+        {% for lane in week.lanes %}
+          <div class="grid grid-cols-7 gap-x-1">
+            {% for bar in lane %}
+              {% include "tasks/partials/calendar_range_bar.html" %}
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% for day in week.days %}
       <div class="bg-white min-h-[7rem] px-1.5 py-1.5 flex flex-col gap-1 {% if not day.in_current_month %}bg-brand-lighter/50{% endif %}">
         <button type="button"
                 class="text-[11px] font-medium self-start {% if day.is_today %}inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-coral text-white{% elif not day.in_current_month %}text-brand-text/30{% else %}text-brand-text/70{% endif %}"

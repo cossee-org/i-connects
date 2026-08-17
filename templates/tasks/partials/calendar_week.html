@@ -1,28 +1,47 @@
 {# Week view — 7 day columns with full task pills — included by task_calendar_view.html when calendar_view == 'week'. #}
-<div class="grid grid-cols-1 sm:grid-cols-7 gap-px bg-brand-light/40 border border-brand-light/60 rounded-lg overflow-hidden text-xs">
-  {% for day in calendar_week_days %}
-    <div class="bg-white min-h-[16rem] px-2 py-2 flex flex-col gap-1.5">
-      <button type="button"
-              class="text-left mb-1"
-              hx-get="{{ calendar_url }}?view=day&date={{ day.date|date:'Y-m-d' }}"
-              hx-target="#calendar-view-container" hx-swap="innerHTML">
-        <span class="block text-[10px] uppercase tracking-wide text-brand-text/50">{{ day.date|date:"D" }}</span>
-        <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-sm font-medium {% if day.is_today %}bg-brand-coral text-white{% else %}text-brand-navy hover:bg-brand-lighter{% endif %}">
-          {{ day.date.day }}
-        </span>
-      </button>
-
-      {% for task in day.tasks %}
-        <div class="brand-card px-2 py-1.5 cursor-pointer hover:bg-brand-lighter transition-colors{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
-             @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
-          <span class="text-brand-navy block truncate">{{ task.name }}</span>
-          <span class="text-brand-text/50 text-[10px]">
-            {% if task.deadline %}Due {{ task.deadline|date:"g:i A" }}{% elif task.start_date %}Starts {{ task.start_date|date:"g:i A" }}{% endif %}
-          </span>
+{# `calendar_week.lanes` are lane-stacked range bars (tasks spanning >1 day) shown as a #}
+{# horizontal strip above the day columns; `days[].tasks` are single-day tasks, shown as #}
+{# pills within their own day column. #}
+<div class="border border-brand-light/60 rounded-lg overflow-hidden bg-white text-xs">
+  {% if calendar_week.lanes %}
+    <div class="px-2 pt-2 pb-1.5 flex flex-col gap-1 border-b border-brand-light/40">
+      {% for lane in calendar_week.lanes %}
+        <div class="grid grid-cols-7 gap-x-1">
+          {% for bar in lane %}
+            {% include "tasks/partials/calendar_range_bar.html" %}
+          {% endfor %}
         </div>
-      {% empty %}
-        <p class="text-brand-text/35 text-[11px]">No dated tasks.</p>
       {% endfor %}
     </div>
-  {% endfor %}
+  {% endif %}
+
+  <div class="grid grid-cols-1 sm:grid-cols-7 gap-px bg-brand-light/40">
+    {% for day in calendar_week.days %}
+      <div class="bg-white min-h-[16rem] px-2 py-2 flex flex-col gap-1.5">
+        <button type="button"
+                class="text-left mb-1"
+                hx-get="{{ calendar_url }}?view=day&date={{ day.date|date:'Y-m-d' }}"
+                hx-target="#calendar-view-container" hx-swap="innerHTML">
+          <span class="block text-[10px] uppercase tracking-wide text-brand-text/50">{{ day.date|date:"D" }}</span>
+          <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-sm font-medium {% if day.is_today %}bg-brand-coral text-white{% else %}text-brand-navy hover:bg-brand-lighter{% endif %}">
+            {{ day.date.day }}
+          </span>
+        </button>
+
+        {% for task in day.tasks %}
+          <div class="brand-card px-2 py-1.5 cursor-pointer hover:bg-brand-lighter transition-colors{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
+               @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
+            <span class="text-brand-navy block truncate">{{ task.name }}</span>
+            <span class="text-brand-text/50 text-[10px]">
+              {% if task.deadline %}Due {{ task.deadline|date:"g:i A" }}{% elif task.start_date %}Starts {{ task.start_date|date:"g:i A" }}{% endif %}
+            </span>
+          </div>
+        {% empty %}
+          {% if not calendar_week.lanes %}
+            <p class="text-brand-text/35 text-[11px]">No dated tasks.</p>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
 </div>

@@ -1,28 +1,35 @@
 {# Day view — agenda-style list for a single date — included by task_calendar_view.html when calendar_view == 'day'. #}
+{# `calendar_day_tasks` is a list of DayAgendaItem: {task, is_range, range_start, range_end}. #}
 {% if calendar_day_tasks %}
   <ul class="flex flex-col gap-2">
-    {% for task in calendar_day_tasks %}
-      <li class="brand-card flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
-          @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
+    {% for item in calendar_day_tasks %}
+      <li class="brand-card flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors{% if item.task.is_priority %} border-l-2 border-l-error{% endif %}"
+          @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=item.task.pk %}' })">
 
         <div class="flex-1 min-w-0">
-          <span class="font-medium text-brand-navy block leading-snug">{{ task.name }}</span>
-          {% if task.description %}
-            <span class="text-xs text-brand-text/55 line-clamp-1 mt-0.5 block">{{ task.description }}</span>
+          <span class="font-medium text-brand-navy block leading-snug">{{ item.task.name }}</span>
+          {% if item.task.description %}
+            <span class="text-xs text-brand-text/55 line-clamp-1 mt-0.5 block">{{ item.task.description }}</span>
           {% endif %}
         </div>
 
-        {% if task.is_priority %}
+        {% if item.task.is_priority %}
           <span class="shrink-0">{% include "_components/priority_flag.html" %}</span>
         {% endif %}
 
         <span class="hidden sm:inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0">
-          {% if task.deadline %}Due {{ task.deadline|date:"g:i A" }}{% elif task.start_date %}Starts {{ task.start_date|date:"g:i A" }}{% endif %}
+          {% if item.is_range %}
+            {{ item.range_start|date:"M j" }} – {{ item.range_end|date:"M j" }}
+          {% elif item.task.deadline %}
+            Due {{ item.task.deadline|date:"g:i A" }}
+          {% elif item.task.start_date %}
+            Starts {{ item.task.start_date|date:"g:i A" }}
+          {% endif %}
         </span>
 
-        {% if task.assigned_members.all %}
+        {% if item.task.assigned_members.all %}
           <div class="flex -space-x-1.5 shrink-0" aria-hidden="true">
-            {% for m in task.assigned_members.all|slice:":4" %}
+            {% for m in item.task.assigned_members.all|slice:":4" %}
               <div class="w-6 h-6 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold ring-1 ring-white"
                    title="{{ m }}">
                 {{ m|stringformat:"s"|slice:":1"|upper }}

@@ -111,14 +111,16 @@ def _calendar_context(request, project) -> dict:
             day.tasks for month in months for week in month["weeks"] for day in week
         )
     elif view == "week":
-        week_days = build_week_grid(anchor, tasks)
-        context["calendar_week_days"] = week_days
-        start, end = week_days[0].date, week_days[-1].date
+        week = build_week_grid(anchor, tasks)
+        context["calendar_week"] = week
+        start, end = week["days"][0].date, week["days"][-1].date
         if start.month == end.month:
             context["calendar_label"] = f"{_fmt_short(start)}–{end.day}, {end.year}"
         else:
             context["calendar_label"] = f"{_fmt_short(start)} – {_fmt_short(end)}, {end.year}"
-        context["calendar_has_tasks"] = any(day.tasks for day in week_days)
+        context["calendar_has_tasks"] = bool(week["lanes"]) or any(
+            day.tasks for day in week["days"]
+        )
     elif view == "day":
         day_tasks = build_day_tasks(anchor, tasks)
         context["calendar_day_tasks"] = day_tasks
@@ -129,7 +131,10 @@ def _calendar_context(request, project) -> dict:
         weeks = build_month_grid(anchor.year, anchor.month, tasks)
         context["calendar_weeks"] = weeks
         context["calendar_label"] = anchor.strftime("%B %Y")
-        context["calendar_has_tasks"] = any(day.tasks for week in weeks for day in week)
+        context["calendar_has_tasks"] = any(
+            bool(week["lanes"]) or any(day.tasks for day in week["days"])
+            for week in weeks
+        )
 
     return context
 
