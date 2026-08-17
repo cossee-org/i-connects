@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import datetime
-
 import pytest
 from django.urls import reverse
-from django.utils import timezone
 
 from apps.audit.models import AuditAction, AuditLog
 from apps.core.enums import JoinRequestStatus, MemberPrivileges, ProjectStatus
@@ -692,59 +689,3 @@ def test_members_page_disables_self_controls_for_last_pm(client, user):
     assert response.status_code == 200
     content = response.content.decode()
     assert "A project must always have at least one Project Manager." in content
-
-
-@pytest.mark.django_db
-def test_my_list_stat_cards_counts_and_filtering(client_logged_in, user, other_user):
-    from apps.tasks.models import KanbanBoard, Task
-
-    project_with_activity = create_project_with_owner(
-        user=user,
-        form_data={"name": "Has Activity", "status": ProjectStatus.ACTIVE, "is_public": True},
-    )
-    project_without_activity = create_project_with_owner(
-        user=user,
-        form_data={"name": "No Activity", "status": ProjectStatus.ACTIVE, "is_public": True},
-    )
-
-    member = ProjectMember.objects.filter(project=project_with_activity, users=user).first()
-    col = KanbanBoard.objects.create(
-        project=project_with_activity, name="Todo", container_order=0
-    )
-    task = Task.objects.create(
-        project=project_with_activity,
-        created_by=member,
-        container=col,
-        container_task_order=0,
-        name="Overdue task",
-        deadline=timezone.now() - datetime.timedelta(days=1),
-    )
-    task.assigned_members.add(member)
-
-    JoinRequest.objects.create(
-        project=project_with_activity, user=other_user, status=JoinRequestStatus.PENDING
-    )
-    Invitation.objects.create(
-        project=project_with_activity,
-        email="invitee@test.com",
-        privilege=MemberPrivileges.CONTRIBUTOR,
-        added_by=user.email,
-        invitation_code="test-code-123",
-    )
-
-    response = client_logged_in.get(reverse("projects:my_list"))
-    assert response.status_code == 200
-    assert response.context["open_task_count"] == 1
-    assert response.context["overdue_count"] == 1
-    assert response.context["join_request_count"] == 1
-    assert response.context["invitation_count"] == 1
-    # Both projects show up with no card filter applied.
-    assert {p.name for p in response.context["projects"]} == {
-        "Has Activity",
-        "No Activity",
-    }
-
-    for card in ("open_tasks", "overdue", "join_requests", "invitations"):
-        filtered = client_logged_in.get(reverse("projects:my_list"), {"card": card})
-        names = [p.name for p in filtered.context["projects"]]
-        assert names == ["Has Activity"], f"card={card} unexpectedly returned {names}"

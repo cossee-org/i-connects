@@ -40,15 +40,7 @@ _STATUS_LABELS = {
     "INACTIVE": "inactive",
 }
 
-_CARD_LABELS = {
-    "open_tasks": "with open tasks",
-    "overdue": "with overdue tasks",
-    "join_requests": "with pending join requests",
-    "invitations": "with pending invitations",
-}
-
-
-def _build_results_summary(count, q, status, sort, visibility=None, card=None):
+def _build_results_summary(count, q, status, sort, visibility=None):
     """Return a human-readable results summary string, or None if no filters active."""
     parts = []
     if visibility:
@@ -59,13 +51,10 @@ def _build_results_summary(count, q, status, sort, visibility=None, card=None):
         desc = " ".join(parts) + " projects"
     else:
         desc = "projects"
-    card_label = _CARD_LABELS.get(card)
-    if card_label:
-        desc += f" {card_label}"
     if q:
         desc += f' matching “{q}”'
     sort_label = _SORT_LABELS.get(sort)
-    has_filters = bool(q or status or visibility or sort_label or card_label)
+    has_filters = bool(q or status or visibility or sort_label)
     if not has_filters:
         return None, count
     n = f"{count} result{'s' if count != 1 else ''}"
@@ -334,81 +323,12 @@ class MyProjectListView(LoginRequiredMixin, ListView):
     }
     _VALID_PER_PAGE = {6, 12, 24, 48}
 
-    _CARD_KEYS = ("open_tasks", "overdue", "join_requests", "invitations")
-
     def get_paginate_by(self, queryset):
         try:
             per_page = int(self.request.GET.get("per_page", self.paginate_by))
         except (TypeError, ValueError):
             per_page = self.paginate_by
         return per_page if per_page in self._VALID_PER_PAGE else self.paginate_by
-
-    def _compute_card_data(self, user):
-        """Counts + matching project IDs for the My Projects stat cards.
-
-        Cached on ``self`` because ``get_queryset`` and ``get_context_data``
-        both need it within the same request.
-        """
-        if hasattr(self, "_card_data"):
-            return self._card_data
-
-        from django.db.models import OuterRef, Q, Subquery
-        from django.utils import timezone
-        from apps.core.enums import TaskStatus
-        from apps.tasks.models import Task, TaskLog
-
-        now = timezone.now()
-
-        # Tasks assigned to the user, excluding ones they've already marked
-        # complete via their own TaskLog (mirrors DashboardView).
-        user_member_qs = ProjectMember.objects.filter(users=user)
-        latest_log_status = Subquery(
-            TaskLog.objects.filter(
-                task=OuterRef("pk"),
-                assigned_to__in=user_member_qs,
-            )
-            .order_by("-created_at")
-            .values("status")[:1]
-        )
-        active_tasks = (
-            Task.objects.filter(
-                assigned_members__users=user,
-                status=TaskStatus.NOT_COMPLETED,
-            )
-            .annotate(_user_log_status=latest_log_status)
-            # NULL-safe: see the identical comment in DashboardView.
-            .filter(Q(_user_log_status__isnull=True) | ~Q(_user_log_status=TaskStatus.COMPLETED))
-            .distinct()
-        )
-        overdue_tasks = active_tasks.filter(deadline__lt=now)
-
-        # Join requests / invitations are scoped to projects the user manages,
-        # since My Projects only lists projects the user already belongs to.
-        pm_project_ids = list(
-            ProjectPrivilege.objects.filter(
-                user=user, privilege=MemberPrivileges.PROJECT_MANAGER
-            ).values_list("project_id", flat=True)
-        )
-        pending_join_requests = JoinRequest.objects.filter(
-            project_id__in=pm_project_ids, status=JoinRequestStatus.PENDING
-        )
-        pending_invitations = Invitation.objects.filter(project_id__in=pm_project_ids)
-
-        self._card_data = {
-            "open_task_project_ids": set(active_tasks.values_list("project_id", flat=True)),
-            "open_task_count": active_tasks.count(),
-            "overdue_project_ids": set(overdue_tasks.values_list("project_id", flat=True)),
-            "overdue_count": overdue_tasks.count(),
-            "join_request_project_ids": set(
-                pending_join_requests.values_list("project_id", flat=True)
-            ),
-            "join_request_count": pending_join_requests.count(),
-            "invitation_project_ids": set(
-                pending_invitations.values_list("project_id", flat=True)
-            ),
-            "invitation_count": pending_invitations.count(),
-        }
-        return self._card_data
 
     def get_queryset(self):
         from django.db.models import Q
@@ -432,16 +352,6 @@ class MyProjectListView(LoginRequiredMixin, ListView):
                 | Q(privileges__user__family_name__icontains=q)
                 | Q(privileges__user__email__icontains=q)
             ).distinct()
-        card = self.request.GET.get("card", "")
-        if card in self._CARD_KEYS:
-            card_data = self._compute_card_data(user)
-            card_project_id_keys = {
-                "open_tasks": "open_task_project_ids",
-                "overdue": "overdue_project_ids",
-                "join_requests": "join_request_project_ids",
-                "invitations": "invitation_project_ids",
-            }
-            qs = qs.filter(id__in=card_data[card_project_id_keys[card]])
         sort = self.request.GET.get("sort", "newest")
         order = self._SORT_MAP.get(sort, "-created_at")
         return qs.order_by(order)
@@ -500,9 +410,6 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
 
-        current_card = self.request.GET.get("card", "")
-        context["current_card"] = current_card
-
         total = context["paginator"].count
         context["total_project_count"] = (
             Project.objects.filter(privileges__user=user).distinct().count()
@@ -513,29 +420,7 @@ class MyProjectListView(LoginRequiredMixin, ListView):
             context["current_status"],
             context["current_sort"],
             context["current_visibility"],
-            current_card,
         )
-
-        # --- Stat cards (Open tasks / Overdue / Join requests / Invitations) ---
-        card_data = self._compute_card_data(user)
-        context["open_task_count"] = card_data["open_task_count"]
-        context["overdue_count"] = card_data["overdue_count"]
-        context["join_request_count"] = card_data["join_request_count"]
-        context["invitation_count"] = card_data["invitation_count"]
-
-        base_params = self.request.GET.copy()
-        base_params.pop("page", None)
-        base_params.pop("card", None)
-        base_qs = base_params.urlencode()
-        path = self.request.path
-
-        def _card_href(key):
-            if current_card == key:
-                return f"{path}?{base_qs}" if base_qs else path
-            sep = "&" if base_qs else ""
-            return f"{path}?{base_qs}{sep}card={key}"
-
-        context["card_hrefs"] = {key: _card_href(key) for key in self._CARD_KEYS}
 
         return context
 
