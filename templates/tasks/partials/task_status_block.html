@@ -47,8 +47,10 @@
           {% endif %}
         {% endif %}
 
-        {# Project Lead: finalise the task. TEAM mode can close any time;
-           INDIVIDUAL mode only once every assignee has marked their part. #}
+        {% comment %}
+          Project Lead: finalise the task. TEAM mode can close any time;
+          INDIVIDUAL mode only once every assignee has marked their part.
+        {% endcomment %}
         {% if can_close %}
           <button class="btn btn-sm btn-primary"
                   hx-post="{% url 'tasks:close' pk=task.pk %}"
