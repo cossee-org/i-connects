@@ -25,7 +25,13 @@ def sidebar_counts(request):
         status=JoinRequestStatus.PENDING,
     ).count()
 
+    my_join_requests_count = JoinRequest.objects.filter(
+        user=request.user,
+        status=JoinRequestStatus.PENDING,
+    ).count()
+
     return {
         "sidebar_pending_invitations": pending_invitations_count,
         "sidebar_incoming_join_requests": incoming_join_requests_count,
+        "sidebar_my_join_requests": my_join_requests_count,
     }
