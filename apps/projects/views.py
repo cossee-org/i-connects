@@ -40,7 +40,6 @@ _STATUS_LABELS = {
     "INACTIVE": "inactive",
 }
 
-
 def _build_results_summary(count, q, status, sort, visibility=None):
     """Return a human-readable results summary string, or None if no filters active."""
     parts = []
@@ -159,7 +158,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 status=TaskStatus.NOT_COMPLETED,
             )
             .annotate(_user_log_status=latest_log_status)
-            .exclude(_user_log_status=TaskStatus.COMPLETED)
+            # NULL-safe: a task with no TaskLog yet has _user_log_status=NULL,
+            # and `exclude(_user_log_status=COMPLETED)` would silently drop it
+            # too (NOT (NULL = COMPLETED) is NULL/false in SQL), so it must be
+            # explicitly kept.
+            .filter(Q(_user_log_status__isnull=True) | ~Q(_user_log_status=TaskStatus.COMPLETED))
             .select_related("project", "container")
             .order_by("deadline", "id")
             .distinct()
@@ -418,62 +421,6 @@ class MyProjectListView(LoginRequiredMixin, ListView):
             context["current_sort"],
             context["current_visibility"],
         )
-
-        # --- Dashboard widgets (Ultra Plan §A3) ---------------------------
-        # Late-import to keep the projects app free of a hard task dep.
-        from django.db.models import OuterRef, Subquery
-        from apps.core.enums import TaskStatus
-        from apps.tasks.models import Task, TaskLog
-
-        user_member_qs = ProjectMember.objects.filter(users=user)
-
-        # Subquery: status of the user's most-recent log for each task.
-        # If it's COMPLETED the user already marked their part done, so the
-        # task should not appear in "active" even though Task.status is still
-        # NOT_COMPLETED (it stays that way until a PM closes it).
-        latest_log_status = Subquery(
-            TaskLog.objects.filter(
-                task=OuterRef("pk"),
-                assigned_to__in=user_member_qs,
-            )
-            .order_by("-created_at")
-            .values("status")[:1]
-        )
-
-        all_active_tasks = list(
-            Task.objects.filter(
-                assigned_members__users=user,
-                status=TaskStatus.NOT_COMPLETED,
-            )
-            .annotate(_user_log_status=latest_log_status)
-            .exclude(_user_log_status=TaskStatus.COMPLETED)
-            .select_related("project", "container")
-            .order_by("deadline", "id")
-            .distinct()
-        )
-        context["my_active_tasks"] = all_active_tasks[:5]
-        context["my_active_tasks_all"] = all_active_tasks
-
-        # Pending approvals — only meaningful if the user is a PM somewhere.
-        pm_project_ids = [
-            pid for pid, priv in privs_map.items()
-            if priv == MemberPrivileges.PROJECT_MANAGER
-        ]
-        if pm_project_ids:
-            all_pending_approvals = list(
-                TaskLog.objects.filter(
-                    status=TaskStatus.COMPLETED,
-                    approved__isnull=True,
-                    task__project_id__in=pm_project_ids,
-                )
-                .select_related("task", "task__project", "assigned_to")
-                .order_by("-created_at")
-            )
-            context["pending_approvals"] = all_pending_approvals[:5]
-            context["pending_approvals_all"] = all_pending_approvals
-        else:
-            context["pending_approvals"] = []
-            context["pending_approvals_all"] = []
 
         return context
 
