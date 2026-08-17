@@ -25,6 +25,11 @@ urlpatterns = [
         views.BoardKanbanPartialView.as_view(),
         name="board_kanban",
     ),
+    path(
+        "projects/<int:project_pk>/board/calendar/",
+        views.BoardCalendarPartialView.as_view(),
+        name="board_calendar",
+    ),
     # Task CRUD (project-scoped)
     path(
         "projects/<int:project_pk>/tasks/new/",

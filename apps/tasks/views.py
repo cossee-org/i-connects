@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import io
 import json
+from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Max, Min, ProtectedError
+from django.db.models import Max, Min, ProtectedError, Q
 from django.http import (
     Http404,
     HttpResponse,
@@ -22,6 +23,7 @@ from django.http import (
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import resolve, reverse, Resolver404
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.text import slugify
 from urllib.parse import urlparse
@@ -39,6 +41,7 @@ from apps.audit.services import AuditAction, log_action
 from apps.comments.forms import CommentForm
 from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
+from apps.tasks.calendar import build_month_grid, shift_month
 from apps.tasks.forms import (
     KanbanBoardForm,
     MilestoneForm,
@@ -72,6 +75,37 @@ from apps.tasks.services import (
 # ---------------------------------------------------------------------------
 
 
+def _parse_month_param(request) -> tuple[int, int]:
+    """Parse ``?month=YYYY-MM`` from the request, defaulting to today."""
+    today = timezone.localdate()
+    raw = request.GET.get("month")
+    if raw:
+        try:
+            year_str, month_str = raw.split("-")
+            return int(year_str), int(month_str)
+        except (ValueError, TypeError):
+            pass
+    return today.year, today.month
+
+
+def _calendar_context(request, project) -> dict:
+    year, month = _parse_month_param(request)
+    tasks = Task.objects.filter(project=project).filter(
+        Q(deadline__isnull=False) | Q(start_date__isnull=False)
+    ).prefetch_related("assigned_members")
+    prev_year, prev_month = shift_month(year, month, -1)
+    next_year, next_month = shift_month(year, month, 1)
+    weeks = build_month_grid(year, month, tasks)
+    return {
+        "calendar_weeks": weeks,
+        "calendar_has_tasks": any(day.tasks for week in weeks for day in week),
+        "calendar_month_label": date(year, month, 1).strftime("%B %Y"),
+        "calendar_prev": f"{prev_year:04d}-{prev_month:02d}",
+        "calendar_next": f"{next_year:04d}-{next_month:02d}",
+        "calendar_current": f"{year:04d}-{month:02d}",
+    }
+
+
 class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
     """Main kanban board for a project."""
 
@@ -85,6 +119,7 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
             .order_by("container_order")
         )
         context["columns"] = columns
+        context.update(_calendar_context(self.request, self.project))
         return context
 
 
@@ -115,6 +150,21 @@ class BoardKanbanPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateVi
             .prefetch_related("tasks__assigned_members")
             .order_by("container_order")
         )
+        return context
+
+
+class BoardCalendarPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
+    """HTMX partial that renders the calendar view section for a given month.
+
+    Only tasks with ``deadline`` and/or ``start_date`` set are included —
+    tasks missing both calendar fields never reach the template.
+    """
+
+    template_name = "tasks/task_calendar_view.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(_calendar_context(self.request, self.project))
         return context
 
 

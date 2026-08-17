@@ -1,0 +1,54 @@
+{# Calendar view partial — included in board.html inside x-show="$store.board.viewMode === 'calendar'". #}
+{# Only tasks with `deadline` and/or `start_date` set are passed in (filtered server-side); tasks with neither field never appear here. #}
+
+<div class="flex items-center justify-between mb-4">
+  <h2 class="text-lg font-semibold text-brand-navy">{{ calendar_month_label }}</h2>
+  <div class="flex items-center gap-1">
+    <button type="button" class="btn btn-ghost btn-sm" aria-label="Previous month"
+            hx-get="{% url 'tasks:board_calendar' project_pk=project.pk %}?month={{ calendar_prev }}"
+            hx-target="#calendar-view-container" hx-swap="innerHTML">
+      &laquo; Prev
+    </button>
+    <button type="button" class="btn btn-ghost btn-sm" aria-label="Next month"
+            hx-get="{% url 'tasks:board_calendar' project_pk=project.pk %}?month={{ calendar_next }}"
+            hx-target="#calendar-view-container" hx-swap="innerHTML">
+      Next &raquo;
+    </button>
+  </div>
+</div>
+
+{% if not calendar_has_tasks %}
+  {% include "_components/empty_state.html" with title="No dated tasks this month" body="Tasks show up here once they have a start date or deadline set." %}
+{% endif %}
+
+<div class="grid grid-cols-7 gap-px bg-brand-light/40 border border-brand-light/60 rounded-lg overflow-hidden text-xs">
+  <div class="bg-brand-lighter px-2 py-1.5 font-semibold text-brand-text/60 uppercase tracking-wide">Mon</div>
+  <div class="bg-brand-lighter px-2 py-1.5 font-semibold text-brand-text/60 uppercase tracking-wide">Tue</div>
+  <div class="bg-brand-lighter px-2 py-1.5 font-semibold text-brand-text/60 uppercase tracking-wide">Wed</div>
+  <div class="bg-brand-lighter px-2 py-1.5 font-semibold text-brand-text/60 uppercase tracking-wide">Thu</div>
+  <div class="bg-brand-lighter px-2 py-1.5 font-semibold text-brand-text/60 uppercase tracking-wide">Fri</div>
+  <div class="bg-brand-lighter px-2 py-1.5 font-semibold text-brand-text/60 uppercase tracking-wide">Sat</div>
+  <div class="bg-brand-lighter px-2 py-1.5 font-semibold text-brand-text/60 uppercase tracking-wide">Sun</div>
+
+  {% for week in calendar_weeks %}
+    {% for day in week %}
+      <div class="bg-white min-h-[7rem] px-1.5 py-1.5 flex flex-col gap-1 {% if not day.in_current_month %}bg-brand-lighter/50{% endif %}">
+        <span class="text-[11px] font-medium {% if day.is_today %}inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-coral text-white{% elif not day.in_current_month %}text-brand-text/30{% else %}text-brand-text/70{% endif %}">
+          {{ day.date.day }}
+        </span>
+
+        {% for task in day.tasks|slice:":3" %}
+          <div class="brand-card px-1.5 py-1 cursor-pointer hover:bg-brand-lighter transition-colors truncate{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
+               title="{{ task.name }}"
+               @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
+            <span class="text-brand-navy truncate block">{{ task.name }}</span>
+          </div>
+        {% endfor %}
+
+        {% if day.tasks|length > 3 %}
+          <span class="text-[11px] text-brand-text/50 px-1.5">+{{ day.tasks|length|add:"-3" }} more</span>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% endfor %}
+</div>

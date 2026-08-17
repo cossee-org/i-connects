@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone as dt_timezone
+
 import pytest
 from django.urls import reverse
 
@@ -9,6 +11,7 @@ from apps.audit.models import AuditAction, AuditLog
 from apps.core.enums import MemberPrivileges, ProjectStatus, TaskStatus
 from apps.projects.models import ProjectMember, ProjectPrivilege
 from apps.projects.services import create_project_with_owner
+from apps.tasks.calendar import build_month_grid, clamp_month
 from apps.tasks.models import KanbanBoard, Task, TaskLog
 from apps.tasks.services import approve_completion, complete_task
 
@@ -524,3 +527,96 @@ def test_team_mode_lead_closes_for_everyone(client, user, other_user):
     assert task.status == TaskStatus.COMPLETED
     # Every assignee ends up done.
     assert task.all_assignees_done
+
+
+@pytest.mark.django_db
+def test_board_calendar_only_shows_tasks_with_calendar_fields(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Dated",
+        deadline=datetime(2026, 3, 15, tzinfo=dt_timezone.utc),
+    )
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=1,
+        name="Undated",
+    )
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"month": "2026-03"},
+    )
+    assert response.status_code == 200
+    assert b"Dated" in response.content
+    assert b"Undated" not in response.content
+
+
+@pytest.mark.django_db
+def test_board_calendar_requires_member_access(client, user, other_user):
+    project, _col1, _col2 = _make_project_with_board(user)
+    client.force_login(other_user)
+    response = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk})
+    )
+    assert response.status_code == 403
+
+
+def test_build_month_grid_buckets_task_on_its_deadline_date():
+    class FakeTask:
+        def __init__(self, name, deadline=None, start_date=None):
+            self.name = name
+            self.deadline = deadline
+            self.start_date = start_date
+
+    task = FakeTask("A", deadline=datetime(2026, 3, 15, tzinfo=dt_timezone.utc))
+    weeks = build_month_grid(2026, 3, [task])
+    matches = [
+        day for week in weeks for day in week if day.date.day == 15 and day.in_current_month
+    ]
+    assert len(matches) == 1
+    assert matches[0].tasks == [task]
+
+
+def test_build_month_grid_falls_back_to_start_date():
+    class FakeTask:
+        def __init__(self, name, deadline=None, start_date=None):
+            self.name = name
+            self.deadline = deadline
+            self.start_date = start_date
+
+    task = FakeTask("B", start_date=datetime(2026, 3, 3, tzinfo=dt_timezone.utc))
+    weeks = build_month_grid(2026, 3, [task])
+    matches = [day for week in weeks for day in week if day.date.day == 3]
+    assert matches[0].tasks == [task]
+
+
+def test_clamp_month_rolls_into_next_year():
+    assert clamp_month(2026, 13) == (2027, 1)
+    assert clamp_month(2026, 0) == (2025, 12)
+
+
+@pytest.mark.django_db
+def test_board_full_page_renders_calendar_section(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Full page dated task",
+        deadline=datetime.now(dt_timezone.utc),
+    )
+    client.force_login(user)
+    response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
+    assert response.status_code == 200
+    assert b"View as calendar" in response.content
+    assert b"calendar-view-container" in response.content
+    assert b"Full page dated task" in response.content
