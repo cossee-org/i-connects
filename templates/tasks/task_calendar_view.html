@@ -11,6 +11,13 @@
             hx-target="#calendar-view-container" hx-swap="innerHTML">
       Today
     </button>
+    {% if is_project_manager and calendar_view != 'year' and calendar_view != 'day' %}
+      <button type="button" class="btn btn-ghost btn-xs"
+              :class="{ 'btn-active': rangeSelect }"
+              @click="toggleRangeSelect()">
+        <span x-text="rangeSelect ? (rangeStart ? 'Pick the end date…' : 'Pick the start date…') : 'Select dates'"></span>
+      </button>
+    {% endif %}
   </div>
 
   <div class="flex items-center gap-2">

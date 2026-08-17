@@ -229,6 +229,11 @@
     return {
       paneOpen: false,
       _dragging: false,
+      // Calendar date-range picker: click a start day, then an end day, to
+      // open the new-task form pre-filled with that span. Nothing is
+      // created until the user fills in the form and saves it.
+      rangeSelect: false,
+      rangeStart: null,
       init() {
         var params = new URLSearchParams(window.location.search);
         var openTask = params.get('open_task');
@@ -245,6 +250,24 @@
       },
       closePane() {
         this.paneOpen = false;
+      },
+      toggleRangeSelect() {
+        this.rangeSelect = !this.rangeSelect;
+        this.rangeStart = null;
+      },
+      pickRangeDate(dateStr) {
+        if (!this.rangeStart) {
+          this.rangeStart = dateStr;
+          return;
+        }
+        var start = this.rangeStart;
+        var end = dateStr;
+        if (end < start) { var tmp = start; start = end; end = tmp; }
+        this.rangeSelect = false;
+        this.rangeStart = null;
+        var url = '{% url "tasks:create" project_pk=project.pk %}?start_date=' + start + '&deadline=' + end;
+        htmx.ajax('GET', url, { target: '#task-modal-body', swap: 'innerHTML' });
+        document.getElementById('task-modal').showModal();
       }
     };
   }

@@ -115,16 +115,24 @@ class TaskForm(forms.ModelForm):
     from a column can pre-fill it without surfacing the field in the UI.
     """
 
+    # datetime-local inputs require the HTML5 "YYYY-MM-DDTHH:MM" format for
+    # both the value they submit and the value they're pre-filled with;
+    # Django's default DATETIME_INPUT_FORMATS is space-separated, which the
+    # browser silently rejects (the field just renders blank).
     deadline = forms.DateTimeField(
         required=False,
+        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"],
         widget=forms.DateTimeInput(
-            attrs={"type": "datetime-local", "class": _daisy_input}
+            attrs={"type": "datetime-local", "class": _daisy_input},
+            format="%Y-%m-%dT%H:%M",
         ),
     )
     start_date = forms.DateTimeField(
         required=False,
+        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"],
         widget=forms.DateTimeInput(
-            attrs={"type": "datetime-local", "class": _daisy_input}
+            attrs={"type": "datetime-local", "class": _daisy_input},
+            format="%Y-%m-%dT%H:%M",
         ),
     )
 

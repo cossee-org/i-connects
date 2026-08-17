@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+from datetime import datetime, time
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -23,6 +24,7 @@ from django.http import (
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import resolve, reverse, Resolver404
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.text import slugify
 from urllib.parse import urlparse
@@ -223,6 +225,20 @@ class TaskCreateView(
             first = KanbanBoard.objects.filter(project=self.project).order_by("container_order").first()
             if first:
                 initial["container"] = first.pk
+
+        # A date range picked on the calendar view (?start_date=&deadline=,
+        # both YYYY-MM-DD) pre-fills the new task's span; the user still
+        # fills in the rest and saves — nothing is created automatically.
+        start_date_param = parse_date(self.request.GET.get("start_date") or "")
+        if start_date_param:
+            initial["start_date"] = timezone.make_aware(
+                datetime.combine(start_date_param, time.min)
+            )
+        deadline_param = parse_date(self.request.GET.get("deadline") or "")
+        if deadline_param:
+            initial["deadline"] = timezone.make_aware(
+                datetime.combine(deadline_param, time(23, 59))
+            )
         return initial
 
     def form_valid(self, form):

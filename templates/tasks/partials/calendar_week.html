@@ -18,12 +18,21 @@
   <div class="grid grid-cols-1 sm:grid-cols-7 gap-px bg-brand-light/40">
     {% for day in calendar_week.days %}
       <div class="bg-white min-h-[16rem] px-2 py-2 flex flex-col gap-1.5">
-        <button type="button"
+        <button type="button" x-show="!rangeSelect"
                 class="text-left mb-1"
                 hx-get="{{ calendar_url }}?view=day&date={{ day.date|date:'Y-m-d' }}"
                 hx-target="#calendar-view-container" hx-swap="innerHTML">
           <span class="block text-[10px] uppercase tracking-wide text-brand-text/50">{{ day.date|date:"D" }}</span>
           <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-sm font-medium {% if day.is_today %}bg-brand-coral text-white{% else %}text-brand-navy hover:bg-brand-lighter{% endif %}">
+            {{ day.date.day }}
+          </span>
+        </button>
+        <button type="button" x-show="rangeSelect" x-cloak
+                @click="pickRangeDate('{{ day.date|date:'Y-m-d' }}')"
+                class="text-left mb-1">
+          <span class="block text-[10px] uppercase tracking-wide text-brand-text/50">{{ day.date|date:"D" }}</span>
+          <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-sm font-medium {% if day.is_today %}bg-brand-coral text-white{% else %}text-brand-navy hover:bg-brand-lighter{% endif %}"
+                :class="{ 'ring-2 ring-brand-coral': rangeStart === '{{ day.date|date:'Y-m-d' }}' }">
             {{ day.date.day }}
           </span>
         </button>
