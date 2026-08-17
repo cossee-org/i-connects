@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import io
 import json
+from datetime import datetime, time
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Max, Min, ProtectedError
+from django.db.models import Max, Min, ProtectedError, Q
 from django.http import (
     Http404,
     HttpResponse,
@@ -22,6 +23,8 @@ from django.http import (
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import resolve, reverse, Resolver404
+from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.text import slugify
 from urllib.parse import urlparse
@@ -39,6 +42,15 @@ from apps.audit.services import AuditAction, log_action
 from apps.comments.forms import CommentForm
 from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
+from apps.tasks.calendar import (
+    VIEWS as CALENDAR_VIEWS,
+    build_day_tasks,
+    build_month_grid,
+    build_week_grid,
+    build_year_grid,
+    parse_view_date,
+    shift_date,
+)
 from apps.tasks.forms import (
     KanbanBoardForm,
     MilestoneForm,
@@ -72,6 +84,52 @@ from apps.tasks.services import (
 # ---------------------------------------------------------------------------
 
 
+def _fmt_short(d) -> str:
+    return f"{d.strftime('%b')} {d.day}"
+
+
+def _calendar_context(request, project) -> dict:
+    view = request.GET.get("view", "month")
+    if view not in CALENDAR_VIEWS:
+        view = "month"
+    anchor = parse_view_date(request.GET.get("date"))
+    tasks = Task.objects.filter(project=project).filter(
+        Q(deadline__isnull=False) | Q(start_date__isnull=False)
+    ).prefetch_related("assigned_members")
+
+    context = {
+        "calendar_view": view,
+        "calendar_date": anchor.isoformat(),
+        "calendar_prev_date": shift_date(view, anchor, -1).isoformat(),
+        "calendar_next_date": shift_date(view, anchor, 1).isoformat(),
+        "calendar_today_date": timezone.localdate().isoformat(),
+    }
+
+    if view == "year":
+        months = build_year_grid(anchor.year, tasks)
+        context["calendar_year_months"] = months
+        context["calendar_label"] = str(anchor.year)
+    elif view == "week":
+        week = build_week_grid(anchor, tasks)
+        context["calendar_week"] = week
+        start, end = week["days"][0].date, week["days"][-1].date
+        if start.month == end.month:
+            context["calendar_label"] = f"{_fmt_short(start)}–{end.day}, {end.year}"
+        else:
+            context["calendar_label"] = f"{_fmt_short(start)} – {_fmt_short(end)}, {end.year}"
+    elif view == "day":
+        day_tasks = build_day_tasks(anchor, tasks)
+        context["calendar_day_tasks"] = day_tasks
+        context["calendar_day_date"] = anchor
+        context["calendar_label"] = f"{anchor.strftime('%A, %B')} {anchor.day}, {anchor.year}"
+    else:
+        weeks = build_month_grid(anchor.year, anchor.month, tasks)
+        context["calendar_weeks"] = weeks
+        context["calendar_label"] = anchor.strftime("%B %Y")
+
+    return context
+
+
 class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
     """Main kanban board for a project."""
 
@@ -85,6 +143,7 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
             .order_by("container_order")
         )
         context["columns"] = columns
+        context.update(_calendar_context(self.request, self.project))
         return context
 
 
@@ -115,6 +174,21 @@ class BoardKanbanPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateVi
             .prefetch_related("tasks__assigned_members")
             .order_by("container_order")
         )
+        return context
+
+
+class BoardCalendarPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
+    """HTMX partial that renders the calendar view section for a given month.
+
+    Only tasks with ``deadline`` and/or ``start_date`` set are included —
+    tasks missing both calendar fields never reach the template.
+    """
+
+    template_name = "tasks/task_calendar_view.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(_calendar_context(self.request, self.project))
         return context
 
 
@@ -151,6 +225,20 @@ class TaskCreateView(
             first = KanbanBoard.objects.filter(project=self.project).order_by("container_order").first()
             if first:
                 initial["container"] = first.pk
+
+        # A date range picked on the calendar view (?start_date=&deadline=,
+        # both YYYY-MM-DD) pre-fills the new task's span; the user still
+        # fills in the rest and saves — nothing is created automatically.
+        start_date_param = parse_date(self.request.GET.get("start_date") or "")
+        if start_date_param:
+            initial["start_date"] = timezone.make_aware(
+                datetime.combine(start_date_param, time.min)
+            )
+        deadline_param = parse_date(self.request.GET.get("deadline") or "")
+        if deadline_param:
+            initial["deadline"] = timezone.make_aware(
+                datetime.combine(deadline_param, time(23, 59))
+            )
         return initial
 
     def form_valid(self, form):

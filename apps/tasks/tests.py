@@ -2,13 +2,28 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timezone as dt_timezone
+
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.audit.models import AuditAction, AuditLog
 from apps.core.enums import MemberPrivileges, ProjectStatus, TaskStatus
 from apps.projects.models import ProjectMember, ProjectPrivilege
 from apps.projects.services import create_project_with_owner
+from apps.tasks.calendar import (
+    bucket_tasks_by_day,
+    build_day_tasks,
+    build_month_grid,
+    build_week_grid,
+    build_year_grid,
+    clamp_month,
+    parse_view_date,
+    shift_date,
+    task_range,
+)
+from apps.tasks.forms import TaskForm
 from apps.tasks.models import KanbanBoard, Task, TaskLog
 from apps.tasks.services import approve_completion, complete_task
 
@@ -334,6 +349,46 @@ def test_create_form_defaults_is_priority_false(client, user):
 
 
 @pytest.mark.django_db
+def test_create_form_prefills_dates_from_calendar_range_params(client, user):
+    # A date range picked on the calendar view opens the create form with
+    # ?start_date=&deadline= (YYYY-MM-DD) — the form should pre-fill both
+    # fields, all-day style (start at 00:00, deadline at 23:59), without
+    # creating anything until the user saves.
+    project, _col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        {"start_date": "2026-03-10", "deadline": "2026-03-12"},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'name="start_date"' in content
+    assert 'value="2026-03-10T00:00"' in content
+    assert 'value="2026-03-12T23:59"' in content
+    assert not Task.objects.filter(project=project).exists()
+
+
+@pytest.mark.django_db
+def test_create_form_ignores_invalid_calendar_range_params(client, user):
+    project, _col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        {"start_date": "not-a-date", "deadline": ""},
+    )
+    assert response.status_code == 200
+    assert 'value="not-a-date"' not in response.content.decode()
+
+
+def test_task_form_datetime_fields_render_html5_local_format():
+    d = timezone.make_aware(datetime(2026, 3, 10, 0, 0))
+    form = TaskForm(project=None, initial={"deadline": d, "start_date": d})
+    rendered = str(form["deadline"])
+    assert 'value="2026-03-10T00:00"' in rendered
+    assert "2026-03-10 00:00:00" not in rendered
+
+
+@pytest.mark.django_db
 def test_priority_task_shows_flag_on_board_card(client, user):
     project, col1, _col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
@@ -524,3 +579,385 @@ def test_team_mode_lead_closes_for_everyone(client, user, other_user):
     assert task.status == TaskStatus.COMPLETED
     # Every assignee ends up done.
     assert task.all_assignees_done
+
+
+@pytest.mark.django_db
+def test_board_calendar_only_shows_tasks_with_calendar_fields(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Dated",
+        deadline=datetime(2026, 3, 15, tzinfo=dt_timezone.utc),
+    )
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=1,
+        name="Undated",
+    )
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"view": "month", "date": "2026-03-01"},
+    )
+    assert response.status_code == 200
+    assert b"Dated" in response.content
+    assert b"Undated" not in response.content
+
+
+@pytest.mark.django_db
+def test_board_calendar_requires_member_access(client, user, other_user):
+    project, _col1, _col2 = _make_project_with_board(user)
+    client.force_login(other_user)
+    response = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk})
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("view", ["month", "week", "day"])
+def test_board_calendar_renders_task_name_at_each_granularity(client, user, view):
+    # Year view only renders a dot indicator per day (no room for task names),
+    # so it's covered separately below.
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Granularity task",
+        deadline=datetime(2026, 3, 15, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"view": view, "date": "2026-03-15"},
+    )
+    assert response.status_code == 200
+    assert b"Granularity task" in response.content
+
+
+@pytest.mark.django_db
+def test_board_calendar_year_view_renders(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Granularity task",
+        deadline=datetime(2026, 3, 15, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"view": "year", "date": "2026-03-15"},
+    )
+    assert response.status_code == 200
+    assert b"March" in response.content
+
+
+@pytest.mark.django_db
+def test_board_calendar_unknown_view_falls_back_to_month(client, user):
+    project, _col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"view": "century"},
+    )
+    assert response.status_code == 200
+
+
+class _FakeTask:
+    def __init__(self, name, deadline=None, start_date=None, is_priority=False):
+        self.name = name
+        self.deadline = deadline
+        self.start_date = start_date
+        self.is_priority = is_priority
+
+
+def test_build_month_grid_buckets_task_on_its_deadline_date():
+    task = _FakeTask("A", deadline=datetime(2026, 3, 15, tzinfo=dt_timezone.utc))
+    weeks = build_month_grid(2026, 3, [task])
+    matches = [
+        day
+        for week in weeks
+        for day in week["days"]
+        if day.date.day == 15 and day.in_current_month
+    ]
+    assert len(matches) == 1
+    assert matches[0].tasks == [task]
+
+
+def test_build_month_grid_falls_back_to_start_date():
+    task = _FakeTask("B", start_date=datetime(2026, 3, 3, tzinfo=dt_timezone.utc))
+    weeks = build_month_grid(2026, 3, [task])
+    matches = [day for week in weeks for day in week["days"] if day.date.day == 3]
+    assert matches[0].tasks == [task]
+
+
+def test_clamp_month_rolls_into_next_year():
+    assert clamp_month(2026, 13) == (2027, 1)
+    assert clamp_month(2026, 0) == (2025, 12)
+
+
+def test_build_year_grid_places_task_in_its_month():
+    task = _FakeTask("Yearly", deadline=datetime(2026, 7, 4, tzinfo=dt_timezone.utc))
+    months = build_year_grid(2026, [task])
+    assert len(months) == 12
+    july = next(m for m in months if m["month"] == 7)
+    matches = [
+        day for week in july["weeks"] for day in week
+        if day.date.day == 4 and day.in_current_month
+    ]
+    assert matches[0].tasks == [task]
+    # No other month's *own* days (excluding leading/trailing overflow days
+    # from adjacent months, which may legitimately echo the same date) carry
+    # the task.
+    other_months = [m for m in months if m["month"] != 7]
+    assert all(
+        not day.tasks
+        for m in other_months
+        for week in m["weeks"]
+        for day in week
+        if day.in_current_month
+    )
+
+
+def test_build_week_grid_spans_monday_to_sunday_and_includes_anchor():
+    task = _FakeTask("Weekly", deadline=datetime(2026, 3, 18, tzinfo=dt_timezone.utc))
+    # 2026-03-18 is a Wednesday.
+    week = build_week_grid(date(2026, 3, 18), [task])
+    days = week["days"]
+    assert len(days) == 7
+    assert days[0].date == date(2026, 3, 16)  # Monday
+    assert days[-1].date == date(2026, 3, 22)  # Sunday
+    matches = [day for day in days if day.date == date(2026, 3, 18)]
+    assert matches[0].tasks == [task]
+    assert week["lanes"] == []  # not a range: no bars
+
+
+def test_build_day_tasks_returns_only_that_days_tasks():
+    on_day = _FakeTask("OnDay", deadline=datetime(2026, 3, 18, tzinfo=dt_timezone.utc))
+    other_day = _FakeTask("OtherDay", deadline=datetime(2026, 3, 19, tzinfo=dt_timezone.utc))
+    items = build_day_tasks(date(2026, 3, 18), [on_day, other_day])
+    assert [item.task for item in items] == [on_day]
+    assert items[0].is_range is False
+
+
+def test_parse_view_date_falls_back_to_today_on_bad_input():
+    assert parse_view_date("not-a-date") == timezone.localdate()
+    assert parse_view_date(None) == timezone.localdate()
+    assert parse_view_date("2026-03-18") == date(2026, 3, 18)
+
+
+def test_shift_date_per_granularity():
+    anchor = date(2026, 3, 18)
+    assert shift_date("day", anchor, 1) == date(2026, 3, 19)
+    assert shift_date("week", anchor, 1) == date(2026, 3, 25)
+    assert shift_date("month", anchor, 1) == date(2026, 4, 1)
+    assert shift_date("year", anchor, 1) == date(2027, 1, 1)
+    assert shift_date("month", date(2026, 12, 1), 1) == date(2027, 1, 1)
+
+
+@pytest.mark.django_db
+def test_board_full_page_renders_calendar_section(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Full page dated task",
+        deadline=datetime.now(dt_timezone.utc),
+    )
+    client.force_login(user)
+    response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
+    assert response.status_code == 200
+    assert b"View as calendar" in response.content
+    assert b"calendar-view-container" in response.content
+    assert b"Full page dated task" in response.content
+
+
+def test_task_range_returns_none_for_single_day_task():
+    same_day = _FakeTask(
+        "Same day",
+        start_date=datetime(2026, 3, 10, 9, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 10, 17, tzinfo=dt_timezone.utc),
+    )
+    assert task_range(same_day) is None
+    assert task_range(_FakeTask("Deadline only", deadline=datetime(2026, 3, 10, tzinfo=dt_timezone.utc))) is None
+    assert task_range(_FakeTask("Neither")) is None
+
+
+def test_task_range_returns_sorted_span_for_multi_day_task():
+    task = _FakeTask(
+        "Spans days",
+        start_date=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 14, tzinfo=dt_timezone.utc),
+    )
+    assert task_range(task) == (date(2026, 3, 10), date(2026, 3, 14))
+
+
+def test_task_range_swaps_reversed_dates():
+    # deadline set before start_date — still treated as a valid range, sorted.
+    task = _FakeTask(
+        "Reversed",
+        start_date=datetime(2026, 3, 14, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+    )
+    assert task_range(task) == (date(2026, 3, 10), date(2026, 3, 14))
+
+
+def test_bucket_tasks_by_day_covers_every_day_in_a_range():
+    task = _FakeTask(
+        "Ranged",
+        start_date=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    by_day = bucket_tasks_by_day([task])
+    assert by_day[date(2026, 3, 10)] == [task]
+    assert by_day[date(2026, 3, 11)] == [task]
+    assert by_day[date(2026, 3, 12)] == [task]
+    assert date(2026, 3, 13) not in by_day
+
+
+def test_build_month_grid_renders_ranged_task_as_a_bar_not_a_pill():
+    task = _FakeTask(
+        "Ranged",
+        start_date=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    weeks = build_month_grid(2026, 3, [task])
+    # The task never appears in any day cell's pill list...
+    assert all(task not in day.tasks for week in weeks for day in week["days"])
+    # ...it appears exactly once, as a lane bar, in the week it falls in.
+    weeks_with_bars = [w for w in weeks if w["lanes"]]
+    assert len(weeks_with_bars) == 1
+    lanes = weeks_with_bars[0]["lanes"]
+    assert len(lanes) == 1
+    bar = lanes[0][0]
+    assert bar["task"] is task
+    assert bar["is_range_start"] is True
+    assert bar["is_range_end"] is True
+    # 2026-03-10 is a Tuesday (col 2), 2026-03-12 is a Thursday (col 4).
+    assert bar["start_col"] == 2
+    assert bar["end_col"] == 4
+
+
+def test_build_month_grid_splits_range_bar_across_week_boundary():
+    # 2026-03-16 (Mon) through 2026-03-20 (Fri) is a single week, so pick a
+    # range that crosses into the next week to exercise clipping.
+    task = _FakeTask(
+        "Crosses weeks",
+        start_date=datetime(2026, 3, 20, tzinfo=dt_timezone.utc),  # Friday
+        deadline=datetime(2026, 3, 23, tzinfo=dt_timezone.utc),  # Monday (next week)
+    )
+    weeks = build_month_grid(2026, 3, [task])
+    weeks_with_bars = [w for w in weeks if w["lanes"]]
+    assert len(weeks_with_bars) == 2
+
+    first_bar = weeks_with_bars[0]["lanes"][0][0]
+    assert first_bar["is_range_start"] is True
+    assert first_bar["is_range_end"] is False
+    assert first_bar["end_col"] == 7  # clipped to Sunday
+
+    second_bar = weeks_with_bars[1]["lanes"][0][0]
+    assert second_bar["is_range_start"] is False
+    assert second_bar["is_range_end"] is True
+    assert second_bar["start_col"] == 1  # clipped to Monday
+
+
+def test_build_month_grid_stacks_overlapping_ranges_into_separate_lanes():
+    task_a = _FakeTask(
+        "A",
+        start_date=datetime(2026, 3, 9, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 11, tzinfo=dt_timezone.utc),
+    )
+    task_b = _FakeTask(
+        "B",
+        start_date=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    weeks = build_month_grid(2026, 3, [task_a, task_b])
+    lanes = next(w["lanes"] for w in weeks if w["lanes"])
+    assert len(lanes) == 2  # overlapping columns forced into separate lanes
+    assert {bar["task"] for lane in lanes for bar in lane} == {task_a, task_b}
+
+
+def test_build_month_grid_shares_a_lane_for_non_overlapping_ranges():
+    task_a = _FakeTask(
+        "A",
+        start_date=datetime(2026, 3, 2, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 3, tzinfo=dt_timezone.utc),
+    )
+    task_b = _FakeTask(
+        "B",
+        start_date=datetime(2026, 3, 5, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 6, tzinfo=dt_timezone.utc),
+    )
+    weeks = build_month_grid(2026, 3, [task_a, task_b])
+    lanes = next(w["lanes"] for w in weeks if w["lanes"])
+    assert len(lanes) == 1  # no column overlap: share lane 0
+    assert len(lanes[0]) == 2
+
+
+def test_build_week_grid_renders_ranged_task_as_a_bar():
+    task = _FakeTask(
+        "Ranged",
+        start_date=datetime(2026, 3, 17, tzinfo=dt_timezone.utc),  # Tuesday
+        deadline=datetime(2026, 3, 19, tzinfo=dt_timezone.utc),  # Thursday
+    )
+    week = build_week_grid(date(2026, 3, 18), [task])
+    assert all(task not in day.tasks for day in week["days"])
+    assert len(week["lanes"]) == 1
+    bar = week["lanes"][0][0]
+    assert bar["start_col"] == 2
+    assert bar["end_col"] == 4
+
+
+def test_build_day_tasks_marks_ranged_tasks_with_their_span():
+    task = _FakeTask(
+        "Ranged",
+        start_date=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    items = build_day_tasks(date(2026, 3, 11), [task])
+    assert len(items) == 1
+    assert items[0].is_range is True
+    assert items[0].range_start == date(2026, 3, 10)
+    assert items[0].range_end == date(2026, 3, 12)
+
+
+@pytest.mark.django_db
+def test_board_calendar_month_view_renders_range_bar_markup(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Ranged task",
+        start_date=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"view": "month", "date": "2026-03-01"},
+    )
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "Ranged task" in content
+    assert "col-start-2" in content
+    assert "col-end-5" in content
