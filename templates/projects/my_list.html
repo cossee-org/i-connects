@@ -10,7 +10,7 @@
   <div class="flex items-center gap-3">
     <h1 class="page-title font-semibold text-brand-navy">Projects</h1>
     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_project_count }}</span>
-    <div class="relative mt-0.5" x-data="{ open: false }" @keydown.escape="open = false" @click.outside="open = false">
+    <div class="relative mt-1" x-data="{ open: false }" @keydown.escape="open = false" @click.outside="open = false">
       <button type="button" @click="open = !open"
               aria-label="About Projects"
               class="inline-flex items-center justify-center w-5 h-5 rounded-full text-brand-text/50 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors">
