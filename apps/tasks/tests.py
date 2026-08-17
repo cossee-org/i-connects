@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone as dt_timezone
+from datetime import date, datetime, timezone as dt_timezone
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.audit.models import AuditAction, AuditLog
 from apps.core.enums import MemberPrivileges, ProjectStatus, TaskStatus
 from apps.projects.models import ProjectMember, ProjectPrivilege
 from apps.projects.services import create_project_with_owner
-from apps.tasks.calendar import build_month_grid, clamp_month
+from apps.tasks.calendar import (
+    build_day_tasks,
+    build_month_grid,
+    build_week_grid,
+    build_year_grid,
+    clamp_month,
+    parse_view_date,
+    shift_date,
+)
 from apps.tasks.models import KanbanBoard, Task, TaskLog
 from apps.tasks.services import approve_completion, complete_task
 
@@ -551,7 +560,7 @@ def test_board_calendar_only_shows_tasks_with_calendar_fields(client, user):
     client.force_login(user)
     response = client.get(
         reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
-        {"month": "2026-03"},
+        {"view": "month", "date": "2026-03-01"},
     )
     assert response.status_code == 200
     assert b"Dated" in response.content
@@ -568,14 +577,72 @@ def test_board_calendar_requires_member_access(client, user, other_user):
     assert response.status_code == 403
 
 
-def test_build_month_grid_buckets_task_on_its_deadline_date():
-    class FakeTask:
-        def __init__(self, name, deadline=None, start_date=None):
-            self.name = name
-            self.deadline = deadline
-            self.start_date = start_date
+@pytest.mark.django_db
+@pytest.mark.parametrize("view", ["month", "week", "day"])
+def test_board_calendar_renders_task_name_at_each_granularity(client, user, view):
+    # Year view only renders a dot indicator per day (no room for task names),
+    # so it's covered separately below.
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Granularity task",
+        deadline=datetime(2026, 3, 15, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"view": view, "date": "2026-03-15"},
+    )
+    assert response.status_code == 200
+    assert b"Granularity task" in response.content
 
-    task = FakeTask("A", deadline=datetime(2026, 3, 15, tzinfo=dt_timezone.utc))
+
+@pytest.mark.django_db
+def test_board_calendar_year_view_renders(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Granularity task",
+        deadline=datetime(2026, 3, 15, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"view": "year", "date": "2026-03-15"},
+    )
+    assert response.status_code == 200
+    assert b"March" in response.content
+
+
+@pytest.mark.django_db
+def test_board_calendar_unknown_view_falls_back_to_month(client, user):
+    project, _col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"view": "century"},
+    )
+    assert response.status_code == 200
+
+
+class _FakeTask:
+    def __init__(self, name, deadline=None, start_date=None, is_priority=False):
+        self.name = name
+        self.deadline = deadline
+        self.start_date = start_date
+        self.is_priority = is_priority
+
+
+def test_build_month_grid_buckets_task_on_its_deadline_date():
+    task = _FakeTask("A", deadline=datetime(2026, 3, 15, tzinfo=dt_timezone.utc))
     weeks = build_month_grid(2026, 3, [task])
     matches = [
         day for week in weeks for day in week if day.date.day == 15 and day.in_current_month
@@ -585,13 +652,7 @@ def test_build_month_grid_buckets_task_on_its_deadline_date():
 
 
 def test_build_month_grid_falls_back_to_start_date():
-    class FakeTask:
-        def __init__(self, name, deadline=None, start_date=None):
-            self.name = name
-            self.deadline = deadline
-            self.start_date = start_date
-
-    task = FakeTask("B", start_date=datetime(2026, 3, 3, tzinfo=dt_timezone.utc))
+    task = _FakeTask("B", start_date=datetime(2026, 3, 3, tzinfo=dt_timezone.utc))
     weeks = build_month_grid(2026, 3, [task])
     matches = [day for week in weeks for day in week if day.date.day == 3]
     assert matches[0].tasks == [task]
@@ -600,6 +661,62 @@ def test_build_month_grid_falls_back_to_start_date():
 def test_clamp_month_rolls_into_next_year():
     assert clamp_month(2026, 13) == (2027, 1)
     assert clamp_month(2026, 0) == (2025, 12)
+
+
+def test_build_year_grid_places_task_in_its_month():
+    task = _FakeTask("Yearly", deadline=datetime(2026, 7, 4, tzinfo=dt_timezone.utc))
+    months = build_year_grid(2026, [task])
+    assert len(months) == 12
+    july = next(m for m in months if m["month"] == 7)
+    matches = [
+        day for week in july["weeks"] for day in week
+        if day.date.day == 4 and day.in_current_month
+    ]
+    assert matches[0].tasks == [task]
+    # No other month's *own* days (excluding leading/trailing overflow days
+    # from adjacent months, which may legitimately echo the same date) carry
+    # the task.
+    other_months = [m for m in months if m["month"] != 7]
+    assert all(
+        not day.tasks
+        for m in other_months
+        for week in m["weeks"]
+        for day in week
+        if day.in_current_month
+    )
+
+
+def test_build_week_grid_spans_monday_to_sunday_and_includes_anchor():
+    task = _FakeTask("Weekly", deadline=datetime(2026, 3, 18, tzinfo=dt_timezone.utc))
+    # 2026-03-18 is a Wednesday.
+    week = build_week_grid(date(2026, 3, 18), [task])
+    assert len(week) == 7
+    assert week[0].date == date(2026, 3, 16)  # Monday
+    assert week[-1].date == date(2026, 3, 22)  # Sunday
+    matches = [day for day in week if day.date == date(2026, 3, 18)]
+    assert matches[0].tasks == [task]
+
+
+def test_build_day_tasks_returns_only_that_days_tasks():
+    on_day = _FakeTask("OnDay", deadline=datetime(2026, 3, 18, tzinfo=dt_timezone.utc))
+    other_day = _FakeTask("OtherDay", deadline=datetime(2026, 3, 19, tzinfo=dt_timezone.utc))
+    tasks = build_day_tasks(date(2026, 3, 18), [on_day, other_day])
+    assert tasks == [on_day]
+
+
+def test_parse_view_date_falls_back_to_today_on_bad_input():
+    assert parse_view_date("not-a-date") == timezone.localdate()
+    assert parse_view_date(None) == timezone.localdate()
+    assert parse_view_date("2026-03-18") == date(2026, 3, 18)
+
+
+def test_shift_date_per_granularity():
+    anchor = date(2026, 3, 18)
+    assert shift_date("day", anchor, 1) == date(2026, 3, 19)
+    assert shift_date("week", anchor, 1) == date(2026, 3, 25)
+    assert shift_date("month", anchor, 1) == date(2026, 4, 1)
+    assert shift_date("year", anchor, 1) == date(2027, 1, 1)
+    assert shift_date("month", date(2026, 12, 1), 1) == date(2027, 1, 1)
 
 
 @pytest.mark.django_db

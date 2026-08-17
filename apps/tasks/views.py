@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import io
 import json
-from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -41,7 +40,15 @@ from apps.audit.services import AuditAction, log_action
 from apps.comments.forms import CommentForm
 from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
-from apps.tasks.calendar import build_month_grid, shift_month
+from apps.tasks.calendar import (
+    VIEWS as CALENDAR_VIEWS,
+    build_day_tasks,
+    build_month_grid,
+    build_week_grid,
+    build_year_grid,
+    parse_view_date,
+    shift_date,
+)
 from apps.tasks.forms import (
     KanbanBoardForm,
     MilestoneForm,
@@ -75,35 +82,56 @@ from apps.tasks.services import (
 # ---------------------------------------------------------------------------
 
 
-def _parse_month_param(request) -> tuple[int, int]:
-    """Parse ``?month=YYYY-MM`` from the request, defaulting to today."""
-    today = timezone.localdate()
-    raw = request.GET.get("month")
-    if raw:
-        try:
-            year_str, month_str = raw.split("-")
-            return int(year_str), int(month_str)
-        except (ValueError, TypeError):
-            pass
-    return today.year, today.month
+def _fmt_short(d) -> str:
+    return f"{d.strftime('%b')} {d.day}"
 
 
 def _calendar_context(request, project) -> dict:
-    year, month = _parse_month_param(request)
+    view = request.GET.get("view", "month")
+    if view not in CALENDAR_VIEWS:
+        view = "month"
+    anchor = parse_view_date(request.GET.get("date"))
     tasks = Task.objects.filter(project=project).filter(
         Q(deadline__isnull=False) | Q(start_date__isnull=False)
     ).prefetch_related("assigned_members")
-    prev_year, prev_month = shift_month(year, month, -1)
-    next_year, next_month = shift_month(year, month, 1)
-    weeks = build_month_grid(year, month, tasks)
-    return {
-        "calendar_weeks": weeks,
-        "calendar_has_tasks": any(day.tasks for week in weeks for day in week),
-        "calendar_month_label": date(year, month, 1).strftime("%B %Y"),
-        "calendar_prev": f"{prev_year:04d}-{prev_month:02d}",
-        "calendar_next": f"{next_year:04d}-{next_month:02d}",
-        "calendar_current": f"{year:04d}-{month:02d}",
+
+    context = {
+        "calendar_view": view,
+        "calendar_date": anchor.isoformat(),
+        "calendar_prev_date": shift_date(view, anchor, -1).isoformat(),
+        "calendar_next_date": shift_date(view, anchor, 1).isoformat(),
+        "calendar_today_date": timezone.localdate().isoformat(),
     }
+
+    if view == "year":
+        months = build_year_grid(anchor.year, tasks)
+        context["calendar_year_months"] = months
+        context["calendar_label"] = str(anchor.year)
+        context["calendar_has_tasks"] = any(
+            day.tasks for month in months for week in month["weeks"] for day in week
+        )
+    elif view == "week":
+        week_days = build_week_grid(anchor, tasks)
+        context["calendar_week_days"] = week_days
+        start, end = week_days[0].date, week_days[-1].date
+        if start.month == end.month:
+            context["calendar_label"] = f"{_fmt_short(start)}–{end.day}, {end.year}"
+        else:
+            context["calendar_label"] = f"{_fmt_short(start)} – {_fmt_short(end)}, {end.year}"
+        context["calendar_has_tasks"] = any(day.tasks for day in week_days)
+    elif view == "day":
+        day_tasks = build_day_tasks(anchor, tasks)
+        context["calendar_day_tasks"] = day_tasks
+        context["calendar_day_date"] = anchor
+        context["calendar_label"] = f"{anchor.strftime('%A, %B')} {anchor.day}, {anchor.year}"
+        context["calendar_has_tasks"] = bool(day_tasks)
+    else:
+        weeks = build_month_grid(anchor.year, anchor.month, tasks)
+        context["calendar_weeks"] = weeks
+        context["calendar_label"] = anchor.strftime("%B %Y")
+        context["calendar_has_tasks"] = any(day.tasks for week in weeks for day in week)
+
+    return context
 
 
 class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):

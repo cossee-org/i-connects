@@ -1,0 +1,29 @@
+{# Year grid — 12 compact mini-month calendars — included by task_calendar_view.html when calendar_view == 'year'. #}
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  {% for month in calendar_year_months %}
+    <div class="brand-card p-3">
+      <button type="button"
+              class="text-sm font-semibold text-brand-navy hover:text-brand-coral transition-colors mb-2"
+              hx-get="{{ calendar_url }}?view=month&date={{ month.first_day|date:'Y-m-d' }}"
+              hx-target="#calendar-view-container" hx-swap="innerHTML">
+        {{ month.label }}
+      </button>
+      <div class="grid grid-cols-7 gap-0.5 text-[10px] text-center">
+        {% for week in month.weeks %}
+          {% for d in week %}
+            <button type="button"
+                    class="w-5 h-5 rounded-full flex items-center justify-center relative
+                           {% if d.is_today %}bg-brand-coral text-white font-semibold{% elif not d.in_current_month %}text-brand-text/25{% else %}text-brand-text/70 hover:bg-brand-lighter{% endif %}"
+                    hx-get="{{ calendar_url }}?view=day&date={{ d.date|date:'Y-m-d' }}"
+                    hx-target="#calendar-view-container" hx-swap="innerHTML">
+              {{ d.date.day }}
+              {% if d.tasks %}
+                <span class="absolute bottom-0 w-1 h-1 rounded-full {% if d.is_today %}bg-white{% else %}bg-brand-coral{% endif %}" aria-hidden="true"></span>
+              {% endif %}
+            </button>
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+</div>
