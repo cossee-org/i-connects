@@ -5,6 +5,60 @@
 
 {% block page_header %}{% endblock %}
 
+{% block extra_head %}
+<style>
+  .stat-card-selected {
+    background-color: #1f2963;
+    border-color: #1f2963;
+  }
+  .stat-card-selected .stat-label { color: rgba(255, 255, 255, 0.65); }
+  .stat-card-selected .stat-number { color: #ffffff; }
+
+  .has-tooltip {
+    position: relative;
+  }
+  .has-tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    color: #f8fafc;
+    font-size: 0.7rem;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+    line-height: 1.4;
+    padding: 4px 9px;
+    border-radius: 5px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 50;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
+  }
+  .has-tooltip::before {
+    content: "";
+    position: absolute;
+    bottom: calc(100% + 1px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1e293b;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 50;
+  }
+  .has-tooltip:hover::after,
+  .has-tooltip:hover::before {
+    opacity: 1;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="mb-6">
   <div class="flex items-center gap-3">
@@ -12,6 +66,42 @@
     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_project_count }}</span>
   </div>
   <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">Projects you're a member of or manage.</p>
+</div>
+
+{# ── Stat cards ───────────────────────────────────────────────────────────── #}
+<div class="flex flex-row flex-wrap gap-4 mb-6">
+  <a href="{{ card_hrefs.open_tasks }}"
+     class="brand-card p-4 flex flex-col gap-1 has-tooltip transition-shadow no-underline
+            {% if current_card == 'open_tasks' %}stat-card-selected{% else %}hover:ring-1 hover:ring-brand-navy/20{% endif %}"
+     style="flex: 1 1 160px"
+     data-tooltip="Projects with tasks assigned to you">
+    <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
+    <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ open_task_count }}</span>
+  </a>
+  <a href="{{ card_hrefs.overdue }}"
+     class="brand-card p-4 flex flex-col gap-1 has-tooltip transition-shadow no-underline
+            {% if current_card == 'overdue' %}stat-card-selected{% else %}hover:ring-1 hover:ring-brand-navy/20{% endif %}"
+     style="flex: 1 1 160px"
+     data-tooltip="Projects with tasks past their deadline">
+    <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
+    <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ overdue_count }}</span>
+  </a>
+  <a href="{{ card_hrefs.join_requests }}"
+     class="brand-card p-4 flex flex-col gap-1 has-tooltip transition-shadow no-underline
+            {% if current_card == 'join_requests' %}stat-card-selected{% else %}hover:ring-1 hover:ring-brand-navy/20{% endif %}"
+     style="flex: 1 1 160px"
+     data-tooltip="Your projects with pending join requests">
+    <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Join requests</span>
+    <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ join_request_count }}</span>
+  </a>
+  <a href="{{ card_hrefs.invitations }}"
+     class="brand-card p-4 flex flex-col gap-1 has-tooltip transition-shadow no-underline
+            {% if current_card == 'invitations' %}stat-card-selected{% else %}hover:ring-1 hover:ring-brand-navy/20{% endif %}"
+     style="flex: 1 1 160px"
+     data-tooltip="Your projects with pending invitations sent">
+    <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Invitations</span>
+    <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ invitation_count }}</span>
+  </a>
 </div>
 
 {# ── Filter / sort bar ────────────────────────────────────────────────────── #}
