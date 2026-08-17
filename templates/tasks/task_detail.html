@@ -22,6 +22,9 @@
       {% if task.is_priority %}
         {% include "_components/priority_flag.html" %}
       {% endif %}
+      {% if task.task_complete %}
+        {% include "_components/completion_flag.html" %}
+      {% endif %}
     </div>
     {% if is_project_manager %}
       <div class="flex flex-wrap gap-2 mt-1 justify-end">
@@ -53,7 +56,7 @@
         </div>
       </section>
 
-      {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done %}
+      {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done can_close=status_block.can_close %}
 
       <section class="brand-card p-6">
         <h2 class="text-lg font-semibold text-brand-navy mb-3">Comments</h2>

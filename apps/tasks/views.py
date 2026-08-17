@@ -667,17 +667,22 @@ def _task_status_context(task, *, project_member, is_project_manager):
         (s for s in assignee_states if project_member and s["member"].id == project_member.id),
         None,
     )
+    is_team_mode = task.completion_mode == CompletedAs.TEAM
+    all_done = task.all_assignees_done
     return {
         "task": task,
         "project": task.project,
         "is_project_manager": is_project_manager,
-        "is_team_mode": task.completion_mode == CompletedAs.TEAM,
+        "is_team_mode": is_team_mode,
         "assignee_states": assignee_states,
         "done_count": sum(1 for s in assignee_states if s["done"]),
         "assignee_count": len(assignee_states),
-        "all_done": task.all_assignees_done,
+        "all_done": all_done,
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
+        # TEAM mode can be closed any time; INDIVIDUAL mode only once every
+        # assignee has marked their own part done.
+        "can_close": is_project_manager and (is_team_mode or all_done),
     }
 
 

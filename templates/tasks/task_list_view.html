@@ -49,6 +49,11 @@
                     <span class="shrink-0">{% include "_components/priority_flag.html" %}</span>
                   {% endif %}
 
+                  {# Completion flag #}
+                  {% if task.task_complete %}
+                    <span class="shrink-0">{% include "_components/completion_flag.html" %}</span>
+                  {% endif %}
+
                   {# Due date #}
                   {% if task.deadline %}
                     <span class="hidden sm:inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0">

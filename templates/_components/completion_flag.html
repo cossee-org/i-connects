@@ -1,0 +1,7 @@
+{# Task-complete indicator — {% include "_components/completion_flag.html" %}, callers gate with {% if task.task_complete %}. Color + icon + text, never color alone (A11Y_GUIDE #7). #}
+<span class="inline-flex items-center gap-1 text-xs font-medium text-success" title="Completed">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="w-3.5 h-3.5 shrink-0" fill="currentColor" aria-hidden="true">
+    <path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.3 3.3 6.8-6.8a1 1 0 0 1 1.4 0Z" clip-rule="evenodd"/>
+  </svg>
+  <span>Completed</span>
+</span>

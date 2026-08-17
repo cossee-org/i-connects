@@ -230,6 +230,17 @@ class Task(models.Model):
         """
         return self.assignees_done_count >= self.assignee_count
 
+    @property
+    def task_complete(self) -> bool:
+        """Boolean completion status, derived from ``status``.
+
+        Kept as a derived property rather than a second stored column so it
+        can never drift out of sync with ``status`` — the field of record
+        for completion, flipped only via the complete/close/reopen service
+        functions in ``apps.tasks.services``.
+        """
+        return self.status == TaskStatus.COMPLETED
+
 
 class TaskLog(models.Model):
     """Audit trail of task assignment and completion events."""

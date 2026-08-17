@@ -4,8 +4,11 @@
     class="task-card brand-card p-3 hover:shadow-md cursor-pointer mb-2 bg-white{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
     @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
 
-  {% if task.is_priority %}
-    <div class="mb-1">{% include "_components/priority_flag.html" %}</div>
+  {% if task.is_priority or task.task_complete %}
+    <div class="mb-1 flex items-center gap-2">
+      {% if task.is_priority %}{% include "_components/priority_flag.html" %}{% endif %}
+      {% if task.task_complete %}{% include "_components/completion_flag.html" %}{% endif %}
+    </div>
   {% endif %}
   <span class="font-medium text-brand-navy text-sm leading-tight block">{{ task.name }}</span>
 

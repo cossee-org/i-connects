@@ -407,6 +407,111 @@ def test_priority_task_shows_flag_on_board_card(client, user):
 
 
 # ---------------------------------------------------------------------------
+# task_complete (derived boolean) and its Close/Reopen surfacing.
+# ---------------------------------------------------------------------------
+
+
+def test_task_complete_property_reflects_status():
+    task = Task(status=TaskStatus.NOT_COMPLETED)
+    assert task.task_complete is False
+    task.status = TaskStatus.COMPLETED
+    assert task.task_complete is True
+
+
+@pytest.mark.django_db
+def test_completed_task_shows_flag_on_board_card(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Done card",
+        status=TaskStatus.COMPLETED,
+    )
+    client.force_login(user)
+    response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
+    assert response.status_code == 200
+    assert "Completed" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_status_block_hides_close_button_until_individual_task_ready(client, user, other_user):
+    from apps.core.enums import CompletedAs
+
+    project, task, lead, contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    client.force_login(user)
+    detail_url = reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+
+    response = client.get(detail_url)
+    assert ">Close task<" not in response.content.decode()
+
+    from apps.tasks.services import mark_own_done
+
+    mark_own_done(task=task, member=lead)
+    mark_own_done(task=task, member=contrib)
+    response = client.get(detail_url)
+    assert ">Close task<" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_status_block_shows_close_button_any_time_in_team_mode(client, user, other_user):
+    from apps.core.enums import CompletedAs
+
+    project, task, lead, _contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.TEAM
+    )
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    )
+    assert ">Close task<" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_status_block_hides_close_button_for_non_pm(client, user, other_user):
+    from apps.core.enums import CompletedAs
+
+    project, task, _lead, _contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.TEAM
+    )
+    client.force_login(other_user)
+    response = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    )
+    assert ">Close task<" not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_status_block_shows_reopen_button_once_completed(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Reopen me",
+    )
+    complete_task(task=task, completed_by=member)
+    client.force_login(user)
+    response = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    )
+    content = response.content.decode()
+    assert "Reopen task" in content
+    assert "Completed" in content
+
+    reopen = client.post(reverse("tasks:reopen", kwargs={"pk": task.pk}))
+    assert reopen.status_code in (200, 302)
+    task.refresh_from_db()
+    assert task.task_complete is False
+
+
+# ---------------------------------------------------------------------------
 # Authorization: only Project Leads may create/edit/delete/move tasks etc.
 # ---------------------------------------------------------------------------
 

@@ -14,7 +14,7 @@
      hx-swap="outerHTML"
      {% if not pane_mode %}class="brand-card p-4"{% endif %}>
   <div class="flex items-center justify-between gap-3 flex-wrap">
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 flex-wrap">
       {% if pane_mode %}
       <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold">Completion</h3>
       {% else %}
@@ -23,6 +23,9 @@
       <span class="text-xs text-brand-text/60">
         {% if is_team_mode %}Team{% else %}Individual &middot; {{ done_count }} / {{ assignee_count }} done{% endif %}
       </span>
+      {% if task.task_complete %}
+        {% include "_components/completion_flag.html" %}
+      {% endif %}
     </div>
 
     <div class="flex items-center gap-2">
@@ -43,6 +46,22 @@
                     {% if pane_mode %}hx-vals='{"pane_mode": "1"}'{% endif %}>Mark my part done</button>
           {% endif %}
         {% endif %}
+
+        {# Project Lead: finalise the task. TEAM mode can close any time;
+           INDIVIDUAL mode only once every assignee has marked their part. #}
+        {% if can_close %}
+          <button class="btn btn-sm btn-primary"
+                  hx-post="{% url 'tasks:close' pk=task.pk %}"
+                  hx-target="#task-status-block"
+                  hx-swap="outerHTML"
+                  {% if pane_mode %}hx-vals='{"pane_mode": "1"}'{% endif %}>Close task</button>
+        {% endif %}
+      {% elif is_project_manager %}
+        <button class="btn btn-ghost btn-sm"
+                hx-post="{% url 'tasks:reopen' pk=task.pk %}"
+                hx-target="#task-status-block"
+                hx-swap="outerHTML"
+                {% if pane_mode %}hx-vals='{"pane_mode": "1"}'{% endif %}>Reopen task</button>
       {% endif %}
     </div>
   </div>
