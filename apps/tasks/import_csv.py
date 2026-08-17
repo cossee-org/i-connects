@@ -34,6 +34,7 @@ OPTIONAL_COLUMNS = [
     "contribution_type",
     "column",
     "assignee_emails",
+    "priority",
 ]
 
 
@@ -177,6 +178,7 @@ def import_rows(
                     description=(row.get("description") or "") or None,
                     deadline=deadline,
                     contribution_type=contribution_type,
+                    is_priority=_parse_priority(row.get("priority")),
                 )
 
                 assignee_members, unknown_emails = _resolve_assignees(
@@ -304,6 +306,12 @@ def _parse_contribution_type(
     if text in by_label:
         return by_label[text]
     return None
+
+
+def _parse_priority(raw: Any) -> bool:
+    """Return ``True`` for CSV priority values like ``yes``/``true``/``1``."""
+    text = (raw or "").strip().lower() if isinstance(raw, str) else ""
+    return text in ("1", "true", "yes", "y", "high", "priority")
 
 
 def _resolve_assignees(

@@ -38,12 +38,13 @@
               <tr><td><code>contribution_type</code></td><td>No</td><td>CRediT value or label. Unknown values fall back to <em>Other</em>.</td></tr>
               <tr><td><code>column</code></td><td>No</td><td>Kanban column name. Created if missing.</td></tr>
               <tr><td><code>assignee_emails</code></td><td>No</td><td>Comma- or semicolon-separated emails. Non-members are skipped.</td></tr>
+              <tr><td><code>priority</code></td><td>No</td><td><code>yes</code>/<code>true</code>/<code>1</code> flags the task as high priority.</td></tr>
             </tbody>
           </table>
         </div>
-        <pre class="bg-brand-lighter/50 border border-brand-light/60 rounded-md p-3 text-xs overflow-x-auto"><code>name,description,deadline,contribution_type,column,assignee_emails
-Write intro,First draft,2026-06-01,WRITING_ORIGINAL_DRAFT,Todo,alice@test.com;bob@test.com
-Run pilot,Small pilot study,2026-06-15,INVESTIGATION,Doing,alice@test.com</code></pre>
+        <pre class="bg-brand-lighter/50 border border-brand-light/60 rounded-md p-3 text-xs overflow-x-auto"><code>name,description,deadline,contribution_type,column,assignee_emails,priority
+Write intro,First draft,2026-06-01,WRITING_ORIGINAL_DRAFT,Todo,alice@test.com;bob@test.com,yes
+Run pilot,Small pilot study,2026-06-15,INVESTIGATION,Doing,alice@test.com,</code></pre>
       </div>
     </details>
 

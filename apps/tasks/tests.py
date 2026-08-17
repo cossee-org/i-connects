@@ -296,6 +296,61 @@ def test_edit_form_seeds_assignee_logs(client, user, other_user):
     assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
 
 
+@pytest.mark.django_db
+def test_create_form_sets_is_priority(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+    response = client.post(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        {
+            "name": "Urgent task",
+            "container": col1.pk,
+            "contribution_type": "OTHER",
+            "completion_mode": "INDIVIDUAL",
+            "is_priority": "on",
+        },
+    )
+    assert response.status_code in (200, 302)
+    task = Task.objects.get(project=project, name="Urgent task")
+    assert task.is_priority is True
+
+
+@pytest.mark.django_db
+def test_create_form_defaults_is_priority_false(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+    response = client.post(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        {
+            "name": "Normal task",
+            "container": col1.pk,
+            "contribution_type": "OTHER",
+            "completion_mode": "INDIVIDUAL",
+        },
+    )
+    assert response.status_code in (200, 302)
+    task = Task.objects.get(project=project, name="Normal task")
+    assert task.is_priority is False
+
+
+@pytest.mark.django_db
+def test_priority_task_shows_flag_on_board_card(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Flagged",
+        is_priority=True,
+    )
+    client.force_login(user)
+    response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
+    assert response.status_code == 200
+    assert "High priority" in response.content.decode()
+
+
 # ---------------------------------------------------------------------------
 # Authorization: only Project Leads may create/edit/delete/move tasks etc.
 # ---------------------------------------------------------------------------

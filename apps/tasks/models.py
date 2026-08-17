@@ -175,6 +175,11 @@ class Task(models.Model):
         help_text="Optional link to a GitHub issue or pull request for this task.",
     )
 
+    is_priority = models.BooleanField(
+        default=False,
+        help_text="Flags this task as high priority (shown with a colored indicator).",
+    )
+
     class Meta:
         ordering = ["container_task_order", "id"]
         indexes = [
@@ -182,6 +187,7 @@ class Task(models.Model):
             models.Index(fields=["container"]),
             models.Index(fields=["milestone"]),
             models.Index(fields=["status"]),
+            models.Index(fields=["is_priority"]),
         ]
 
     def __str__(self) -> str:
