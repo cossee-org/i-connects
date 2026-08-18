@@ -766,3 +766,79 @@ def test_members_page_disables_self_controls_for_last_pm(client, user):
     assert response.status_code == 200
     content = response.content.decode()
     assert "A project must always have at least one Project Manager." in content
+
+
+@pytest.mark.django_db
+def test_dashboard_timeline_orders_by_urgency_and_links_to_tasks(client, user):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.tasks.models import KanbanBoard, Task
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Timeline Project", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    column = KanbanBoard.objects.filter(project=project).first()
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+
+    upcoming = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=0,
+        name="Upcoming task",
+        deadline=timezone.now() + timedelta(days=30),
+    )
+    upcoming.assigned_members.add(member)
+
+    no_deadline = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=1,
+        name="Undated task",
+    )
+    no_deadline.assigned_members.add(member)
+
+    overdue = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=2,
+        name="Overdue task",
+        deadline=timezone.now() - timedelta(days=1),
+    )
+    overdue.assigned_members.add(member)
+
+    due_soon = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=3,
+        name="Due soon task",
+        deadline=timezone.now() + timedelta(days=2),
+    )
+    due_soon.assigned_members.add(member)
+
+    client.force_login(user)
+    response = client.get(reverse("projects:dashboard"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Task Timeline" in content
+
+    # Urgency-ordered: overdue, due soon, upcoming, then no deadline.
+    positions = {
+        task.name: content.index(task.name)
+        for task in (overdue, due_soon, upcoming, no_deadline)
+    }
+    assert positions["Overdue task"] < positions["Due soon task"] < positions["Upcoming task"] < positions["Undated task"]
+
+    # Each task links to its detail page and shows its project.
+    for task in (overdue, due_soon, upcoming, no_deadline):
+        assert reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}) in content
+    assert content.count("Timeline Project") >= 4
+
+    assert "no deadline" in content

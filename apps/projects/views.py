@@ -171,6 +171,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         all_active = list(assigned_tasks)
         overdue = [t for t in all_active if t.deadline and t.deadline < now]
         due_soon = [t for t in all_active if t.deadline and now <= t.deadline <= soon]
+        upcoming = [t for t in all_active if t.deadline and t.deadline > soon]
         no_deadline = [t for t in all_active if not t.deadline]
 
         context["overdue_tasks"] = overdue
@@ -180,6 +181,17 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["active_task_count"] = len(all_active)
         context["overdue_count"] = len(overdue)
         context["now"] = now
+
+        # --- Timeline (urgency-ordered: overdue -> due soon -> upcoming -> no deadline)
+        for task in overdue:
+            task.timeline_urgency = "overdue"
+        for task in due_soon:
+            task.timeline_urgency = "due_soon"
+        for task in upcoming:
+            task.timeline_urgency = "upcoming"
+        for task in no_deadline:
+            task.timeline_urgency = "none"
+        context["timeline_tasks"] = overdue + due_soon + upcoming + no_deadline
 
         # --- Pending approvals (PM only) -----------------------------------
         if pm_project_ids:
