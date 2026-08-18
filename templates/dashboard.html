@@ -72,33 +72,39 @@
     </h2>
 
     {% if timeline_tasks %}
-      <ul class="flex flex-col gap-4">
+      <ul class="flex flex-col">
         {% for task in timeline_tasks %}
-        <li class="flex items-start gap-3"
+        <li class="flex items-stretch gap-3"
             {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
-          <span class="mt-1.5 w-2.5 h-2.5 rounded-full shrink-0
-            {% if task.timeline_urgency == 'overdue' %}bg-error
-            {% elif task.timeline_urgency == 'due_soon' %}bg-warning
-            {% elif task.timeline_urgency == 'upcoming' %}bg-brand-navy
-            {% else %}bg-brand-text/30{% endif %}"></span>
-          <div class="flex-1 min-w-0">
+          {# Date column #}
+          <div class="w-16 shrink-0 py-2 text-right text-xs leading-tight
+            {% if task.timeline_urgency == 'overdue' %}text-error font-medium
+            {% elif task.timeline_urgency == 'due_soon' %}text-warning font-medium
+            {% elif task.timeline_urgency == 'upcoming' %}text-brand-text/70
+            {% else %}text-brand-text/40 italic{% endif %}">
+            {% if task.deadline %}
+              {{ task.deadline|date:"M j" }}<br>{{ task.deadline|date:"Y" }}
+            {% else %}
+              no date
+            {% endif %}
+          </div>
+
+          {# Rail: connecting line + urgency dot #}
+          <div class="w-4 flex flex-col items-center shrink-0" aria-hidden="true">
+            <div class="w-px flex-1 {% if forloop.first %}bg-transparent{% else %}bg-brand-light/60{% endif %}"></div>
+            <span class="w-2.5 h-2.5 rounded-full shrink-0 my-0.5
+              {% if task.timeline_urgency == 'overdue' %}bg-error
+              {% elif task.timeline_urgency == 'due_soon' %}bg-warning
+              {% elif task.timeline_urgency == 'upcoming' %}bg-brand-navy
+              {% else %}bg-brand-text/30{% endif %}"></span>
+            <div class="w-px flex-1 {% if forloop.last %}bg-transparent{% else %}bg-brand-light/60{% endif %}"></div>
+          </div>
+
+          {# Task info #}
+          <div class="flex-1 min-w-0 py-2">
             <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
                class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
-            <div class="text-xs text-brand-text/60 mt-0.5">
-              {{ task.project.name }}
-              {% if task.deadline %}
-                &middot;
-                {% if task.timeline_urgency == 'overdue' %}
-                  <span class="text-error font-medium">due {{ task.deadline|date:"M j, Y" }}</span>
-                {% elif task.timeline_urgency == 'due_soon' %}
-                  <span class="text-warning font-medium">due {{ task.deadline|date:"M j, Y" }}</span>
-                {% else %}
-                  <span>due {{ task.deadline|date:"M j, Y" }}</span>
-                {% endif %}
-              {% else %}
-                &middot; <span class="italic">no deadline</span>
-              {% endif %}
-            </div>
+            <div class="text-xs text-brand-text/60 mt-0.5">{{ task.project.name }}</div>
           </div>
         </li>
         {% endfor %}

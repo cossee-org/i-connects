@@ -841,4 +841,4 @@ def test_dashboard_timeline_orders_by_urgency_and_links_to_tasks(client, user):
         assert reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}) in content
     assert content.count("Timeline Project") >= 4
 
-    assert "no deadline" in content
+    assert "no date" in content
