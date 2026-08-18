@@ -34,7 +34,7 @@
          data-tooltip="Tasks currently assigned to you"
          @click="selected = selected === 'open-tasks' ? null : 'open-tasks'"
          :class="selected === 'open-tasks' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">My open tasks</span>
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">My tasks</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ active_task_count }}</span>
     </div>
     <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
@@ -73,7 +73,7 @@
               d="M3.75 13.5 10.5 3v6.75h9L12.75 21v-7.5h-9Z" />
       </svg>
       <span x-text="
-        selected === 'open-tasks' ? 'My open tasks' :
+        selected === 'open-tasks' ? 'My tasks' :
         selected === 'overdue' ? 'Overdue Tasks' :
         selected === 'join-requests' ? 'Join Requests' :
         selected === 'invitations' ? 'Invitations' :
@@ -94,8 +94,8 @@
               (selected === 'invitations' && $el.dataset.kind === 'invitation')
             )"
             x-cloak>
-          {# Date column: connecting line is the column's own right border; dot is centered on it, color-coded by urgency. #}
-          <div class="relative w-16 shrink-0 pt-2 pb-2 pr-4 border-r-2 border-brand-light text-right text-xs leading-5
+          {# Date column #}
+          <div class="w-16 shrink-0 pt-2 pb-2 pr-2 text-right text-xs leading-5
             {% if item.urgency == 'overdue' %}text-error font-medium
             {% elif item.urgency == 'due_soon' %}text-warning font-medium
             {% elif item.urgency == 'none' %}text-brand-text/40 italic
@@ -105,15 +105,21 @@
             {% else %}
               no date
             {% endif %}
-            <span class="absolute top-[18px] right-0 translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ring-2 ring-white
+          </div>
+
+          {# Rail: line segments meet at the dot, so the line starts/ends at the first/last dot. #}
+          <div class="w-4 shrink-0 flex flex-col items-center" aria-hidden="true">
+            <div class="w-0.5 flex-1 {% if forloop.first %}bg-transparent{% else %}bg-brand-light{% endif %}"></div>
+            <span class="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white
               {% if item.urgency == 'overdue' %}bg-error
               {% elif item.urgency == 'due_soon' %}bg-warning
               {% elif item.urgency == 'none' %}bg-brand-text/30
-              {% else %}bg-brand-navy{% endif %}" aria-hidden="true"></span>
+              {% else %}bg-brand-navy{% endif %}"></span>
+            <div class="w-0.5 flex-1 {% if forloop.last %}bg-transparent{% else %}bg-brand-light{% endif %}"></div>
           </div>
 
           {# Item info #}
-          <div class="flex-1 min-w-0 pt-2 pb-2 pl-4">
+          <div class="flex-1 min-w-0 pt-2 pb-2 pl-2">
             <a href="{{ item.url }}"
                class="font-medium text-brand-navy hover:text-brand-coral text-sm leading-5">{{ item.title }}</a>
             <div class="text-xs text-brand-text/60 mt-0.5">
