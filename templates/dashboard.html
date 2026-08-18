@@ -89,16 +89,8 @@
             {% endif %}
           </div>
 
-          {# Rail: connecting line + urgency dot #}
-          <div class="w-4 flex flex-col items-center shrink-0" aria-hidden="true">
-            <div class="w-px flex-1 {% if forloop.first %}bg-transparent{% else %}bg-brand-light/60{% endif %}"></div>
-            <span class="w-2.5 h-2.5 rounded-full shrink-0 my-0.5
-              {% if task.timeline_urgency == 'overdue' %}bg-error
-              {% elif task.timeline_urgency == 'due_soon' %}bg-warning
-              {% elif task.timeline_urgency == 'upcoming' %}bg-brand-navy
-              {% else %}bg-brand-text/30{% endif %}"></span>
-            <div class="w-px flex-1 {% if forloop.last %}bg-transparent{% else %}bg-brand-light/60{% endif %}"></div>
-          </div>
+          {# Rail: connecting line #}
+          <div class="w-px shrink-0 bg-brand-light/60" aria-hidden="true"></div>
 
           {# Task info #}
           <div class="flex-1 min-w-0 py-2">
