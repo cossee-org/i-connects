@@ -20,8 +20,8 @@
        style="flex: 1 1 160px">
       <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ project_count }}</span>
-      <span class="absolute bottom-3 right-3 flex items-center gap-1 pl-3 pr-2.5 py-1.5 rounded-full bg-brand-navy text-white text-xs font-semibold whitespace-nowrap
-                   opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150">
+      <span class="absolute bottom-3 left-3 flex items-center gap-1 pl-3 pr-2.5 py-1.5 rounded-full bg-brand-navy text-white text-xs font-semibold whitespace-nowrap
+                   opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150">
         All projects
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
              stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
@@ -63,22 +63,22 @@
     </div>
   </div>
 
-  {# Task Timeline: tasks, join requests, and invitations, filterable by the stat cards above #}
+  {# Activities: tasks, join requests, and invitations, filterable by the stat cards above #}
   <section class="brand-card p-5" aria-labelledby="timeline-heading"
            x-data="{ showAll: false }">
     <h2 id="timeline-heading" class="section-heading flex items-center gap-2 mb-4">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
         <path stroke-linecap="round" stroke-linejoin="round"
-              d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              d="M3.75 13.5 10.5 3v6.75h9L12.75 21v-7.5h-9Z" />
       </svg>
       <span x-text="
         selected === 'open-tasks' ? 'Open Tasks' :
         selected === 'overdue' ? 'Overdue Tasks' :
         selected === 'join-requests' ? 'Join Requests' :
         selected === 'invitations' ? 'Invitations' :
-        'Task Timeline'
-      ">Task Timeline</span>
+        'Activities'
+      ">Activities</span>
     </h2>
 
     {% if timeline_items %}
