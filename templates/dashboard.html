@@ -72,31 +72,33 @@
     </h2>
 
     {% if timeline_tasks %}
-      <ul class="relative flex flex-col gap-4 border-l-2 border-brand-light/60 ml-1">
+      <ul class="flex flex-col gap-4">
         {% for task in timeline_tasks %}
-        <li class="relative pl-5"
+        <li class="flex items-start gap-3"
             {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
-          <span class="absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ring-2 ring-white
+          <span class="mt-1.5 w-2.5 h-2.5 rounded-full shrink-0
             {% if task.timeline_urgency == 'overdue' %}bg-error
             {% elif task.timeline_urgency == 'due_soon' %}bg-warning
             {% elif task.timeline_urgency == 'upcoming' %}bg-brand-navy
             {% else %}bg-brand-text/30{% endif %}"></span>
-          <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
-             class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
-          <div class="text-xs text-brand-text/60 mt-0.5">
-            {{ task.project.name }}
-            {% if task.deadline %}
-              &middot;
-              {% if task.timeline_urgency == 'overdue' %}
-                <span class="text-error font-medium">due {{ task.deadline|date:"M j, Y" }}</span>
-              {% elif task.timeline_urgency == 'due_soon' %}
-                <span class="text-warning font-medium">due {{ task.deadline|date:"M j, Y" }}</span>
+          <div class="flex-1 min-w-0">
+            <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
+               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
+            <div class="text-xs text-brand-text/60 mt-0.5">
+              {{ task.project.name }}
+              {% if task.deadline %}
+                &middot;
+                {% if task.timeline_urgency == 'overdue' %}
+                  <span class="text-error font-medium">due {{ task.deadline|date:"M j, Y" }}</span>
+                {% elif task.timeline_urgency == 'due_soon' %}
+                  <span class="text-warning font-medium">due {{ task.deadline|date:"M j, Y" }}</span>
+                {% else %}
+                  <span>due {{ task.deadline|date:"M j, Y" }}</span>
+                {% endif %}
               {% else %}
-                <span>due {{ task.deadline|date:"M j, Y" }}</span>
+                &middot; <span class="italic">no deadline</span>
               {% endif %}
-            {% else %}
-              &middot; <span class="italic">no deadline</span>
-            {% endif %}
+            </div>
           </div>
         </li>
         {% endfor %}
