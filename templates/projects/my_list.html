@@ -34,10 +34,15 @@
   <input type="hidden" name="status" id="status-input-my" value="{{ current_status }}">
   <input type="hidden" name="visibility" id="visibility-input-my" value="{{ current_visibility }}">
 
-  {# Row 1: Search #}
+  {# Row 1: Search — filters live as the user types #}
   <div class="w-full sm:flex-1 sm:min-w-[200px]">
     <input type="text" name="q" value="{{ current_q }}" placeholder="Search projects…"
-           class="input input-sm input-bordered w-full" />
+           class="input input-sm input-bordered w-full"
+           hx-get="{% url 'projects:my_list' %}"
+           hx-trigger="input changed delay:300ms"
+           hx-target="#project-results"
+           hx-swap="innerHTML"
+           hx-push-url="true" />
   </div>
 
   {# Row 2: Filter dropdowns — grouped so they share a row and fill width on mobile #}
@@ -195,111 +200,8 @@
   </noscript>
 </form>
 
-{% if results_summary %}
-  <div class="flex items-center gap-3 mb-4">
-    <p class="text-sm text-brand-text">{{ results_summary }}</p>
-    <a href="{% url 'projects:my_list' %}" class="ml-auto inline-flex items-center gap-1 text-sm text-gray-400 hover:!text-blue-500 hover:underline shrink-0">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"/></svg>
-      Clear filter
-    </a>
-  </div>
-{% endif %}
-
-{% if project_rows %}
-  <div class="flex flex-col gap-4">
-    {% for row in project_rows %}
-      <a href="{% url 'projects:detail' pk=row.project.pk %}"
-         class="brand-card p-5 hover:shadow-md transition flex gap-4 h-56 overflow-hidden">
-        <div class="flex-1 min-w-0 flex flex-col gap-1.5">
-          <h2 class="max-w-[37.33rem] text-lg font-semibold text-brand-navy leading-snug line-clamp-2">{{ row.project.name }}</h2>
-
-          {% if row.project.description %}
-            <p class="max-w-[37.33rem] text-xs text-brand-text/70 line-clamp-2">{{ row.project.description }}</p>
-          {% elif row.project.abstract %}
-            <p class="max-w-[37.33rem] text-xs text-brand-text/70 line-clamp-2">{{ row.project.abstract }}</p>
-          {% endif %}
-
-          {# Member names — full list on sm+, truncated to 2 on smaller screens #}
-          {% with mn=row.members|member_names %}
-            {% if mn.full %}
-              <p class="max-w-[37.33rem] text-xs text-brand-text/60 min-w-0 truncate">
-                <span class="hidden sm:inline">{{ mn.full }}</span>
-                <span class="sm:hidden">{{ mn.short }}</span>
-              </p>
-            {% endif %}
-          {% endwith %}
-
-          <div class="mt-auto pt-3 flex flex-col gap-2">
-            <p class="text-xs text-brand-text/40">{{ row.project.updated_at|relative_updated }}</p>
-
-            <div class="flex items-center gap-3">
-              <span class="topbar-tooltip inline-flex items-center gap-1 text-xs font-medium text-brand-text/60"
-                    data-tooltip="{{ row.open_task_count }} open task{{ row.open_task_count|pluralize }}"
-                    aria-label="{{ row.open_task_count }} open task{{ row.open_task_count|pluralize }}">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0">
-                  <path fill-rule="evenodd" d="M4.5 3.75a.75.75 0 0 0 0 1.5h11a.75.75 0 0 0 0-1.5h-11Zm0 4.5a.75.75 0 0 0 0 1.5h11a.75.75 0 0 0 0-1.5h-11Zm0 4.5a.75.75 0 0 0 0 1.5h11a.75.75 0 0 0 0-1.5h-11Z" clip-rule="evenodd" />
-                </svg>
-                {{ row.open_task_count }}
-              </span>
-              {% if row.due_task_count %}
-                <span class="topbar-tooltip inline-flex items-center gap-1 text-xs font-medium text-brand-text/60"
-                      data-tooltip="{{ row.due_task_count }} task{{ row.due_task_count|pluralize }} overdue"
-                      aria-label="{{ row.due_task_count }} task{{ row.due_task_count|pluralize }} overdue">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd" />
-                  </svg>
-                  {{ row.due_task_count }}
-                </span>
-              {% endif %}
-              {% if row.pending_join_request_count %}
-                <span class="topbar-tooltip inline-flex items-center gap-1 text-xs font-medium text-brand-text/60"
-                      data-tooltip="{{ row.pending_join_request_count }} join request{{ row.pending_join_request_count|pluralize }}"
-                      aria-label="{{ row.pending_join_request_count }} join request{{ row.pending_join_request_count|pluralize }}">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0">
-                    <path d="M1 16a6.002 6.002 0 0 1 10.632-3.807.75.75 0 0 1-.198 1.079A6.5 6.5 0 0 0 8.694 16H1.5A.5.5 0 0 1 1 16Zm11.5-9.5a3.5 3.5 0 1 0-7 0 3.5 3.5 0 0 0 7 0ZM14 8a.75.75 0 0 1 .75.75V10h1.25a.75.75 0 0 1 0 1.5H14.75v1.25a.75.75 0 0 1-1.5 0V11.5H12a.75.75 0 0 1 0-1.5h1.25V8.75A.75.75 0 0 1 14 8Z" />
-                  </svg>
-                  {{ row.pending_join_request_count }}
-                </span>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-
-        <div class="shrink-0 flex items-center gap-2 pt-0.5 self-start">
-          {% if row.project.is_public %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
-          {% else %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
-          {% endif %}
-          {% include "_components/status_badge.html" with status=row.project.get_status_display %}
-          {% if row.privilege %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-              {% if row.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-              {{ row.privilege|privilege_label }}
-            </span>
-          {% endif %}
-        </div>
-      </a>
-    {% endfor %}
-  </div>
-
-  {% if is_paginated %}
-    <div class="join mt-8 flex justify-center">
-      {% if page_obj.has_previous %}
-        <a class="join-item btn btn-sm"
-           href="?{{ filter_params }}&page={{ page_obj.previous_page_number }}">&laquo;</a>
-      {% endif %}
-      <span class="join-item btn btn-sm btn-active">
-        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
-      </span>
-      {% if page_obj.has_next %}
-        <a class="join-item btn btn-sm"
-           href="?{{ filter_params }}&page={{ page_obj.next_page_number }}">&raquo;</a>
-      {% endif %}
-    </div>
-  {% endif %}
-{% else %}
-  {% include "_components/empty_state.html" with title="No projects yet" body="Create your first project or accept an invitation to join one." cta_label="New project" cta_href=create_url %}
-{% endif %}
+<div id="project-results">
+  {% include "projects/partials/my_list_results.html" %}
+</div>
 
 {% endblock %}

@@ -43,6 +43,31 @@ def test_my_list_requires_login(client):
 
 
 @pytest.mark.django_db
+def test_my_list_htmx_search_returns_results_partial_only(client, user):
+    create_project_with_owner(
+        user=user,
+        form_data={"name": "Alpha Findable", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    create_project_with_owner(
+        user=user,
+        form_data={"name": "Beta Other", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    client.force_login(user)
+
+    response = client.get(
+        reverse("projects:my_list"), {"q": "Findable"}, HTTP_HX_REQUEST="true"
+    )
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Alpha Findable" in content
+    assert "Beta Other" not in content
+    # The partial doesn't re-render the page shell (sidebar, filter form, etc.).
+    assert 'id="filter-form-my"' not in content
+    assert 'aria-label="Sidebar navigation"' not in content
+
+
+@pytest.mark.django_db
 def test_my_list_shows_open_due_and_join_request_counts(client, user, other_user):
     from datetime import timedelta
 

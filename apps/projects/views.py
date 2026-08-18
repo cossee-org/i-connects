@@ -315,6 +315,11 @@ class MyProjectListView(LoginRequiredMixin, ListView):
     context_object_name = "projects"
     paginate_by = 12
 
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["projects/partials/my_list_results.html"]
+        return [self.template_name]
+
     _SORT_MAP = {
         "newest": "-created_at",
         "oldest": "created_at",
