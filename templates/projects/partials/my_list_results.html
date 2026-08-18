@@ -13,20 +13,20 @@
   <div class="flex flex-col gap-4">
     {% for row in project_rows %}
       <a href="{% url 'projects:detail' pk=row.project.pk %}"
-         class="brand-card p-5 hover:shadow-md transition flex gap-4 h-56">
+         class="brand-card p-5 hover:shadow-md transition flex items-start gap-4">
         <div class="flex-1 min-w-0 flex flex-col gap-1.5">
-          <h2 class="max-w-[37.33rem] text-lg font-semibold text-brand-navy leading-snug line-clamp-2">{{ row.project.name }}</h2>
+          <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
 
           {% if row.project.description %}
-            <p class="max-w-[37.33rem] text-xs text-brand-text/70 line-clamp-2">{{ row.project.description }}</p>
+            <p class="text-xs text-brand-text/70 line-clamp-2">{{ row.project.description }}</p>
           {% elif row.project.abstract %}
-            <p class="max-w-[37.33rem] text-xs text-brand-text/70 line-clamp-2">{{ row.project.abstract }}</p>
+            <p class="text-xs text-brand-text/70 line-clamp-2">{{ row.project.abstract }}</p>
           {% endif %}
 
           {# Member names — full list on sm+, truncated to 2 on smaller screens #}
           {% with mn=row.members|member_names %}
             {% if mn.full %}
-              <p class="max-w-[37.33rem] text-xs text-brand-text/60 min-w-0 truncate">
+              <p class="text-xs text-brand-text/60 min-w-0">
                 <span class="hidden sm:inline">{{ mn.full }}</span>
                 <span class="sm:hidden">{{ mn.short }}</span>
               </p>
