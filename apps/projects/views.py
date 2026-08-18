@@ -171,6 +171,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         all_active = list(assigned_tasks)
         overdue = [t for t in all_active if t.deadline and t.deadline < now]
         due_soon = [t for t in all_active if t.deadline and now <= t.deadline <= soon]
+        upcoming = [t for t in all_active if t.deadline and t.deadline > soon]
         no_deadline = [t for t in all_active if not t.deadline]
 
         context["overdue_tasks"] = overdue
@@ -206,7 +207,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                     status=JoinRequestStatus.PENDING,
                 )
                 .select_related("user", "project")
-                .order_by("created_at")
+                .order_by("-created_at")
             )
         else:
             pending_join_requests = []
@@ -221,6 +222,59 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         )
         context["invitation_requests"] = invitation_requests
         context["invitation_request_count"] = len(invitation_requests)
+
+        # --- Timeline: tasks (urgency-ordered), join requests, and invitations,
+        # each dated and linked to where the user acts on them. ----------------
+        timeline_items = []
+        for task_bucket, urgency in (
+            (overdue, "overdue"),
+            (due_soon, "due_soon"),
+            (upcoming, "upcoming"),
+            (no_deadline, "none"),
+        ):
+            for task in task_bucket:
+                timeline_items.append({
+                    "kind": "task",
+                    "urgency": urgency,
+                    "date": task.deadline,
+                    "title": task.name,
+                    "subtitle": task.project.name,
+                    "url": reverse(
+                        "tasks:detail",
+                        kwargs={"project_pk": task.project_id, "pk": task.pk},
+                    ),
+                    "type_label": None,
+                })
+
+        for jr in pending_join_requests:
+            timeline_items.append({
+                "kind": "join_request",
+                "urgency": "join_request",
+                "date": jr.created_at,
+                "title": f"{jr.user.name or jr.user.email} requested to join",
+                "subtitle": jr.project.name,
+                "url": reverse("projects:join_requests", kwargs={"pk": jr.project_id}),
+                "type_label": "Join request",
+            })
+
+        for inv in invitation_requests:
+            timeline_items.append({
+                "kind": "invitation",
+                "urgency": "invitation",
+                "date": inv.created_at,
+                "title": f"Invited to {inv.project.name}",
+                "subtitle": f"{inv.get_privilege_display()} · invited by {inv.added_by}",
+                "url": reverse(
+                    "projects:accept_or_decline", kwargs={"code": inv.invitation_code}
+                ),
+                "type_label": "Invitation",
+            })
+
+        # Sort strictly by date so tasks, join requests, and invitations are
+        # interleaved chronologically; undated tasks sort last.
+        timeline_items.sort(key=lambda item: (item["date"] is None, item["date"]))
+        context["timeline_items"] = timeline_items
+        context["timeline_item_count"] = len(timeline_items)
 
         # --- Notifications -------------------------------------------------
         context["recent_notifications"] = list(

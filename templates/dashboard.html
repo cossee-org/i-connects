@@ -15,20 +15,26 @@
 
   {# Stats bar #}
   <div class="flex flex-row flex-wrap gap-4">
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
-         style="flex: 1 1 160px"
-         data-tooltip="Total projects you belong to"
-         @click="selected = selected === 'projects' ? null : 'projects'"
-         :class="selected === 'projects' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
+    <a href="{% url 'projects:my_list' %}"
+       class="group relative brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow hover:ring-1 hover:ring-brand-navy/20 overflow-hidden"
+       style="flex: 1 1 160px">
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">My projects</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ project_count }}</span>
-    </div>
+      <span class="absolute bottom-3 left-3 flex items-center gap-1 pl-3 pr-2.5 py-1.5 rounded-full bg-brand-navy text-white text-xs font-semibold whitespace-nowrap
+                   opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150">
+        View all
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+        </svg>
+      </span>
+    </a>
     <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
          style="flex: 1 1 160px"
          data-tooltip="Tasks currently assigned to you"
          @click="selected = selected === 'open-tasks' ? null : 'open-tasks'"
          :class="selected === 'open-tasks' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">My tasks</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ active_task_count }}</span>
     </div>
     <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
@@ -57,183 +63,94 @@
     </div>
   </div>
 
-  {# Projects #}
-  <section class="brand-card p-5" aria-labelledby="projects-heading"
-           x-data="{ showAll: false }"
-           x-show="selected === null || selected === 'projects'"
-           x-cloak>
-    <h2 id="projects-heading" class="section-heading flex items-center gap-2 mb-4">
+  {# My activities: tasks, join requests, and invitations, filterable by the stat cards above #}
+  <section class="brand-card p-5" aria-labelledby="timeline-heading"
+           x-data="{ showAll: false }">
+    <h2 id="timeline-heading" class="section-heading flex items-center gap-2 mb-4">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
         <path stroke-linecap="round" stroke-linejoin="round"
-              d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" />
+              d="M3.75 13.5 10.5 3v6.75h9L12.75 21v-7.5h-9Z" />
       </svg>
-      Projects
+      <span x-text="
+        selected === 'open-tasks' ? 'My tasks' :
+        selected === 'overdue' ? 'Overdue Tasks' :
+        selected === 'join-requests' ? 'Join Requests' :
+        selected === 'invitations' ? 'Invitations' :
+        'My activities'
+      ">My activities</span>
     </h2>
 
-    {% if recent_projects %}
-      <ul class="divide-y divide-brand-light/60">
-        {% for project in recent_projects %}
-        <li class="py-3 flex items-start justify-between gap-3"
-            {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
-          <div class="flex-1 min-w-0">
-            <a href="{% url 'projects:detail' pk=project.pk %}"
-               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ project.name }}</a>
-            <div class="text-xs text-brand-text/60 mt-0.5">
-              {{ project.get_status_display }}
-              &middot; updated {{ project.updated_at|date:"M j, Y" }}
-            </div>
-          </div>
-        </li>
-        {% endfor %}
-      </ul>
-      {% if project_count > 5 %}
-      <button @click="showAll = !showAll"
-              class="mt-3 flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
-        <span x-text="showAll ? 'Show less' : 'Show all {{ project_count }} projects'">Show all {{ project_count }} projects</span>
-      </button>
-      {% endif %}
-    {% else %}
-      <p class="text-sm text-brand-text/60 italic">No projects yet.</p>
-    {% endif %}
-  </section>
-
-  {# Open Tasks (includes overdue filter) #}
-  <section class="brand-card p-5" aria-labelledby="active-tasks-heading"
-           x-data="{ showAll: false }"
-           x-show="selected === null || selected === 'open-tasks' || selected === 'overdue'"
-           x-cloak>
-    <h2 id="active-tasks-heading" class="section-heading flex items-center gap-2 mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
-      </svg>
-      <span x-text="selected === 'overdue' ? 'Overdue Tasks' : 'Open Tasks'">Open Tasks</span>
-    </h2>
-
-    {% if all_open_tasks %}
-      <ul class="divide-y divide-brand-light/60">
-        {% for task in all_open_tasks %}
-        <li class="py-3 flex items-start gap-3"
-            data-overdue="{% if task.deadline and task.deadline < now %}1{% else %}0{% endif %}"
-            x-show="(selected !== 'overdue' || $el.dataset.overdue === '1') && ({{ forloop.counter }} <= 5 || showAll)"
+    {% if timeline_items %}
+      <ul class="flex flex-col">
+        {% for item in timeline_items %}
+        <li class="flex items-stretch"
+            data-kind="{{ item.kind }}"
+            data-urgency="{{ item.urgency }}"
+            x-show="selected === null ? ({{ forloop.counter }} <= 5 || showAll) : (
+              (selected === 'open-tasks' && $el.dataset.kind === 'task') ||
+              (selected === 'overdue' && $el.dataset.urgency === 'overdue') ||
+              (selected === 'join-requests' && $el.dataset.kind === 'join_request') ||
+              (selected === 'invitations' && $el.dataset.kind === 'invitation')
+            )"
             x-cloak>
-          <div>
-            <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
-               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
+          {# Date column #}
+          <div class="w-16 shrink-0 pt-2 pb-2 pr-2 text-right text-xs leading-5
+            {% if item.urgency == 'overdue' %}text-error font-medium
+            {% elif item.urgency == 'due_soon' %}text-warning font-medium
+            {% elif item.urgency == 'none' %}text-brand-text/40 italic
+            {% else %}text-brand-text/70{% endif %}">
+            {% if item.date %}
+              {{ item.date|date:"M j" }}<br>{{ item.date|date:"Y" }}
+            {% else %}
+              no date
+            {% endif %}
+          </div>
+
+          {# Rail: line segments meet at the dot, so the line starts/ends at the first/last dot. #}
+          <div class="w-4 shrink-0 flex flex-col items-center" aria-hidden="true">
+            <div class="w-0.5 flex-1 {% if forloop.first %}bg-transparent{% else %}bg-brand-light{% endif %}"></div>
+            <span class="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white
+              {% if item.urgency == 'overdue' %}bg-error
+              {% elif item.urgency == 'due_soon' %}bg-warning
+              {% elif item.urgency == 'none' %}bg-brand-text/30
+              {% else %}bg-brand-navy{% endif %}"></span>
+            <div class="w-0.5 flex-1 {% if forloop.last %}bg-transparent{% else %}bg-brand-light{% endif %}"></div>
+          </div>
+
+          {# Item info #}
+          <div class="flex-1 min-w-0 pt-2 pb-2 pl-2">
+            <a href="{{ item.url }}"
+               class="font-medium text-brand-navy hover:text-brand-coral text-sm leading-5">{{ item.title }}</a>
             <div class="text-xs text-brand-text/60 mt-0.5">
-              {{ task.project.name }}
-              {% if task.deadline %}
-                &middot;
-                {% if task.deadline < now %}
-                  <span class="text-error font-medium">due {{ task.deadline|date:"M j, Y" }}</span>
-                {% else %}
-                  <span>due {{ task.deadline|date:"M j, Y" }}</span>
-                {% endif %}
+              {% if item.type_label %}
+                <span class="inline-block px-1.5 py-0.5 mr-1 rounded bg-brand-lighter text-brand-navy/70 text-[10px] font-semibold uppercase tracking-wide align-middle">{{ item.type_label }}</span>
               {% endif %}
+              {{ item.subtitle }}
             </div>
           </div>
         </li>
         {% endfor %}
       </ul>
-      {% if overdue_count == 0 %}
-      <p x-show="selected === 'overdue'" x-cloak
-         class="text-sm text-brand-text/60 italic">No overdue tasks.</p>
-      {% endif %}
-      {% if active_task_count > 5 %}
-      <button x-show="selected !== 'overdue'" @click="showAll = !showAll"
+
+      <p class="text-sm text-brand-text/60 italic"
+         x-show="
+           (selected === 'open-tasks' && {{ active_task_count }} === 0) ||
+           (selected === 'overdue' && {{ overdue_count }} === 0) ||
+           (selected === 'join-requests' && {{ pending_join_request_count }} === 0) ||
+           (selected === 'invitations' && {{ invitation_request_count }} === 0)
+         " x-cloak>
+        Nothing to show for this filter.
+      </p>
+
+      {% if timeline_item_count > 5 %}
+      <button x-show="selected === null" @click="showAll = !showAll"
               class="mt-3 flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
-        <span x-text="showAll ? 'Show less' : 'Show all {{ active_task_count }} tasks'">Show all {{ active_task_count }} tasks</span>
+        <span x-text="showAll ? 'Show less' : 'Show all {{ timeline_item_count }} items'">Show all {{ timeline_item_count }} items</span>
       </button>
       {% endif %}
     {% else %}
-      <p class="text-sm text-brand-text/60 italic">No open tasks assigned to you.</p>
-    {% endif %}
-  </section>
-
-  {# Join Requests #}
-  {% if is_pm_anywhere %}
-  <section class="brand-card p-5" aria-labelledby="join-requests-heading"
-           x-data="{ showAll: false }"
-           x-show="selected === null || selected === 'join-requests'"
-           x-cloak>
-    <h2 id="join-requests-heading" class="section-heading flex items-center gap-2 mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
-      </svg>
-      Join Requests
-    </h2>
-
-    {% if pending_join_requests %}
-      <ul class="divide-y divide-brand-light/60">
-        {% for jr in pending_join_requests %}
-        <li class="py-3 flex items-start justify-between gap-3"
-            {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
-          <div class="flex-1 min-w-0">
-            <a href="{% url 'projects:join_requests' pk=jr.project.pk %}"
-               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ jr.user.name|default:jr.user.email }}</a>
-            <span class="text-xs text-brand-text/60 ml-1">{{ jr.user.email }}</span>
-            <div class="text-xs text-brand-text/60 mt-0.5 flex items-center gap-2">
-              <span>{{ jr.project.name }}</span>
-            </div>
-          </div>
-        </li>
-        {% endfor %}
-      </ul>
-      {% if pending_join_request_count > 5 %}
-      <button @click="showAll = !showAll"
-              class="mt-3 flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
-        <span x-text="showAll ? 'Show less' : 'Show all {{ pending_join_request_count }} requests'">Show all {{ pending_join_request_count }} requests</span>
-      </button>
-      {% endif %}
-    {% else %}
-      <p class="text-sm text-brand-text/60 italic">No pending join requests.</p>
-    {% endif %}
-  </section>
-  {% endif %}
-
-  {# Invitations #}
-  <section class="brand-card p-5" aria-labelledby="invitations-heading"
-           x-data="{ showAll: false }"
-           x-show="selected === null || selected === 'invitations'"
-           x-cloak>
-    <h2 id="invitations-heading" class="section-heading flex items-center gap-2 mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-      </svg>
-      Invitations
-    </h2>
-
-    {% if invitation_requests %}
-      <ul class="divide-y divide-brand-light/60">
-        {% for inv in invitation_requests %}
-        <li class="py-3 flex items-start justify-between gap-3"
-            {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
-          <div class="flex-1 min-w-0">
-            <a href="{% url 'projects:detail' pk=inv.project.pk %}"
-               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ inv.project.name }}</a>
-            <div class="text-xs text-brand-text/60 mt-0.5">
-              Invited by {{ inv.added_by }}
-              &middot; {{ inv.get_privilege_display }}
-              &middot; {{ inv.created_at|date:"M j, Y" }}
-            </div>
-          </div>
-        </li>
-        {% endfor %}
-      </ul>
-      {% if invitation_request_count > 5 %}
-      <button @click="showAll = !showAll"
-              class="mt-3 flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
-        <span x-text="showAll ? 'Show less' : 'Show all {{ invitation_request_count }} invitations'">Show all {{ invitation_request_count }} invitations</span>
-      </button>
-      {% endif %}
-    {% else %}
-      <p class="text-sm text-brand-text/60 italic">No pending invitations.</p>
+      <p class="text-sm text-brand-text/60 italic">Nothing in your timeline yet.</p>
     {% endif %}
   </section>
 
