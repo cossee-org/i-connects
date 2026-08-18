@@ -840,5 +840,60 @@ def test_dashboard_timeline_orders_by_urgency_and_links_to_tasks(client, user):
     for task in (overdue, due_soon, upcoming, no_deadline):
         assert reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}) in content
     assert content.count("Timeline Project") >= 4
-
     assert "no date" in content
+
+
+@pytest.mark.django_db
+def test_dashboard_timeline_includes_join_requests_and_invitations(client, user, other_user):
+    from apps.projects.services import create_invitation, create_join_request
+
+    owned_project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Owned Project", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    join_request = create_join_request(
+        project=owned_project, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+
+    other_project = create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Other Project", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    invitation = create_invitation(
+        project=other_project,
+        email=user.email,
+        privilege=MemberPrivileges.CONTRIBUTOR,
+        added_by="Bob",
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("projects:dashboard"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Join request" in content
+    assert "Invitation" in content
+    assert reverse("projects:join_requests", kwargs={"pk": owned_project.pk}) in content
+    assert reverse("projects:accept_or_decline", kwargs={"code": invitation.invitation_code}) in content
+    assert "Owned Project" in content
+    assert "Other Project" in content
+
+
+@pytest.mark.django_db
+def test_dashboard_projects_card_links_to_projects_module_and_drops_old_sections(client, user):
+    create_project_with_owner(
+        user=user,
+        form_data={"name": "Sole Project", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    client.force_login(user)
+    response = client.get(reverse("projects:dashboard"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert reverse("projects:my_list") in content
+    # The standalone Projects/Open Tasks/Join Requests/Invitations sections
+    # are gone -- their content now lives in the unified timeline instead.
+    assert 'id="projects-heading"' not in content
+    assert 'id="active-tasks-heading"' not in content
+    assert 'id="join-requests-heading"' not in content
+    assert 'id="invitations-heading"' not in content
