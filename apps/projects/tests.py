@@ -827,7 +827,7 @@ def test_dashboard_timeline_orders_by_urgency_and_links_to_tasks(client, user):
     content = response.content.decode()
 
     assert response.status_code == 200
-    assert "Activities" in content
+    assert "My activities" in content
 
     # Urgency-ordered: overdue, due soon, upcoming, then no deadline.
     positions = {

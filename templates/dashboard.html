@@ -18,11 +18,11 @@
     <a href="{% url 'projects:my_list' %}"
        class="group relative brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow hover:ring-1 hover:ring-brand-navy/20 overflow-hidden"
        style="flex: 1 1 160px">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">My projects</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ project_count }}</span>
       <span class="absolute bottom-3 left-3 flex items-center gap-1 pl-3 pr-2.5 py-1.5 rounded-full bg-brand-navy text-white text-xs font-semibold whitespace-nowrap
                    opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150">
-        All projects
+        My projects
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
              stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
@@ -34,7 +34,7 @@
          data-tooltip="Tasks currently assigned to you"
          @click="selected = selected === 'open-tasks' ? null : 'open-tasks'"
          :class="selected === 'open-tasks' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
+      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">My open tasks</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ active_task_count }}</span>
     </div>
     <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
@@ -63,7 +63,7 @@
     </div>
   </div>
 
-  {# Activities: tasks, join requests, and invitations, filterable by the stat cards above #}
+  {# My activities: tasks, join requests, and invitations, filterable by the stat cards above #}
   <section class="brand-card p-5" aria-labelledby="timeline-heading"
            x-data="{ showAll: false }">
     <h2 id="timeline-heading" class="section-heading flex items-center gap-2 mb-4">
@@ -73,12 +73,12 @@
               d="M3.75 13.5 10.5 3v6.75h9L12.75 21v-7.5h-9Z" />
       </svg>
       <span x-text="
-        selected === 'open-tasks' ? 'Open Tasks' :
+        selected === 'open-tasks' ? 'My open tasks' :
         selected === 'overdue' ? 'Overdue Tasks' :
         selected === 'join-requests' ? 'Join Requests' :
         selected === 'invitations' ? 'Invitations' :
-        'Activities'
-      ">Activities</span>
+        'My activities'
+      ">My activities</span>
     </h2>
 
     {% if timeline_items %}
@@ -94,8 +94,8 @@
               (selected === 'invitations' && $el.dataset.kind === 'invitation')
             )"
             x-cloak>
-          {# Date column: the connecting line is this column's own right border. #}
-          <div class="w-16 shrink-0 pt-2 pb-2 pr-4 border-r-2 border-brand-light text-right text-xs leading-5
+          {# Date column: connecting line is the column's own right border; dot is centered on it, color-coded by urgency. #}
+          <div class="relative w-16 shrink-0 pt-2 pb-2 pr-4 border-r-2 border-brand-light text-right text-xs leading-5
             {% if item.urgency == 'overdue' %}text-error font-medium
             {% elif item.urgency == 'due_soon' %}text-warning font-medium
             {% elif item.urgency == 'none' %}text-brand-text/40 italic
@@ -105,6 +105,11 @@
             {% else %}
               no date
             {% endif %}
+            <span class="absolute top-[18px] right-0 translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ring-2 ring-white
+              {% if item.urgency == 'overdue' %}bg-error
+              {% elif item.urgency == 'due_soon' %}bg-warning
+              {% elif item.urgency == 'none' %}bg-brand-text/30
+              {% else %}bg-brand-navy{% endif %}" aria-hidden="true"></span>
           </div>
 
           {# Item info #}
