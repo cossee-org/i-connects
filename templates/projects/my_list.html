@@ -229,6 +229,22 @@
             <p class="text-xs text-brand-text/70 line-clamp-2">{{ row.project.abstract }}</p>
           {% endif %}
 
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-navy/10 text-brand-navy">
+              {{ row.open_task_count }} open task{{ row.open_task_count|pluralize }}
+            </span>
+            {% if row.due_task_count %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
+                {{ row.due_task_count }} task{{ row.due_task_count|pluralize }} overdue
+              </span>
+            {% endif %}
+            {% if row.pending_join_request_count %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
+                {{ row.pending_join_request_count }} join request{{ row.pending_join_request_count|pluralize }}
+              </span>
+            {% endif %}
+          </div>
+
           <div class="mt-auto pt-3">
             <p class="text-xs text-brand-text/40">{{ row.project.updated_at|relative_updated }}</p>
           </div>

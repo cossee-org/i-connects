@@ -6,7 +6,7 @@ import pytest
 from django.urls import reverse
 
 from apps.audit.models import AuditAction, AuditLog
-from apps.core.enums import JoinRequestStatus, MemberPrivileges, ProjectStatus
+from apps.core.enums import JoinRequestStatus, MemberPrivileges, ProjectStatus, TaskStatus
 from apps.projects.models import (
     Invitation,
     JoinRequest,
@@ -40,6 +40,58 @@ def test_my_list_requires_login(client):
     # Anonymous -> redirect to login.
     assert response.status_code in (301, 302)
     assert "/accounts/login" in response["Location"]
+
+
+@pytest.mark.django_db
+def test_my_list_shows_open_due_and_join_request_counts(client, user, other_user):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.projects.models import ProjectMember
+    from apps.tasks.models import KanbanBoard, Task
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Counted", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    column = KanbanBoard.objects.filter(project=project).first()
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=0,
+        name="Open task",
+    )
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=1,
+        name="Overdue task",
+        deadline=timezone.now() - timedelta(days=1),
+    )
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=2,
+        name="Completed task",
+        status=TaskStatus.COMPLETED,
+        deadline=timezone.now() - timedelta(days=1),
+    )
+    create_join_request(project=project, user=other_user, requested_privilege="CONTRIBUTOR")
+
+    client.force_login(user)
+    response = client.get(reverse("projects:my_list"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "2 open tasks" in content
+    assert "1 task overdue" in content
+    assert "1 join request" in content
 
 
 @pytest.mark.django_db
