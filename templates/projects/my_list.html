@@ -250,19 +250,8 @@
           </div>
         </div>
 
-        <div class="shrink-0 flex items-center gap-2 pt-0.5">
-          {% if row.project.is_public %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
-          {% else %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
-          {% endif %}
-          {% include "_components/status_badge.html" with status=row.project.get_status_display %}
-          {% if row.privilege %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-              {% if row.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-              {{ row.privilege|privilege_label }}
-            </span>
-          {% endif %}
+        <div class="shrink-0 flex items-center gap-3 pt-0.5">
+          {% include "_components/visibility_status_lead.html" with project=row.project privilege=row.privilege %}
         </div>
       </a>
     {% endfor %}
