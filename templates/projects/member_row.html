@@ -31,9 +31,9 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
         {% csrf_token %}
         {% if row.is_self and viewer_is_last_pm %}
           <select name="privilege" disabled
-                  title="A project must always have at least one Project Lead."
+                  title="A project must always have at least one Lead."
                   class="select select-bordered select-sm">
-            <option value="PROJECT_MANAGER" selected>Project Lead</option>
+            <option value="PROJECT_MANAGER" selected>Lead</option>
           </select>
         {% else %}
           {{ row.form.privilege }}
@@ -61,7 +61,7 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
       {% if row.is_self and viewer_is_last_pm %}
         <button class="btn btn-xs btn-ghost text-error/50 cursor-not-allowed"
                 disabled
-                title="A project must always have at least one Project Lead.">
+                title="A project must always have at least one Lead.">
           Remove
         </button>
       {% else %}

@@ -715,7 +715,7 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseBadRequest("No project membership.")
         if self.task.completion_mode == CompletedAs.TEAM:
             return HttpResponseBadRequest(
-                "This task is completed as a team; a Project Lead closes it."
+                "This task is completed as a team; a Lead closes it."
             )
         if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
             return HttpResponseForbidden("Only an assignee can mark their part done.")

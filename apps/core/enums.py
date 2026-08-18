@@ -6,7 +6,7 @@ from django.db import models
 
 
 class MemberPrivileges(models.TextChoices):
-    PROJECT_MANAGER = "PROJECT_MANAGER", "Project Lead"
+    PROJECT_MANAGER = "PROJECT_MANAGER", "Lead"
     CONTRIBUTOR = "CONTRIBUTOR", "Member"
 
 
