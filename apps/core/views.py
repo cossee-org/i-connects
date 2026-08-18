@@ -16,11 +16,11 @@ from apps.tasks.models import Task
 def home(request):
     """Landing page for the Django MVP.
 
-    Authenticated users are bounced to their project dashboard; anonymous
+    Authenticated users are bounced to their projects list; anonymous
     visitors see the marketing/landing page.
     """
     if request.user.is_authenticated:
-        return redirect("projects:dashboard")
+        return redirect("projects:my_list")
     return render(request, "core/home.html")
 
 

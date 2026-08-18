@@ -182,7 +182,7 @@
     </button>
 
     {% block topbar_logo %}
-      <a href="{% url 'projects:dashboard' %}" class="flex items-center gap-2 shrink-0" aria-label="i-CONNECTS home">
+      <a href="{% url 'projects:my_list' %}" class="flex items-center gap-2 shrink-0" aria-label="i-CONNECTS home">
         <img src="{% static 'img/favicon.png' %}" alt="" class="h-7 w-7" />
         <span class="font-bold text-brand-navy text-sm">i&bull;CONNECTS</span>
       </a>
@@ -418,21 +418,23 @@
       </div>
     </main>
 
-    <footer class="border-t border-brand-light bg-base-100 mt-auto" role="contentinfo">
-      <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-brand-text/70">
-        <div class="flex items-center gap-2">
-          <span class="font-semibold text-brand-navy">i&bull;CONNECTS</span>
-          <span>&middot;</span>
-          <span>Collaborative research platform</span>
+    {% if not user.is_authenticated %}
+      <footer class="border-t border-brand-light bg-base-100 mt-auto" role="contentinfo">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-brand-text/70">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-brand-navy">i&bull;CONNECTS</span>
+            <span>&middot;</span>
+            <span>Collaborative research platform</span>
+          </div>
+          <div class="flex gap-4">
+            <a href="{% url 'core:home' %}" class="hover:text-brand-coral">Home</a>
+            <a href="{% url 'projects:list' %}" class="hover:text-brand-coral">Browse projects</a>
+            <a href="{% url 'core:terms_of_use' %}" class="hover:text-brand-coral">Terms of Use</a>
+            <a href="{% url 'core:privacy_policy' %}" class="hover:text-brand-coral">Privacy Policy</a>
+          </div>
         </div>
-        <div class="flex gap-4">
-          <a href="{% url 'core:home' %}" class="hover:text-brand-coral">Home</a>
-          <a href="{% url 'projects:list' %}" class="hover:text-brand-coral">Browse projects</a>
-          <a href="{% url 'core:terms_of_use' %}" class="hover:text-brand-coral">Terms of Use</a>
-          <a href="{% url 'core:privacy_policy' %}" class="hover:text-brand-coral">Privacy Policy</a>
-        </div>
-      </div>
-    </footer>
+      </footer>
+    {% endif %}
   </div><!-- end main content -->
 
   {% block extra_body %}{% endblock %}

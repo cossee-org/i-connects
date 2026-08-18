@@ -137,6 +137,6 @@ class ProjectManagerRequiredMixin:
             request.user, project
         ):
             return HttpResponseForbidden(
-                "Only a Project Lead can perform this action."
+                "Only a Lead can perform this action."
             )
         return super().dispatch(request, *args, **kwargs)
