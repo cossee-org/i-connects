@@ -270,6 +270,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 "type_label": "Invitation",
             })
 
+        # Sort strictly by date so tasks, join requests, and invitations are
+        # interleaved chronologically; undated tasks sort last.
+        timeline_items.sort(key=lambda item: (item["date"] is None, item["date"]))
         context["timeline_items"] = timeline_items
         context["timeline_item_count"] = len(timeline_items)
 

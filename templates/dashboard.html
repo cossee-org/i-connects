@@ -16,16 +16,15 @@
   {# Stats bar #}
   <div class="flex flex-row flex-wrap gap-4">
     <a href="{% url 'projects:my_list' %}"
-       class="group relative brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow hover:ring-1 hover:ring-brand-navy/20"
-       style="flex: 1 1 160px"
-       data-tooltip="Open All projects">
+       class="group relative brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow hover:ring-1 hover:ring-brand-navy/20 overflow-hidden"
+       style="flex: 1 1 160px">
       <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ project_count }}</span>
-      <span class="absolute top-3 right-3 flex items-center justify-center w-6 h-6 rounded-full bg-brand-navy text-white
-                   opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150"
-            aria-hidden="true">
+      <span class="absolute bottom-3 right-3 flex items-center gap-1 pl-3 pr-2.5 py-1.5 rounded-full bg-brand-navy text-white text-xs font-semibold whitespace-nowrap
+                   opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150">
+        All projects
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5">
+             stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
         </svg>
       </span>
@@ -95,8 +94,8 @@
               (selected === 'invitations' && $el.dataset.kind === 'invitation')
             )"
             x-cloak>
-          {# Date column #}
-          <div class="w-16 shrink-0 py-2 pr-4 text-right text-xs leading-tight
+          {# Date column: the connecting line is this column's own right border. #}
+          <div class="w-16 shrink-0 pt-2 pb-2 pr-4 border-r-2 border-brand-light text-right text-xs leading-5
             {% if item.urgency == 'overdue' %}text-error font-medium
             {% elif item.urgency == 'due_soon' %}text-warning font-medium
             {% elif item.urgency == 'none' %}text-brand-text/40 italic
@@ -108,13 +107,10 @@
             {% endif %}
           </div>
 
-          {# Rail: connecting line #}
-          <div class="w-0.5 shrink-0 bg-brand-light" aria-hidden="true"></div>
-
           {# Item info #}
-          <div class="flex-1 min-w-0 py-2 pl-3">
+          <div class="flex-1 min-w-0 pt-2 pb-2 pl-4">
             <a href="{{ item.url }}"
-               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ item.title }}</a>
+               class="font-medium text-brand-navy hover:text-brand-coral text-sm leading-5">{{ item.title }}</a>
             <div class="text-xs text-brand-text/60 mt-0.5">
               {% if item.type_label %}
                 <span class="inline-block px-1.5 py-0.5 mr-1 rounded bg-brand-lighter text-brand-navy/70 text-[10px] font-semibold uppercase tracking-wide align-middle">{{ item.type_label }}</span>
