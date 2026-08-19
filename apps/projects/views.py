@@ -311,6 +311,17 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # Sort strictly by date so tasks, join requests, and invitations are
         # interleaved chronologically; undated tasks sort last.
         timeline_items.sort(key=lambda item: (item["date"] is None, item["date"]))
+
+        from django.utils.dateformat import format as django_date_format
+
+        for item in timeline_items:
+            if item["date"]:
+                item["date_label"] = django_date_format(item["date"], "M j")
+                item["date_year"] = django_date_format(item["date"], "Y")
+            else:
+                item["date_label"] = None
+                item["date_year"] = None
+
         context["timeline_items"] = timeline_items
         context["timeline_item_count"] = len(timeline_items)
 
