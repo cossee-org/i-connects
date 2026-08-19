@@ -117,7 +117,12 @@
                }
                return list;
              },
-             get visible() { return this.showAll ? this.sorted : this.sorted.slice(0, 5); }
+             get visible() { return this.showAll ? this.sorted : this.sorted.slice(0, 5); },
+             get hasActive() { return this.items.some(i => i.kind === 'task'); },
+             get hasOverdue() { return this.items.some(i => i.urgency === 'overdue'); },
+             get hasReview() { return this.items.some(i => i.kind === 'review_task'); },
+             get hasJoinRequest() { return this.items.some(i => i.kind === 'join_request'); },
+             get hasInvitation() { return this.items.some(i => i.kind === 'invitation'); }
            }">
     <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
       <h2 id="timeline-heading" class="section-heading flex items-center gap-2">
@@ -130,38 +135,37 @@
       </h2>
 
       <div class="flex items-center gap-1.5 flex-wrap">
-        <button type="button" @click="selected = selected === 'active' ? null : 'active'"
+        <button type="button" x-show="hasActive" x-cloak @click="selected = selected === 'active' ? null : 'active'"
                 class="px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors"
                 :class="selected === 'active' ? 'bg-brand-navy text-white border-brand-navy' : 'border-gray-200 text-brand-text/60 hover:bg-gray-50'">
-          Active Tasks
+          Tasks
         </button>
-        <button type="button" @click="selected = selected === 'overdue' ? null : 'overdue'"
+        <button type="button" x-show="hasOverdue" x-cloak @click="selected = selected === 'overdue' ? null : 'overdue'"
                 class="px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors"
                 :class="selected === 'overdue' ? 'bg-brand-navy text-white border-brand-navy' : 'border-gray-200 text-brand-text/60 hover:bg-gray-50'">
           Overdue
         </button>
-        <button type="button" @click="selected = selected === 'review' ? null : 'review'"
+        <button type="button" x-show="hasReview" x-cloak @click="selected = selected === 'review' ? null : 'review'"
                 class="px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors"
                 :class="selected === 'review' ? 'bg-brand-navy text-white border-brand-navy' : 'border-gray-200 text-brand-text/60 hover:bg-gray-50'">
           To Review
         </button>
-        <button type="button" @click="selected = selected === 'join_request' ? null : 'join_request'"
+        <button type="button" x-show="hasJoinRequest" x-cloak @click="selected = selected === 'join_request' ? null : 'join_request'"
                 class="px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors"
                 :class="selected === 'join_request' ? 'bg-brand-navy text-white border-brand-navy' : 'border-gray-200 text-brand-text/60 hover:bg-gray-50'">
           Join Requests
         </button>
-        <button type="button" @click="selected = selected === 'invitation' ? null : 'invitation'"
+        <button type="button" x-show="hasInvitation" x-cloak @click="selected = selected === 'invitation' ? null : 'invitation'"
                 class="px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors"
                 :class="selected === 'invitation' ? 'bg-brand-navy text-white border-brand-navy' : 'border-gray-200 text-brand-text/60 hover:bg-gray-50'">
-          Invitation
+          Invitations
         </button>
 
         {# Sort dropdown #}
         <div class="relative" x-data="{ open: false }" @keydown.escape="open = false" @click.outside="open = false">
           <button type="button" @click="open = !open"
                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-gray-200 text-brand-text/60 hover:bg-gray-50 transition-colors">
-            Sort:
-            <span x-text="sort === 'date' ? 'Date' : sort === 'title' ? 'Title' : 'Type'"></span>
+            Sort
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 shrink-0">
               <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
             </svg>
