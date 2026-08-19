@@ -89,7 +89,7 @@ class MyTaskListView(LoginRequiredMixin, ListView):
     split into two tabs by role:
 
     - "Assigned": tasks assigned to the user.
-    - "Review": tasks where the user is a reviewer.
+    - "To Review": tasks where the user is a reviewer.
 
     Each tab shows every matching task by default (any status); a
     "Type" filter narrows a tab down to not-completed / marked-done /
