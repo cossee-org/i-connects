@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% load project_tags %}
 
-{% block title %}My projects &mdash; i&bull;CONNECTS{% endblock %}
+{% block title %}Projects &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block page_header %}{% endblock %}
 
 {% block content %}
 <div class="mb-6">
   <div class="flex items-center gap-3">
-    <h1 class="page-title font-semibold text-brand-navy">My projects</h1>
+    <h1 class="page-title font-semibold text-brand-navy">Projects</h1>
     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_project_count }}</span>
     <div class="relative mt-1.5" x-data="{ open: false }" @keydown.escape="open = false" @click.outside="open = false">
       <button type="button" @click="open = !open"
