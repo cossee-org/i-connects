@@ -35,28 +35,6 @@
 
           <div class="mt-auto pt-3 flex flex-col gap-2">
             <p class="text-xs text-brand-text/40">{{ row.project.updated_at|relative_updated }}</p>
-
-            <div class="flex items-center gap-3">
-              <span class="topbar-tooltip inline-flex items-center gap-1 text-xs font-medium text-brand-text/60"
-                    data-tooltip="{{ row.open_task_count }} open task{{ row.open_task_count|pluralize }}"
-                    aria-label="{{ row.open_task_count }} open task{{ row.open_task_count|pluralize }}">
-                {{ row.open_task_count }}
-              </span>
-              {% if row.due_task_count %}
-                <span class="topbar-tooltip inline-flex items-center gap-1 text-xs font-medium text-brand-text/60"
-                      data-tooltip="{{ row.due_task_count }} task{{ row.due_task_count|pluralize }} overdue"
-                      aria-label="{{ row.due_task_count }} task{{ row.due_task_count|pluralize }} overdue">
-                  {{ row.due_task_count }}
-                </span>
-              {% endif %}
-              {% if row.pending_join_request_count %}
-                <span class="topbar-tooltip inline-flex items-center gap-1 text-xs font-medium text-brand-text/60"
-                      data-tooltip="{{ row.pending_join_request_count }} join request{{ row.pending_join_request_count|pluralize }}"
-                      aria-label="{{ row.pending_join_request_count }} join request{{ row.pending_join_request_count|pluralize }}">
-                  {{ row.pending_join_request_count }}
-                </span>
-              {% endif %}
-            </div>
           </div>
         </div>
 
