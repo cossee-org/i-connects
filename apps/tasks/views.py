@@ -85,9 +85,12 @@ from apps.tasks.services import (
 
 
 class MyTaskListView(LoginRequiredMixin, ListView):
-    """Every task — done and not done — across every project the user
-    belongs to. The one place tasks can be filtered and browsed across
-    projects; paginated so a heavy task load never gets fetched at once.
+    """Tasks assigned to the current user, across all of their projects —
+    split into two tabs: "Assigned" (tasks assigned to them) and "Assigned
+    to review" (tasks where they're a reviewer). Excludes tasks they merely
+    created or that are assigned to others. The one place tasks can be
+    filtered and browsed across projects; paginated so a heavy task load
+    never gets fetched at once.
     """
 
     model = Task
@@ -109,10 +112,18 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         "name_desc": "-name",
     }
 
-    def get_queryset(self):
+    def _base_queryset(self, tab):
         user = self.request.user
+        if tab == "review":
+            return Task.objects.filter(reviewers__users=user)
+        return Task.objects.filter(assigned_members__users=user)
+
+    def _current_tab(self):
+        return "review" if self.request.GET.get("tab") == "review" else "assigned"
+
+    def get_queryset(self):
         qs = (
-            Task.objects.filter(project__privileges__user=user)
+            self._base_queryset(self._current_tab())
             .select_related("project", "container")
             .prefetch_related("assigned_members")
             .distinct()
@@ -147,12 +158,14 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
+        current_tab = self._current_tab()
         current_q = self.request.GET.get("q", "").strip()
         current_sort = self.request.GET.get("sort", "newest")
         current_status = self.request.GET.get("status", "")
         current_project = self.request.GET.get("project", "")
         current_priority = self.request.GET.get("priority", "")
 
+        context["current_tab"] = current_tab
         context["current_q"] = current_q
         context["current_sort"] = current_sort
         context["current_status"] = current_status
@@ -167,10 +180,17 @@ class MyTaskListView(LoginRequiredMixin, ListView):
 
         params = self.request.GET.copy()
         params.pop("page", None)
+        params.pop("tab", None)
         context["filter_params"] = params.urlencode()
 
+        context["assigned_total"] = (
+            Task.objects.filter(assigned_members__users=user).distinct().count()
+        )
+        context["review_total"] = (
+            Task.objects.filter(reviewers__users=user).distinct().count()
+        )
         context["total_task_count"] = (
-            Task.objects.filter(project__privileges__user=user).distinct().count()
+            context["review_total"] if current_tab == "review" else context["assigned_total"]
         )
 
         has_filters = bool(
