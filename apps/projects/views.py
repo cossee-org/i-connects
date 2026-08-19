@@ -1425,6 +1425,9 @@ class RequestsView(LoginRequiredMixin, TemplateView):
             .select_related("project")
             .order_by("-created_at")
         )
+        context["incoming_total"] = (
+            len(context["incoming_join_requests"]) + len(context["incoming_invitations"])
+        )
         return context
 
 
