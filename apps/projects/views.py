@@ -251,7 +251,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 "kind": "join_request",
                 "urgency": "join_request",
                 "date": jr.created_at,
-                "title": f"{jr.user.name or jr.user.email} requested to join",
+                "title": f"{jr.user.name or jr.user.email} requested to join your project",
                 "subtitle": jr.project.name,
                 "url": reverse("projects:join_requests", kwargs={"pk": jr.project_id}),
                 "type_label": "Join request",
