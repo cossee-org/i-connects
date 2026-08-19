@@ -33,11 +33,9 @@ def sidebar_counts(request):
         status=JoinRequestStatus.PENDING,
     ).count()
 
-    requests_total = (
-        pending_invitations_count
-        + incoming_join_requests_count
-        + my_join_requests_count
-    )
+    # Requests sent *to* the user (invitations, incoming join requests) --
+    # excludes join requests the user sent out themselves.
+    requests_total = pending_invitations_count + incoming_join_requests_count
 
     # Active (not-completed) task count -- same definition as the dashboard's
     # active_task_count + review_task_count, and the Tasks page's default,
