@@ -182,6 +182,24 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["overdue_count"] = len(overdue)
         context["now"] = now
 
+        # --- Tasks assigned to the user to review --------------------------
+        review_tasks = list(
+            Task.objects.filter(
+                reviewers__users=user,
+                status=TaskStatus.NOT_COMPLETED,
+            )
+            .select_related("project", "container")
+            .order_by("deadline", "id")
+            .distinct()
+        )
+        review_overdue = [t for t in review_tasks if t.deadline and t.deadline < now]
+        review_due_soon = [
+            t for t in review_tasks if t.deadline and now <= t.deadline <= soon
+        ]
+        review_upcoming = [t for t in review_tasks if t.deadline and t.deadline > soon]
+        review_no_deadline = [t for t in review_tasks if not t.deadline]
+        context["review_task_count"] = len(review_tasks)
+
         # --- Pending approvals (PM only) -----------------------------------
         if pm_project_ids:
             pending_logs = list(
@@ -244,6 +262,26 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                         kwargs={"project_pk": task.project_id, "pk": task.pk},
                     ),
                     "type_label": None,
+                })
+
+        for task_bucket, urgency in (
+            (review_overdue, "overdue"),
+            (review_due_soon, "due_soon"),
+            (review_upcoming, "upcoming"),
+            (review_no_deadline, "none"),
+        ):
+            for task in task_bucket:
+                timeline_items.append({
+                    "kind": "review_task",
+                    "urgency": urgency,
+                    "date": task.deadline,
+                    "title": task.name,
+                    "subtitle": task.project.name,
+                    "url": reverse(
+                        "tasks:detail",
+                        kwargs={"project_pk": task.project_id, "pk": task.pk},
+                    ),
+                    "type_label": "To review",
                 })
 
         for jr in pending_join_requests:
