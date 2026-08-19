@@ -416,12 +416,6 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         return qs.order_by(order)
 
     def get_context_data(self, **kwargs):
-        from django.db.models import Count
-        from django.utils import timezone
-
-        from apps.core.enums import TaskStatus
-        from apps.tasks.models import Task
-
         context = super().get_context_data(**kwargs)
         user = self.request.user
         privs_map = {
@@ -448,52 +442,12 @@ class MyProjectListView(LoginRequiredMixin, ListView):
                 key=lambda p: (0 if p.privilege == pm else 1)
             )
 
-        # Open/overdue task counts and pending join-request counts, one
-        # aggregate query each so this stays flat regardless of page size.
-        open_tasks_by_project = {
-            row["project_id"]: row["n"]
-            for row in (
-                Task.objects
-                .filter(project_id__in=project_ids)
-                .exclude(status=TaskStatus.COMPLETED)
-                .values("project_id")
-                .annotate(n=Count("id"))
-            )
-        }
-        now = timezone.now()
-        due_tasks_by_project = {
-            row["project_id"]: row["n"]
-            for row in (
-                Task.objects
-                .filter(project_id__in=project_ids, deadline__lt=now)
-                .exclude(status=TaskStatus.COMPLETED)
-                .values("project_id")
-                .annotate(n=Count("id"))
-            )
-        }
-        pending_requests_by_project = {
-            row["project_id"]: row["n"]
-            for row in (
-                JoinRequest.objects
-                .filter(project_id__in=project_ids, status=JoinRequestStatus.PENDING)
-                .values("project_id")
-                .annotate(n=Count("id"))
-            )
-        }
-
         # Templates can't do dict lookups by variable key, so pre-zip here.
         context["project_rows"] = [
             {
                 "project": p,
                 "privilege": privs_map.get(p.id),
                 "members": members_by_project.get(p.id, []),
-                "open_task_count": open_tasks_by_project.get(p.id, 0),
-                "due_task_count": due_tasks_by_project.get(p.id, 0),
-                "pending_join_request_count": (
-                    pending_requests_by_project.get(p.id, 0)
-                    if privs_map.get(p.id) == pm
-                    else 0
-                ),
             }
             for p in context["projects"]
         ]
@@ -1431,6 +1385,47 @@ class IncomingJoinRequestsView(LoginRequiredMixin, ListView):
             .select_related("user", "project")
             .order_by("created_at")
         )
+
+
+class RequestsView(LoginRequiredMixin, TemplateView):
+    """Consolidated view of all incoming and outgoing requests:
+    join requests you've sent, join requests awaiting your review,
+    and invitations you've received.
+    """
+
+    template_name = "projects/requests.html"
+
+    def get_context_data(self, **kwargs):
+        from apps.core.enums import MemberPrivileges
+
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        user_email = (user.email or "").lower()
+
+        pm_project_ids = ProjectPrivilege.objects.filter(
+            user=user,
+            privilege=MemberPrivileges.PROJECT_MANAGER,
+        ).values_list("project_id", flat=True)
+
+        context["incoming_join_requests"] = (
+            JoinRequest.objects.filter(
+                project_id__in=pm_project_ids,
+                status=JoinRequestStatus.PENDING,
+            )
+            .select_related("user", "project")
+            .order_by("created_at")
+        )
+        context["incoming_invitations"] = (
+            Invitation.objects.filter(email__iexact=user_email)
+            .select_related("project")
+            .order_by("-created_at")
+        )
+        context["outgoing_join_requests"] = (
+            JoinRequest.objects.filter(user=user)
+            .select_related("project")
+            .order_by("-created_at")
+        )
+        return context
 
 
 @login_required
