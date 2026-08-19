@@ -11,7 +11,7 @@
   <h1 class="page-title font-semibold text-brand-navy">Dashboard</h1>
 </div>
 
-<div class="flex flex-col gap-6" x-data="{ selected: null }">
+<div class="flex flex-col gap-6">
 
   {# Stats bar #}
   <div class="flex flex-row flex-wrap gap-4">
@@ -31,18 +31,16 @@
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ project_count }}</span>
       <span class="absolute bottom-3 left-3 flex items-center gap-1 pl-3 pr-2.5 py-1.5 rounded-full bg-brand-navy text-white text-xs font-semibold whitespace-nowrap
                    opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150">
-        View all
+        All projects
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
              stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
         </svg>
       </span>
     </a>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
-         style="flex: 1 1 160px"
-         data-tooltip="Tasks currently assigned to you"
-         @click="selected = selected === 'open-tasks' ? null : 'open-tasks'"
-         :class="selected === 'open-tasks' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
+    <a href="{% url 'tasks:my_list' %}"
+       class="group relative brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow hover:ring-1 hover:ring-brand-navy/20 overflow-hidden"
+       style="flex: 1 1 160px">
       <div class="flex items-center gap-2">
         <span class="stat-icon flex items-center justify-center text-brand-text/50 shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -54,12 +52,18 @@
         <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Tasks</span>
       </div>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ active_task_count }}</span>
-    </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
-         style="flex: 1 1 160px"
-         data-tooltip="Pending join requests and invitations"
-         @click="selected = selected === 'requests' ? null : 'requests'"
-         :class="selected === 'requests' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
+      <span class="absolute bottom-3 left-3 flex items-center gap-1 pl-3 pr-2.5 py-1.5 rounded-full bg-brand-navy text-white text-xs font-semibold whitespace-nowrap
+                   opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150">
+        All tasks
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+        </svg>
+      </span>
+    </a>
+    <a href="{% url 'projects:requests' %}"
+       class="group relative brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow hover:ring-1 hover:ring-brand-navy/20 overflow-hidden"
+       style="flex: 1 1 160px">
       <div class="flex items-center gap-2">
         <span class="stat-icon flex items-center justify-center text-brand-text/50 shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -71,10 +75,18 @@
         <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Requests</span>
       </div>
       <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ pending_join_request_count|add:invitation_request_count }}</span>
-    </div>
+      <span class="absolute bottom-3 left-3 flex items-center gap-1 pl-3 pr-2.5 py-1.5 rounded-full bg-brand-navy text-white text-xs font-semibold whitespace-nowrap
+                   opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150">
+        All requests
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+        </svg>
+      </span>
+    </a>
   </div>
 
-  {# My activities: tasks, join requests, and invitations, filterable by the stat cards above #}
+  {# Current tasks and requests timeline #}
   <section class="brand-card p-5" aria-labelledby="timeline-heading"
            x-data="{ showAll: false }">
     <h2 id="timeline-heading" class="section-heading flex items-center gap-2 mb-4">
@@ -83,23 +95,14 @@
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M3.75 13.5 10.5 3v6.75h9L12.75 21v-7.5h-9Z" />
       </svg>
-      <span x-text="
-        selected === 'open-tasks' ? 'Tasks' :
-        selected === 'requests' ? 'Requests' :
-        'My activities'
-      ">My activities</span>
+      Current Tasks and Requests
     </h2>
 
     {% if timeline_items %}
       <ul class="flex flex-col">
         {% for item in timeline_items %}
         <li class="flex items-stretch"
-            data-kind="{{ item.kind }}"
-            data-urgency="{{ item.urgency }}"
-            x-show="selected === null ? ({{ forloop.counter }} <= 5 || showAll) : (
-              (selected === 'open-tasks' && $el.dataset.kind === 'task') ||
-              (selected === 'requests' && ($el.dataset.kind === 'join_request' || $el.dataset.kind === 'invitation'))
-            )"
+            x-show="{{ forloop.counter }} <= 5 || showAll"
             x-cloak>
           {# Date column #}
           <div class="w-16 shrink-0 pt-2 pb-2 pr-2 text-right text-xs leading-5
@@ -140,16 +143,8 @@
         {% endfor %}
       </ul>
 
-      <p class="text-sm text-brand-text/60 italic"
-         x-show="
-           (selected === 'open-tasks' && {{ active_task_count }} === 0) ||
-           (selected === 'requests' && {{ pending_join_request_count|add:invitation_request_count }} === 0)
-         " x-cloak>
-        Nothing to show for this filter.
-      </p>
-
       {% if timeline_item_count > 5 %}
-      <button x-show="selected === null" @click="showAll = !showAll"
+      <button @click="showAll = !showAll"
               class="mt-3 flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
         <span x-text="showAll ? 'Show less' : 'Show all {{ timeline_item_count }} items'">Show all {{ timeline_item_count }} items</span>
       </button>
@@ -164,63 +159,12 @@
 <style>
   [x-cloak] { display: none !important; }
 
-  .stat-card-selected {
-    background-color: #1f2963;
-    border-color: #1f2963;
-  }
-  .stat-card-selected .stat-label { color: rgba(255, 255, 255, 0.65); }
-  .stat-card-selected .stat-number { color: #ffffff; }
-  .stat-card-selected .stat-icon { color: #ffffff; }
-
   .section-heading {
     font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: rgb(var(--color-brand-navy, 31 41 99) / 0.8);
-  }
-
-  .has-tooltip {
-    position: relative;
-  }
-  .has-tooltip::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: #1e293b;
-    color: #f8fafc;
-    font-size: 0.7rem;
-    font-weight: 400;
-    text-transform: none;
-    letter-spacing: normal;
-    line-height: 1.4;
-    padding: 4px 9px;
-    border-radius: 5px;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-    z-index: 50;
-    box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
-  }
-  .has-tooltip::before {
-    content: "";
-    position: absolute;
-    bottom: calc(100% + 1px);
-    left: 50%;
-    transform: translateX(-50%);
-    border: 5px solid transparent;
-    border-top-color: #1e293b;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-    z-index: 50;
-  }
-  .has-tooltip:hover::after,
-  .has-tooltip:hover::before {
-    opacity: 1;
   }
 </style>
 
