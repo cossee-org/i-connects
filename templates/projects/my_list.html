@@ -31,7 +31,6 @@
 {# ── Filter / sort bar ────────────────────────────────────────────────────── #}
 <form method="get" id="filter-form-my" class="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-stretch sm:items-center mb-6">
   <input type="hidden" name="sort" id="sort-input-my" value="{{ current_sort }}">
-  <input type="hidden" name="status" id="status-input-my" value="{{ current_status }}">
   <input type="hidden" name="visibility" id="visibility-input-my" value="{{ current_visibility }}">
 
   {# Row 1: Search — filters live as the user types #}
@@ -82,49 +81,6 @@
                   class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
                   :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
                   x-text="opt.label"></button>
-        </template>
-      </div>
-    </div>
-
-    {# Status dropdown #}
-    <div x-data="{
-      open: false,
-      options: [
-        {value: '', label: 'All', color: ''},
-        {value: 'PLANNING', label: 'Planning', color: 'bg-orange-400'},
-        {value: 'ACTIVE', label: 'Active', color: 'bg-green-500'},
-        {value: 'PAUSED', label: 'Paused', color: 'bg-purple-400'},
-        {value: 'COMPLETED', label: 'Completed', color: 'bg-blue-400'},
-        {value: 'INACTIVE', label: 'Inactive', color: 'bg-gray-400'}
-      ],
-      current: '{{ current_status }}',
-      get label() { return 'Status' },
-      pick(val) {
-        this.current = val;
-        document.getElementById('status-input-my').value = val;
-        this.open = false;
-        document.getElementById('filter-form-my').submit();
-      }
-    }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
-      <button type="button" @click="open = !open"
-              class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
-        <span x-text="label"></span>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
-          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-        </svg>
-      </button>
-      <div x-cloak x-show="open"
-           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-           class="absolute left-0 mt-1 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
-        <template x-for="opt in options" :key="opt.value">
-          <button type="button" @click="pick(opt.value)"
-                  class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors inline-flex items-center gap-2"
-                  :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'">
-            <span x-show="opt.color" :class="opt.color" class="w-2 h-2 rounded-full shrink-0 inline-block"></span>
-            <span x-show="!opt.color" class="w-2 h-2 shrink-0 inline-block"></span>
-            <span x-text="opt.label"></span>
-          </button>
         </template>
       </div>
     </div>
@@ -184,12 +140,6 @@
       <option value="oldest" {% if current_sort == "oldest" %}selected{% endif %}>Oldest first</option>
       <option value="name_asc" {% if current_sort == "name_asc" %}selected{% endif %}>Name A–Z</option>
       <option value="name_desc" {% if current_sort == "name_desc" %}selected{% endif %}>Name Z–A</option>
-    </select>
-    <select name="status">
-      <option value="">All</option>
-      {% for value, label in project_statuses %}
-        <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
     </select>
     <select name="visibility">
       <option value="">All</option>

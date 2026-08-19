@@ -51,8 +51,8 @@
               d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M7.5 7.5 12 3m0 0 4.5 4.5M12 3v13.5" />
       </svg>
       Outgoing
-      {% if outgoing_join_requests %}
-        <span class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">{{ outgoing_join_requests|length }}</span>
+      {% if active_outgoing_join_requests_count %}
+        <span class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">{{ active_outgoing_join_requests_count }}</span>
       {% endif %}
     </button>
   </div>
