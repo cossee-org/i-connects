@@ -167,6 +167,7 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
+        context["is_htmx_request"] = bool(self.request.headers.get("HX-Request"))
         current_tab = self._current_tab()
         current_q = self.request.GET.get("q", "").strip()
         current_sort = self.request.GET.get("sort", "newest")
