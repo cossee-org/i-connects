@@ -281,7 +281,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                         "tasks:detail",
                         kwargs={"project_pk": task.project_id, "pk": task.pk},
                     ),
-                    "type_label": "To review",
+                    "type_label": "Review",
                 })
 
         for jr in pending_join_requests:

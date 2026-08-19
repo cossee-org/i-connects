@@ -98,6 +98,7 @@
                if (this.selected === 'active') return this.items.filter(i => i.kind === 'task');
                if (this.selected === 'overdue') return this.items.filter(i => i.urgency === 'overdue');
                if (this.selected === 'review') return this.items.filter(i => i.kind === 'review_task');
+               if (this.selected === 'requests') return this.items.filter(i => i.kind === 'join_request' || i.kind === 'invitation');
                if (this.selected === 'join_request') return this.items.filter(i => i.kind === 'join_request');
                if (this.selected === 'invitation') return this.items.filter(i => i.kind === 'invitation');
                return this.items;
@@ -122,7 +123,8 @@
              get hasOverdue() { return this.items.some(i => i.urgency === 'overdue'); },
              get hasReview() { return this.items.some(i => i.kind === 'review_task'); },
              get hasJoinRequest() { return this.items.some(i => i.kind === 'join_request'); },
-             get hasInvitation() { return this.items.some(i => i.kind === 'invitation'); }
+             get hasInvitation() { return this.items.some(i => i.kind === 'invitation'); },
+             get hasRequests() { return this.hasJoinRequest || this.hasInvitation; }
            }">
     <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
       <h2 id="timeline-heading" class="section-heading flex items-center gap-2">
@@ -148,7 +150,12 @@
         <button type="button" x-show="hasReview" x-cloak @click="selected = selected === 'review' ? null : 'review'"
                 class="px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors"
                 :class="selected === 'review' ? 'bg-brand-navy text-white border-brand-navy' : 'border-gray-200 text-brand-text/60 hover:bg-gray-50'">
-          To Review
+          Review
+        </button>
+        <button type="button" x-show="hasRequests" x-cloak @click="selected = selected === 'requests' ? null : 'requests'"
+                class="px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors"
+                :class="selected === 'requests' ? 'bg-brand-navy text-white border-brand-navy' : 'border-gray-200 text-brand-text/60 hover:bg-gray-50'">
+          Requests
         </button>
         <button type="button" x-show="hasJoinRequest" x-cloak @click="selected = selected === 'join_request' ? null : 'join_request'"
                 class="px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors"
