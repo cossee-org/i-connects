@@ -1,0 +1,23 @@
+{% load project_tags %}
+{# Shared project header — title + position/status/privacy pills.        #}
+{# Rendered identically across every project tab (Project/Tasks/         #}
+{# Contributors/Contribution Tracking/Wiki/Forms/Settings), so the       #}
+{# header never changes shape as you switch tabs. Needs `project` and   #}
+{# `user_privilege` in context.                                         #}
+<div>
+  <h1 class="page-title font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
+  <div class="flex flex-wrap gap-2 mt-3">
+    {% if user_privilege %}
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+        {% if user_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+        {{ user_privilege|privilege_label }}
+      </span>
+    {% endif %}
+    {% include "_components/status_badge.html" with status=project.get_status_display %}
+    {% if project.is_public %}
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
+    {% else %}
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
+    {% endif %}
+  </div>
+</div>

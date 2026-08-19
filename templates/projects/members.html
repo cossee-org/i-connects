@@ -3,11 +3,10 @@
 {% block title %}Members &mdash; {{ project.name }}{% endblock %}
 
 {% block page_header %}
-  <header class="mb-6">
-    <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">{{ project.name }}</p>
-    <h1 class="page-title font-semibold text-brand-navy leading-tight">Contributors</h1>
+  <header class="mb-6 flex flex-col gap-3">
+    {% include "_components/project_header.html" %}
     {% if user_privilege == "PROJECT_MANAGER" %}
-      <div class="flex flex-wrap gap-2 mt-3 justify-end">
+      <div class="flex flex-wrap gap-2 justify-end">
         <a href="{% url 'projects:join_requests' pk=project.pk %}"
            class="btn btn-sm btn-ghost relative">
           Join requests
