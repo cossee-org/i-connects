@@ -89,14 +89,14 @@ class MyTaskListView(LoginRequiredMixin, ListView):
     split into two tabs by role:
 
     - "Assigned": tasks assigned to the user.
-    - "To Review": tasks where the user is a reviewer.
+    - "Assigned to review": tasks where the user is a reviewer.
 
-    Each tab shows every matching task by default (any status); a
-    "Type" filter narrows a tab down to not-completed / marked-done /
-    completed. Excludes tasks the user merely created or that are
-    assigned to others. The one place tasks can be filtered and browsed
-    across projects; paginated so a heavy task load never gets fetched
-    at once.
+    By default each tab shows only active tasks, matching the dashboard's
+    task counts; the "Show completed" toggle lifts that filter to show
+    every record regardless of status. Excludes tasks the user merely
+    created or that are assigned to others. The one place tasks can be
+    filtered and browsed across projects; paginated so a heavy task load
+    never gets fetched at once.
     """
 
     model = Task
@@ -118,18 +118,13 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         "name_desc": "-name",
     }
     _TABS = ("assigned", "review")
-    _TYPES_BY_TAB = {
-        "assigned": ("", "not_completed", "marked_done", "completed"),
-        "review": ("", "not_completed", "completed"),
-    }
 
     def _current_tab(self):
         tab = self.request.GET.get("tab")
         return tab if tab in self._TABS else "assigned"
 
-    def _current_type(self, tab):
-        type_ = self.request.GET.get("type", "")
-        return type_ if type_ in self._TYPES_BY_TAB[tab] else ""
+    def _current_show_completed(self):
+        return self.request.GET.get("show_completed") == "1"
 
     def _base_queryset(self, tab):
         user = self.request.user
@@ -146,16 +141,20 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             user_log_status=latest_log_status
         )
 
-    def _apply_type_filter(self, qs, tab, type_):
-        if type_ == "completed":
-            return qs.filter(status=TaskStatus.COMPLETED)
-        if type_ == "not_completed":
+    def _apply_active_filter(self, qs, tab, show_completed):
+        """Restrict to active (not-completed) tasks, matching the dashboard's
+        task counts, unless the "Show completed" toggle is on."""
+        if show_completed:
+            return qs
+        if tab == "review":
             return qs.filter(status=TaskStatus.NOT_COMPLETED)
-        if type_ == "marked_done" and tab == "assigned":
-            # NULL-safe: a task with no TaskLog yet has user_log_status=NULL,
-            # so this only ever matches an explicit COMPLETED mark.
-            return qs.filter(status=TaskStatus.NOT_COMPLETED, user_log_status=TaskStatus.COMPLETED)
-        return qs
+        # NULL-safe: a task with no TaskLog yet has user_log_status=NULL, and
+        # `.exclude(user_log_status=COMPLETED)` would silently drop it too
+        # (NOT (NULL = COMPLETED) is NULL/false in SQL), so it must be kept
+        # explicitly — matching the dashboard's active_task_count logic.
+        return qs.filter(status=TaskStatus.NOT_COMPLETED).filter(
+            Q(user_log_status__isnull=True) | ~Q(user_log_status=TaskStatus.COMPLETED)
+        )
 
     def _apply_common_filters(self, qs):
         """Search/project/priority filters shared by both tabs (not sort,
@@ -189,7 +188,7 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             .prefetch_related("assigned_members")
         )
         qs = self._apply_common_filters(qs)
-        qs = self._apply_type_filter(qs, tab, self._current_type(tab))
+        qs = self._apply_active_filter(qs, tab, self._current_show_completed())
 
         sort = self.request.GET.get("sort", "newest")
         if sort in ("deadline_asc", "deadline_desc"):
@@ -207,14 +206,14 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         current_sort = self.request.GET.get("sort", "newest")
         current_project = self.request.GET.get("project", "")
         current_priority = self.request.GET.get("priority", "")
-        current_type = self._current_type(current_tab)
+        show_completed = self._current_show_completed()
 
         context["current_tab"] = current_tab
         context["current_q"] = current_q
         context["current_sort"] = current_sort
         context["current_project"] = current_project
         context["current_priority"] = current_priority
-        context["current_type"] = current_type
+        context["current_show_completed"] = show_completed
 
         context["my_projects"] = (
             Project.objects.filter(privileges__user=user)
@@ -227,28 +226,27 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         params.pop("tab", None)
         context["filter_params"] = params.urlencode()
 
-        context["assigned_total"] = self._apply_common_filters(
-            self._base_queryset("assigned")
+        context["assigned_total"] = self._apply_active_filter(
+            self._apply_common_filters(self._base_queryset("assigned")),
+            "assigned",
+            show_completed,
         ).count()
-        context["review_total"] = self._apply_common_filters(
-            self._base_queryset("review")
+        context["review_total"] = self._apply_active_filter(
+            self._apply_common_filters(self._base_queryset("review")),
+            "review",
+            show_completed,
         ).count()
         context["total_task_count"] = context["assigned_total"] + context["review_total"]
         context["now"] = timezone.now()
 
-        has_filters = bool(current_q or current_project or current_priority or current_type)
+        has_filters = bool(current_q or current_project or current_priority or show_completed)
         if has_filters:
             parts = []
             if current_priority == "high":
                 parts.append("high-priority")
-            type_labels = {
-                "not_completed": "not completed",
-                "marked_done": "marked done",
-                "completed": "completed",
-            }
-            if current_type in type_labels:
-                parts.append(type_labels[current_type])
             desc = (" ".join(parts) + " tasks") if parts else "tasks"
+            if show_completed:
+                desc += " (including completed)"
             if current_project:
                 project_obj = next(
                     (p for p in context["my_projects"] if str(p.pk) == current_project),

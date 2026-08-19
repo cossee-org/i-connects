@@ -66,7 +66,7 @@ so emitting these too would duplicate visible, unstyled-by-htmx content.
 
         <div class="shrink-0 flex flex-col items-end gap-1 pt-0.5">
           {% if current_tab == 'review' %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">To Review</span>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">To review</span>
           {% elif task.status == 'COMPLETED' and task.user_log_status != 'COMPLETED' %}
             <span class="text-[11px] text-brand-text/50 italic whitespace-nowrap">Closed without your mark</span>
           {% endif %}
