@@ -3,10 +3,9 @@
 {% block title %}{{ form_title }} &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block page_header %}
-{% if object %}
+{% if project %}
   <header class="mb-6">
-    <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">{{ object.name }}</p>
-    <h1 class="page-title font-semibold text-brand-navy leading-tight">Settings</h1>
+    {% include "_components/project_header.html" %}
   </header>
 {% endif %}
 {% endblock %}

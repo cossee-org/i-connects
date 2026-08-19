@@ -30,8 +30,15 @@ def sidebar_counts(request):
         status=JoinRequestStatus.PENDING,
     ).count()
 
+    requests_total = (
+        pending_invitations_count
+        + incoming_join_requests_count
+        + my_join_requests_count
+    )
+
     return {
         "sidebar_pending_invitations": pending_invitations_count,
         "sidebar_incoming_join_requests": incoming_join_requests_count,
         "sidebar_my_join_requests": my_join_requests_count,
+        "sidebar_requests_total": requests_total,
     }

@@ -121,6 +121,12 @@ urlpatterns = [
         views.IncomingJoinRequestsView.as_view(),
         name="incoming_join_requests",
     ),
+    # Requests (consolidated incoming + outgoing)
+    path(
+        "requests/",
+        views.RequestsView.as_view(),
+        name="requests",
+    ),
     path(
         "my-projects/badge/",
         views.my_projects_badge,

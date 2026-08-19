@@ -4,8 +4,7 @@
 
 {% block page_header %}
   <header class="mb-6">
-    <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">{{ project.name }}</p>
-    <h1 class="page-title font-semibold text-brand-navy leading-tight">Wiki</h1>
+    {% include "_components/project_header.html" %}
   </header>
 {% endblock %}
 

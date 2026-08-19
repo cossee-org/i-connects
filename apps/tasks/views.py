@@ -14,7 +14,7 @@ from datetime import datetime, time
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Max, Min, ProtectedError, Q
+from django.db.models import Max, Min, OuterRef, ProtectedError, Q, Subquery
 from django.http import (
     Http404,
     HttpResponse,
@@ -41,7 +41,7 @@ from django.views.generic import (
 from apps.audit.services import AuditAction, log_action
 from apps.comments.forms import CommentForm
 from apps.core.enums import CompletedAs, TaskStatus
-from apps.projects.models import ProjectMember
+from apps.projects.models import Project, ProjectMember
 from apps.tasks.calendar import (
     VIEWS as CALENDAR_VIEWS,
     build_day_tasks,
@@ -77,6 +77,193 @@ from apps.tasks.services import (
     reopen_own,
     reopen_task,
 )
+
+
+# ---------------------------------------------------------------------------
+# All tasks (cross-project)
+# ---------------------------------------------------------------------------
+
+
+class MyTaskListView(LoginRequiredMixin, ListView):
+    """Tasks touching the current user, across all of their projects,
+    split into two tabs by role:
+
+    - "Assigned": tasks assigned to the user.
+    - "To Review": tasks where the user is a reviewer.
+
+    Each tab shows every matching task by default (any status); a
+    "Type" filter narrows a tab down to not-completed / marked-done /
+    completed. Excludes tasks the user merely created or that are
+    assigned to others. The one place tasks can be filtered and browsed
+    across projects; paginated so a heavy task load never gets fetched
+    at once.
+    """
+
+    model = Task
+    template_name = "tasks/my_list.html"
+    context_object_name = "tasks"
+    paginate_by = 20
+
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["tasks/partials/my_list_results.html"]
+        return [self.template_name]
+
+    _SORT_MAP = {
+        "newest": "-created_at",
+        "oldest": "created_at",
+        "deadline_asc": "deadline",
+        "deadline_desc": "-deadline",
+        "name_asc": "name",
+        "name_desc": "-name",
+    }
+    _TABS = ("assigned", "review")
+    _TYPES_BY_TAB = {
+        "assigned": ("", "not_completed", "marked_done", "completed"),
+        "review": ("", "not_completed", "completed"),
+    }
+
+    def _current_tab(self):
+        tab = self.request.GET.get("tab")
+        return tab if tab in self._TABS else "assigned"
+
+    def _current_type(self, tab):
+        type_ = self.request.GET.get("type", "")
+        return type_ if type_ in self._TYPES_BY_TAB[tab] else ""
+
+    def _base_queryset(self, tab):
+        user = self.request.user
+        if tab == "review":
+            return Task.objects.filter(reviewers__users=user)
+
+        user_member_qs = ProjectMember.objects.filter(users=user)
+        latest_log_status = Subquery(
+            TaskLog.objects.filter(task=OuterRef("pk"), assigned_to__in=user_member_qs)
+            .order_by("-created_at")
+            .values("status")[:1]
+        )
+        return Task.objects.filter(assigned_members__users=user).annotate(
+            user_log_status=latest_log_status
+        )
+
+    def _apply_type_filter(self, qs, tab, type_):
+        if type_ == "completed":
+            return qs.filter(status=TaskStatus.COMPLETED)
+        if type_ == "not_completed":
+            return qs.filter(status=TaskStatus.NOT_COMPLETED)
+        if type_ == "marked_done" and tab == "assigned":
+            # NULL-safe: a task with no TaskLog yet has user_log_status=NULL,
+            # so this only ever matches an explicit COMPLETED mark.
+            return qs.filter(status=TaskStatus.NOT_COMPLETED, user_log_status=TaskStatus.COMPLETED)
+        return qs
+
+    def _apply_common_filters(self, qs):
+        """Search/project/priority filters shared by both tabs (not sort,
+        not the tab's own type filter)."""
+        project_id = self.request.GET.get("project", "")
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+
+        if self.request.GET.get("priority", "") == "high":
+            qs = qs.filter(is_priority=True)
+
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(
+                Q(name__icontains=q)
+                | Q(description__icontains=q)
+                | Q(project__name__icontains=q)
+                | Q(assigned_members__name__icontains=q)
+                | Q(assigned_members__users__given_name__icontains=q)
+                | Q(assigned_members__users__family_name__icontains=q)
+                | Q(assigned_members__users__name__icontains=q)
+                | Q(assigned_members__users__email__icontains=q)
+            )
+        return qs.distinct()
+
+    def get_queryset(self):
+        tab = self._current_tab()
+        qs = (
+            self._base_queryset(tab)
+            .select_related("project", "container")
+            .prefetch_related("assigned_members")
+        )
+        qs = self._apply_common_filters(qs)
+        qs = self._apply_type_filter(qs, tab, self._current_type(tab))
+
+        sort = self.request.GET.get("sort", "newest")
+        if sort in ("deadline_asc", "deadline_desc"):
+            qs = qs.filter(deadline__isnull=False)
+        order = self._SORT_MAP.get(sort, "-created_at")
+        return qs.order_by(order, "id")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        context["is_htmx_request"] = bool(self.request.headers.get("HX-Request"))
+        current_tab = self._current_tab()
+        current_q = self.request.GET.get("q", "").strip()
+        current_sort = self.request.GET.get("sort", "newest")
+        current_project = self.request.GET.get("project", "")
+        current_priority = self.request.GET.get("priority", "")
+        current_type = self._current_type(current_tab)
+
+        context["current_tab"] = current_tab
+        context["current_q"] = current_q
+        context["current_sort"] = current_sort
+        context["current_project"] = current_project
+        context["current_priority"] = current_priority
+        context["current_type"] = current_type
+
+        context["my_projects"] = (
+            Project.objects.filter(privileges__user=user)
+            .distinct()
+            .order_by("name")
+        )
+
+        params = self.request.GET.copy()
+        params.pop("page", None)
+        params.pop("tab", None)
+        context["filter_params"] = params.urlencode()
+
+        context["assigned_total"] = self._apply_common_filters(
+            self._base_queryset("assigned")
+        ).count()
+        context["review_total"] = self._apply_common_filters(
+            self._base_queryset("review")
+        ).count()
+        context["total_task_count"] = context["assigned_total"] + context["review_total"]
+        context["now"] = timezone.now()
+
+        has_filters = bool(current_q or current_project or current_priority or current_type)
+        if has_filters:
+            parts = []
+            if current_priority == "high":
+                parts.append("high-priority")
+            type_labels = {
+                "not_completed": "not completed",
+                "marked_done": "marked done",
+                "completed": "completed",
+            }
+            if current_type in type_labels:
+                parts.append(type_labels[current_type])
+            desc = (" ".join(parts) + " tasks") if parts else "tasks"
+            if current_project:
+                project_obj = next(
+                    (p for p in context["my_projects"] if str(p.pk) == current_project),
+                    None,
+                )
+                if project_obj:
+                    desc += f" in {project_obj.name}"
+            if current_q:
+                desc += f' matching "{current_q}"'
+
+            total = context["paginator"].count
+            n = f"{total} result{'s' if total != 1 else ''}"
+            context["results_summary"] = f"{n} for {desc}"
+
+        return context
 
 
 # ---------------------------------------------------------------------------

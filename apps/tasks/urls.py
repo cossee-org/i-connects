@@ -9,6 +9,12 @@ from apps.tasks import views
 app_name = "tasks"
 
 urlpatterns = [
+    # All tasks (cross-project)
+    path(
+        "tasks/",
+        views.MyTaskListView.as_view(),
+        name="my_list",
+    ),
     # Kanban board
     path(
         "projects/<int:project_pk>/board/",

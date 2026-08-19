@@ -26,7 +26,11 @@
           {# Member names — full list on sm+, truncated to 2 on smaller screens #}
           {% with mn=row.members|member_names %}
             {% if mn.full %}
-              <p class="text-xs text-brand-text/60 min-w-0">
+              <p class="inline-flex items-start gap-1 text-xs text-brand-text/60 min-w-0">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                     stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                </svg>
                 <span class="hidden sm:inline">{{ mn.full }}</span>
                 <span class="sm:hidden">{{ mn.short }}</span>
               </p>
@@ -35,52 +39,21 @@
 
           <div class="mt-auto pt-3 flex flex-col gap-2">
             <p class="text-xs text-brand-text/40">{{ row.project.updated_at|relative_updated }}</p>
-
-            <div class="flex items-center gap-3">
-              <span class="topbar-tooltip inline-flex items-center gap-1 text-xs font-medium text-brand-text/60"
-                    data-tooltip="{{ row.open_task_count }} open task{{ row.open_task_count|pluralize }}"
-                    aria-label="{{ row.open_task_count }} open task{{ row.open_task_count|pluralize }}">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0">
-                  <path fill-rule="evenodd" d="M4.5 3.75a.75.75 0 0 0 0 1.5h11a.75.75 0 0 0 0-1.5h-11Zm0 4.5a.75.75 0 0 0 0 1.5h11a.75.75 0 0 0 0-1.5h-11Zm0 4.5a.75.75 0 0 0 0 1.5h11a.75.75 0 0 0 0-1.5h-11Z" clip-rule="evenodd" />
-                </svg>
-                {{ row.open_task_count }}
-              </span>
-              {% if row.due_task_count %}
-                <span class="topbar-tooltip inline-flex items-center gap-1 text-xs font-medium text-brand-text/60"
-                      data-tooltip="{{ row.due_task_count }} task{{ row.due_task_count|pluralize }} overdue"
-                      aria-label="{{ row.due_task_count }} task{{ row.due_task_count|pluralize }} overdue">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd" />
-                  </svg>
-                  {{ row.due_task_count }}
-                </span>
-              {% endif %}
-              {% if row.pending_join_request_count %}
-                <span class="topbar-tooltip inline-flex items-center gap-1 text-xs font-medium text-brand-text/60"
-                      data-tooltip="{{ row.pending_join_request_count }} join request{{ row.pending_join_request_count|pluralize }}"
-                      aria-label="{{ row.pending_join_request_count }} join request{{ row.pending_join_request_count|pluralize }}">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0">
-                    <path d="M1 16a6.002 6.002 0 0 1 10.632-3.807.75.75 0 0 1-.198 1.079A6.5 6.5 0 0 0 8.694 16H1.5A.5.5 0 0 1 1 16Zm11.5-9.5a3.5 3.5 0 1 0-7 0 3.5 3.5 0 0 0 7 0ZM14 8a.75.75 0 0 1 .75.75V10h1.25a.75.75 0 0 1 0 1.5H14.75v1.25a.75.75 0 0 1-1.5 0V11.5H12a.75.75 0 0 1 0-1.5h1.25V8.75A.75.75 0 0 1 14 8Z" />
-                  </svg>
-                  {{ row.pending_join_request_count }}
-                </span>
-              {% endif %}
-            </div>
           </div>
         </div>
 
         <div class="shrink-0 flex items-center gap-2 pt-0.5 self-start">
-          {% if row.project.is_public %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
-          {% else %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
-          {% endif %}
-          {% include "_components/status_badge.html" with status=row.project.get_status_display %}
           {% if row.privilege %}
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
               {% if row.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
               {{ row.privilege|privilege_label }}
             </span>
+          {% endif %}
+          {% include "_components/status_badge.html" with status=row.project.get_status_display %}
+          {% if row.project.is_public %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
+          {% else %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
           {% endif %}
         </div>
       </a>

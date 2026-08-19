@@ -182,6 +182,24 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["overdue_count"] = len(overdue)
         context["now"] = now
 
+        # --- Tasks assigned to the user to review --------------------------
+        review_tasks = list(
+            Task.objects.filter(
+                reviewers__users=user,
+                status=TaskStatus.NOT_COMPLETED,
+            )
+            .select_related("project", "container")
+            .order_by("deadline", "id")
+            .distinct()
+        )
+        review_overdue = [t for t in review_tasks if t.deadline and t.deadline < now]
+        review_due_soon = [
+            t for t in review_tasks if t.deadline and now <= t.deadline <= soon
+        ]
+        review_upcoming = [t for t in review_tasks if t.deadline and t.deadline > soon]
+        review_no_deadline = [t for t in review_tasks if not t.deadline]
+        context["review_task_count"] = len(review_tasks)
+
         # --- Pending approvals (PM only) -----------------------------------
         if pm_project_ids:
             pending_logs = list(
@@ -246,12 +264,32 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                     "type_label": None,
                 })
 
+        for task_bucket, urgency in (
+            (review_overdue, "overdue"),
+            (review_due_soon, "due_soon"),
+            (review_upcoming, "upcoming"),
+            (review_no_deadline, "none"),
+        ):
+            for task in task_bucket:
+                timeline_items.append({
+                    "kind": "review_task",
+                    "urgency": urgency,
+                    "date": task.deadline,
+                    "title": task.name,
+                    "subtitle": task.project.name,
+                    "url": reverse(
+                        "tasks:detail",
+                        kwargs={"project_pk": task.project_id, "pk": task.pk},
+                    ),
+                    "type_label": "To Review",
+                })
+
         for jr in pending_join_requests:
             timeline_items.append({
                 "kind": "join_request",
                 "urgency": "join_request",
                 "date": jr.created_at,
-                "title": f"{jr.user.name or jr.user.email} requested to join",
+                "title": f"{jr.user.name or jr.user.email} requested to join your project",
                 "subtitle": jr.project.name,
                 "url": reverse("projects:join_requests", kwargs={"pk": jr.project_id}),
                 "type_label": "Join request",
@@ -273,6 +311,17 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # Sort strictly by date so tasks, join requests, and invitations are
         # interleaved chronologically; undated tasks sort last.
         timeline_items.sort(key=lambda item: (item["date"] is None, item["date"]))
+
+        from django.utils.dateformat import format as django_date_format
+
+        for item in timeline_items:
+            if item["date"]:
+                item["date_label"] = django_date_format(item["date"], "M j")
+                item["date_year"] = django_date_format(item["date"], "Y")
+            else:
+                item["date_label"] = None
+                item["date_year"] = None
+
         context["timeline_items"] = timeline_items
         context["timeline_item_count"] = len(timeline_items)
 
@@ -416,12 +465,6 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         return qs.order_by(order)
 
     def get_context_data(self, **kwargs):
-        from django.db.models import Count
-        from django.utils import timezone
-
-        from apps.core.enums import TaskStatus
-        from apps.tasks.models import Task
-
         context = super().get_context_data(**kwargs)
         user = self.request.user
         privs_map = {
@@ -448,52 +491,12 @@ class MyProjectListView(LoginRequiredMixin, ListView):
                 key=lambda p: (0 if p.privilege == pm else 1)
             )
 
-        # Open/overdue task counts and pending join-request counts, one
-        # aggregate query each so this stays flat regardless of page size.
-        open_tasks_by_project = {
-            row["project_id"]: row["n"]
-            for row in (
-                Task.objects
-                .filter(project_id__in=project_ids)
-                .exclude(status=TaskStatus.COMPLETED)
-                .values("project_id")
-                .annotate(n=Count("id"))
-            )
-        }
-        now = timezone.now()
-        due_tasks_by_project = {
-            row["project_id"]: row["n"]
-            for row in (
-                Task.objects
-                .filter(project_id__in=project_ids, deadline__lt=now)
-                .exclude(status=TaskStatus.COMPLETED)
-                .values("project_id")
-                .annotate(n=Count("id"))
-            )
-        }
-        pending_requests_by_project = {
-            row["project_id"]: row["n"]
-            for row in (
-                JoinRequest.objects
-                .filter(project_id__in=project_ids, status=JoinRequestStatus.PENDING)
-                .values("project_id")
-                .annotate(n=Count("id"))
-            )
-        }
-
         # Templates can't do dict lookups by variable key, so pre-zip here.
         context["project_rows"] = [
             {
                 "project": p,
                 "privilege": privs_map.get(p.id),
                 "members": members_by_project.get(p.id, []),
-                "open_task_count": open_tasks_by_project.get(p.id, 0),
-                "due_task_count": due_tasks_by_project.get(p.id, 0),
-                "pending_join_request_count": (
-                    pending_requests_by_project.get(p.id, 0)
-                    if privs_map.get(p.id) == pm
-                    else 0
-                ),
             }
             for p in context["projects"]
         ]
@@ -1431,6 +1434,53 @@ class IncomingJoinRequestsView(LoginRequiredMixin, ListView):
             .select_related("user", "project")
             .order_by("created_at")
         )
+
+
+class RequestsView(LoginRequiredMixin, TemplateView):
+    """Consolidated view of all incoming and outgoing requests:
+    join requests you've sent, join requests awaiting your review,
+    and invitations you've received.
+    """
+
+    template_name = "projects/requests.html"
+
+    def get_context_data(self, **kwargs):
+        from apps.core.enums import MemberPrivileges
+
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        user_email = (user.email or "").lower()
+
+        pm_project_ids = ProjectPrivilege.objects.filter(
+            user=user,
+            privilege=MemberPrivileges.PROJECT_MANAGER,
+        ).values_list("project_id", flat=True)
+
+        context["incoming_join_requests"] = (
+            JoinRequest.objects.filter(
+                project_id__in=pm_project_ids,
+                status=JoinRequestStatus.PENDING,
+            )
+            .select_related("user", "project")
+            .order_by("created_at")
+        )
+        context["incoming_invitations"] = (
+            Invitation.objects.filter(email__iexact=user_email)
+            .select_related("project")
+            .order_by("-created_at")
+        )
+        context["outgoing_join_requests"] = (
+            JoinRequest.objects.filter(user=user)
+            .select_related("project")
+            .order_by("-created_at")
+        )
+        context["incoming_total"] = (
+            len(context["incoming_join_requests"]) + len(context["incoming_invitations"])
+        )
+        context["requests_total"] = (
+            context["incoming_total"] + len(context["outgoing_join_requests"])
+        )
+        return context
 
 
 @login_required

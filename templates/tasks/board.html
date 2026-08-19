@@ -72,48 +72,47 @@
 
 {% block page_header %}
   <header class="mb-6">
-    <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">{{ project.name }}</p>
-    <h1 class="page-title font-semibold text-brand-navy leading-tight">Tasks</h1>
-    <div class="flex flex-wrap gap-2 mt-3 justify-end">
-      <div x-data class="join">
-        <button type="button" class="btn btn-ghost btn-sm join-item"
-                :class="{ 'btn-active': $store.board.viewMode === 'board' }"
-                @click="$store.board.setView('board')">
-          View as board
-        </button>
-        <button type="button" class="btn btn-ghost btn-sm join-item"
-                :class="{ 'btn-active': $store.board.viewMode === 'list' }"
-                @click="$store.board.setView('list')">
-          View as list
-        </button>
-        <button type="button" class="btn btn-ghost btn-sm join-item"
-                :class="{ 'btn-active': $store.board.viewMode === 'calendar' }"
-                @click="$store.board.setView('calendar')">
-          View as calendar
-        </button>
-      </div>
-      {% if is_project_manager %}
-        <button type="button"
-                class="btn btn-ghost btn-sm"
-                hx-get="{% url 'tasks:board_columns' project_pk=project.pk %}"
-                hx-target="#columns-modal-body"
-                hx-swap="innerHTML"
-                onclick="document.getElementById('columns-modal').showModal()">
-          Manage columns
-        </button>
-        <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                hx-get="{% url 'tasks:create' project_pk=project.pk %}"
-                hx-target="#task-modal-body"
-                hx-swap="innerHTML"
-                onclick="document.getElementById('task-modal').showModal()">
-          + New task
-        </button>
-      {% endif %}
-    </div>
+    {% include "_components/project_header.html" %}
   </header>
 {% endblock %}
 
 {% block content %}
+<div class="flex flex-wrap gap-2 justify-end mb-4">
+  <div x-data class="join">
+    <button type="button" class="btn btn-ghost btn-sm join-item"
+            :class="{ 'btn-active': $store.board.viewMode === 'board' }"
+            @click="$store.board.setView('board')">
+      View as board
+    </button>
+    <button type="button" class="btn btn-ghost btn-sm join-item"
+            :class="{ 'btn-active': $store.board.viewMode === 'list' }"
+            @click="$store.board.setView('list')">
+      View as list
+    </button>
+    <button type="button" class="btn btn-ghost btn-sm join-item"
+            :class="{ 'btn-active': $store.board.viewMode === 'calendar' }"
+            @click="$store.board.setView('calendar')">
+      View as calendar
+    </button>
+  </div>
+  {% if is_project_manager %}
+    <button type="button"
+            class="btn btn-ghost btn-sm"
+            hx-get="{% url 'tasks:board_columns' project_pk=project.pk %}"
+            hx-target="#columns-modal-body"
+            hx-swap="innerHTML"
+            onclick="document.getElementById('columns-modal').showModal()">
+      Manage columns
+    </button>
+    <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+            hx-get="{% url 'tasks:create' project_pk=project.pk %}"
+            hx-target="#task-modal-body"
+            hx-swap="innerHTML"
+            onclick="document.getElementById('task-modal').showModal()">
+      + New task
+    </button>
+  {% endif %}
+</div>
 <div x-data="taskPaneData()"
      @open-task-pane="if (!_dragging) openPane($event.detail.url)"
      @close-task-pane.document="closePane()"
