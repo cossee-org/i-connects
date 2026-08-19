@@ -120,9 +120,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         from apps.tasks.models import Task, TaskLog
         from apps.notifications.models import Notification
 
-        now = timezone.now()
-        soon = now + timezone.timedelta(days=7)
-
         # --- Privilege map -------------------------------------------------
         privs = ProjectPrivilege.objects.filter(user=user).select_related("project")
         privs_map = {p.project_id: p.privilege for p in privs}
@@ -168,37 +165,14 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             .distinct()
         )
 
-        all_active = list(assigned_tasks)
-        overdue = [t for t in all_active if t.deadline and t.deadline < now]
-        due_soon = [t for t in all_active if t.deadline and now <= t.deadline <= soon]
-        upcoming = [t for t in all_active if t.deadline and t.deadline > soon]
-        no_deadline = [t for t in all_active if not t.deadline]
-
-        context["overdue_tasks"] = overdue
-        context["due_soon_tasks"] = due_soon
-        context["no_deadline_tasks"] = no_deadline
-        context["all_open_tasks"] = all_active
-        context["active_task_count"] = len(all_active)
-        context["overdue_count"] = len(overdue)
-        context["now"] = now
+        context["active_task_count"] = assigned_tasks.count()
 
         # --- Tasks assigned to the user to review --------------------------
-        review_tasks = list(
-            Task.objects.filter(
-                reviewers__users=user,
-                status=TaskStatus.NOT_COMPLETED,
-            )
-            .select_related("project", "container")
-            .order_by("deadline", "id")
+        context["review_task_count"] = (
+            Task.objects.filter(reviewers__users=user, status=TaskStatus.NOT_COMPLETED)
             .distinct()
+            .count()
         )
-        review_overdue = [t for t in review_tasks if t.deadline and t.deadline < now]
-        review_due_soon = [
-            t for t in review_tasks if t.deadline and now <= t.deadline <= soon
-        ]
-        review_upcoming = [t for t in review_tasks if t.deadline and t.deadline > soon]
-        review_no_deadline = [t for t in review_tasks if not t.deadline]
-        context["review_task_count"] = len(review_tasks)
 
         # --- Pending approvals (PM only) -----------------------------------
         if pm_project_ids:
@@ -240,90 +214,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         )
         context["invitation_requests"] = invitation_requests
         context["invitation_request_count"] = len(invitation_requests)
-
-        # --- Timeline: tasks (urgency-ordered), join requests, and invitations,
-        # each dated and linked to where the user acts on them. ----------------
-        timeline_items = []
-        for task_bucket, urgency in (
-            (overdue, "overdue"),
-            (due_soon, "due_soon"),
-            (upcoming, "upcoming"),
-            (no_deadline, "none"),
-        ):
-            for task in task_bucket:
-                timeline_items.append({
-                    "kind": "task",
-                    "urgency": urgency,
-                    "date": task.deadline,
-                    "title": task.name,
-                    "subtitle": task.project.name,
-                    "url": reverse(
-                        "tasks:detail",
-                        kwargs={"project_pk": task.project_id, "pk": task.pk},
-                    ),
-                    "type_label": None,
-                })
-
-        for task_bucket, urgency in (
-            (review_overdue, "overdue"),
-            (review_due_soon, "due_soon"),
-            (review_upcoming, "upcoming"),
-            (review_no_deadline, "none"),
-        ):
-            for task in task_bucket:
-                timeline_items.append({
-                    "kind": "review_task",
-                    "urgency": urgency,
-                    "date": task.deadline,
-                    "title": task.name,
-                    "subtitle": task.project.name,
-                    "url": reverse(
-                        "tasks:detail",
-                        kwargs={"project_pk": task.project_id, "pk": task.pk},
-                    ),
-                    "type_label": "To Review",
-                })
-
-        for jr in pending_join_requests:
-            timeline_items.append({
-                "kind": "join_request",
-                "urgency": "join_request",
-                "date": jr.created_at,
-                "title": f"{jr.user.name or jr.user.email} requested to join your project",
-                "subtitle": jr.project.name,
-                "url": reverse("projects:join_requests", kwargs={"pk": jr.project_id}),
-                "type_label": "Join request",
-            })
-
-        for inv in invitation_requests:
-            timeline_items.append({
-                "kind": "invitation",
-                "urgency": "invitation",
-                "date": inv.created_at,
-                "title": f"Invited to {inv.project.name}",
-                "subtitle": f"{inv.get_privilege_display()} · invited by {inv.added_by}",
-                "url": reverse(
-                    "projects:accept_or_decline", kwargs={"code": inv.invitation_code}
-                ),
-                "type_label": "Invitation",
-            })
-
-        # Sort strictly by date so tasks, join requests, and invitations are
-        # interleaved chronologically; undated tasks sort last.
-        timeline_items.sort(key=lambda item: (item["date"] is None, item["date"]))
-
-        from django.utils.dateformat import format as django_date_format
-
-        for item in timeline_items:
-            if item["date"]:
-                item["date_label"] = django_date_format(item["date"], "M j")
-                item["date_year"] = django_date_format(item["date"], "Y")
-            else:
-                item["date_label"] = None
-                item["date_year"] = None
-
-        context["timeline_items"] = timeline_items
-        context["timeline_item_count"] = len(timeline_items)
 
         # --- Notifications -------------------------------------------------
         context["recent_notifications"] = list(
@@ -442,9 +332,6 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         from django.db.models import Q
         user = self.request.user
         qs = Project.objects.filter(privileges__user=user).distinct()
-        status = self.request.GET.get("status", "")
-        if status:
-            qs = qs.filter(status=status)
         visibility = self.request.GET.get("visibility", "")
         if visibility == "public":
             qs = qs.filter(is_public=True)
@@ -467,10 +354,6 @@ class MyProjectListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        privs_map = {
-            p.project_id: p.privilege
-            for p in ProjectPrivilege.objects.filter(user=user)
-        }
 
         # Fetch all member privileges for visible projects in one query.
         project_ids = [p.id for p in context["projects"]]
@@ -495,7 +378,6 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         context["project_rows"] = [
             {
                 "project": p,
-                "privilege": privs_map.get(p.id),
                 "members": members_by_project.get(p.id, []),
             }
             for p in context["projects"]
@@ -504,15 +386,9 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         # Filter / sort context
         context["current_q"] = self.request.GET.get("q", "")
         context["current_sort"] = self.request.GET.get("sort", "newest")
-        context["current_status"] = self.request.GET.get("status", "")
         context["current_visibility"] = self.request.GET.get("visibility", "")
         context["current_per_page"] = self.get_paginate_by(self.get_queryset())
         context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
-        from apps.core.enums import ProjectStatus
-        _STATUS_ORDER = ["PLANNING", "ACTIVE", "PAUSED", "COMPLETED", "INACTIVE"]
-        context["project_statuses"] = [
-            c for key in _STATUS_ORDER for c in ProjectStatus.choices if c[0] == key
-        ]
         context["create_url"] = reverse("projects:create")
         params = self.request.GET.copy()
         params.pop("page", None)
@@ -525,7 +401,7 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         context["results_summary"], _ = _build_results_summary(
             total,
             context["current_q"],
-            context["current_status"],
+            "",
             context["current_sort"],
             context["current_visibility"],
         )
@@ -1474,11 +1350,14 @@ class RequestsView(LoginRequiredMixin, TemplateView):
             .select_related("project")
             .order_by("-created_at")
         )
+        context["active_outgoing_join_requests_count"] = (
+            context["outgoing_join_requests"].filter(status=JoinRequestStatus.PENDING).count()
+        )
         context["incoming_total"] = (
             len(context["incoming_join_requests"]) + len(context["incoming_invitations"])
         )
         context["requests_total"] = (
-            context["incoming_total"] + len(context["outgoing_join_requests"])
+            context["incoming_total"] + context["active_outgoing_join_requests_count"]
         )
         return context
 
