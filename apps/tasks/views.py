@@ -198,10 +198,27 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             current_q or current_status or current_project or current_priority
         )
         if has_filters:
+            parts = []
+            if current_priority == "high":
+                parts.append("high-priority")
+            if current_status == TaskStatus.COMPLETED:
+                parts.append("completed")
+            elif current_status == TaskStatus.NOT_COMPLETED:
+                parts.append("not completed")
+            desc = (" ".join(parts) + " tasks") if parts else "tasks"
+            if current_project:
+                project_obj = next(
+                    (p for p in context["my_projects"] if str(p.pk) == current_project),
+                    None,
+                )
+                if project_obj:
+                    desc += f" in {project_obj.name}"
+            if current_q:
+                desc += f' matching "{current_q}"'
+
             total = context["paginator"].count
-            context["results_summary"] = (
-                f"{total} result{'s' if total != 1 else ''}"
-            )
+            n = f"{total} result{'s' if total != 1 else ''}"
+            context["results_summary"] = f"{n} for {desc}"
 
         return context
 
