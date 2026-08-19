@@ -10,6 +10,8 @@ so emitting these too would duplicate visible, unstyled-by-htmx content.
 {% if is_htmx_request %}
 <span id="task-total-badge" hx-swap-oob="true" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_task_count }}</span>
 <span id="assigned-tab-badge" hx-swap-oob="true" class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center{% if not assigned_total %} hidden{% endif %}">{{ assigned_total }}</span>
+<span id="marked-done-tab-badge" hx-swap-oob="true" class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center{% if not marked_done_total %} hidden{% endif %}">{{ marked_done_total }}</span>
+<span id="completed-tab-badge" hx-swap-oob="true" class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center{% if not completed_total %} hidden{% endif %}">{{ completed_total }}</span>
 <span id="review-tab-badge" hx-swap-oob="true" class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center{% if not review_total %} hidden{% endif %}">{{ review_total }}</span>
 {% endif %}
 
@@ -64,11 +66,11 @@ so emitting these too would duplicate visible, unstyled-by-htmx content.
           </div>
         </div>
 
-        <div class="shrink-0 flex items-center gap-2 pt-0.5">
-          {% if task.status == 'COMPLETED' %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Completed</span>
-          {% else %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-light/60 text-brand-text">Not completed</span>
+        <div class="shrink-0 flex flex-col items-end gap-1 pt-0.5">
+          {% if current_tab == 'review' %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">Review</span>
+          {% elif current_tab == 'completed' and task.user_log_status != 'COMPLETED' %}
+            <span class="text-[11px] text-brand-text/50 italic whitespace-nowrap">Closed without your mark</span>
           {% endif %}
         </div>
       </a>

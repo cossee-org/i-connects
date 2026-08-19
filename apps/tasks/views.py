@@ -14,7 +14,7 @@ from datetime import datetime, time
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Max, Min, ProtectedError, Q
+from django.db.models import Max, Min, OuterRef, ProtectedError, Q, Subquery
 from django.http import (
     Http404,
     HttpResponse,
@@ -85,12 +85,19 @@ from apps.tasks.services import (
 
 
 class MyTaskListView(LoginRequiredMixin, ListView):
-    """Tasks assigned to the current user, across all of their projects —
-    split into two tabs: "Assigned" (tasks assigned to them) and "Assigned
-    to review" (tasks where they're a reviewer). Excludes tasks they merely
-    created or that are assigned to others. The one place tasks can be
-    filtered and browsed across projects; paginated so a heavy task load
-    never gets fetched at once.
+    """Tasks touching the current user, across all of their projects, split
+    into four tabs:
+
+    - "Assigned": tasks assigned to them, not yet marked done by them.
+    - "Marked Done": tasks assigned to them, marked done by them, but not
+      yet closed by the project lead.
+    - "Completed": tasks closed by the project lead — regardless of
+      whether the user personally marked it done first.
+    - "Review": tasks where they're a reviewer.
+
+    Excludes tasks they merely created or that are assigned to others.
+    The one place tasks can be filtered and browsed across projects;
+    paginated so a heavy task load never gets fetched at once.
     """
 
     model = Task
@@ -111,23 +118,46 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         "name_asc": "name",
         "name_desc": "-name",
     }
+    _TABS = ("assigned", "marked_done", "completed", "review")
 
     def _base_queryset(self, tab):
         user = self.request.user
         if tab == "review":
             return Task.objects.filter(reviewers__users=user)
-        return Task.objects.filter(assigned_members__users=user)
+
+        user_member_qs = ProjectMember.objects.filter(users=user)
+        latest_log_status = Subquery(
+            TaskLog.objects.filter(task=OuterRef("pk"), assigned_to__in=user_member_qs)
+            .order_by("-created_at")
+            .values("status")[:1]
+        )
+        qs = Task.objects.filter(assigned_members__users=user).annotate(
+            user_log_status=latest_log_status
+        )
+        if tab == "completed":
+            return qs.filter(status=TaskStatus.COMPLETED)
+        if tab == "marked_done":
+            return qs.filter(
+                status=TaskStatus.NOT_COMPLETED,
+                user_log_status=TaskStatus.COMPLETED,
+            )
+        # "assigned" (default): not closed by the lead, and not marked
+        # done by the user yet. NULL-safe: a task with no TaskLog yet has
+        # user_log_status=NULL, and `exclude(user_log_status=COMPLETED)`
+        # would silently drop it too (NOT (NULL = COMPLETED) is NULL/false
+        # in SQL), so it must be explicitly kept.
+        return qs.filter(status=TaskStatus.NOT_COMPLETED).filter(
+            Q(user_log_status__isnull=True) | ~Q(user_log_status=TaskStatus.COMPLETED)
+        )
 
     def _current_tab(self):
-        return "review" if self.request.GET.get("tab") == "review" else "assigned"
+        tab = self.request.GET.get("tab")
+        return tab if tab in self._TABS else "assigned"
 
     def _apply_filters(self, qs):
-        """Apply the current search/status/project/priority filters
-        (but not sort) to a base queryset."""
-        status = self.request.GET.get("status", "")
-        if status in (TaskStatus.COMPLETED, TaskStatus.NOT_COMPLETED):
-            qs = qs.filter(status=status)
-
+        """Apply the current search/project/priority filters (but not
+        sort) to a base queryset. Completion state is expressed by the
+        tab itself, so there's no separate status filter."""
         project_id = self.request.GET.get("project", "")
         if project_id:
             qs = qs.filter(project_id=project_id)
@@ -171,14 +201,12 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         current_tab = self._current_tab()
         current_q = self.request.GET.get("q", "").strip()
         current_sort = self.request.GET.get("sort", "newest")
-        current_status = self.request.GET.get("status", "")
         current_project = self.request.GET.get("project", "")
         current_priority = self.request.GET.get("priority", "")
 
         context["current_tab"] = current_tab
         context["current_q"] = current_q
         context["current_sort"] = current_sort
-        context["current_status"] = current_status
         context["current_project"] = current_project
         context["current_priority"] = current_priority
 
@@ -196,23 +224,28 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         context["assigned_total"] = self._apply_filters(
             self._base_queryset("assigned")
         ).count()
+        context["marked_done_total"] = self._apply_filters(
+            self._base_queryset("marked_done")
+        ).count()
+        context["completed_total"] = self._apply_filters(
+            self._base_queryset("completed")
+        ).count()
         context["review_total"] = self._apply_filters(
             self._base_queryset("review")
         ).count()
-        context["total_task_count"] = context["assigned_total"] + context["review_total"]
+        context["total_task_count"] = (
+            context["assigned_total"]
+            + context["marked_done_total"]
+            + context["completed_total"]
+            + context["review_total"]
+        )
         context["now"] = timezone.now()
 
-        has_filters = bool(
-            current_q or current_status or current_project or current_priority
-        )
+        has_filters = bool(current_q or current_project or current_priority)
         if has_filters:
             parts = []
             if current_priority == "high":
                 parts.append("high-priority")
-            if current_status == TaskStatus.COMPLETED:
-                parts.append("completed")
-            elif current_status == TaskStatus.NOT_COMPLETED:
-                parts.append("not completed")
             desc = (" ".join(parts) + " tasks") if parts else "tasks"
             if current_project:
                 project_obj = next(
