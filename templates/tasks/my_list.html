@@ -70,13 +70,18 @@
 
   <div class="flex gap-3 w-full sm:w-auto flex-wrap items-center">
 
-    {# Show completed toggle — off by default, active tasks only (matches the dashboard's counts) #}
-    <label class="inline-flex items-center gap-2 flex-1 sm:flex-none sm:w-fit bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm cursor-pointer select-none">
-      <input type="checkbox" name="show_completed" value="1" class="toggle toggle-sm toggle-primary"
-             {% if current_show_completed %}checked{% endif %}
-             @change="document.getElementById('filter-form-tasks').submit()">
-      Show completed
-    </label>
+    {# Completed chip — off by default, active tasks only (matches the dashboard's counts) #}
+    <div x-data="{ active: {% if current_show_completed %}true{% else %}false{% endif %} }" class="flex-1 sm:flex-none sm:w-fit">
+      <input type="hidden" name="show_completed" id="show-completed-input-tasks" value="{% if current_show_completed %}1{% endif %}">
+      <button type="button"
+              @click="active = !active;
+                      document.getElementById('show-completed-input-tasks').value = active ? '1' : '';
+                      document.getElementById('filter-form-tasks').submit();"
+              :class="active ? 'bg-brand-navy text-white border-brand-navy' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'"
+              class="w-full inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-sm shadow-sm transition-colors border">
+        Completed
+      </button>
+    </div>
 
     {# Sort dropdown #}
     <div x-data="{
