@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Admin &mdash; i&bull;CONNECTS{% endblock %}
+{% block title %}Admin Console &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block brand_tabs %}{% endblock %}
 
@@ -10,10 +10,10 @@
 <div class="mb-6">
   <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-1">Platform admin</div>
   <div class="flex items-center gap-3">
-    <h1 class="page-title font-semibold text-brand-navy leading-tight">Console</h1>
+    <h1 class="page-title font-semibold text-brand-navy leading-tight">Admin Console</h1>
     <div class="relative mt-1.5" x-data="{ open: false }" @keydown.escape="open = false" @click.outside="open = false">
       <button type="button" @click="open = !open"
-              aria-label="About Console"
+              aria-label="About Admin Console"
               class="inline-flex items-center justify-center w-5 h-5 rounded-full text-brand-text/50 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
           <path fill-rule="evenodd" d="M18 10A8 8 0 1 1 2 10a8 8 0 0 1 16 0ZM9 9a1 1 0 0 1 2 0v4a1 1 0 1 1-2 0V9Zm1-3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
