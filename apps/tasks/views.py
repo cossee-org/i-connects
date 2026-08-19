@@ -41,7 +41,7 @@ from django.views.generic import (
 from apps.audit.services import AuditAction, log_action
 from apps.comments.forms import CommentForm
 from apps.core.enums import CompletedAs, TaskStatus
-from apps.projects.models import ProjectMember
+from apps.projects.models import Project, ProjectMember
 from apps.tasks.calendar import (
     VIEWS as CALENDAR_VIEWS,
     build_day_tasks,
@@ -77,6 +77,112 @@ from apps.tasks.services import (
     reopen_own,
     reopen_task,
 )
+
+
+# ---------------------------------------------------------------------------
+# All tasks (cross-project)
+# ---------------------------------------------------------------------------
+
+
+class MyTaskListView(LoginRequiredMixin, ListView):
+    """Every task — done and not done — across every project the user
+    belongs to. The one place tasks can be filtered and browsed across
+    projects; paginated so a heavy task load never gets fetched at once.
+    """
+
+    model = Task
+    template_name = "tasks/my_list.html"
+    context_object_name = "tasks"
+    paginate_by = 20
+
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["tasks/partials/my_list_results.html"]
+        return [self.template_name]
+
+    _SORT_MAP = {
+        "newest": "-created_at",
+        "oldest": "created_at",
+        "deadline_asc": "deadline",
+        "deadline_desc": "-deadline",
+        "name_asc": "name",
+        "name_desc": "-name",
+    }
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = (
+            Task.objects.filter(project__privileges__user=user)
+            .select_related("project", "container")
+            .prefetch_related("assigned_members")
+            .distinct()
+        )
+
+        status = self.request.GET.get("status", "")
+        if status in (TaskStatus.COMPLETED, TaskStatus.NOT_COMPLETED):
+            qs = qs.filter(status=status)
+
+        project_id = self.request.GET.get("project", "")
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+
+        if self.request.GET.get("priority", "") == "high":
+            qs = qs.filter(is_priority=True)
+
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(
+                Q(name__icontains=q)
+                | Q(description__icontains=q)
+                | Q(project__name__icontains=q)
+            ).distinct()
+
+        sort = self.request.GET.get("sort", "newest")
+        if sort in ("deadline_asc", "deadline_desc"):
+            qs = qs.filter(deadline__isnull=False)
+        order = self._SORT_MAP.get(sort, "-created_at")
+        return qs.order_by(order, "id")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+
+        current_q = self.request.GET.get("q", "").strip()
+        current_sort = self.request.GET.get("sort", "newest")
+        current_status = self.request.GET.get("status", "")
+        current_project = self.request.GET.get("project", "")
+        current_priority = self.request.GET.get("priority", "")
+
+        context["current_q"] = current_q
+        context["current_sort"] = current_sort
+        context["current_status"] = current_status
+        context["current_project"] = current_project
+        context["current_priority"] = current_priority
+
+        context["my_projects"] = (
+            Project.objects.filter(privileges__user=user)
+            .distinct()
+            .order_by("name")
+        )
+
+        params = self.request.GET.copy()
+        params.pop("page", None)
+        context["filter_params"] = params.urlencode()
+
+        context["total_task_count"] = (
+            Task.objects.filter(project__privileges__user=user).distinct().count()
+        )
+
+        has_filters = bool(
+            current_q or current_status or current_project or current_priority
+        )
+        if has_filters:
+            total = context["paginator"].count
+            context["results_summary"] = (
+                f"{total} result{'s' if total != 1 else ''}"
+            )
+
+        return context
 
 
 # ---------------------------------------------------------------------------

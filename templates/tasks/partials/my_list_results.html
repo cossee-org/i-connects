@@ -1,0 +1,78 @@
+{% if results_summary %}
+  <div class="flex items-center gap-3 mb-4">
+    <p class="text-sm text-brand-text">{{ results_summary }}</p>
+    <a href="{% url 'tasks:my_list' %}" class="ml-auto inline-flex items-center gap-1 text-sm text-gray-400 hover:!text-blue-500 hover:underline shrink-0">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"/></svg>
+      Clear filter
+    </a>
+  </div>
+{% endif %}
+
+{% if tasks %}
+  <div class="flex flex-col gap-3">
+    {% for task in tasks %}
+      <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
+         class="brand-card p-4 hover:shadow-md transition flex items-start gap-4{% if task.is_priority %} border-l-2 border-l-error{% endif %}">
+        <div class="flex-1 min-w-0 flex flex-col gap-1">
+          <h2 class="text-base font-semibold text-brand-navy leading-snug">{{ task.name }}</h2>
+          <p class="text-xs text-brand-text/60">{{ task.project.name }}</p>
+
+          {% if task.description %}
+            <p class="text-xs text-brand-text/70 line-clamp-2">{{ task.description }}</p>
+          {% endif %}
+
+          <div class="flex items-center gap-3 mt-1 flex-wrap">
+            {% if task.is_priority %}
+              {% include "_components/priority_flag.html" %}
+            {% endif %}
+            {% if task.deadline %}
+              <span class="inline-flex items-center gap-1 text-xs text-brand-text/60">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                     stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                {{ task.deadline|date:"M j, Y" }}
+              </span>
+            {% endif %}
+            {% if task.assigned_members.all %}
+              <div class="flex -space-x-1.5" aria-hidden="true">
+                {% for m in task.assigned_members.all|slice:":4" %}
+                  <div class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold ring-1 ring-white"
+                       title="{{ m }}">
+                    {{ m|stringformat:"s"|slice:":1"|upper }}
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="shrink-0 flex items-center gap-2 pt-0.5">
+          {% if task.status == 'COMPLETED' %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Completed</span>
+          {% else %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-light/60 text-brand-text">Not completed</span>
+          {% endif %}
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+
+  {% if is_paginated %}
+    <div class="join mt-8 flex justify-center">
+      {% if page_obj.has_previous %}
+        <a class="join-item btn btn-sm"
+           href="?{{ filter_params }}&page={{ page_obj.previous_page_number }}">&laquo;</a>
+      {% endif %}
+      <span class="join-item btn btn-sm btn-active">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      </span>
+      {% if page_obj.has_next %}
+        <a class="join-item btn btn-sm"
+           href="?{{ filter_params }}&page={{ page_obj.next_page_number }}">&raquo;</a>
+      {% endif %}
+    </div>
+  {% endif %}
+{% else %}
+  {% include "_components/empty_state.html" with title="No tasks found" body="Try adjusting the filters above, or check back once tasks are created in your projects." %}
+{% endif %}
