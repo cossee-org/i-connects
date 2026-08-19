@@ -28,9 +28,10 @@
               {% include "_components/priority_flag.html" %}
             {% endif %}
             {% if task.deadline %}
-              <span class="inline-flex items-center gap-1 text-xs text-brand-text/60">
+              <span class="inline-flex items-center gap-1 text-xs
+                {% if task.deadline < now and task.status != 'COMPLETED' %}text-error font-medium{% else %}text-brand-text/60{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                     stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+                     stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
                 {{ task.deadline|date:"M j, Y" }}

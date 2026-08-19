@@ -1428,6 +1428,9 @@ class RequestsView(LoginRequiredMixin, TemplateView):
         context["incoming_total"] = (
             len(context["incoming_join_requests"]) + len(context["incoming_invitations"])
         )
+        context["requests_total"] = (
+            context["incoming_total"] + len(context["outgoing_join_requests"])
+        )
         return context
 
 

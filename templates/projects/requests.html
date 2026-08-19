@@ -8,6 +8,7 @@
 <div class="mb-6">
   <div class="flex items-center gap-3">
     <h1 class="page-title font-semibold text-brand-navy">Requests</h1>
+    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ requests_total }}</span>
     <div class="relative mt-1.5" x-data="{ open: false }" @keydown.escape="open = false" @click.outside="open = false">
       <button type="button" @click="open = !open"
               aria-label="About Requests"

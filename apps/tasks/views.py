@@ -192,6 +192,7 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         context["total_task_count"] = (
             context["review_total"] if current_tab == "review" else context["assigned_total"]
         )
+        context["now"] = timezone.now()
 
         has_filters = bool(
             current_q or current_status or current_project or current_priority
