@@ -58,7 +58,7 @@
         {value: 'name_desc', label: 'Name Z–A'}
       ],
       current: '{{ current_sort }}',
-      get label() { return 'Sort by' },
+      get label() { return 'Sort' },
       pick(val) {
         this.current = val;
         document.getElementById('sort-input-my').value = val;
@@ -129,7 +129,7 @@
       </div>
     </div>
 
-    {# Visibility dropdown #}
+    {# Privacy dropdown #}
     <div x-data="{
       open: false,
       options: [
@@ -138,7 +138,7 @@
         {value: 'private', label: 'Private'}
       ],
       current: '{{ current_visibility }}',
-      get label() { return 'Visibility' },
+      get label() { return 'Privacy' },
       pick(val) {
         this.current = val;
         document.getElementById('visibility-input-my').value = val;

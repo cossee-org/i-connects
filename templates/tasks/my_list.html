@@ -87,7 +87,7 @@
         {value: 'name_desc', label: 'Name Z–A'}
       ],
       current: '{{ current_sort }}',
-      get label() { return 'Sort by' },
+      get label() { return 'Sort' },
       pick(val) {
         this.current = val;
         document.getElementById('sort-input-tasks').value = val;
