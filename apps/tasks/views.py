@@ -121,14 +121,9 @@ class MyTaskListView(LoginRequiredMixin, ListView):
     def _current_tab(self):
         return "review" if self.request.GET.get("tab") == "review" else "assigned"
 
-    def get_queryset(self):
-        qs = (
-            self._base_queryset(self._current_tab())
-            .select_related("project", "container")
-            .prefetch_related("assigned_members")
-            .distinct()
-        )
-
+    def _apply_filters(self, qs):
+        """Apply the current search/status/project/priority filters
+        (but not sort) to a base queryset."""
         status = self.request.GET.get("status", "")
         if status in (TaskStatus.COMPLETED, TaskStatus.NOT_COMPLETED):
             qs = qs.filter(status=status)
@@ -146,7 +141,21 @@ class MyTaskListView(LoginRequiredMixin, ListView):
                 Q(name__icontains=q)
                 | Q(description__icontains=q)
                 | Q(project__name__icontains=q)
-            ).distinct()
+                | Q(assigned_members__name__icontains=q)
+                | Q(assigned_members__users__given_name__icontains=q)
+                | Q(assigned_members__users__family_name__icontains=q)
+                | Q(assigned_members__users__name__icontains=q)
+                | Q(assigned_members__users__email__icontains=q)
+            )
+        return qs.distinct()
+
+    def get_queryset(self):
+        qs = (
+            self._base_queryset(self._current_tab())
+            .select_related("project", "container")
+            .prefetch_related("assigned_members")
+        )
+        qs = self._apply_filters(qs)
 
         sort = self.request.GET.get("sort", "newest")
         if sort in ("deadline_asc", "deadline_desc"):
@@ -183,15 +192,13 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         params.pop("tab", None)
         context["filter_params"] = params.urlencode()
 
-        context["assigned_total"] = (
-            Task.objects.filter(assigned_members__users=user).distinct().count()
-        )
-        context["review_total"] = (
-            Task.objects.filter(reviewers__users=user).distinct().count()
-        )
-        context["total_task_count"] = (
-            context["review_total"] if current_tab == "review" else context["assigned_total"]
-        )
+        context["assigned_total"] = self._apply_filters(
+            self._base_queryset("assigned")
+        ).count()
+        context["review_total"] = self._apply_filters(
+            self._base_queryset("review")
+        ).count()
+        context["total_task_count"] = context["assigned_total"] + context["review_total"]
         context["now"] = timezone.now()
 
         has_filters = bool(
