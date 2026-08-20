@@ -1385,6 +1385,39 @@ class RequestsView(LoginRequiredMixin, TemplateView):
 
     _STATUSES = ("active", "completed", "all")
     _SORTS = ("newest", "oldest", "name_asc", "name_desc")
+    _SORT_LABELS = {
+        "newest": None,
+        "oldest": "oldest first",
+        "name_asc": "project A–Z",
+        "name_desc": "project Z–A",
+    }
+    _TYPE_LABELS = {
+        "join_request": "join request",
+        "invitation": "invitation",
+    }
+
+    @classmethod
+    def _build_summary(cls, count, current_q, current_type, current_status, current_sort):
+        """Human-readable results summary, or None if no filters are active."""
+        parts = []
+        if current_type:
+            parts.append(cls._TYPE_LABELS.get(current_type, current_type))
+        if current_status == "completed":
+            parts.append("completed")
+        desc = (" ".join(parts) + " requests") if parts else "requests"
+        if current_status == "all":
+            desc += " (including completed)"
+        if current_q:
+            desc += f' matching "{current_q}"'
+        sort_label = cls._SORT_LABELS.get(current_sort)
+        has_filters = bool(current_q or current_type or current_status != "active" or sort_label)
+        if not has_filters:
+            return None
+        n = f"{count} result{'s' if count != 1 else ''}"
+        summary = f"{n} for {desc}"
+        if sort_label:
+            summary += f", sorted by {sort_label}"
+        return summary
 
     @staticmethod
     def _merge_and_sort(join_requests, invitations, sort):
@@ -1497,6 +1530,13 @@ class RequestsView(LoginRequiredMixin, TemplateView):
 
         context["incoming_total"] = len(context["incoming_items"])
         context["requests_total"] = context["incoming_total"]
+
+        context["incoming_results_summary"] = self._build_summary(
+            context["incoming_total"], current_q, current_type, current_status, current_sort
+        )
+        context["outgoing_results_summary"] = self._build_summary(
+            len(context["outgoing_items"]), current_q, current_type, current_status, current_sort
+        )
         return context
 
 
