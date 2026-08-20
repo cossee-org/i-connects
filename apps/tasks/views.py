@@ -87,8 +87,8 @@ from apps.tasks.services import (
 class MyTaskListView(LoginRequiredMixin, ListView):
     """Tasks touching the current user, across all of their projects: those
     assigned to the user and those where the user is a reviewer, merged into
-    a single list. The "Review tasks only" filter narrows that down to just
-    the tasks where the user is a reviewer.
+    a single list. The "Type" filter narrows that down to just tasks
+    assigned to the user, or just tasks where the user is a reviewer.
 
     By default only active tasks are shown, matching the dashboard's task
     counts; the "Show completed" toggle lifts that filter to show every
@@ -117,11 +117,14 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         "name_desc": "-name",
     }
 
+    _TYPES = ("assigned", "review")
+
     def _current_show_completed(self):
         return self.request.GET.get("show_completed") == "1"
 
-    def _current_review_only(self):
-        return self.request.GET.get("review_only") == "1"
+    def _current_type(self):
+        task_type = self.request.GET.get("type", "")
+        return task_type if task_type in self._TYPES else ""
 
     def _base_queryset(self):
         user = self.request.user
@@ -156,13 +159,15 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             | ~Q(user_log_status=TaskStatus.COMPLETED)
         )
 
-    def _apply_review_filter(self, qs, review_only):
-        if review_only:
+    def _apply_type_filter(self, qs, task_type):
+        if task_type == "assigned":
+            return qs.filter(is_assigned=True)
+        if task_type == "review":
             return qs.filter(is_reviewing=True)
         return qs
 
     def _apply_common_filters(self, qs):
-        """Search/project/priority filters (not sort, not the review-only
+        """Search/project/priority filters (not sort, not the type
         filter)."""
         project_id = self.request.GET.get("project", "")
         if project_id:
@@ -192,7 +197,7 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             .prefetch_related("assigned_members")
         )
         qs = self._apply_common_filters(qs)
-        qs = self._apply_review_filter(qs, self._current_review_only())
+        qs = self._apply_type_filter(qs, self._current_type())
         qs = self._apply_active_filter(qs, self._current_show_completed())
 
         sort = self.request.GET.get("sort", "newest")
@@ -211,14 +216,14 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         current_project = self.request.GET.get("project", "")
         current_priority = self.request.GET.get("priority", "")
         show_completed = self._current_show_completed()
-        review_only = self._current_review_only()
+        current_type = self._current_type()
 
         context["current_q"] = current_q
         context["current_sort"] = current_sort
         context["current_project"] = current_project
         context["current_priority"] = current_priority
         context["current_show_completed"] = show_completed
-        context["current_review_only"] = review_only
+        context["current_type"] = current_type
 
         context["my_projects"] = (
             Project.objects.filter(privileges__user=user)
@@ -233,22 +238,18 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         context["total_task_count"] = self._apply_active_filter(
             self._apply_common_filters(self._base_queryset()), show_completed
         ).count()
-        context["review_total"] = self._apply_active_filter(
-            self._apply_review_filter(
-                self._apply_common_filters(self._base_queryset()), True
-            ),
-            show_completed,
-        ).count()
         context["now"] = timezone.now()
 
         has_filters = bool(
-            current_q or current_project or current_priority or show_completed or review_only
+            current_q or current_project or current_priority or show_completed or current_type
         )
         if has_filters:
             parts = []
             if current_priority == "high":
                 parts.append("high-priority")
-            if review_only:
+            if current_type == "assigned":
+                parts.append("assigned")
+            elif current_type == "review":
                 parts.append("review")
             desc = (" ".join(parts) + " tasks") if parts else "tasks"
             if show_completed:

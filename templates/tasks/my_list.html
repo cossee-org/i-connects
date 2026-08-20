@@ -29,11 +29,10 @@
 
 {# ── Filter / sort bar ────────────────────────────────────────────────────── #}
 <form method="get" id="filter-form-tasks" class="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-stretch sm:items-center mb-6">
-  <input type="hidden" name="sort" id="sort-input-tasks" value="{{ current_sort }}">
-  <input type="hidden" name="project" id="project-input-tasks" value="{{ current_project }}">
+  <input type="hidden" name="type" id="type-input-tasks" value="{{ current_type }}">
   <input type="hidden" name="priority" id="priority-input-tasks" value="{{ current_priority }}">
-  <input type="hidden" name="show_completed" id="show-completed-input-tasks" value="{% if current_show_completed %}1{% endif %}">
-  <input type="hidden" name="review_only" id="review-only-input-tasks" value="{% if current_review_only %}1{% endif %}">
+  <input type="hidden" name="project" id="project-input-tasks" value="{{ current_project }}">
+  <input type="hidden" name="sort" id="sort-input-tasks" value="{{ current_sort }}">
 
   {# Search — filters live as the user types #}
   <div class="w-full sm:flex-1 sm:min-w-[200px]">
@@ -48,65 +47,19 @@
 
   <div class="flex gap-3 w-full sm:w-auto flex-wrap items-center">
 
-    {# Filters — multiselect: Include completed, Review tasks only, High priority #}
-    <div x-data="{
-      open: false,
-      showCompleted: {% if current_show_completed %}true{% else %}false{% endif %},
-      reviewOnly: {% if current_review_only %}true{% else %}false{% endif %},
-      highPriority: {% if current_priority == 'high' %}true{% else %}false{% endif %},
-      get activeCount() { return (this.showCompleted ? 1 : 0) + (this.reviewOnly ? 1 : 0) + (this.highPriority ? 1 : 0); },
-      get label() { return this.activeCount ? 'Filters (' + this.activeCount + ')' : 'Filters'; },
-      apply() {
-        document.getElementById('show-completed-input-tasks').value = this.showCompleted ? '1' : '';
-        document.getElementById('review-only-input-tasks').value = this.reviewOnly ? '1' : '';
-        document.getElementById('priority-input-tasks').value = this.highPriority ? 'high' : '';
-        document.getElementById('filter-form-tasks').submit();
-      }
-    }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
-      <button type="button" @click="open = !open"
-              :class="activeCount ? 'bg-brand-navy text-white border-brand-navy' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'"
-              class="w-full inline-flex items-center justify-between gap-1.5 rounded-lg px-3 py-1.5 text-sm shadow-sm transition-colors border">
-        <span x-text="label"></span>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0" :class="activeCount ? 'text-white/70' : 'text-brand-text/50'">
-          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-        </svg>
-      </button>
-      <div x-cloak x-show="open"
-           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-           class="absolute left-0 mt-1 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
-        <label class="flex items-center gap-2 px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors cursor-pointer">
-          <input type="checkbox" x-model="showCompleted" @change="apply()" class="checkbox checkbox-sm">
-          Include completed
-        </label>
-        <label class="flex items-center gap-2 px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors cursor-pointer">
-          <input type="checkbox" x-model="reviewOnly" @change="apply()" class="checkbox checkbox-sm">
-          Review tasks only
-          <span id="review-only-badge" class="ml-auto text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center{% if not review_total %} hidden{% endif %}">{{ review_total }}</span>
-        </label>
-        <label class="flex items-center gap-2 px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors cursor-pointer">
-          <input type="checkbox" x-model="highPriority" @change="apply()" class="checkbox checkbox-sm">
-          High priority only
-        </label>
-      </div>
-    </div>
-
-    {# Sort dropdown #}
+    {# Type dropdown — Assigned vs To Review; unselected means both, merged #}
     <div x-data="{
       open: false,
       options: [
-        {value: 'newest', label: 'Newest first'},
-        {value: 'oldest', label: 'Oldest first'},
-        {value: 'deadline_asc', label: 'Deadline: soonest'},
-        {value: 'deadline_desc', label: 'Deadline: latest'},
-        {value: 'name_asc', label: 'Name A–Z'},
-        {value: 'name_desc', label: 'Name Z–A'}
+        {value: '', label: 'All'},
+        {value: 'assigned', label: 'Assigned'},
+        {value: 'review', label: 'To Review'}
       ],
-      current: '{{ current_sort }}',
-      get label() { return 'Sort' },
+      current: '{{ current_type }}',
+      get label() { return 'Type' },
       pick(val) {
         this.current = val;
-        document.getElementById('sort-input-tasks').value = val;
+        document.getElementById('type-input-tasks').value = val;
         this.open = false;
         document.getElementById('filter-form-tasks').submit();
       }
@@ -121,7 +74,53 @@
       <div x-cloak x-show="open"
            x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
            x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-           class="absolute left-0 mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+           class="absolute left-0 mt-1 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        <template x-for="opt in options" :key="opt.value">
+          <button type="button" @click="pick(opt.value)"
+                  class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                  :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                  x-text="opt.label"></button>
+        </template>
+      </div>
+    </div>
+
+    {# Include completed select box — active tasks only by default (matches the dashboard's counts) #}
+    <div class="flex-1 sm:flex-none sm:w-fit">
+      <select name="show_completed"
+              onchange="document.getElementById('filter-form-tasks').submit()"
+              class="select select-sm select-bordered w-full">
+        <option value="" {% if not current_show_completed %}selected{% endif %}>Active only</option>
+        <option value="1" {% if current_show_completed %}selected{% endif %}>Include completed</option>
+      </select>
+    </div>
+
+    {# Priority dropdown #}
+    <div x-data="{
+      open: false,
+      options: [
+        {value: '', label: 'All'},
+        {value: 'high', label: 'High priority'}
+      ],
+      current: '{{ current_priority }}',
+      get label() { return 'Priority' },
+      pick(val) {
+        this.current = val;
+        document.getElementById('priority-input-tasks').value = val;
+        this.open = false;
+        document.getElementById('filter-form-tasks').submit();
+      }
+    }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+        <span x-text="label"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute left-0 mt-1 w-36 max-w-[90vw] bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
         <template x-for="opt in options" :key="opt.value">
           <button type="button" @click="pick(opt.value)"
                   class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
@@ -158,6 +157,46 @@
         <template x-for="opt in options" :key="opt.value">
           <button type="button" @click="pick(opt.value)"
                   class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors break-words"
+                  :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                  x-text="opt.label"></button>
+        </template>
+      </div>
+    </div>
+
+    {# Sort dropdown — last #}
+    <div x-data="{
+      open: false,
+      options: [
+        {value: 'newest', label: 'Newest first'},
+        {value: 'oldest', label: 'Oldest first'},
+        {value: 'deadline_asc', label: 'Deadline: soonest'},
+        {value: 'deadline_desc', label: 'Deadline: latest'},
+        {value: 'name_asc', label: 'Name A–Z'},
+        {value: 'name_desc', label: 'Name Z–A'}
+      ],
+      current: '{{ current_sort }}',
+      get label() { return 'Sort' },
+      pick(val) {
+        this.current = val;
+        document.getElementById('sort-input-tasks').value = val;
+        this.open = false;
+        document.getElementById('filter-form-tasks').submit();
+      }
+    }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+        <span x-text="label"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        <template x-for="opt in options" :key="opt.value">
+          <button type="button" @click="pick(opt.value)"
+                  class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
                   :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
                   x-text="opt.label"></button>
         </template>
