@@ -27,11 +27,11 @@
   </div>
 </div>
 
-<div x-data="{ tab: 'incoming' }">
+<div x-data="{ tab: '{{ current_tab }}' }">
 
   {# ── Tabs ── #}
   <div class="flex gap-6 border-b border-brand-light mb-6">
-    <button type="button" @click="tab = 'incoming'"
+    <button type="button" @click="tab = 'incoming'; document.getElementById('tab-input-requests').value = 'incoming';"
             class="brand-tab inline-flex items-center gap-1.5" :class="tab === 'incoming' ? 'brand-tab-active' : ''">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
@@ -43,7 +43,7 @@
         <span class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">{{ incoming_total }}</span>
       {% endif %}
     </button>
-    <button type="button" @click="tab = 'outgoing'"
+    <button type="button" @click="tab = 'outgoing'; document.getElementById('tab-input-requests').value = 'outgoing';"
             class="brand-tab inline-flex items-center gap-1.5" :class="tab === 'outgoing' ? 'brand-tab-active' : ''">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
@@ -59,6 +59,7 @@
 
   {# ── Filter / sort bar — shared by both tabs ── #}
   <form method="get" id="filter-form-requests" class="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-stretch sm:items-center mb-6">
+    <input type="hidden" name="tab" id="tab-input-requests" value="{{ current_tab }}">
     <input type="hidden" name="status" id="status-input-requests" value="{{ current_status }}">
     <input type="hidden" name="sort" id="sort-input-requests" value="{{ current_sort }}">
 

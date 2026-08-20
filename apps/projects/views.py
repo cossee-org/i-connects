@@ -1412,6 +1412,9 @@ class RequestsView(LoginRequiredMixin, TemplateView):
         current_sort = self.request.GET.get("sort", "")
         if current_sort not in self._SORTS:
             current_sort = "newest"
+        current_tab = self.request.GET.get("tab", "")
+        if current_tab not in ("incoming", "outgoing"):
+            current_tab = "incoming"
 
         pm_project_ids = ProjectPrivilege.objects.filter(
             user=user,
@@ -1479,6 +1482,7 @@ class RequestsView(LoginRequiredMixin, TemplateView):
         context["current_q"] = current_q
         context["current_status"] = current_status
         context["current_sort"] = current_sort
+        context["current_tab"] = current_tab
 
         context["incoming_total"] = len(context["incoming_items"])
         context["outgoing_total"] = len(context["outgoing_items"])
