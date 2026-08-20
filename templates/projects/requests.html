@@ -207,10 +207,20 @@
                     <span class="text-brand-text/70">requested to join</span>
                     <a href="{% url 'projects:join_requests' pk=jr.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ jr.project.name }}</a>
                   </p>
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit
-                    {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-                    {{ jr.get_requested_privilege_display }}
-                  </span>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                      {{ jr.get_requested_privilege_display }}
+                    </span>
+                    {% if jr.status != 'PENDING' %}
+                      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                        {% if jr.status == 'APPROVED' %}bg-green-100 text-green-700
+                        {% elif jr.status == 'DECLINED' %}bg-red-100 text-red-700
+                        {% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                        {{ jr.get_status_display }}
+                      </span>
+                    {% endif %}
+                  </div>
                   <p class="text-xs text-brand-text/60">{{ jr.user.email }}</p>
                   {% if jr.message %}
                     <p class="text-xs text-brand-text/70 whitespace-pre-line mt-1">{{ jr.message }}</p>
@@ -218,10 +228,12 @@
                   <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"Y-m-d H:i" }}</p>
                 </div>
                 <div class="shrink-0">
-                  <a href="{% url 'projects:review_join_request' pk=jr.project.pk join_request_pk=jr.pk %}?source=incoming"
-                     class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-                    Review
-                  </a>
+                  {% if jr.status == 'PENDING' %}
+                    <a href="{% url 'projects:review_join_request' pk=jr.project.pk join_request_pk=jr.pk %}?source=incoming"
+                       class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+                      Review
+                    </a>
+                  {% endif %}
                 </div>
               </div>
             {% endwith %}
