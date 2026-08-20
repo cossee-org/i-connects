@@ -1373,7 +1373,7 @@ class RequestsView(LoginRequiredMixin, TemplateView):
     you've sent and invitations you've sent out (for projects you
     manage), merged the same way.
 
-    A shared search box and Status/Sort filters apply to both tabs.
+    A shared search box and Type/Status/Sort filters apply to both tabs.
     Invitations have no "completed" state of their own -- they're
     deleted outright once accepted or declined -- so the "Completed"
     status only ever matches join requests; "Active" (the default)
@@ -1415,6 +1415,9 @@ class RequestsView(LoginRequiredMixin, TemplateView):
         current_tab = self.request.GET.get("tab", "")
         if current_tab not in ("incoming", "outgoing"):
             current_tab = "incoming"
+        current_type = self.request.GET.get("type", "")
+        if current_type not in ("join_request", "invitation"):
+            current_type = ""
 
         pm_project_ids = ProjectPrivilege.objects.filter(
             user=user,
@@ -1436,6 +1439,13 @@ class RequestsView(LoginRequiredMixin, TemplateView):
             incoming_inv_qs = incoming_inv_qs.none()
             outgoing_inv_qs = outgoing_inv_qs.none()
         # "all": no status filter on either side.
+
+        if current_type == "join_request":
+            incoming_inv_qs = incoming_inv_qs.none()
+            outgoing_inv_qs = outgoing_inv_qs.none()
+        elif current_type == "invitation":
+            incoming_jr_qs = incoming_jr_qs.none()
+            outgoing_jr_qs = outgoing_jr_qs.none()
 
         if current_q:
             jr_q = (
@@ -1483,6 +1493,7 @@ class RequestsView(LoginRequiredMixin, TemplateView):
         context["current_status"] = current_status
         context["current_sort"] = current_sort
         context["current_tab"] = current_tab
+        context["current_type"] = current_type
 
         context["incoming_total"] = len(context["incoming_items"])
         context["requests_total"] = context["incoming_total"]
