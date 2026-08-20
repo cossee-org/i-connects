@@ -132,6 +132,33 @@
     }
     .topbar-tooltip:hover::after,
     .topbar-tooltip:hover::before { opacity: 1; }
+
+    /* ── Page header "i" info button (wraps longer subtitle text) ── */
+    .info-tooltip { position: relative; }
+    .info-tooltip::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      width: max-content;
+      max-width: 260px;
+      background: #1e293b;
+      color: #f8fafc;
+      font-size: 0.7rem;
+      font-weight: 400;
+      line-height: 1.4;
+      padding: 6px 10px;
+      border-radius: 6px;
+      white-space: normal;
+      text-align: left;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      z-index: 60;
+      box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
+    }
+    .info-tooltip:hover::after,
+    .info-tooltip:focus-visible::after { opacity: 1; }
   </style>
 
   {% comment %}Vendored locally so the UI works in environments whose network policy blocks external hosts.{% endcomment %}
@@ -276,15 +303,15 @@
          :class="{ 'open': sidebarOpen, 'sidebar-ready': sidebarReady }"
          aria-label="Sidebar navigation">
     <nav class="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1" aria-label="Primary">
-      <a href="{% url 'projects:dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>
-        Dashboard
-      </a>
       <a href="{% url 'projects:create' %}" class="sidebar-link {% if request.resolver_match.url_name == 'create' and request.resolver_match.app_name == 'projects' %}active{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
         </svg>
         New project
+      </a>
+      <a href="{% url 'projects:dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>
+        Dashboard
       </a>
       <a href="{% url 'projects:my_list' %}" class="sidebar-link {% if project or request.resolver_match.url_name == 'my_list' and request.resolver_match.app_name == 'projects' %}active{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
