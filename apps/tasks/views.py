@@ -14,7 +14,7 @@ from datetime import datetime, time
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Max, Min, OuterRef, ProtectedError, Q, Subquery
+from django.db.models import Exists, Max, Min, OuterRef, ProtectedError, Q, Subquery
 from django.http import (
     Http404,
     HttpResponse,
@@ -85,18 +85,17 @@ from apps.tasks.services import (
 
 
 class MyTaskListView(LoginRequiredMixin, ListView):
-    """Tasks touching the current user, across all of their projects,
-    split into two tabs by role:
+    """Tasks touching the current user, across all of their projects: those
+    assigned to the user and those where the user is a reviewer, merged into
+    a single list. The "Review tasks only" filter narrows that down to just
+    the tasks where the user is a reviewer.
 
-    - "Assigned": tasks assigned to the user.
-    - "Assigned to review": tasks where the user is a reviewer.
-
-    By default each tab shows only active tasks, matching the dashboard's
-    task counts; the "Show completed" toggle lifts that filter to show
-    every record regardless of status. Excludes tasks the user merely
-    created or that are assigned to others. The one place tasks can be
-    filtered and browsed across projects; paginated so a heavy task load
-    never gets fetched at once.
+    By default only active tasks are shown, matching the dashboard's task
+    counts; the "Show completed" toggle lifts that filter to show every
+    record regardless of status. Excludes tasks the user merely created or
+    that are assigned to others. The one place tasks can be filtered and
+    browsed across projects; paginated so a heavy task load never gets
+    fetched at once.
     """
 
     model = Task
@@ -117,48 +116,54 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         "name_asc": "name",
         "name_desc": "-name",
     }
-    _TABS = ("assigned", "review")
-
-    def _current_tab(self):
-        tab = self.request.GET.get("tab")
-        return tab if tab in self._TABS else "assigned"
 
     def _current_show_completed(self):
         return self.request.GET.get("show_completed") == "1"
 
-    def _base_queryset(self, tab):
-        user = self.request.user
-        if tab == "review":
-            return Task.objects.filter(reviewers__users=user)
+    def _current_review_only(self):
+        return self.request.GET.get("review_only") == "1"
 
+    def _base_queryset(self):
+        user = self.request.user
         user_member_qs = ProjectMember.objects.filter(users=user)
         latest_log_status = Subquery(
             TaskLog.objects.filter(task=OuterRef("pk"), assigned_to__in=user_member_qs)
             .order_by("-created_at")
             .values("status")[:1]
         )
-        return Task.objects.filter(assigned_members__users=user).annotate(
-            user_log_status=latest_log_status
+        return Task.objects.filter(
+            Q(assigned_members__users=user) | Q(reviewers__users=user)
+        ).annotate(
+            user_log_status=latest_log_status,
+            is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
+            is_reviewing=Exists(user_member_qs.filter(reviewed_tasks=OuterRef("pk"))),
         )
 
-    def _apply_active_filter(self, qs, tab, show_completed):
+    def _apply_active_filter(self, qs, show_completed):
         """Restrict to active (not-completed) tasks, matching the dashboard's
         task counts, unless the "Show completed" toggle is on."""
         if show_completed:
             return qs
-        if tab == "review":
-            return qs.filter(status=TaskStatus.NOT_COMPLETED)
         # NULL-safe: a task with no TaskLog yet has user_log_status=NULL, and
         # `.exclude(user_log_status=COMPLETED)` would silently drop it too
         # (NOT (NULL = COMPLETED) is NULL/false in SQL), so it must be kept
-        # explicitly — matching the dashboard's active_task_count logic.
+        # explicitly — matching the dashboard's active_task_count logic. Only
+        # applies to tasks the user is assigned to; a review-only task is
+        # judged by the task's own status alone.
         return qs.filter(status=TaskStatus.NOT_COMPLETED).filter(
-            Q(user_log_status__isnull=True) | ~Q(user_log_status=TaskStatus.COMPLETED)
+            Q(is_assigned=False)
+            | Q(user_log_status__isnull=True)
+            | ~Q(user_log_status=TaskStatus.COMPLETED)
         )
 
+    def _apply_review_filter(self, qs, review_only):
+        if review_only:
+            return qs.filter(is_reviewing=True)
+        return qs
+
     def _apply_common_filters(self, qs):
-        """Search/project/priority filters shared by both tabs (not sort,
-        not the tab's own type filter)."""
+        """Search/project/priority filters (not sort, not the review-only
+        filter)."""
         project_id = self.request.GET.get("project", "")
         if project_id:
             qs = qs.filter(project_id=project_id)
@@ -181,14 +186,14 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         return qs.distinct()
 
     def get_queryset(self):
-        tab = self._current_tab()
         qs = (
-            self._base_queryset(tab)
+            self._base_queryset()
             .select_related("project", "container")
             .prefetch_related("assigned_members")
         )
         qs = self._apply_common_filters(qs)
-        qs = self._apply_active_filter(qs, tab, self._current_show_completed())
+        qs = self._apply_review_filter(qs, self._current_review_only())
+        qs = self._apply_active_filter(qs, self._current_show_completed())
 
         sort = self.request.GET.get("sort", "newest")
         if sort in ("deadline_asc", "deadline_desc"):
@@ -201,19 +206,19 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         user = self.request.user
 
         context["is_htmx_request"] = bool(self.request.headers.get("HX-Request"))
-        current_tab = self._current_tab()
         current_q = self.request.GET.get("q", "").strip()
         current_sort = self.request.GET.get("sort", "newest")
         current_project = self.request.GET.get("project", "")
         current_priority = self.request.GET.get("priority", "")
         show_completed = self._current_show_completed()
+        review_only = self._current_review_only()
 
-        context["current_tab"] = current_tab
         context["current_q"] = current_q
         context["current_sort"] = current_sort
         context["current_project"] = current_project
         context["current_priority"] = current_priority
         context["current_show_completed"] = show_completed
+        context["current_review_only"] = review_only
 
         context["my_projects"] = (
             Project.objects.filter(privileges__user=user)
@@ -223,27 +228,28 @@ class MyTaskListView(LoginRequiredMixin, ListView):
 
         params = self.request.GET.copy()
         params.pop("page", None)
-        params.pop("tab", None)
         context["filter_params"] = params.urlencode()
 
-        context["assigned_total"] = self._apply_active_filter(
-            self._apply_common_filters(self._base_queryset("assigned")),
-            "assigned",
-            show_completed,
+        context["total_task_count"] = self._apply_active_filter(
+            self._apply_common_filters(self._base_queryset()), show_completed
         ).count()
         context["review_total"] = self._apply_active_filter(
-            self._apply_common_filters(self._base_queryset("review")),
-            "review",
+            self._apply_review_filter(
+                self._apply_common_filters(self._base_queryset()), True
+            ),
             show_completed,
         ).count()
-        context["total_task_count"] = context["assigned_total"] + context["review_total"]
         context["now"] = timezone.now()
 
-        has_filters = bool(current_q or current_project or current_priority or show_completed)
+        has_filters = bool(
+            current_q or current_project or current_priority or show_completed or review_only
+        )
         if has_filters:
             parts = []
             if current_priority == "high":
                 parts.append("high-priority")
+            if review_only:
+                parts.append("review")
             desc = (" ".join(parts) + " tasks") if parts else "tasks"
             if show_completed:
                 desc += " (including completed)"
