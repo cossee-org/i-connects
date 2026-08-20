@@ -72,17 +72,17 @@
                     <span class="text-brand-text/70">requested to join</span>
                     <a href="{% url 'projects:join_requests' pk=jr.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ jr.project.name }}</a>
                   </p>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit
+                    {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                    {{ jr.get_requested_privilege_display }}
+                  </span>
                   <p class="text-xs text-brand-text/60">{{ jr.user.email }}</p>
                   {% if jr.message %}
                     <p class="text-xs text-brand-text/70 whitespace-pre-line mt-1">{{ jr.message }}</p>
                   {% endif %}
                   <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"Y-m-d H:i" }}</p>
                 </div>
-                <div class="shrink-0 flex flex-col items-end gap-2">
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                    {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-                    {{ jr.get_requested_privilege_display }}
-                  </span>
+                <div class="shrink-0">
                   <a href="{% url 'projects:review_join_request' pk=jr.project.pk join_request_pk=jr.pk %}?source=incoming"
                      class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
                     Review
@@ -100,13 +100,13 @@
                     <span class="text-brand-text/70">invited you to join</span>
                     <a href="{% url 'projects:detail' pk=inv.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ inv.project.name }}</a>
                   </p>
-                  <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"Y-m-d" }}</p>
-                </div>
-                <div class="shrink-0 flex flex-col items-end gap-2">
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit
                     {% if inv.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
                     {{ inv.get_privilege_display }}
                   </span>
+                  <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"Y-m-d" }}</p>
+                </div>
+                <div class="shrink-0">
                   <a class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
                      href="{% url 'projects:accept_or_decline' code=inv.invitation_code %}"
                      aria-label="Review invitation to {{ inv.project.name }}">
@@ -137,17 +137,22 @@
                     <span class="text-brand-text/70">Requested to join</span>
                     <a href="{% url 'projects:detail' pk=jr.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ jr.project.name }}</a>
                   </p>
-                  <p class="text-xs text-brand-text/60">As {{ jr.get_requested_privilege_display }}</p>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                      {{ jr.get_requested_privilege_display }}
+                    </span>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      {% if jr.status == 'PENDING' %}bg-brand-coral/10 text-brand-coral
+                      {% elif jr.status == 'APPROVED' %}bg-green-100 text-green-700
+                      {% elif jr.status == 'DECLINED' %}bg-red-100 text-red-700
+                      {% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                      {{ jr.get_status_display }}
+                    </span>
+                  </div>
                   <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"Y-m-d" }}</p>
                 </div>
-                <div class="shrink-0 flex flex-col items-end gap-2">
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                    {% if jr.status == 'PENDING' %}bg-brand-coral/10 text-brand-coral
-                    {% elif jr.status == 'APPROVED' %}bg-green-100 text-green-700
-                    {% elif jr.status == 'DECLINED' %}bg-red-100 text-red-700
-                    {% else %}bg-brand-light/60 text-brand-text{% endif %}">
-                    {{ jr.get_status_display }}
-                  </span>
+                <div class="shrink-0">
                   {% if jr.status == 'PENDING' %}
                     <form method="post" action="{% url 'projects:cancel_join_request' join_request_pk=jr.pk %}">
                       {% csrf_token %}
@@ -168,13 +173,19 @@
                     <span class="text-brand-text/70">to join</span>
                     <a href="{% url 'projects:detail' pk=inv.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ inv.project.name }}</a>
                   </p>
-                  <p class="text-xs text-brand-text/60">As {{ inv.get_privilege_display }} &middot; Sent by {{ inv.added_by }}</p>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      {% if inv.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                      {{ inv.get_privilege_display }}
+                    </span>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">
+                      Pending
+                    </span>
+                  </div>
+                  <p class="text-xs text-brand-text/60">Sent by {{ inv.added_by }}</p>
                   <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"Y-m-d" }}</p>
                 </div>
-                <div class="shrink-0 flex flex-col items-end gap-2">
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">
-                    Pending
-                  </span>
+                <div class="shrink-0">
                   <form method="post" action="{% url 'projects:cancel_invitation' pk=inv.project.pk invitation_pk=inv.pk %}">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-sm btn-ghost">Cancel</button>
