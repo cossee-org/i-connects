@@ -132,33 +132,6 @@
     }
     .topbar-tooltip:hover::after,
     .topbar-tooltip:hover::before { opacity: 1; }
-
-    /* ── Page header "i" info button (wraps longer subtitle text) ── */
-    .info-tooltip { position: relative; }
-    .info-tooltip::after {
-      content: attr(data-tooltip);
-      position: absolute;
-      top: calc(100% + 6px);
-      left: 0;
-      width: max-content;
-      max-width: 260px;
-      background: #1e293b;
-      color: #f8fafc;
-      font-size: 0.7rem;
-      font-weight: 400;
-      line-height: 1.4;
-      padding: 6px 10px;
-      border-radius: 6px;
-      white-space: normal;
-      text-align: left;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.15s ease;
-      z-index: 60;
-      box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
-    }
-    .info-tooltip:hover::after,
-    .info-tooltip:focus-visible::after { opacity: 1; }
   </style>
 
   {% comment %}Vendored locally so the UI works in environments whose network policy blocks external hosts.{% endcomment %}
