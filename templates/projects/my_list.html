@@ -85,7 +85,7 @@
       </div>
     </div>
 
-    {# Privacy dropdown #}
+    {# Visibility dropdown #}
     <div x-data="{
       open: false,
       options: [
@@ -94,7 +94,7 @@
         {value: 'private', label: 'Private'}
       ],
       current: '{{ current_visibility }}',
-      get label() { return 'Privacy' },
+      get label() { return 'Visibility' },
       pick(val) {
         this.current = val;
         document.getElementById('visibility-input-my').value = val;
