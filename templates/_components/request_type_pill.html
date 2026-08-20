@@ -1,8 +1,10 @@
-{# Request type pill — distinguishes a merged Incoming/Outgoing list row.
-   Usage: {% include "_components/request_type_pill.html" with kind="join_request" %}
-      or: {% include "_components/request_type_pill.html" with kind="invitation" direction="incoming"|"outgoing" %}
-   `direction` only matters for kind="invitation": "outgoing" reads as sent
-   from your project, anything else reads as received from another. #}
+{% comment %}
+Request type pill — distinguishes a merged Incoming/Outgoing list row.
+Usage: {% include "_components/request_type_pill.html" with kind="join_request" %}
+   or: {% include "_components/request_type_pill.html" with kind="invitation" direction="outgoing" %}
+`direction` only matters for kind="invitation": "outgoing" reads as sent
+from your project, anything else reads as received from another.
+{% endcomment %}
 {% if kind == 'join_request' %}
   <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-600 w-fit shrink-0">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 shrink-0" aria-hidden="true">
