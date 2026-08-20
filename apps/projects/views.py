@@ -114,7 +114,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
-        from django.db.models import Count, OuterRef, Subquery, Q
+        from django.db.models import Count, Exists, OuterRef, Subquery, Q
         from django.utils import timezone
         from apps.core.enums import TaskStatus, MemberPrivileges
         from apps.tasks.models import Task, TaskLog
@@ -170,6 +170,28 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # --- Tasks assigned to the user to review --------------------------
         context["review_task_count"] = (
             Task.objects.filter(reviewers__users=user, status=TaskStatus.NOT_COMPLETED)
+            .distinct()
+            .count()
+        )
+
+        # Combined count for the dashboard's single "Tasks" tile -- counts a
+        # task once even if the user is both assigned to and reviewing it,
+        # matching the Tasks page's and sidebar's merged total (summing
+        # active_task_count + review_task_count would double-count those).
+        context["active_tasks_total"] = (
+            Task.objects.filter(
+                Q(assigned_members__users=user) | Q(reviewers__users=user),
+                status=TaskStatus.NOT_COMPLETED,
+            )
+            .annotate(
+                _user_log_status=latest_log_status,
+                _is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
+            )
+            .filter(
+                Q(_is_assigned=False)
+                | Q(_user_log_status__isnull=True)
+                | ~Q(_user_log_status=TaskStatus.COMPLETED)
+            )
             .distinct()
             .count()
         )
