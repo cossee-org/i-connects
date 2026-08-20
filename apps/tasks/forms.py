@@ -176,7 +176,7 @@ class TaskForm(forms.ModelForm):
         self.fields["name"].label = "Task name"
         self.fields["assigned_members"].label = "Assignees"
         self.fields["reviewers"].label = "Reviewers"
-        self.fields["completion_mode"].label = "Completion mode"
+        self.fields["completion_mode"].label = "Completion"
         self.fields["deadline"].label = "Due date"
         self.fields["is_priority"].label = "Mark as high priority"
         self.fields["container"].label = "Status"

@@ -51,7 +51,7 @@
       </p>
     </div>
 
-    {# Status and Completion mode — same row, no bounding box #}
+    {# Status and Completion — same row, no bounding box #}
     <div class="form-control w-full mb-3"
          x-data="{
            open: false,
@@ -114,7 +114,7 @@
          @keydown.escape="open = false"
          @click.outside="open = false">
       <label class="label py-0.5 pb-1">
-        <span class="label-text text-sm text-brand-navy font-medium">Completion mode</span>
+        <span class="label-text text-sm text-brand-navy font-medium">Completion</span>
       </label>
       <div class="relative w-full">
         <input type="hidden" name="completion_mode" :value="value">

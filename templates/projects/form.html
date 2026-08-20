@@ -7,6 +7,8 @@
   <header class="mb-6">
     {% include "_components/project_header.html" %}
   </header>
+{% else %}
+  {% include "_components/page_header.html" with title="Create a new project" subtitle="Set up a new project workspace to start collaborating." %}
 {% endif %}
 {% endblock %}
 
@@ -15,7 +17,9 @@
   <form method="post" class="brand-card p-6">
     {% csrf_token %}
 
-    <h2 class="text-lg font-semibold text-brand-navy mb-4">{% if object %}Project details{% else %}Create a new project{% endif %}</h2>
+    {% if object %}
+      <h2 class="text-lg font-semibold text-brand-navy mb-4">Project details</h2>
+    {% endif %}
 
     {% if form.non_field_errors %}
       <div class="alert alert-error mb-4">{{ form.non_field_errors }}</div>
