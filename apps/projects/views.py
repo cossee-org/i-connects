@@ -40,9 +40,16 @@ _STATUS_LABELS = {
     "INACTIVE": "inactive",
 }
 
-def _build_results_summary(count, q, status, sort, visibility=None):
+_ROLE_LABELS = {
+    "PROJECT_MANAGER": "lead",
+    "CONTRIBUTOR": "member",
+}
+
+def _build_results_summary(count, q, status, sort, visibility=None, role=None):
     """Return a human-readable results summary string, or None if no filters active."""
     parts = []
+    if role:
+        parts.append(_ROLE_LABELS.get(role, role.lower()))
     if visibility:
         parts.append(visibility)
     if status:
@@ -54,7 +61,7 @@ def _build_results_summary(count, q, status, sort, visibility=None):
     if q:
         desc += f' matching “{q}”'
     sort_label = _SORT_LABELS.get(sort)
-    has_filters = bool(q or status or visibility or sort_label)
+    has_filters = bool(q or status or visibility or role or sort_label)
     if not has_filters:
         return None, count
     n = f"{count} result{'s' if count != 1 else ''}"
@@ -353,7 +360,14 @@ class MyProjectListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         from django.db.models import Q
         user = self.request.user
-        qs = Project.objects.filter(privileges__user=user).distinct()
+        role = self.request.GET.get("role", "")
+        privilege_filter = {"privileges__user": user}
+        if role in MemberPrivileges.values:
+            privilege_filter["privileges__privilege"] = role
+        qs = Project.objects.filter(**privilege_filter).distinct()
+        status = self.request.GET.get("status", "")
+        if status:
+            qs = qs.filter(status=status)
         visibility = self.request.GET.get("visibility", "")
         if visibility == "public":
             qs = qs.filter(is_public=True)
@@ -396,11 +410,18 @@ class MyProjectListView(LoginRequiredMixin, ListView):
                 key=lambda p: (0 if p.privilege == pm else 1)
             )
 
+        # The current user's own privilege on each project, for the "Role" pill.
+        my_privileges = dict(
+            ProjectPrivilege.objects.filter(project_id__in=project_ids, user=user)
+            .values_list("project_id", "privilege")
+        )
+
         # Templates can't do dict lookups by variable key, so pre-zip here.
         context["project_rows"] = [
             {
                 "project": p,
                 "members": members_by_project.get(p.id, []),
+                "my_privilege": my_privileges.get(p.id),
             }
             for p in context["projects"]
         ]
@@ -409,12 +430,20 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         context["current_q"] = self.request.GET.get("q", "")
         context["current_sort"] = self.request.GET.get("sort", "newest")
         context["current_visibility"] = self.request.GET.get("visibility", "")
+        context["current_status"] = self.request.GET.get("status", "")
+        context["current_role"] = self.request.GET.get("role", "")
         context["current_per_page"] = self.get_paginate_by(self.get_queryset())
         context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
         context["create_url"] = reverse("projects:create")
         params = self.request.GET.copy()
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
+
+        from apps.core.enums import ProjectStatus
+        _STATUS_ORDER = ["PLANNING", "ACTIVE", "PAUSED", "COMPLETED", "INACTIVE"]
+        context["project_statuses"] = [
+            c for key in _STATUS_ORDER for c in ProjectStatus.choices if c[0] == key
+        ]
 
         total = context["paginator"].count
         context["total_project_count"] = (
@@ -423,9 +452,10 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         context["results_summary"], _ = _build_results_summary(
             total,
             context["current_q"],
-            "",
+            context["current_status"],
             context["current_sort"],
             context["current_visibility"],
+            context["current_role"],
         )
 
         return context
