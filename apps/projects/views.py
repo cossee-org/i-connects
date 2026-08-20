@@ -1485,8 +1485,7 @@ class RequestsView(LoginRequiredMixin, TemplateView):
         context["current_tab"] = current_tab
 
         context["incoming_total"] = len(context["incoming_items"])
-        context["outgoing_total"] = len(context["outgoing_items"])
-        context["requests_total"] = context["incoming_total"] + context["outgoing_total"]
+        context["requests_total"] = context["incoming_total"]
         return context
 
 
