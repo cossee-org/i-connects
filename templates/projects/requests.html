@@ -225,7 +225,7 @@
                   {% if jr.message %}
                     <p class="text-xs text-brand-text/70 whitespace-pre-line mt-1">{{ jr.message }}</p>
                   {% endif %}
-                  <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"Y-m-d H:i" }}</p>
+                  <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"M j, Y H:i" }}</p>
                 </div>
                 <div class="shrink-0">
                   {% if jr.status == 'PENDING' %}
@@ -251,7 +251,7 @@
                     {% if inv.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
                     {{ inv.get_privilege_display }}
                   </span>
-                  <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"Y-m-d" }}</p>
+                  <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"M j, Y" }}</p>
                 </div>
                 <div class="shrink-0">
                   <a class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
@@ -306,7 +306,7 @@
                       {{ jr.get_status_display }}
                     </span>
                   </div>
-                  <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"Y-m-d" }}</p>
+                  <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"M j, Y" }}</p>
                 </div>
                 <div class="shrink-0">
                   {% if jr.status == 'PENDING' %}
@@ -339,7 +339,7 @@
                     </span>
                   </div>
                   <p class="text-xs text-brand-text/60">Sent by {{ inv.added_by }}</p>
-                  <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"Y-m-d" }}</p>
+                  <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"M j, Y" }}</p>
                 </div>
                 <div class="shrink-0">
                   <form method="post" action="{% url 'projects:cancel_invitation' pk=inv.project.pk invitation_pk=inv.pk %}">
