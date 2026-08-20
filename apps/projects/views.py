@@ -1365,12 +1365,23 @@ class IncomingJoinRequestsView(LoginRequiredMixin, ListView):
 
 
 class RequestsView(LoginRequiredMixin, TemplateView):
-    """Consolidated view of all incoming and outgoing requests:
-    join requests you've sent, join requests awaiting your review,
-    and invitations you've received.
+    """Consolidated view of all incoming and outgoing requests.
+
+    Incoming: join requests awaiting your review (as a project manager)
+    and invitations you've received, merged into one list tagged by type
+    so the "type" pill can distinguish them. Outgoing: join requests
+    you've sent and invitations you've sent out (for projects you
+    manage), merged the same way.
     """
 
     template_name = "projects/requests.html"
+
+    @staticmethod
+    def _merge_by_recency(join_requests, invitations):
+        items = [{"kind": "join_request", "obj": jr} for jr in join_requests]
+        items += [{"kind": "invitation", "obj": inv} for inv in invitations]
+        items.sort(key=lambda item: item["obj"].created_at, reverse=True)
+        return items
 
     def get_context_data(self, **kwargs):
         from apps.core.enums import MemberPrivileges
@@ -1384,7 +1395,7 @@ class RequestsView(LoginRequiredMixin, TemplateView):
             privilege=MemberPrivileges.PROJECT_MANAGER,
         ).values_list("project_id", flat=True)
 
-        context["incoming_join_requests"] = (
+        incoming_join_requests = list(
             JoinRequest.objects.filter(
                 project_id__in=pm_project_ids,
                 status=JoinRequestStatus.PENDING,
@@ -1392,25 +1403,36 @@ class RequestsView(LoginRequiredMixin, TemplateView):
             .select_related("user", "project")
             .order_by("created_at")
         )
-        context["incoming_invitations"] = (
+        incoming_invitations = list(
             Invitation.objects.filter(email__iexact=user_email)
             .select_related("project")
             .order_by("-created_at")
         )
-        context["outgoing_join_requests"] = (
+        outgoing_join_requests = list(
             JoinRequest.objects.filter(user=user)
             .select_related("project")
             .order_by("-created_at")
         )
-        context["active_outgoing_join_requests_count"] = (
-            context["outgoing_join_requests"].filter(status=JoinRequestStatus.PENDING).count()
+        # Invitations sent out to others, for projects the user manages.
+        outgoing_invitations = list(
+            Invitation.objects.filter(project_id__in=pm_project_ids)
+            .select_related("project")
+            .order_by("-created_at")
         )
-        context["incoming_total"] = (
-            len(context["incoming_join_requests"]) + len(context["incoming_invitations"])
+
+        context["incoming_items"] = self._merge_by_recency(
+            incoming_join_requests, incoming_invitations
         )
-        context["requests_total"] = (
-            context["incoming_total"] + context["active_outgoing_join_requests_count"]
+        context["outgoing_items"] = self._merge_by_recency(
+            outgoing_join_requests, outgoing_invitations
         )
+
+        active_outgoing_join_requests_count = sum(
+            1 for jr in outgoing_join_requests if jr.status == JoinRequestStatus.PENDING
+        )
+        context["incoming_total"] = len(incoming_join_requests) + len(incoming_invitations)
+        context["outgoing_total"] = active_outgoing_join_requests_count + len(outgoing_invitations)
+        context["requests_total"] = context["incoming_total"] + context["outgoing_total"]
         return context
 
 

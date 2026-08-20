@@ -51,133 +51,143 @@
               d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M7.5 7.5 12 3m0 0 4.5 4.5M12 3v13.5" />
       </svg>
       Outgoing
-      {% if active_outgoing_join_requests_count %}
-        <span class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">{{ active_outgoing_join_requests_count }}</span>
+      {% if outgoing_total %}
+        <span class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">{{ outgoing_total }}</span>
       {% endif %}
     </button>
   </div>
 
-  {# ── Incoming: join requests awaiting your review + invitations you've received ── #}
-  <div x-show="tab === 'incoming'" x-cloak class="flex flex-col gap-8">
-
-    <section aria-labelledby="incoming-join-requests-heading">
-      <h2 id="incoming-join-requests-heading" class="section-heading flex items-center gap-2 mb-3">
-        Join requests
-        {% if incoming_join_requests %}
-          <span class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">{{ incoming_join_requests|length }}</span>
-        {% endif %}
-      </h2>
-      {% if incoming_join_requests %}
-        <div class="flex flex-col gap-3">
-          {% for jr in incoming_join_requests %}
-            <div class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
-              <div class="flex-1 min-w-0 flex flex-col gap-1">
-                <p class="text-sm">
-                  <span class="font-medium text-brand-navy">{{ jr.user.name|default:jr.user.email }}</span>
-                  <span class="text-brand-text/70">requested to join</span>
-                  <a href="{% url 'projects:join_requests' pk=jr.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ jr.project.name }}</a>
-                </p>
-                <p class="text-xs text-brand-text/60">{{ jr.user.email }}</p>
-                {% if jr.message %}
-                  <p class="text-xs text-brand-text/70 whitespace-pre-line mt-1">{{ jr.message }}</p>
-                {% endif %}
-                <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"Y-m-d H:i" }}</p>
+  {# ── Incoming: join requests awaiting your review + invitations you've received, merged ── #}
+  <div x-show="tab === 'incoming'" x-cloak>
+    {% if incoming_items %}
+      <div class="flex flex-col gap-3">
+        {% for item in incoming_items %}
+          {% if item.kind == 'join_request' %}
+            {% with jr=item.obj %}
+              <div class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
+                <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                  {% include "_components/request_type_pill.html" with kind="join_request" %}
+                  <p class="text-sm">
+                    <span class="font-medium text-brand-navy">{{ jr.user.name|default:jr.user.email }}</span>
+                    <span class="text-brand-text/70">requested to join</span>
+                    <a href="{% url 'projects:join_requests' pk=jr.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ jr.project.name }}</a>
+                  </p>
+                  <p class="text-xs text-brand-text/60">{{ jr.user.email }}</p>
+                  {% if jr.message %}
+                    <p class="text-xs text-brand-text/70 whitespace-pre-line mt-1">{{ jr.message }}</p>
+                  {% endif %}
+                  <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"Y-m-d H:i" }}</p>
+                </div>
+                <div class="shrink-0 flex flex-col items-end gap-2">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                    {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                    {{ jr.get_requested_privilege_display }}
+                  </span>
+                  <a href="{% url 'projects:review_join_request' pk=jr.project.pk join_request_pk=jr.pk %}?source=incoming"
+                     class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+                    Review
+                  </a>
+                </div>
               </div>
-              <div class="shrink-0 flex flex-col items-end gap-2">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                  {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-                  {{ jr.get_requested_privilege_display }}
-                </span>
-                <a href="{% url 'projects:review_join_request' pk=jr.project.pk join_request_pk=jr.pk %}?source=incoming"
-                   class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-                  Review
-                </a>
+            {% endwith %}
+          {% else %}
+            {% with inv=item.obj %}
+              <div class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
+                <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                  {% include "_components/request_type_pill.html" with kind="invitation" direction="incoming" %}
+                  <p class="text-sm">
+                    <span class="font-medium text-brand-navy">{{ inv.added_by }}</span>
+                    <span class="text-brand-text/70">invited you to join</span>
+                    <a href="{% url 'projects:detail' pk=inv.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ inv.project.name }}</a>
+                  </p>
+                  <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"Y-m-d" }}</p>
+                </div>
+                <div class="shrink-0 flex flex-col items-end gap-2">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                    {% if inv.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                    {{ inv.get_privilege_display }}
+                  </span>
+                  <a class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                     href="{% url 'projects:accept_or_decline' code=inv.invitation_code %}"
+                     aria-label="Review invitation to {{ inv.project.name }}">
+                    Review
+                  </a>
+                </div>
               </div>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        {% include "_components/empty_state.html" with title="No pending requests" body="When someone asks to join one of your projects, it will appear here." %}
-      {% endif %}
-    </section>
-
-    <section aria-labelledby="invitations-heading">
-      <h2 id="invitations-heading" class="section-heading flex items-center gap-2 mb-3">
-        Invitations
-        {% if incoming_invitations %}
-          <span class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">{{ incoming_invitations|length }}</span>
-        {% endif %}
-      </h2>
-      {% if incoming_invitations %}
-        <div class="flex flex-col gap-3">
-          {% for inv in incoming_invitations %}
-            <div class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
-              <div class="flex-1 min-w-0 flex flex-col gap-1">
-                <p class="text-sm">
-                  <span class="font-medium text-brand-navy">{{ inv.added_by }}</span>
-                  <span class="text-brand-text/70">invited you to join</span>
-                  <a href="{% url 'projects:detail' pk=inv.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ inv.project.name }}</a>
-                </p>
-                <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"Y-m-d" }}</p>
-              </div>
-              <div class="shrink-0 flex flex-col items-end gap-2">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                  {% if inv.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-                  {{ inv.privilege }}
-                </span>
-                <a class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                   href="{% url 'projects:accept_or_decline' code=inv.invitation_code %}"
-                   aria-label="Review invitation to {{ inv.project.name }}">
-                  Review
-                </a>
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        {% include "_components/empty_state.html" with title="No pending invitations" body="When someone invites you to a project, it will appear here." %}
-      {% endif %}
-    </section>
-
+            {% endwith %}
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% else %}
+      {% include "_components/empty_state.html" with title="No incoming requests" body="Join requests to your projects and invitations you've received will appear here." %}
+    {% endif %}
   </div>
 
-  {# ── Outgoing: join requests you've sent ── #}
+  {# ── Outgoing: join requests you've sent + invitations you've sent out, merged ── #}
   <div x-show="tab === 'outgoing'" x-cloak>
-    <section aria-labelledby="my-join-requests-heading">
-      {% if outgoing_join_requests %}
-        <div class="flex flex-col gap-3">
-          {% for jr in outgoing_join_requests %}
-            <div class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
-              <div class="flex-1 min-w-0 flex flex-col gap-1">
-                <p class="text-sm">
-                  <span class="text-brand-text/70">Requested to join</span>
-                  <a href="{% url 'projects:detail' pk=jr.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ jr.project.name }}</a>
-                </p>
-                <p class="text-xs text-brand-text/60">As {{ jr.get_requested_privilege_display }}</p>
-                <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"Y-m-d" }}</p>
+    {% if outgoing_items %}
+      <div class="flex flex-col gap-3">
+        {% for item in outgoing_items %}
+          {% if item.kind == 'join_request' %}
+            {% with jr=item.obj %}
+              <div class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
+                <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                  {% include "_components/request_type_pill.html" with kind="join_request" %}
+                  <p class="text-sm">
+                    <span class="text-brand-text/70">Requested to join</span>
+                    <a href="{% url 'projects:detail' pk=jr.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ jr.project.name }}</a>
+                  </p>
+                  <p class="text-xs text-brand-text/60">As {{ jr.get_requested_privilege_display }}</p>
+                  <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"Y-m-d" }}</p>
+                </div>
+                <div class="shrink-0 flex flex-col items-end gap-2">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                    {% if jr.status == 'PENDING' %}bg-brand-coral/10 text-brand-coral
+                    {% elif jr.status == 'APPROVED' %}bg-green-100 text-green-700
+                    {% elif jr.status == 'DECLINED' %}bg-red-100 text-red-700
+                    {% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                    {{ jr.get_status_display }}
+                  </span>
+                  {% if jr.status == 'PENDING' %}
+                    <form method="post" action="{% url 'projects:cancel_join_request' join_request_pk=jr.pk %}">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-ghost">Cancel</button>
+                    </form>
+                  {% endif %}
+                </div>
               </div>
-              <div class="shrink-0 flex flex-col items-end gap-2">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                  {% if jr.status == 'PENDING' %}bg-brand-coral/10 text-brand-coral
-                  {% elif jr.status == 'APPROVED' %}bg-green-100 text-green-700
-                  {% elif jr.status == 'DECLINED' %}bg-red-100 text-red-700
-                  {% else %}bg-brand-light/60 text-brand-text{% endif %}">
-                  {{ jr.get_status_display }}
-                </span>
-                {% if jr.status == 'PENDING' %}
-                  <form method="post" action="{% url 'projects:cancel_join_request' join_request_pk=jr.pk %}">
+            {% endwith %}
+          {% else %}
+            {% with inv=item.obj %}
+              <div class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
+                <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                  {% include "_components/request_type_pill.html" with kind="invitation" direction="outgoing" %}
+                  <p class="text-sm">
+                    <span class="text-brand-text/70">Invited</span>
+                    <span class="font-medium text-brand-navy">{{ inv.invited_user.name|default:inv.email }}</span>
+                    <span class="text-brand-text/70">to join</span>
+                    <a href="{% url 'projects:detail' pk=inv.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ inv.project.name }}</a>
+                  </p>
+                  <p class="text-xs text-brand-text/60">As {{ inv.get_privilege_display }}</p>
+                  <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"Y-m-d" }}</p>
+                </div>
+                <div class="shrink-0 flex flex-col items-end gap-2">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">
+                    Pending
+                  </span>
+                  <form method="post" action="{% url 'projects:cancel_invitation' pk=inv.project.pk invitation_pk=inv.pk %}">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-sm btn-ghost">Cancel</button>
                   </form>
-                {% endif %}
+                </div>
               </div>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        {% include "_components/empty_state.html" with title="No join requests" body="When you ask to join a project, it will appear here." %}
-      {% endif %}
-    </section>
+            {% endwith %}
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% else %}
+      {% include "_components/empty_state.html" with title="No outgoing requests" body="Join requests and invitations you've sent will appear here." %}
+    {% endif %}
   </div>
 
 </div>
