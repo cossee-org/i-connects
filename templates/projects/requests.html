@@ -57,6 +57,96 @@
     </button>
   </div>
 
+  {# ── Filter / sort bar — shared by both tabs ── #}
+  <form method="get" id="filter-form-requests" class="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-stretch sm:items-center mb-6">
+    <input type="hidden" name="status" id="status-input-requests" value="{{ current_status }}">
+    <input type="hidden" name="sort" id="sort-input-requests" value="{{ current_sort }}">
+
+    <div class="w-full sm:flex-1 sm:min-w-[200px]">
+      <input type="text" name="q" value="{{ current_q }}" placeholder="Search requests…"
+             class="input input-sm input-bordered w-full" />
+    </div>
+
+    <div class="flex gap-3 w-full sm:w-auto flex-wrap">
+
+      {# Status dropdown #}
+      <div x-data="{
+        open: false,
+        options: [
+          {value: 'active', label: 'Active'},
+          {value: 'completed', label: 'Completed'},
+          {value: 'all', label: 'All'}
+        ],
+        current: '{{ current_status }}',
+        get label() { return 'Status' },
+        pick(val) {
+          this.current = val;
+          document.getElementById('status-input-requests').value = val;
+          this.open = false;
+          document.getElementById('filter-form-requests').submit();
+        }
+      }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+        <button type="button" @click="open = !open"
+                class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+          <span x-text="label"></span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+            <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+          </svg>
+        </button>
+        <div x-cloak x-show="open"
+             x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+             class="absolute left-0 mt-1 w-32 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+          <template x-for="opt in options" :key="opt.value">
+            <button type="button" @click="pick(opt.value)"
+                    class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                    :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                    x-text="opt.label"></button>
+          </template>
+        </div>
+      </div>
+
+      {# Sort dropdown #}
+      <div x-data="{
+        open: false,
+        options: [
+          {value: 'newest', label: 'Newest first'},
+          {value: 'oldest', label: 'Oldest first'},
+          {value: 'name_asc', label: 'Project A–Z'},
+          {value: 'name_desc', label: 'Project Z–A'}
+        ],
+        current: '{{ current_sort }}',
+        get label() { return 'Sort' },
+        pick(val) {
+          this.current = val;
+          document.getElementById('sort-input-requests').value = val;
+          this.open = false;
+          document.getElementById('filter-form-requests').submit();
+        }
+      }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+        <button type="button" @click="open = !open"
+                class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+          <span x-text="label"></span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+            <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+          </svg>
+        </button>
+        <div x-cloak x-show="open"
+             x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+             class="absolute left-0 mt-1 w-40 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+          <template x-for="opt in options" :key="opt.value">
+            <button type="button" @click="pick(opt.value)"
+                    class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                    :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                    x-text="opt.label"></button>
+          </template>
+        </div>
+      </div>
+
+    </div>
+  </form>
+
   {# ── Incoming: join requests awaiting your review + invitations you've received, merged ── #}
   <div x-show="tab === 'incoming'" x-cloak>
     {% if incoming_items %}

@@ -1372,66 +1372,116 @@ class RequestsView(LoginRequiredMixin, TemplateView):
     so the "type" pill can distinguish them. Outgoing: join requests
     you've sent and invitations you've sent out (for projects you
     manage), merged the same way.
+
+    A shared search box and Status/Sort filters apply to both tabs.
+    Invitations have no "completed" state of their own -- they're
+    deleted outright once accepted or declined -- so the "Completed"
+    status only ever matches join requests; "Active" (the default)
+    matches pending join requests plus every invitation, since an
+    invitation still on file is by definition not yet resolved.
     """
 
     template_name = "projects/requests.html"
 
+    _STATUSES = ("active", "completed", "all")
+    _SORTS = ("newest", "oldest", "name_asc", "name_desc")
+
     @staticmethod
-    def _merge_by_recency(join_requests, invitations):
+    def _merge_and_sort(join_requests, invitations, sort):
         items = [{"kind": "join_request", "obj": jr} for jr in join_requests]
         items += [{"kind": "invitation", "obj": inv} for inv in invitations]
-        items.sort(key=lambda item: item["obj"].created_at, reverse=True)
+        if sort in ("name_asc", "name_desc"):
+            items.sort(key=lambda item: item["obj"].project.name.lower(), reverse=sort == "name_desc")
+        else:
+            items.sort(key=lambda item: item["obj"].created_at, reverse=sort != "oldest")
         return items
 
     def get_context_data(self, **kwargs):
+        from django.db.models import Q
+
         from apps.core.enums import MemberPrivileges
 
         context = super().get_context_data(**kwargs)
         user = self.request.user
         user_email = (user.email or "").lower()
 
+        current_q = self.request.GET.get("q", "").strip()
+        current_status = self.request.GET.get("status", "")
+        if current_status not in self._STATUSES:
+            current_status = "active"
+        current_sort = self.request.GET.get("sort", "")
+        if current_sort not in self._SORTS:
+            current_sort = "newest"
+
         pm_project_ids = ProjectPrivilege.objects.filter(
             user=user,
             privilege=MemberPrivileges.PROJECT_MANAGER,
         ).values_list("project_id", flat=True)
 
-        incoming_join_requests = list(
-            JoinRequest.objects.filter(
-                project_id__in=pm_project_ids,
-                status=JoinRequestStatus.PENDING,
+        incoming_jr_qs = JoinRequest.objects.filter(project_id__in=pm_project_ids)
+        incoming_inv_qs = Invitation.objects.filter(email__iexact=user_email)
+        outgoing_jr_qs = JoinRequest.objects.filter(user=user)
+        # Invitations sent out to others, for projects the user manages.
+        outgoing_inv_qs = Invitation.objects.filter(project_id__in=pm_project_ids)
+
+        if current_status == "active":
+            incoming_jr_qs = incoming_jr_qs.filter(status=JoinRequestStatus.PENDING)
+            outgoing_jr_qs = outgoing_jr_qs.filter(status=JoinRequestStatus.PENDING)
+        elif current_status == "completed":
+            incoming_jr_qs = incoming_jr_qs.exclude(status=JoinRequestStatus.PENDING)
+            outgoing_jr_qs = outgoing_jr_qs.exclude(status=JoinRequestStatus.PENDING)
+            incoming_inv_qs = incoming_inv_qs.none()
+            outgoing_inv_qs = outgoing_inv_qs.none()
+        # "all": no status filter on either side.
+
+        if current_q:
+            jr_q = (
+                Q(user__name__icontains=current_q)
+                | Q(user__given_name__icontains=current_q)
+                | Q(user__family_name__icontains=current_q)
+                | Q(user__email__icontains=current_q)
+                | Q(project__name__icontains=current_q)
             )
-            .select_related("user", "project")
-            .order_by("created_at")
+            incoming_jr_qs = incoming_jr_qs.filter(jr_q)
+            outgoing_jr_qs = outgoing_jr_qs.filter(jr_q)
+
+            inv_q = (
+                Q(email__icontains=current_q)
+                | Q(invited_user__name__icontains=current_q)
+                | Q(invited_user__given_name__icontains=current_q)
+                | Q(invited_user__family_name__icontains=current_q)
+                | Q(added_by__icontains=current_q)
+                | Q(project__name__icontains=current_q)
+            )
+            incoming_inv_qs = incoming_inv_qs.filter(inv_q)
+            outgoing_inv_qs = outgoing_inv_qs.filter(inv_q)
+
+        incoming_join_requests = list(
+            incoming_jr_qs.select_related("user", "project").order_by("created_at")
         )
         incoming_invitations = list(
-            Invitation.objects.filter(email__iexact=user_email)
-            .select_related("project")
-            .order_by("-created_at")
+            incoming_inv_qs.select_related("project").order_by("-created_at")
         )
         outgoing_join_requests = list(
-            JoinRequest.objects.filter(user=user)
-            .select_related("project")
-            .order_by("-created_at")
+            outgoing_jr_qs.select_related("project").order_by("-created_at")
         )
-        # Invitations sent out to others, for projects the user manages.
         outgoing_invitations = list(
-            Invitation.objects.filter(project_id__in=pm_project_ids)
-            .select_related("project")
-            .order_by("-created_at")
+            outgoing_inv_qs.select_related("project").order_by("-created_at")
         )
 
-        context["incoming_items"] = self._merge_by_recency(
-            incoming_join_requests, incoming_invitations
+        context["incoming_items"] = self._merge_and_sort(
+            incoming_join_requests, incoming_invitations, current_sort
         )
-        context["outgoing_items"] = self._merge_by_recency(
-            outgoing_join_requests, outgoing_invitations
+        context["outgoing_items"] = self._merge_and_sort(
+            outgoing_join_requests, outgoing_invitations, current_sort
         )
 
-        active_outgoing_join_requests_count = sum(
-            1 for jr in outgoing_join_requests if jr.status == JoinRequestStatus.PENDING
-        )
-        context["incoming_total"] = len(incoming_join_requests) + len(incoming_invitations)
-        context["outgoing_total"] = active_outgoing_join_requests_count + len(outgoing_invitations)
+        context["current_q"] = current_q
+        context["current_status"] = current_status
+        context["current_sort"] = current_sort
+
+        context["incoming_total"] = len(context["incoming_items"])
+        context["outgoing_total"] = len(context["outgoing_items"])
         context["requests_total"] = context["incoming_total"] + context["outgoing_total"]
         return context
 
