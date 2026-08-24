@@ -52,6 +52,8 @@
                 <div class="brand-card flex-1 flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors min-w-0{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
                      @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
 
+                  {% include "_components/completion_check.html" with task=task %}
+
                   {# Name only — the description belongs to the side pane, not the row. #}
                   <div class="flex-1 min-w-0">
                     <span class="font-medium text-brand-navy text-sm group-hover:text-brand-coral transition-colors leading-tight block truncate">{{ task.name }}</span>

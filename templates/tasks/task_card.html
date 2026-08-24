@@ -8,7 +8,10 @@
     <div class="mb-1">{% include "_components/priority_flag.html" %}</div>
   {% endif %}
   {# Name only — the description belongs to the side pane, not the card. #}
-  <span class="font-medium text-brand-navy text-sm leading-tight block">{{ task.name }}</span>
+  <div class="flex items-start gap-1.5">
+    {% include "_components/completion_check.html" with task=task nudge=True %}
+    <span class="font-medium text-brand-navy text-sm leading-tight min-w-0">{{ task.name }}</span>
+  </div>
 
   {# No status pill here — the column heading the card sits under already names it. #}
   {% if task.github_url or task.deadline or task.start_date %}

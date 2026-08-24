@@ -6,6 +6,8 @@
       <li class="brand-card flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors{% if item.task.is_priority %} border-l-2 border-l-error{% endif %}"
           @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=item.task.pk %}' })">
 
+        {% include "_components/completion_check.html" with task=item.task %}
+
         {# Name only — the description belongs to the side pane, not the agenda row. #}
         <div class="flex-1 min-w-0">
           <span class="font-medium text-brand-navy text-sm block leading-tight truncate">{{ item.task.name }}</span>

@@ -1489,3 +1489,95 @@ def test_pane_completion_button_waits_for_individual_assignees(client, user, oth
     ready = client.get(_pane_url(project, task)).content.decode()
     assert reverse("tasks:close", kwargs={"pk": task.pk}) in ready
     assert "Every assignee must mark their part done" not in ready
+
+
+# ---------------------------------------------------------------------------
+# Completed check circle in the browsing views
+# ---------------------------------------------------------------------------
+
+
+def _browsing_views(project):
+    """The Kanban, List and Calendar surfaces, each keyed by a readable name."""
+    calendar_url = reverse("tasks:board_calendar", kwargs={"project_pk": project.pk})
+    return {
+        "kanban": (reverse("tasks:board_kanban", kwargs={"project_pk": project.pk}), {}),
+        "list": (reverse("tasks:board_list", kwargs={"project_pk": project.pk}), {}),
+        "calendar day": (calendar_url, {"view": "day", "date": "2026-03-12"}),
+        "calendar week": (calendar_url, {"view": "week", "date": "2026-03-12"}),
+        "calendar month": (calendar_url, {"view": "month", "date": "2026-03-12"}),
+    }
+
+
+@pytest.mark.django_db
+def test_completed_tasks_show_a_check_in_the_browsing_views(client, user):
+    """Kanban, List and Calendar mark completed tasks with a check circle.
+
+    Open tasks get no marker, so exactly one check shows per view even though
+    both tasks are listed.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    due = datetime(2026, 3, 12, tzinfo=dt_timezone.utc)
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Finished", status=TaskStatus.COMPLETED, deadline=due,
+    )
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=1,
+        name="Ongoing", deadline=due,
+    )
+    client.force_login(user)
+
+    for name, (url, params) in _browsing_views(project).items():
+        content = client.get(url, params).content.decode()
+        assert "Finished" in content, f"{name} view lost the completed task"
+        assert "Ongoing" in content, f"{name} view lost the open task"
+        assert content.count('aria-label="Complete"') == 1, (
+            f"{name} view should mark exactly the completed task"
+        )
+
+
+@pytest.mark.django_db
+def test_open_tasks_show_no_check_in_the_browsing_views(client, user):
+    """Nothing is marked while every task is still open."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Ongoing", deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+
+    for name, (url, params) in _browsing_views(project).items():
+        content = client.get(url, params).content.decode()
+        assert "Ongoing" in content, f"{name} view lost the task"
+        assert 'aria-label="Complete"' not in content, (
+            f"{name} view marked an open task complete"
+        )
+
+
+@pytest.mark.django_db
+def test_completed_calendar_range_bar_shows_a_check(client, user):
+    """A completed multi-day task is marked on its calendar range bar too.
+
+    Range tasks render as lane bars rather than day-cell pills, which is a
+    separate template from the single-day pill.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    # Mar 10-12 2026 sits inside one Mon-Sun week, so this spans a single bar.
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Spanning", status=TaskStatus.COMPLETED,
+        start_date=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+
+    url = reverse("tasks:board_calendar", kwargs={"project_pk": project.pk})
+    for view in ("week", "month"):
+        content = client.get(url, {"view": view, "date": "2026-03-12"}).content.decode()
+        assert "Spanning" in content, f"calendar {view} lost the range task"
+        assert content.count('aria-label="Complete"') == 1, (
+            f"calendar {view} should mark the completed range bar"
+        )

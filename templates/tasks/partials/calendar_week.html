@@ -40,7 +40,10 @@
         {% for task in day.tasks %}
           <div class="brand-card px-2 py-1.5 cursor-pointer hover:bg-brand-lighter transition-colors{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
                @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
-            <span class="text-brand-navy block truncate">{{ task.name }}</span>
+            <span class="flex items-center gap-1">
+              {% include "_components/completion_check.html" with task=task compact=True %}
+              <span class="text-brand-navy truncate min-w-0">{{ task.name }}</span>
+            </span>
             <span class="text-brand-text/50 text-[10px]">
               {% if task.deadline %}Due {{ task.deadline|date:"g:i A" }}{% elif task.start_date %}Starts {{ task.start_date|date:"g:i A" }}{% endif %}
             </span>
