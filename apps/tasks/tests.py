@@ -2111,25 +2111,32 @@ def test_pane_matrix_says_so_when_nobody_is_assigned(client, user):
 
 
 @pytest.mark.django_db
-def test_kanban_check_sits_in_the_card_corner_above_the_name(client, user):
-    """The check leads the card, ahead of the task name, in its top row."""
+def test_kanban_check_trails_the_task_name_on_the_title_row(client, user):
+    """The check shares the title's line, after the name and before the meta."""
     project, col1, _col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
-    Task.objects.create(
+    task = Task.objects.create(
         project=project, created_by=member, container=col1, container_task_order=0,
-        name="Cornered", status=TaskStatus.COMPLETED,
+        name="Titled", status=TaskStatus.COMPLETED,
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
     )
+    task.assigned_members.add(member)
     client.force_login(user)
 
     card = client.get(
         reverse("tasks:board_kanban", kwargs={"project_pk": project.pk})
     ).content.decode()
-    assert card.index('aria-label="Complete"') < card.index("Cornered")
+    # After the name: it trails the title rather than leading it.
+    assert card.index("Titled") < card.index('aria-label="Complete"')
+    # ...but before the dates and assignee count, so it is on the title row
+    # and not tacked onto the meta row below.
+    assert card.index('aria-label="Complete"') < card.index("Due Mar 12")
+    assert card.index('aria-label="Complete"') < card.index("1 assigned member")
 
 
 @pytest.mark.django_db
-def test_kanban_check_and_priority_flag_share_the_top_row(client, user):
-    """Flag on the left, check on the right, both above the name."""
+def test_kanban_priority_flag_stays_above_the_title_row(client, user):
+    """The flag keeps its own line above; the check does not join it there."""
     project, col1, _col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
     Task.objects.create(
@@ -2143,8 +2150,8 @@ def test_kanban_check_and_priority_flag_share_the_top_row(client, user):
     ).content.decode()
     assert (
         card.index("High priority")
-        < card.index('aria-label="Complete"')
         < card.index("Both")
+        < card.index('aria-label="Complete"')
     )
 
 

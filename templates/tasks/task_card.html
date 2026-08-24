@@ -4,18 +4,18 @@
     class="task-card brand-card p-3 hover:shadow-md cursor-pointer mb-2 bg-white{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
     @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
 
-  {% comment %}
-    Top row: priority on the left, the completed check in the right corner.
-    Rendered only when there is something to put in it.
-  {% endcomment %}
-  {% if task.is_priority or task.status == "COMPLETED" %}
-    <div class="flex items-center justify-between gap-2 mb-1">
-      <span class="min-w-0">{% if task.is_priority %}{% include "_components/priority_flag.html" %}{% endif %}</span>
-      {% include "_components/completion_check.html" with task=task %}
-    </div>
+  {% if task.is_priority %}
+    <div class="mb-1">{% include "_components/priority_flag.html" %}</div>
   {% endif %}
-  {# Name only — the description belongs to the side pane, not the card. #}
-  <span class="font-medium text-brand-navy text-sm leading-tight block">{{ task.name }}</span>
+  {% comment %}
+    Title row: the name, with the completed check trailing it on the same
+    line. items-start keeps the check level with the first line of a name
+    that wraps, and justify-between is a no-op when there is no check.
+  {% endcomment %}
+  <div class="flex items-start justify-between gap-2">
+    <span class="font-medium text-brand-navy text-sm leading-tight min-w-0">{{ task.name }}</span>
+    {% include "_components/completion_check.html" with task=task %}
+  </div>
 
   {# No status pill here — the column heading the card sits under already names it. #}
   {% with assignees=task.assigned_members.all|length %}
