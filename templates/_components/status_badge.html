@@ -3,7 +3,7 @@
 {# Pass plain=True for the dot-and-text form with no pill behind it, matching the priority flag and completion chip. #}
 {# One colour chain drives both forms: each branch sets the text colour, and adds the pill's tint only when it is a pill. #}
 {% with s=status|lower %}
-<span class="inline-flex items-center text-xs font-medium{% if plain %} gap-1.5{% else %} px-2.5 py-0.5 rounded-full{% endif %}
+<span class="inline-flex items-center font-medium{% if plain %} text-sm gap-1.5{% else %} text-xs px-2.5 py-0.5 rounded-full{% endif %}
   {% if s == 'in progress' or s == 'in_progress' or s == 'active' or s == 'open' %}text-success{% if not plain %} bg-success/10{% endif %}
   {% elif s == 'planning' %}text-orange-600{% if not plain %} bg-orange-100{% endif %}
   {% elif s == 'paused' %}text-purple-600{% if not plain %} bg-purple-100{% endif %}

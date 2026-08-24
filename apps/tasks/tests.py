@@ -2379,3 +2379,54 @@ def test_pane_status_is_a_dot_and_text_not_a_pill(client, user):
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
     assert "px-2.5 py-0.5 rounded-full" in detail
+
+
+@pytest.mark.django_db
+def test_pane_body_text_is_one_size(client, user, other_user):
+    """Tags, dates, author and description all run at text-sm in the pane.
+
+    Section labels and buttons stay at text-xs — they are labels and actions,
+    not body copy.
+    """
+    from datetime import datetime, timezone as dt_tz
+
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+    task.description = "Some description."
+    task.is_priority = True
+    task.start_date = datetime(2026, 3, 10, tzinfo=dt_tz.utc)
+    task.deadline = datetime(2026, 3, 12, tzinfo=dt_tz.utc)
+    task.save()
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    # The dates / Created by row.
+    assert "gap-y-1.5 text-sm text-brand-text/70" in pane
+    # The three tags: flag, completion chip, status.
+    assert 'gap-1 text-sm font-medium shrink-0 text-error' in pane
+    assert "inline-flex items-center gap-1.5 text-sm font-medium" in pane
+    assert "font-medium text-sm gap-1.5" in pane
+    # Nothing in the pill row is left at text-xs.
+    pill_row = pane[pane.index("flex flex-wrap items-center gap-2") : pane.index("gap-x-4")]
+    assert "text-xs" not in pill_row
+
+
+@pytest.mark.django_db
+def test_priority_flag_keeps_its_smaller_size_off_the_pane(client, user):
+    """text_size is opt-in: the browsing rows and My tasks sit at text-xs."""
+    from datetime import datetime, timezone as dt_tz
+
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Flagged", is_priority=True,
+        deadline=datetime(2026, 3, 12, tzinfo=dt_tz.utc),
+    )
+    client.force_login(user)
+
+    detail = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    i = detail.index('title="High priority"')
+    flag = detail[detail.rfind("<span", 0, i) : i]
+    assert "text-xs" in flag and "text-sm" not in flag

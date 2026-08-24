@@ -2,7 +2,8 @@
 {# Pass icon_only=True where the label will not fit (the Kanban card pairs this with the completion check): the wording #}
 {# moves to role="img" + aria-label, so the meaning survives without the visible text rather than resting on the red. #}
 {# icon_only also sizes the glyph to w-4 to match the check circle it sits beside. #}
-<span class="inline-flex items-center {% if not icon_only %}gap-1 text-xs font-medium {% endif %}shrink-0 text-error"
+{# Pass text_size to match the surface it sits on — the side pane runs at text-sm, the browsing rows at text-xs. #}
+<span class="inline-flex items-center {% if not icon_only %}gap-1 {{ text_size|default:"text-xs" }} font-medium {% endif %}shrink-0 text-error"
       {% if icon_only %}role="img" aria-label="High priority"{% endif %} title="High priority">
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
        class="{% if icon_only %}w-4 h-4{% else %}w-3.5 h-3.5{% endif %} shrink-0" fill="currentColor" aria-hidden="true">
