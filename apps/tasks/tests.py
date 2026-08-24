@@ -1843,11 +1843,13 @@ def test_pane_description_ships_a_measured_toggle(client, user):
         task = _task_with_description(project, member, col1, description)
         pane = client.get(_pane_url(project, task)).content.decode()
 
-        # Clamp bound, not static: if Alpine never runs, nothing is hidden.
-        assert "line-clamp-3" in pane, label
+        # The clamp is both a static class and a binding, and needs to be
+        # both: bound alone stops re-applying after the first HTMX swap, so a
+        # reopened task came back expanded; static alone could not be removed.
+        assert 'class="text-sm text-brand-text line-clamp-3"' in pane, label
+        assert "{ 'line-clamp-3': !expanded }" in pane, label
         # text-sm, matching the pane's other body text — not the inherited
         # 16px the inert prose classes used to leave it at.
-        assert 'class="text-sm text-brand-text"' in pane, label
         assert "prose" not in pane, label
         # Measured on init, and the button hidden until that says otherwise.
         assert "$refs.body.scrollHeight" in pane, label
