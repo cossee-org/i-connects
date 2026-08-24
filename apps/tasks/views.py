@@ -14,7 +14,7 @@ from datetime import datetime, time
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Exists, Max, Min, OuterRef, ProtectedError, Q, Subquery
+from django.db.models import Exists, F, Max, Min, OuterRef, ProtectedError, Q, Subquery
 from django.http import (
     Http404,
     HttpResponse,
@@ -295,7 +295,7 @@ def _calendar_context(request, project) -> dict:
     anchor = parse_view_date(request.GET.get("date"))
     tasks = Task.objects.filter(project=project).filter(
         Q(deadline__isnull=False) | Q(start_date__isnull=False)
-    ).prefetch_related("assigned_members")
+    )
 
     context = {
         "calendar_view": view,
@@ -330,6 +330,148 @@ def _calendar_context(request, project) -> dict:
     return context
 
 
+# --- List view: search / filter / sort -------------------------------------
+
+LIST_SORT_CHOICES = (
+    ("manual", "Board order"),
+    ("name_asc", "Name A–Z"),
+    ("name_desc", "Name Z–A"),
+    ("deadline_asc", "Due date: soonest"),
+    ("deadline_desc", "Due date: latest"),
+    ("start_asc", "Start date: soonest"),
+    ("newest", "Newest first"),
+    ("oldest", "Oldest first"),
+)
+
+LIST_DONE_CHOICES = (
+    ("", "Any completion"),
+    ("complete", "Complete"),
+    ("not_complete", "Not complete"),
+)
+
+LIST_PRIORITY_CHOICES = (
+    ("", "Any priority"),
+    ("high", "High priority"),
+)
+
+
+def _list_order_by(sort: str):
+    """Ordering for a List view sort key.
+
+    Tasks with no date sort last on the date keys either way, so switching
+    between soonest/latest never buries the dated tasks under the undated
+    ones.
+    """
+    if sort == "deadline_asc":
+        return (F("deadline").asc(nulls_last=True), "id")
+    if sort == "deadline_desc":
+        return (F("deadline").desc(nulls_last=True), "id")
+    if sort == "start_asc":
+        return (F("start_date").asc(nulls_last=True), "id")
+    return {
+        "name_asc": ("name", "id"),
+        "name_desc": ("-name", "id"),
+        "newest": ("-created_at", "id"),
+        "oldest": ("created_at", "id"),
+    }.get(sort, ("container_task_order", "id"))
+
+
+def _list_view_context(request, project, columns) -> dict:
+    """Search / filter / sort state for the task List view.
+
+    Groups the matching tasks by column so the template can render one
+    section per column, and echoes the control values back so the full board
+    page and the HTMX partial stay in step. ``columns`` is the same queryset
+    the Kanban view renders, so no extra column query is needed.
+    """
+    q = request.GET.get("q", "").strip()
+    column_filter = request.GET.get("col", "")
+    done = request.GET.get("done", "")
+    priority = request.GET.get("priority", "")
+    assignee = request.GET.get("assignee", "")
+    sort = request.GET.get("sort", "")
+
+    if sort not in dict(LIST_SORT_CHOICES):
+        sort = "manual"
+    if done not in dict(LIST_DONE_CHOICES):
+        done = ""
+    if priority not in dict(LIST_PRIORITY_CHOICES):
+        priority = ""
+
+    members = (
+        ProjectMember.objects.filter(project=project, deleted=False)
+        .annotate(sort_name=Min("users__given_name"))
+        .order_by("sort_name", "id")
+    )
+
+    column_pks = {str(column.pk) for column in columns}
+    if column_filter not in column_pks:
+        column_filter = ""
+    member_pks = {str(member.pk) for member in members}
+    if assignee not in member_pks and assignee != "none":
+        assignee = ""
+
+    tasks = Task.objects.filter(project=project)
+
+    if q:
+        tasks = tasks.filter(
+            Q(name__icontains=q)
+            | Q(description__icontains=q)
+            | Q(assigned_members__name__icontains=q)
+            | Q(assigned_members__users__given_name__icontains=q)
+            | Q(assigned_members__users__family_name__icontains=q)
+            | Q(assigned_members__users__name__icontains=q)
+        )
+    if column_filter:
+        tasks = tasks.filter(container_id=column_filter)
+    if done == "complete":
+        tasks = tasks.filter(status=TaskStatus.COMPLETED)
+    elif done == "not_complete":
+        tasks = tasks.exclude(status=TaskStatus.COMPLETED)
+    if priority == "high":
+        tasks = tasks.filter(is_priority=True)
+    if assignee == "none":
+        tasks = tasks.filter(assigned_members__isnull=True)
+    elif assignee:
+        tasks = tasks.filter(assigned_members__pk=assignee)
+
+    tasks = tasks.distinct().order_by(*_list_order_by(sort))
+
+    by_column: dict[int, list] = {}
+    for task in tasks:
+        by_column.setdefault(task.container_id, []).append(task)
+
+    is_filtered = bool(q or column_filter or done or priority or assignee)
+    groups = []
+    for column in columns:
+        column_tasks = by_column.get(column.pk, [])
+        # An unfiltered list keeps empty columns so a Lead can drop a task
+        # into one; while filtering they would just be dead sections.
+        if not column_tasks and is_filtered:
+            continue
+        groups.append({"column": column, "tasks": column_tasks})
+
+    return {
+        "list_groups": groups,
+        "list_match_count": sum(len(group["tasks"]) for group in groups),
+        "list_is_filtered": is_filtered,
+        # Dropping a row rewrites container_task_order, which only lines up
+        # with what is on screen while the list shows every task in board
+        # order.
+        "list_reorderable": sort == "manual" and not is_filtered,
+        "list_q": q,
+        "list_col": column_filter,
+        "list_done": done,
+        "list_priority": priority,
+        "list_assignee": assignee,
+        "list_sort": sort,
+        "list_sort_choices": LIST_SORT_CHOICES,
+        "list_done_choices": LIST_DONE_CHOICES,
+        "list_priority_choices": LIST_PRIORITY_CHOICES,
+        "list_members": members,
+    }
+
+
 class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
     """Main kanban board for a project."""
 
@@ -339,26 +481,38 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         columns = (
             KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks__assigned_members")
+            .prefetch_related("tasks")
             .order_by("container_order")
         )
         context["columns"] = columns
+        context.update(_list_view_context(self.request, self.project, columns))
         context.update(_calendar_context(self.request, self.project))
         return context
 
 
 class BoardListPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
-    """HTMX partial that renders the list view section with fresh data."""
+    """HTMX partial that renders the list view section with fresh data.
+
+    ``?results=1`` renders the grouped rows alone, which is what the
+    search / filter / sort controls swap; they sit outside that target so
+    typing in the search box never loses focus.
+    """
 
     template_name = "tasks/task_list_view.html"
 
+    def get_template_names(self):
+        if self.request.GET.get("results") == "1":
+            return ["tasks/partials/list_results.html"]
+        return [self.template_name]
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["columns"] = (
+        columns = (
             KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks__assigned_members")
             .order_by("container_order")
         )
+        context["columns"] = columns
+        context.update(_list_view_context(self.request, self.project, columns))
         return context
 
 
@@ -371,7 +525,7 @@ class BoardKanbanPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateVi
         context = super().get_context_data(**kwargs)
         context["columns"] = (
             KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks__assigned_members")
+            .prefetch_related("tasks")
             .order_by("container_order")
         )
         return context

@@ -21,6 +21,7 @@ from apps.tasks.calendar import (
     clamp_month,
     parse_view_date,
     shift_date,
+    task_date_label,
     task_range,
 )
 from apps.tasks.forms import TaskForm
@@ -961,3 +962,419 @@ def test_board_calendar_month_view_renders_range_bar_markup(client, user):
     assert "Ranged task" in content
     assert "col-start-2" in content
     assert "col-end-5" in content
+
+
+# ---------------------------------------------------------------------------
+# List view: search / filter / sort
+# ---------------------------------------------------------------------------
+
+
+def _list_url(project):
+    return reverse("tasks:board_list", kwargs={"project_pk": project.pk})
+
+
+def _row_order(content: str, names) -> list[str]:
+    """Names in the order they appear in the rendered rows."""
+    return sorted(
+        (name for name in names if name in content),
+        key=content.index,
+    )
+
+
+@pytest.mark.django_db
+def test_board_list_search_matches_name_description_and_assignee(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    by_name = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Widget wiring",
+    )
+    by_desc = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=1, name="Unrelated", description="mentions widget here",
+    )
+    by_assignee = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=2, name="Assigned elsewhere",
+    )
+    by_assignee.assigned_members.add(member)
+    miss = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=3, name="Nothing to see",
+    )
+
+    client.force_login(user)
+    content = client.get(_list_url(project), {"q": "widget"}).content.decode()
+    assert by_name.name in content
+    assert by_desc.name in content
+    assert miss.name not in content
+
+    # The member's display name falls back to the user's name, "Alice".
+    content = client.get(_list_url(project), {"q": "alice"}).content.decode()
+    assert by_assignee.name in content
+    assert miss.name not in content
+
+
+@pytest.mark.django_db
+def test_board_list_filters_by_column_completion_and_priority(client, user):
+    project, col1, col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    plain = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Plain task",
+    )
+    done = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=1, name="Finished task", status=TaskStatus.COMPLETED,
+    )
+    urgent = Task.objects.create(
+        project=project, created_by=member, container=col2,
+        container_task_order=0, name="Urgent task", is_priority=True,
+    )
+    client.force_login(user)
+
+    content = client.get(_list_url(project), {"col": col2.pk}).content.decode()
+    assert urgent.name in content
+    assert plain.name not in content
+    # Empty columns are dropped while filtering rather than left as dead sections.
+    assert f'data-list-column-id="{col2.pk}"' in content
+    assert f'data-list-column-id="{col1.pk}"' not in content
+
+    content = client.get(_list_url(project), {"done": "complete"}).content.decode()
+    assert done.name in content
+    assert plain.name not in content
+
+    content = client.get(_list_url(project), {"done": "not_complete"}).content.decode()
+    assert plain.name in content
+    assert done.name not in content
+
+    content = client.get(_list_url(project), {"priority": "high"}).content.decode()
+    assert urgent.name in content
+    assert plain.name not in content
+
+
+@pytest.mark.django_db
+def test_board_list_filters_by_assignee_and_unassigned(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    mine = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Mine",
+    )
+    mine.assigned_members.add(member)
+    nobodys = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=1, name="Unclaimed",
+    )
+    client.force_login(user)
+
+    content = client.get(_list_url(project), {"assignee": member.pk}).content.decode()
+    assert mine.name in content
+    assert nobodys.name not in content
+
+    content = client.get(_list_url(project), {"assignee": "none"}).content.decode()
+    assert nobodys.name in content
+    assert mine.name not in content
+
+
+@pytest.mark.django_db
+def test_board_list_sort_orders_rows_and_puts_undated_last(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    names = ["Beta", "Alpha", "Gamma"]
+    for order, name in enumerate(names):
+        Task.objects.create(
+            project=project, created_by=member, container=col1,
+            container_task_order=order, name=name,
+            deadline=(
+                datetime(2026, 3, 5, tzinfo=dt_timezone.utc) if name == "Beta"
+                else datetime(2026, 3, 1, tzinfo=dt_timezone.utc) if name == "Alpha"
+                else None
+            ),
+        )
+    client.force_login(user)
+
+    content = client.get(_list_url(project)).content.decode()
+    assert _row_order(content, names) == ["Beta", "Alpha", "Gamma"]
+
+    content = client.get(_list_url(project), {"sort": "name_asc"}).content.decode()
+    assert _row_order(content, names) == ["Alpha", "Beta", "Gamma"]
+
+    content = client.get(_list_url(project), {"sort": "name_desc"}).content.decode()
+    assert _row_order(content, names) == ["Gamma", "Beta", "Alpha"]
+
+    # Undated tasks sort last in both directions, never ahead of dated ones.
+    content = client.get(_list_url(project), {"sort": "deadline_asc"}).content.decode()
+    assert _row_order(content, names) == ["Alpha", "Beta", "Gamma"]
+
+    content = client.get(_list_url(project), {"sort": "deadline_desc"}).content.decode()
+    assert _row_order(content, names) == ["Beta", "Alpha", "Gamma"]
+
+
+@pytest.mark.django_db
+def test_board_list_renders_rows_without_a_control_bar(client, user):
+    """The search / filter / sort bar is hidden; the rows still render, and
+    ?results=1 still returns them on their own."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Only task",
+    )
+    client.force_login(user)
+
+    full = client.get(_list_url(project)).content.decode()
+    assert "Only task" in full
+    assert 'id="list-results"' in full
+    assert 'id="list-filters"' not in full
+    assert 'name="q"' not in full
+    assert 'name="sort"' not in full
+
+    rows = client.get(_list_url(project), {"results": "1"}).content.decode()
+    assert "Only task" in rows
+    assert 'id="list-results"' not in rows
+
+
+@pytest.mark.django_db
+def test_board_list_drag_handle_only_shows_in_unfiltered_board_order(client, pm_user):
+    project, col1, _col2 = _make_project_with_board(pm_user)
+    member = _primary_member(project, pm_user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Draggable",
+    )
+    client.force_login(pm_user)
+
+    assert "task-drag-handle" in client.get(_list_url(project)).content.decode()
+
+    sorted_rows = client.get(_list_url(project), {"sort": "name_asc"}).content.decode()
+    assert "task-drag-handle" not in sorted_rows
+
+    filtered = client.get(_list_url(project), {"q": "Drag"}).content.decode()
+    assert "task-drag-handle" not in filtered
+
+
+@pytest.mark.django_db
+def test_board_list_reports_no_matches_and_ignores_unknown_params(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Real task",
+    )
+    client.force_login(user)
+
+    content = client.get(_list_url(project), {"q": "nothing matches this"}).content.decode()
+    assert "No matching tasks" in content
+    assert "Real task" not in content
+
+    # Junk filter/sort values fall back to "no filter" rather than 500ing.
+    content = client.get(
+        _list_url(project),
+        {"sort": "bogus", "done": "bogus", "priority": "bogus",
+         "col": "9999", "assignee": "9999"},
+    ).content.decode()
+    assert "Real task" in content
+    assert "No matching tasks" not in content
+
+
+@pytest.mark.django_db
+def test_board_page_shows_manage_columns_for_every_view(client, pm_user):
+    """The button used to be Kanban-only; columns are edited from any view."""
+    project, _col1, _col2 = _make_project_with_board(pm_user)
+    client.force_login(pm_user)
+    response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
+    content = response.content.decode()
+    assert "Manage columns" in content
+    # No x-show gate on the button itself (the view switcher still uses one).
+    button = content[content.rindex("<button", 0, content.index("Manage columns")):]
+    assert "x-show" not in button[: button.index("</button>")]
+
+
+# ---------------------------------------------------------------------------
+# Shared task date label
+# ---------------------------------------------------------------------------
+
+
+def _label(start=None, end=None, today=date(2026, 6, 1)):
+    return task_date_label(_FakeTask("T", start_date=start, deadline=end), today=today)
+
+
+def test_task_date_label_shows_a_span_when_both_dates_are_set():
+    label = _label(
+        start=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        end=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    # The year is dropped in the current year, and carried once on the end date.
+    assert label["short"] == "Mar 10 – Mar 12"
+    assert label["full"] == "Mar 10, 2026 – Mar 12, 2026"
+
+
+def test_task_date_label_carries_the_year_outside_the_current_one():
+    label = _label(
+        start=datetime(2027, 3, 10, tzinfo=dt_timezone.utc),
+        end=datetime(2027, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    assert label["short"] == "Mar 10 – Mar 12, 2027"
+
+    # A span across a year boundary spells out both years.
+    label = _label(
+        start=datetime(2026, 12, 28, tzinfo=dt_timezone.utc),
+        end=datetime(2027, 1, 3, tzinfo=dt_timezone.utc),
+    )
+    assert label["short"] == "Dec 28, 2026 – Jan 3, 2027"
+
+
+def test_task_date_label_names_a_lone_date_so_it_is_never_ambiguous():
+    assert _label(end=datetime(2026, 3, 12, tzinfo=dt_timezone.utc))["short"] == "Due Mar 12"
+    assert _label(start=datetime(2026, 3, 10, tzinfo=dt_timezone.utc))["short"] == "Starts Mar 10"
+    # Both dates on the same day is a due date, not a zero-length span.
+    same = datetime(2026, 3, 12, tzinfo=dt_timezone.utc)
+    assert _label(start=same, end=same)["short"] == "Due Mar 12"
+
+
+def test_task_date_label_is_empty_without_dates():
+    assert _label() == {"short": "", "full": ""}
+
+
+def test_task_date_label_orders_a_reversed_span():
+    label = _label(
+        start=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+        end=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+    )
+    assert label["short"] == "Mar 10 – Mar 12"
+
+
+@pytest.mark.django_db
+def test_kanban_list_and_calendar_render_the_same_date_span(client, user):
+    """One task, three views, one date string."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Ranged task",
+        start_date=datetime(2026, 3, 10, 9, 0, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 12, 17, 0, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+    span = task_date_label(Task.objects.get(name="Ranged task"))["short"]
+    assert "–" in span
+
+    kanban = client.get(
+        reverse("tasks:board_kanban", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    listing = client.get(
+        reverse("tasks:board_list", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    calendar_day = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"view": "day", "date": "2026-03-11"},
+    ).content.decode()
+
+    for view_name, content in (
+        ("kanban", kanban), ("list", listing), ("calendar", calendar_day),
+    ):
+        assert span in content, f"{view_name} view is missing the shared date span"
+        # The old deadline-only rendering is gone from all three.
+        assert "Mar 12, 2026<" not in content
+
+
+@pytest.mark.django_db
+def test_kanban_card_has_no_status_pill_but_the_column_heading_names_it(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Carded",
+    )
+    client.force_login(user)
+    content = client.get(
+        reverse("tasks:board_kanban", kwargs={"project_pk": project.pk})
+    ).content.decode()
+
+    assert "Carded" in content
+    # The column header still carries the status; the card no longer repeats it.
+    card = content[content.index('id="task-card-'):]
+    card = card[: card.index("</li>")]
+    assert "Carded" in card
+    assert col1.name not in card
+    assert "rounded-full text-xs font-medium" not in card
+
+
+@pytest.mark.django_db
+def test_task_descriptions_stay_out_of_the_kanban_list_and_day_views(client, user):
+    """Descriptions live in the side pane; the browsing views show names only.
+    Search still reads the description server-side."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Documented", description="a description nobody should see here",
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+
+    views = {
+        "kanban": (reverse("tasks:board_kanban", kwargs={"project_pk": project.pk}), {}),
+        "list": (reverse("tasks:board_list", kwargs={"project_pk": project.pk}), {}),
+        "calendar day": (
+            reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+            {"view": "day", "date": "2026-03-12"},
+        ),
+    }
+    for name, (url, params) in views.items():
+        content = client.get(url, params).content.decode()
+        assert "Documented" in content, f"{name} view lost the task name"
+        assert "nobody should see here" not in content, f"{name} view still shows the description"
+
+    # The pane is where the description belongs.
+    pane = client.get(
+        reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": Task.objects.get().pk})
+    ).content.decode()
+    assert "nobody should see here" in pane
+
+    # ...and searching on it still works even though it is not displayed.
+    hit = client.get(views["list"][0], {"q": "nobody should see"}).content.decode()
+    assert "Documented" in hit
+
+
+@pytest.mark.django_db
+def test_assignee_avatars_stay_out_of_the_kanban_list_and_day_views(client, user):
+    """Assignees are shown in the side pane, not stacked onto browsing rows."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Staffed", deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    task.assigned_members.add(member)
+    # The avatar carried str(member) as its title and display_name is what the
+    # pane lists, so pin both and assert neither reaches a browsing view.
+    member.name = "Assignee Avatarson"
+    member.save(update_fields=["name"])
+    titled, listed = str(member), member.display_name
+    client.force_login(user)
+
+    views = {
+        "kanban": (reverse("tasks:board_kanban", kwargs={"project_pk": project.pk}), {}),
+        "list": (reverse("tasks:board_list", kwargs={"project_pk": project.pk}), {}),
+        "calendar day": (
+            reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+            {"view": "day", "date": "2026-03-12"},
+        ),
+    }
+    for name, (url, params) in views.items():
+        content = client.get(url, params).content.decode()
+        assert "Staffed" in content, f"{name} view lost the task name"
+        assert titled not in content, f"{name} view still shows an assignee avatar"
+        assert listed not in content, f"{name} view still names the assignee"
+
+    # The pane still lists them.
+    pane = client.get(
+        reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    assert listed in pane
+
+    # ...and the List view still searches by assignee even without showing them.
+    hit = client.get(views["list"][0], {"q": "Avatarson"}).content.decode()
+    assert "Staffed" in hit

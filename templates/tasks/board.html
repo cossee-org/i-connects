@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static project_tags %}
 
-{% block title %}Kanban Board &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
+{% block title %}Kanban &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -87,7 +87,7 @@
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z" />
       </svg>
-      Kanban board
+      Kanban
     </button>
     <button type="button" class="btn btn-ghost btn-sm join-item"
             :class="{ 'btn-active': $store.board.viewMode === 'list' }"
@@ -110,10 +110,8 @@
   </div>
   {% if is_project_manager %}
     <div class="flex flex-wrap items-center gap-2">
-      {# Columns only exist on the Kanban board, so hide the action elsewhere. #}
       <button type="button"
               class="btn btn-ghost btn-sm"
-              x-show="$store.board.viewMode === 'board'" x-cloak
               hx-get="{% url 'tasks:board_columns' project_pk=project.pk %}"
               hx-target="#columns-modal-body"
               hx-swap="innerHTML"
@@ -360,31 +358,6 @@
             refreshColumnCount(sourceColumnId);
             refreshColumnCount(newColumnId);
 
-            // Update the status badge label and colour instantly.
-            var colHeader = evt.to.closest('.kanban-column');
-            if (colHeader) {
-              var colName = colHeader.querySelector('h2').childNodes[0].textContent.trim();
-              var badge = evt.item.querySelector('.inline-flex.items-center.rounded-full');
-              if (badge && colName) {
-                badge.textContent = colName;
-                var s = colName.toLowerCase();
-                badge.className = badge.className.replace(/bg-\S+\s*text-\S+/g, '').trim();
-                var colours;
-                if (s === 'in progress' || s === 'in_progress' || s === 'active' || s === 'open') {
-                  colours = 'bg-success/10 text-success';
-                } else if (s === 'done' || s === 'completed' || s === 'closed' || s === 'archived') {
-                  colours = 'bg-brand-navy/10 text-brand-navy';
-                } else if (s === 'to do' || s === 'to-do' || s === 'todo' || s === 'pending' || s === 'new' || s === 'draft') {
-                  colours = 'bg-warning/10 text-warning';
-                } else if (s === 'overdue' || s === 'blocked' || s === 'error') {
-                  colours = 'bg-error/10 text-error';
-                } else {
-                  colours = 'bg-brand-light/50 text-brand-text';
-                }
-                badge.classList.add(...colours.split(' '));
-              }
-            }
-
             htmx.ajax('POST', '/tasks/' + taskId + '/move/', {
               values: { container_id: newColumnId, order: newIndex },
               headers: { 'X-CSRFToken': csrfToken },
@@ -406,7 +379,9 @@
       if (id === 'board-view-container') {
         if (typeof Alpine !== 'undefined') Alpine.initTree(evt.detail.target);
         {% if is_project_manager %}initKanbanSortable();{% endif %}
-      } else if (id === 'list-view-container') {
+      } else if (id === 'list-view-container' || id === 'list-results') {
+        // Alpine picks up the new rows' x-on bindings itself; only Sortable
+        // needs re-binding after a swap.
         {% if is_project_manager %}initListSortable();{% endif %}
       }
     });
