@@ -783,7 +783,7 @@ def test_board_full_page_renders_calendar_section(client, user):
     client.force_login(user)
     response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
     assert response.status_code == 200
-    assert b"View as calendar" in response.content
+    assert b"$store.board.setView('calendar')" in response.content
     assert b"calendar-view-container" in response.content
     assert b"Full page dated task" in response.content
 
