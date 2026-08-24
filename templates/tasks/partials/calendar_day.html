@@ -17,15 +17,7 @@
           <span class="shrink-0">{% include "_components/priority_flag.html" %}</span>
         {% endif %}
 
-        <span class="hidden sm:inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0">
-          {% if item.is_range %}
-            {{ item.range_start|date:"M j" }} – {{ item.range_end|date:"M j" }}
-          {% elif item.task.deadline %}
-            Due {{ item.task.deadline|date:"g:i A" }}
-          {% elif item.task.start_date %}
-            Starts {{ item.task.start_date|date:"g:i A" }}
-          {% endif %}
-        </span>
+        {% include "_components/task_dates.html" with task=item.task hide_on_mobile=True %}
 
         {% if item.task.assigned_members.all %}
           <div class="flex -space-x-1.5 shrink-0" aria-hidden="true">

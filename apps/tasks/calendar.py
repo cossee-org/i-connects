@@ -66,6 +66,57 @@ def task_range(task) -> tuple[date, date] | None:
     return start, end
 
 
+def _fmt_date(day: date, *, with_year: bool) -> str:
+    return f"{day.strftime('%b')} {day.day}, {day.year}" if with_year else f"{day.strftime('%b')} {day.day}"
+
+
+def task_date_label(task, today: date | None = None) -> dict:
+    """One task's dates, formatted the same way everywhere they are shown.
+
+    Returns ``{"short": ..., "full": ...}``. ``short`` is what a card or row
+    displays and drops the year for dates in the current year; ``full``
+    always spells the year out and is used as the hover title.
+
+    A task with both dates shows the span ("Mar 10 – Mar 12"); one with a
+    single date says which date it is, so a bare day is never ambiguous.
+    Both are "" when the task has no dates at all.
+    """
+    empty = {"short": "", "full": ""}
+    start = _to_local_date(task.start_date) if task.start_date else None
+    end = _to_local_date(task.deadline) if task.deadline else None
+    if start is None and end is None:
+        return empty
+    if today is None:
+        today = timezone.localdate()
+
+    if start is not None and end is not None:
+        if start > end:
+            start, end = end, start
+        if start == end:
+            return {
+                "short": f"Due {_fmt_date(end, with_year=end.year != today.year)}",
+                "full": f"Due {_fmt_date(end, with_year=True)}",
+            }
+        # A span inside one year carries the year once, on the end date.
+        if start.year == end.year:
+            short_start = _fmt_date(start, with_year=False)
+            short_end = _fmt_date(end, with_year=end.year != today.year)
+        else:
+            short_start = _fmt_date(start, with_year=True)
+            short_end = _fmt_date(end, with_year=True)
+        return {
+            "short": f"{short_start} – {short_end}",
+            "full": f"{_fmt_date(start, with_year=True)} – {_fmt_date(end, with_year=True)}",
+        }
+
+    day = end if end is not None else start
+    prefix = "Due" if end is not None else "Starts"
+    return {
+        "short": f"{prefix} {_fmt_date(day, with_year=day.year != today.year)}",
+        "full": f"{prefix} {_fmt_date(day, with_year=True)}",
+    }
+
+
 def _sort_key(task):
     return task.deadline or task.start_date
 

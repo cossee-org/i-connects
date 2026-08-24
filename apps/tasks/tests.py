@@ -21,6 +21,7 @@ from apps.tasks.calendar import (
     clamp_month,
     parse_view_date,
     shift_date,
+    task_date_label,
     task_range,
 )
 from apps.tasks.forms import TaskForm
@@ -1188,3 +1189,91 @@ def test_board_page_shows_manage_columns_for_every_view(client, pm_user):
     # No x-show gate on the button itself (the view switcher still uses one).
     button = content[content.rindex("<button", 0, content.index("Manage columns")):]
     assert "x-show" not in button[: button.index("</button>")]
+
+
+# ---------------------------------------------------------------------------
+# Shared task date label
+# ---------------------------------------------------------------------------
+
+
+def _label(start=None, end=None, today=date(2026, 6, 1)):
+    return task_date_label(_FakeTask("T", start_date=start, deadline=end), today=today)
+
+
+def test_task_date_label_shows_a_span_when_both_dates_are_set():
+    label = _label(
+        start=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        end=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    # The year is dropped in the current year, and carried once on the end date.
+    assert label["short"] == "Mar 10 – Mar 12"
+    assert label["full"] == "Mar 10, 2026 – Mar 12, 2026"
+
+
+def test_task_date_label_carries_the_year_outside_the_current_one():
+    label = _label(
+        start=datetime(2027, 3, 10, tzinfo=dt_timezone.utc),
+        end=datetime(2027, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    assert label["short"] == "Mar 10 – Mar 12, 2027"
+
+    # A span across a year boundary spells out both years.
+    label = _label(
+        start=datetime(2026, 12, 28, tzinfo=dt_timezone.utc),
+        end=datetime(2027, 1, 3, tzinfo=dt_timezone.utc),
+    )
+    assert label["short"] == "Dec 28, 2026 – Jan 3, 2027"
+
+
+def test_task_date_label_names_a_lone_date_so_it_is_never_ambiguous():
+    assert _label(end=datetime(2026, 3, 12, tzinfo=dt_timezone.utc))["short"] == "Due Mar 12"
+    assert _label(start=datetime(2026, 3, 10, tzinfo=dt_timezone.utc))["short"] == "Starts Mar 10"
+    # Both dates on the same day is a due date, not a zero-length span.
+    same = datetime(2026, 3, 12, tzinfo=dt_timezone.utc)
+    assert _label(start=same, end=same)["short"] == "Due Mar 12"
+
+
+def test_task_date_label_is_empty_without_dates():
+    assert _label() == {"short": "", "full": ""}
+
+
+def test_task_date_label_orders_a_reversed_span():
+    label = _label(
+        start=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+        end=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+    )
+    assert label["short"] == "Mar 10 – Mar 12"
+
+
+@pytest.mark.django_db
+def test_kanban_list_and_calendar_render_the_same_date_span(client, user):
+    """One task, three views, one date string."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Ranged task",
+        start_date=datetime(2026, 3, 10, 9, 0, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 12, 17, 0, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+    span = task_date_label(Task.objects.get(name="Ranged task"))["short"]
+    assert "–" in span
+
+    kanban = client.get(
+        reverse("tasks:board_kanban", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    listing = client.get(
+        reverse("tasks:board_list", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    calendar_day = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"view": "day", "date": "2026-03-11"},
+    ).content.decode()
+
+    for view_name, content in (
+        ("kanban", kanban), ("list", listing), ("calendar", calendar_day),
+    ):
+        assert span in content, f"{view_name} view is missing the shared date span"
+        # The old deadline-only rendering is gone from all three.
+        assert "Mar 12, 2026<" not in content
