@@ -73,43 +73,38 @@
         {% include "_components/status_badge.html" with status=task.container.name %}
       </div>
 
-      {% if task.start_date or task.deadline %}
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-brand-text/70">
-          {% if task.start_date %}
-            <span class="inline-flex items-center gap-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                   stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                      d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-              </svg>
-              <span>Start date</span>
-              <span class="text-brand-navy font-medium">{{ task.start_date|date:"M j, Y" }}</span>
-            </span>
-          {% endif %}
-          {% if task.deadline %}
-            <span class="inline-flex items-center gap-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                   stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                      d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-              </svg>
-              <span>Due date</span>
-              <span class="text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</span>
-            </span>
-          {% endif %}
-        </div>
-      {% endif %}
-    </div>
-
-    {# Created by #}
-    <div>
-      <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">Created by</h3>
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-base-100 border border-brand-light text-xs text-brand-text">
-          <span aria-hidden="true" class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
-            {{ task.created_by.display_name|slice:":1"|upper }}
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-brand-text/70">
+        {% if task.start_date %}
+          <span class="inline-flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                 stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <span>Start date</span>
+            <span class="text-brand-navy font-medium">{{ task.start_date|date:"M j, Y" }}</span>
           </span>
-          {{ task.created_by.display_name }}
+        {% endif %}
+        {% if task.deadline %}
+          <span class="inline-flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                 stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <span>Due date</span>
+            <span class="text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</span>
+          </span>
+        {% endif %}
+        {# Created by, in the same plain icon-label-value shape as the dates. #}
+        <span class="inline-flex items-center gap-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+          </svg>
+          <span>Created by</span>
+          <span class="text-brand-navy font-medium">{{ task.created_by.display_name }}</span>
         </span>
       </div>
     </div>

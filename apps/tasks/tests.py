@@ -2014,11 +2014,14 @@ def test_pane_section_labels_are_neutral(client, user):
 
     pane = client.get(_pane_url(project, task)).content.decode()
     assert coral_label not in pane
-    assert pane.count(label) >= 4, "expected the pane's section labels to be neutral"
     # Assignees / Reviewers are no longer sections here — the Completion
-    # matrix covers those people.
-    for heading in ("Description", "Completion", "Created by", "Comments"):
+    # matrix covers those people — and Created by is a meta line beside the
+    # dates rather than a section of its own.
+    for heading in ("Description", "Completion", "Comments"):
         assert heading in pane
+        assert label in pane
+    assert pane.count(label) >= 3, "expected the pane's section labels to be neutral"
+    assert "Created by" in pane
 
 
 # ---------------------------------------------------------------------------
