@@ -404,7 +404,11 @@ def test_priority_task_shows_flag_on_board_card(client, user):
     client.force_login(user)
     response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
     assert response.status_code == 200
-    assert "High priority" in response.content.decode()
+    # The card renders the flag icon-only, so the wording lives in the
+    # accessible name. (This page also embeds the List view, which keeps the
+    # visible label — the icon-only/labelled split is pinned per view by
+    # test_only_the_kanban_card_drops_the_priority_label.)
+    assert 'aria-label="High priority"' in response.content.decode()
 
 
 # ---------------------------------------------------------------------------
@@ -2135,24 +2139,51 @@ def test_kanban_check_trails_the_task_name_on_the_title_row(client, user):
 
 
 @pytest.mark.django_db
-def test_kanban_priority_flag_stays_above_the_title_row(client, user):
-    """The flag keeps its own line above; the check does not join it there."""
+def test_kanban_pairs_the_priority_flag_with_the_check(client, user):
+    """Flag and check sit together after the name, on the title's line."""
     project, col1, _col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
-    Task.objects.create(
+    task = Task.objects.create(
         project=project, created_by=member, container=col1, container_task_order=0,
         name="Both", status=TaskStatus.COMPLETED, is_priority=True,
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
     )
+    task.assigned_members.add(member)
     client.force_login(user)
 
     card = client.get(
         reverse("tasks:board_kanban", kwargs={"project_pk": project.pk})
     ).content.decode()
     assert (
-        card.index("High priority")
-        < card.index("Both")
+        card.index("Both")
+        < card.index('aria-label="High priority"')
         < card.index('aria-label="Complete"')
+        < card.index("Due Mar 12")  # still the title row, not the meta row
     )
+
+
+@pytest.mark.django_db
+def test_only_the_kanban_card_drops_the_priority_label(client, user):
+    """Every other surface keeps the words; the card is where space is tight."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Flagged", is_priority=True,
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+
+    calendar_url = reverse("tasks:board_calendar", kwargs={"project_pk": project.pk})
+    wordy = {
+        "list": (reverse("tasks:board_list", kwargs={"project_pk": project.pk}), {}),
+        "calendar day": (calendar_url, {"view": "day", "date": "2026-03-12"}),
+        "pane": (reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk}), {}),
+        "detail page": (reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}), {}),
+    }
+    for name, (url, params) in wordy.items():
+        content = client.get(url, params).content.decode()
+        assert "<span>High priority</span>" in content, f"{name} lost the label"
 
 
 @pytest.mark.django_db

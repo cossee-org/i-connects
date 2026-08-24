@@ -4,17 +4,21 @@
     class="task-card brand-card p-3 hover:shadow-md cursor-pointer mb-2 bg-white{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
     @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
 
-  {% if task.is_priority %}
-    <div class="mb-1">{% include "_components/priority_flag.html" %}</div>
-  {% endif %}
   {% comment %}
-    Title row: the name, with the completed check trailing it on the same
-    line. items-start keeps the check level with the first line of a name
-    that wraps, and justify-between is a no-op when there is no check.
+    Title row: the name, then the priority flag and completed check paired at
+    the right. They share a wrapper so justify-between keeps them together
+    instead of spreading all three across the row; the wrapper is skipped
+    entirely when there is nothing to show. items-start keeps the pair level
+    with the first line of a name that wraps.
   {% endcomment %}
   <div class="flex items-start justify-between gap-2">
     <span class="font-medium text-brand-navy text-sm leading-tight min-w-0">{{ task.name }}</span>
-    {% include "_components/completion_check.html" with task=task %}
+    {% if task.is_priority or task.status == "COMPLETED" %}
+      <span class="flex items-start gap-1 shrink-0">
+        {% if task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True %}{% endif %}
+        {% include "_components/completion_check.html" with task=task %}
+      </span>
+    {% endif %}
   </div>
 
   {# No status pill here — the column heading the card sits under already names it. #}
