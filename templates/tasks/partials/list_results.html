@@ -66,6 +66,9 @@
                   {# Dates #}
                   {% include "_components/task_dates.html" with task=task hide_on_mobile=True %}
 
+                  {# Assignee count #}
+                  {% include "_components/assignee_count.html" with count=task.assigned_members.all|length %}
+
                   {# GitHub icon #}
                   {% if task.github_url %}
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"

@@ -1709,3 +1709,95 @@ def test_delete_confirmation_markup_is_lead_only(client, user, other_user):
         html = client.get(url).content.decode()
         assert "Delete task confirmation" not in html, f"{name} still ships the dialog"
         assert delete_url not in html, f"{name} still ships the delete form"
+
+
+# ---------------------------------------------------------------------------
+# Assignee count in the browsing views
+# ---------------------------------------------------------------------------
+
+
+def _assignee_count_views(project):
+    """Kanban, List and Calendar Day — the surfaces showing the people count."""
+    calendar_url = reverse("tasks:board_calendar", kwargs={"project_pk": project.pk})
+    return {
+        "kanban": (reverse("tasks:board_kanban", kwargs={"project_pk": project.pk}), {}),
+        "list": (reverse("tasks:board_list", kwargs={"project_pk": project.pk}), {}),
+        "calendar day": (calendar_url, {"view": "day", "date": "2026-03-12"}),
+    }
+
+
+@pytest.mark.django_db
+def test_browsing_views_show_the_assignee_count(client, user, other_user):
+    """Each view reports how many members a task has, and stays quiet at zero."""
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    contrib = _add_contributor(project, other_user)
+    due = datetime(2026, 3, 12, tzinfo=dt_timezone.utc)
+
+    solo = Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=0,
+        name="Solo", deadline=due,
+    )
+    solo.assigned_members.add(lead)
+    pair = Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=1,
+        name="Pair", deadline=due,
+    )
+    pair.assigned_members.add(lead, contrib)
+    Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=2,
+        name="Nobody", deadline=due,
+    )
+    client.force_login(user)
+
+    for name, (url, params) in _assignee_count_views(project).items():
+        content = client.get(url, params).content.decode()
+        assert "Nobody" in content, f"{name} view lost the unassigned task"
+        # Singular and plural for the two staffed tasks, once each; the third
+        # task is unassigned and gets no marker at all.
+        assert content.count('aria-label="1 assigned member"') == 1, (
+            f"{name} view missed the single assignee"
+        )
+        assert content.count('aria-label="2 assigned members"') == 1, (
+            f"{name} view missed the pair"
+        )
+        assert content.count('aria-label="0 assigned') == 0, (
+            f"{name} view labelled an unassigned task"
+        )
+        # The count is a number, not a roll-call: names stay in the side pane.
+        assert contrib.display_name not in content, f"{name} view named an assignee"
+
+
+@pytest.mark.django_db
+def test_assignee_count_does_not_add_a_query_per_task(client, user):
+    """The count reads a prefetch, so query volume is flat in task count."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    client.force_login(user)
+
+    def queries_for(task_total):
+        Task.objects.filter(project=project).delete()
+        for i in range(task_total):
+            task = Task.objects.create(
+                project=project, created_by=lead, container=col1,
+                container_task_order=i, name=f"T{i}",
+                deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+            )
+            task.assigned_members.add(lead)
+        counts = {}
+        for name, (url, params) in _assignee_count_views(project).items():
+            with CaptureQueriesContext(connection) as ctx:
+                client.get(url, params)
+            counts[name] = len(ctx)
+        return counts
+
+    few = queries_for(2)
+    many = queries_for(20)
+    for name, count in many.items():
+        assert count <= few[name], (
+            f"{name} view went from {few[name]} to {count} queries over 18 more "
+            f"tasks — the assignee count is querying per task"
+        )

@@ -18,6 +18,8 @@
         {% endif %}
 
         {% include "_components/task_dates.html" with task=item.task hide_on_mobile=True %}
+
+        {% include "_components/assignee_count.html" with count=item.task.assigned_members.all|length %}
       </li>
     {% endfor %}
   </ul>
