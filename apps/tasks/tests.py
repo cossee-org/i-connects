@@ -2005,7 +2005,9 @@ def test_pane_section_labels_are_neutral(client, user):
     pane = client.get(_pane_url(project, task)).content.decode()
     assert coral_label not in pane
     assert pane.count(label) >= 4, "expected the pane's section labels to be neutral"
-    for heading in ("Description", "Completion", "Assignees", "Reviewers"):
+    # Assignees / Reviewers are no longer sections here — the Completion
+    # matrix covers those people.
+    for heading in ("Description", "Completion", "Created by", "Comments"):
         assert heading in pane
 
 

@@ -1,5 +1,7 @@
-{# Partial: render every field of a dynamic form.
-   Used from version_detail (preview, readonly) and fill_form (live). #}
+{% comment %}
+  Partial: render every field of a dynamic form.
+  Used from version_detail (preview, readonly) and fill_form (live).
+{% endcomment %}
 {% if form.non_field_errors %}
   <div class="alert alert-error mb-3">{{ form.non_field_errors }}</div>
 {% endif %}
