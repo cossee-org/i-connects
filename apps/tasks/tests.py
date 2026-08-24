@@ -1801,3 +1801,78 @@ def test_assignee_count_does_not_add_a_query_per_task(client, user):
             f"{name} view went from {few[name]} to {count} queries over 18 more "
             f"tasks — the assignee count is querying per task"
         )
+
+
+# ---------------------------------------------------------------------------
+# Long descriptions are clamped behind a See more toggle
+# ---------------------------------------------------------------------------
+
+
+def _task_with_description(project, member, column, description):
+    return Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=0,
+        name="Described",
+        description=description,
+    )
+
+
+@pytest.mark.django_db
+def test_pane_clamps_a_long_description(client, user):
+    """A long description is clamped to three lines with a See more toggle."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = _task_with_description(project, member, col1, "word " * 80)
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "line-clamp-3" in pane
+    assert "See more" in pane
+    assert "See less" in pane  # the toggle's expanded label
+    # The button is wired to the block it collapses.
+    assert f'aria-controls="task-description-{task.pk}"' in pane
+    assert f'id="task-description-{task.pk}"' in pane
+    # The text itself is all still there — only its height is capped.
+    assert pane.count("word") >= 80
+
+
+@pytest.mark.django_db
+def test_pane_leaves_a_short_description_alone(client, user):
+    """A short description gets no clamp and no toggle."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = _task_with_description(project, member, col1, "Just the one line.")
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Just the one line." in pane
+    assert "line-clamp-3" not in pane
+    assert "See more" not in pane
+
+
+@pytest.mark.django_db
+def test_pane_clamps_a_description_that_is_long_by_line_breaks(client, user):
+    """Length is not the only way to overflow: hard line breaks count too."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    client.force_login(user)
+
+    four_lines = _task_with_description(project, member, col1, "a\nb\nc\nd")
+    assert "See more" in client.get(_pane_url(project, four_lines)).content.decode()
+
+    three_lines = _task_with_description(project, member, col1, "a\nb\nc")
+    assert "See more" not in client.get(_pane_url(project, three_lines)).content.decode()
+
+
+def test_is_long_filter_bounds():
+    """The filter's thresholds, which the clamp markup keys off."""
+    from apps.tasks.templatetags.task_tags import LONG_TEXT_CHARS, is_long
+
+    assert is_long(None) is False
+    assert is_long("") is False
+    assert is_long("x" * LONG_TEXT_CHARS) is False
+    assert is_long("x" * (LONG_TEXT_CHARS + 1)) is True
+    assert is_long("a\nb\nc") is False  # three lines fit
+    assert is_long("a\nb\nc\nd") is True  # a fourth does not

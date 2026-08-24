@@ -1,5 +1,5 @@
 {# Side-pane partial — no {% extends %}. Injected via HTMX into #task-pane-body. #}
-{% load static %}
+{% load static task_tags %}
 
 <div>
 
@@ -99,13 +99,28 @@
       {% endif %}
     </div>
 
-    {# Description #}
+    {# Description — a long one is clamped to three lines behind a See more toggle. #}
     <div>
       <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Description</h3>
       {% if task.description %}
-        <div class="prose prose-sm max-w-none text-brand-text">
-          {{ task.description|linebreaks }}
-        </div>
+        {% with long=task.description|is_long %}
+          <div {% if long %}x-data="{ expanded: false }"{% endif %}>
+            {# The clamp is bound, not static, so expanding can take it off again. #}
+            <div id="task-description-{{ task.pk }}"
+                 class="prose prose-sm max-w-none text-brand-text"
+                 {% if long %}:class="expanded ? '' : 'line-clamp-3'"{% endif %}>
+              {{ task.description|linebreaks }}
+            </div>
+            {% if long %}
+              <button type="button"
+                      class="mt-1 text-xs font-medium text-brand-coral hover:underline"
+                      aria-controls="task-description-{{ task.pk }}"
+                      aria-expanded="false" :aria-expanded="expanded"
+                      @click="expanded = !expanded"
+                      x-text="expanded ? 'See less' : 'See more'">See more</button>
+            {% endif %}
+          </div>
+        {% endwith %}
       {% else %}
         <p class="text-sm text-brand-text/50 italic">No description.</p>
       {% endif %}

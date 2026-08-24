@@ -31,6 +31,28 @@ def member_name_summary(members, short_limit=2):
     return {"full": full, "short": short}
 
 
+# Roughly three lines of text-sm in the side pane, matching `line-clamp-3`.
+LONG_TEXT_CHARS = 300
+LONG_TEXT_BREAKS = 3
+
+
+@register.filter
+def is_long(text):
+    """True when ``text`` runs past the ~3 lines the UI shows before clamping.
+
+    Decides whether to render the clamp and its "See more" toggle at all, so
+    a short description is never wrapped in machinery it does not need. The
+    bounds are approximate on purpose — a false positive only costs a toggle
+    that reveals a line or two, and a false negative leaves the text
+    unclamped and fully visible, so neither way hides content.
+    """
+    if not text:
+        return False
+    if text.count("\n") >= LONG_TEXT_BREAKS:
+        return True
+    return len(text) > LONG_TEXT_CHARS
+
+
 @register.filter
 def task_dates(task):
     """``{'short': ..., 'full': ...}`` for a task's date span — see
