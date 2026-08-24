@@ -149,28 +149,8 @@
       </div>
     {% endif %}
 
-    {# Assignees #}
-    <div>
-      <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">Assignees</h3>
-      {% include "tasks/partials/task_assignees.html" with task=task %}
-    </div>
-
-    {# Reviewers #}
-    <div>
-      <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">Reviewers</h3>
-      <div class="flex flex-wrap items-center gap-2">
-        {% for m in task.reviewers.all %}
-          <span class="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-base-100 border border-brand-light text-xs text-brand-text">
-            <span aria-hidden="true" class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
-              {{ m.display_name|slice:":1"|upper }}
-            </span>
-            {{ m.display_name }}
-          </span>
-        {% empty %}
-          <span class="text-sm text-brand-text/60">No reviewers assigned.</span>
-        {% endfor %}
-      </div>
-    </div>
+    {# No Assignees / Reviewers sections: the Completion matrix above names the
+       assignees and reports both their marks and the reviewers' verdicts. #}
 
     {# Created by #}
     <div>

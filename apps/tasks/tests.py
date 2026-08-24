@@ -2007,3 +2007,99 @@ def test_pane_section_labels_are_neutral(client, user):
     assert pane.count(label) >= 4, "expected the pane's section labels to be neutral"
     for heading in ("Description", "Completion", "Assignees", "Reviewers"):
         assert heading in pane
+
+
+# ---------------------------------------------------------------------------
+# Side-pane completion matrix
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_pane_completion_matrix_reports_marks_and_reviews(client, user, other_user):
+    """Each assignee gets a row: their own mark, then a reviewer's verdict."""
+    from apps.core.enums import CompletedAs
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    # The lead marked their part done and a reviewer approved that submission;
+    # the contributor has done neither.
+    mark_own_done(task=task, member=lead)
+    log = task.task_logs.filter(assigned_to=lead).order_by("-created_at").first()
+    log.approved = True
+    log.save(update_fields=["approved"])
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+
+    assert ">Assignee<" in pane
+    assert "Marked Done" in pane
+    assert ">Reviewed<" in pane
+    assert lead.display_name in pane
+    assert contrib.display_name in pane
+    # Four cells: the lead is yes on both counts, the contributor no on both.
+    assert pane.count('aria-label="Yes"') == 2
+    assert pane.count('aria-label="No"') == 2
+
+
+@pytest.mark.django_db
+def test_pane_matrix_treats_an_unreviewed_mark_as_not_reviewed(client, user, other_user):
+    """A done mark alone is one check, not two: review is a separate verdict."""
+    from apps.core.enums import CompletedAs
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, _contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    mark_own_done(task=task, member=lead)
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+
+    assert pane.count('aria-label="Yes"') == 1  # the lead's mark, nothing more
+    assert pane.count('aria-label="No"') == 3
+
+
+@pytest.mark.django_db
+def test_pane_drops_the_assignees_and_reviewers_sections(client, user, other_user):
+    """Those two lists are gone; the matrix is the only place people appear."""
+    from apps.core.enums import CompletedAs
+
+    project, task, _lead, _contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    task.reviewers.add(_lead)
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Assignees</h3>" not in pane
+    assert "Reviewers</h3>" not in pane
+    assert "No reviewers assigned." not in pane
+    # The Completion block is still there, carrying the matrix.
+    assert ">Completion</h3>" in pane
+
+    # The full task page is a separate surface and keeps its own lists.
+    detail = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    assert "Assignees</h3>" in detail
+    assert "Reviewers</h3>" in detail
+
+
+@pytest.mark.django_db
+def test_pane_matrix_says_so_when_nobody_is_assigned(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Unstaffed",
+    )
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Nobody is assigned to this task yet." in pane
+    assert "Marked Done" not in pane

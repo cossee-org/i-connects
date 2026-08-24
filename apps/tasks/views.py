@@ -671,7 +671,9 @@ class TaskDetailPaneView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            .prefetch_related("assigned_members", "reviewers", "task_logs", "comments__author"),
+            # No "reviewers": the pane reports review state per assignee from
+            # task_logs, and no longer lists the reviewers themselves.
+            .prefetch_related("assigned_members", "task_logs", "comments__author"),
             project=self.project,
             pk=kwargs["pk"],
         )
@@ -1003,21 +1005,28 @@ class TaskChangeColumnView(
 
 
 def _task_status_context(task, *, project_member, is_project_manager):
-    """Context for the completion status block (per-assignee done state)."""
+    """Context for the completion status block (per-assignee done state).
+
+    Each assignee state carries the two verdicts the pane's completion matrix
+    shows side by side: ``done`` is the member's own mark on their current
+    TaskLog, ``reviewed`` is a reviewer's approval of that same submission.
+    """
     current = {}
     for log in task.task_logs.all():  # newest-first; first seen is current
         current.setdefault(log.assigned_to_id, log)
     assignees = list(task.assigned_members.all())
-    assignee_states = [
-        {
-            "member": m,
-            "done": (
-                (log := current.get(m.id)) is not None
-                and log.status == TaskStatus.COMPLETED
-            ),
-        }
-        for m in assignees
-    ]
+    assignee_states = []
+    for member in assignees:
+        log = current.get(member.id)
+        assignee_states.append(
+            {
+                "member": member,
+                "done": log is not None and log.status == TaskStatus.COMPLETED,
+                # approved is nullable: None is "not reviewed yet", False is a
+                # rejection. Only an explicit True counts as reviewed.
+                "reviewed": log is not None and log.approved is True,
+            }
+        )
     my_state = next(
         (s for s in assignee_states if project_member and s["member"].id == project_member.id),
         None,
