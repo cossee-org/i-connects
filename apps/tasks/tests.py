@@ -1438,6 +1438,36 @@ def test_pane_completion_button_is_lead_only(client, user, other_user):
 
 
 @pytest.mark.django_db
+def test_pane_completion_button_sits_next_to_the_task_name(client, user):
+    """The button shares the title row, ahead of the Completion block."""
+    from apps.core.enums import CompletedAs
+
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=lead,
+        container=col1,
+        container_task_order=0,
+        name="Titled",
+        completion_mode=CompletedAs.TEAM,
+    )
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    name_at = pane.index("Titled")
+    button_at = pane.index("Mark Completed")
+    completion_at = pane.index(">Completion<")
+    assert name_at < button_at < completion_at, (
+        "the button should follow the task name and precede the Completion block"
+    )
+    # It lives outside #task-status-block now, so the block's swap has to reach
+    # it out of band.
+    assert 'id="task-completion-button"' in pane
+    assert pane.index('id="task-completion-button"') < pane.index('id="task-status-block"')
+
+
+@pytest.mark.django_db
 def test_pane_completion_button_toggles_not_complete_to_completed(client, user):
     """A Lead clicking the pane button flips the task, and the button inverts."""
     from apps.core.enums import CompletedAs
