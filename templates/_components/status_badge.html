@@ -1,17 +1,19 @@
 {# Status badge — {% include "_components/status_badge.html" with status=project.get_status_display %} #}
 {# Pass with_icon=True to prefix a dot that inherits the status colour (A11Y_GUIDE #7: never colour alone — the label carries the meaning). #}
+{# Pass plain=True for the dot-and-text form with no pill behind it, matching the priority flag and completion chip. #}
+{# One colour chain drives both forms: each branch sets the text colour, and adds the pill's tint only when it is a pill. #}
 {% with s=status|lower %}
-<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-  {% if s == 'in progress' or s == 'in_progress' or s == 'active' or s == 'open' %}bg-success/10 text-success
-  {% elif s == 'planning' %}bg-orange-100 text-orange-600
-  {% elif s == 'paused' %}bg-purple-100 text-purple-600
-  {% elif s == 'done' or s == 'completed' or s == 'closed' or s == 'archived' %}bg-brand-navy/10 text-brand-navy
-  {% elif s == 'to do' or s == 'to-do' or s == 'todo' or s == 'pending' or s == 'new' or s == 'draft' %}bg-warning/10 text-warning
-  {% elif s == 'overdue' or s == 'blocked' or s == 'error' %}bg-error/10 text-error
-  {% elif s == 'inactive' %}bg-gray-100 text-gray-500
-  {% else %}bg-brand-light/50 text-brand-text{% endif %}">
-  {% if with_icon %}
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" class="w-2 h-2 mr-1.5 shrink-0" fill="currentColor" aria-hidden="true">
+<span class="inline-flex items-center font-medium{% if plain %} text-sm gap-1.5{% else %} text-xs px-2.5 py-0.5 rounded-full{% endif %}
+  {% if s == 'in progress' or s == 'in_progress' or s == 'active' or s == 'open' %}text-success{% if not plain %} bg-success/10{% endif %}
+  {% elif s == 'planning' %}text-orange-600{% if not plain %} bg-orange-100{% endif %}
+  {% elif s == 'paused' %}text-purple-600{% if not plain %} bg-purple-100{% endif %}
+  {% elif s == 'done' or s == 'completed' or s == 'closed' or s == 'archived' %}text-brand-navy{% if not plain %} bg-brand-navy/10{% endif %}
+  {% elif s == 'to do' or s == 'to-do' or s == 'todo' or s == 'pending' or s == 'new' or s == 'draft' %}text-warning{% if not plain %} bg-warning/10{% endif %}
+  {% elif s == 'overdue' or s == 'blocked' or s == 'error' %}text-error{% if not plain %} bg-error/10{% endif %}
+  {% elif s == 'inactive' %}text-gray-500{% if not plain %} bg-gray-100{% endif %}
+  {% else %}text-brand-text{% if not plain %} bg-brand-light/50{% endif %}{% endif %}">
+  {% if with_icon or plain %}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" class="w-2 h-2 shrink-0{% if not plain %} mr-1.5{% endif %}" fill="currentColor" aria-hidden="true">
       <circle cx="4" cy="4" r="4" />
     </svg>
   {% endif %}

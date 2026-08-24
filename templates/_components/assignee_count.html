@@ -1,0 +1,18 @@
+{# Assignee count — {% include "_components/assignee_count.html" with count=task.assigned_members.all|length %}. #}
+{# People icon plus how many members are assigned; renders nothing when nobody is, so #}
+{# callers can drop it in unconditionally. The count is passed in rather than derived #}
+{# here so the surrounding row can test the same value, and callers should prefetch #}
+{# assigned_members to keep this off the per-task query path. The bare number needs #}
+{# naming for assistive tech, hence role="img" plus a spelt-out label. #}
+{% if count %}
+  <span class="inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0"
+        role="img" aria-label="{{ count }} assigned member{{ count|pluralize }}"
+        title="{{ count }} assigned member{{ count|pluralize }}">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+         stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round"
+            d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+    </svg>
+    {{ count }}
+  </span>
+{% endif %}

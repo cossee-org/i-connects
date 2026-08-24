@@ -255,6 +255,21 @@
           this.openPane('/projects/{{ project.pk }}/tasks/' + openTask + '/pane/');
           history.replaceState(null, '', window.location.pathname);
         }
+        // htmx.ajax resolves its promise even on a 5xx, and fires
+        // htmx:responseError on the body rather than the target — so without
+        // this the pane keeps its loading spinner forever when the request
+        // fails, saying nothing about why.
+        ['htmx:responseError', 'htmx:sendError'].forEach(function (evt) {
+          document.body.addEventListener(evt, function (e) {
+            var body = document.getElementById('task-pane-body');
+            if (!body || !e.detail || e.detail.target !== body) return;
+            body.innerHTML =
+              '<div class="px-5 py-10 text-center">' +
+              '<p class="text-sm font-medium text-brand-navy">This task could not be loaded.</p>' +
+              '<p class="mt-1 text-sm text-brand-text/70">Something went wrong on the server. ' +
+              'Close the pane and try again.</p></div>';
+          });
+        });
       },
       openPane(url) {
         this.paneOpen = true;

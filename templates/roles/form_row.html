@@ -1,5 +1,7 @@
-{# Renders a single Role either as a display row or inline edit form.
-   Context: role (Role|None), form (RoleForm), project, editing (bool). #}
+{% comment %}
+  Renders a single Role either as a display row or inline edit form.
+  Context: role (Role|None), form (RoleForm), project, editing (bool).
+{% endcomment %}
 <div id="role-row-{{ role.pk|default:'new' }}" class="py-3">
   {% if editing %}
     <form

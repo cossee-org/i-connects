@@ -117,17 +117,6 @@ class Task(models.Model):
         default=TaskStatus.NOT_COMPLETED,
     )
 
-    completion_mode = models.CharField(
-        max_length=16,
-        choices=CompletedAs.choices,
-        default=CompletedAs.INDIVIDUAL,
-        help_text=(
-            "How the task is completed. INDIVIDUAL: each assignee marks their "
-            "own part done and a Lead closes once everyone is done. TEAM: a "
-            "Lead closes the task at once for all assignees."
-        ),
-    )
-
     assigned_members = models.ManyToManyField(
         "projects.ProjectMember",
         blank=True,
@@ -264,6 +253,16 @@ class TaskLog(models.Model):
         related_name="task_logs",
     )
     approved = models.BooleanField(null=True, blank=True)
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When this entry was marked COMPLETED. Distinct from created_at, "
+            "which is when the entry was seeded on assignment. Null on entries "
+            "that are not complete, and on ones completed before this field "
+            "existed."
+        ),
+    )
 
     class Meta:
         ordering = ["-created_at"]

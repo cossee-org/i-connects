@@ -68,10 +68,8 @@ from apps.tasks.mixins import (
 )
 from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
 from apps.tasks.services import (
-    TaskNotReadyToClose,
     approve_completion,
     close_task,
-    complete_task,
     mark_own_done,
     move_task,
     reopen_own,
@@ -293,8 +291,10 @@ def _calendar_context(request, project) -> dict:
     if view not in CALENDAR_VIEWS:
         view = "month"
     anchor = parse_view_date(request.GET.get("date"))
-    tasks = Task.objects.filter(project=project).filter(
-        Q(deadline__isnull=False) | Q(start_date__isnull=False)
+    tasks = (
+        Task.objects.filter(project=project)
+        .filter(Q(deadline__isnull=False) | Q(start_date__isnull=False))
+        .prefetch_related("assigned_members")
     )
 
     context = {
@@ -411,7 +411,7 @@ def _list_view_context(request, project, columns) -> dict:
     if assignee not in member_pks and assignee != "none":
         assignee = ""
 
-    tasks = Task.objects.filter(project=project)
+    tasks = Task.objects.filter(project=project).prefetch_related("assigned_members")
 
     if q:
         tasks = tasks.filter(
@@ -481,7 +481,7 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         columns = (
             KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks")
+            .prefetch_related("tasks", "tasks__assigned_members")
             .order_by("container_order")
         )
         context["columns"] = columns
@@ -525,7 +525,7 @@ class BoardKanbanPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateVi
         context = super().get_context_data(**kwargs)
         context["columns"] = (
             KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks")
+            .prefetch_related("tasks", "tasks__assigned_members")
             .order_by("container_order")
         )
         return context
@@ -670,7 +670,9 @@ class TaskDetailPaneView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            .prefetch_related("assigned_members", "reviewers", "task_logs", "comments__author"),
+            # No "reviewers": the pane reports review state per assignee from
+            # task_logs, and no longer lists the reviewers themselves.
+            .prefetch_related("assigned_members", "task_logs", "comments__author"),
             project=self.project,
             pk=kwargs["pk"],
         )
@@ -1002,21 +1004,31 @@ class TaskChangeColumnView(
 
 
 def _task_status_context(task, *, project_member, is_project_manager):
-    """Context for the completion status block (per-assignee done state)."""
+    """Context for the completion status block (per-assignee done state).
+
+    Each assignee state carries the two verdicts the pane's completion matrix
+    shows side by side: ``done`` is the member's own mark on their current
+    TaskLog, ``reviewed`` is a reviewer's approval of that same submission.
+    """
     current = {}
     for log in task.task_logs.all():  # newest-first; first seen is current
         current.setdefault(log.assigned_to_id, log)
     assignees = list(task.assigned_members.all())
-    assignee_states = [
-        {
-            "member": m,
-            "done": (
-                (log := current.get(m.id)) is not None
-                and log.status == TaskStatus.COMPLETED
-            ),
-        }
-        for m in assignees
-    ]
+    assignee_states = []
+    for member in assignees:
+        log = current.get(member.id)
+        assignee_states.append(
+            {
+                "member": member,
+                "done": log is not None and log.status == TaskStatus.COMPLETED,
+                # Null on entries completed before completed_at existed, so the
+                # cell shows the check with no date rather than a wrong one.
+                "done_at": log.completed_at if log is not None else None,
+                # approved is nullable: None is "not reviewed yet", False is a
+                # rejection. Only an explicit True counts as reviewed.
+                "reviewed": log is not None and log.approved is True,
+            }
+        )
     my_state = next(
         (s for s in assignee_states if project_member and s["member"].id == project_member.id),
         None,
@@ -1025,11 +1037,9 @@ def _task_status_context(task, *, project_member, is_project_manager):
         "task": task,
         "project": task.project,
         "is_project_manager": is_project_manager,
-        "is_team_mode": task.completion_mode == CompletedAs.TEAM,
         "assignee_states": assignee_states,
         "done_count": sum(1 for s in assignee_states if s["done"]),
         "assignee_count": len(assignee_states),
-        "all_done": task.all_assignees_done,
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
     }
@@ -1067,10 +1077,6 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     def post(self, request, *args, **kwargs):
         if self.project_member is None:
             return HttpResponseBadRequest("No project membership.")
-        if self.task.completion_mode == CompletedAs.TEAM:
-            return HttpResponseBadRequest(
-                "This task is completed as a team; a Lead closes it."
-            )
         if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
             return HttpResponseForbidden("Only an assignee can mark their part done.")
         mark_own_done(task=self.task, member=self.project_member)
@@ -1104,10 +1110,7 @@ class TaskCloseView(
 
     def post(self, request, *args, **kwargs):
         closer = self.project_member or _fallback_member(request.user, self.project)
-        try:
-            close_task(task=self.task, closed_by=closer)
-        except TaskNotReadyToClose as exc:
-            return HttpResponseBadRequest(str(exc))
+        close_task(task=self.task, closed_by=closer)
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,
@@ -1121,8 +1124,7 @@ class TaskReopenView(
     """A Project Lead reopens a closed task, clearing all completion state."""
 
     def post(self, request, *args, **kwargs):
-        reopener = self.project_member or _fallback_member(request.user, self.project)
-        reopen_task(task=self.task, completed_by=reopener)
+        reopen_task(task=self.task)
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,

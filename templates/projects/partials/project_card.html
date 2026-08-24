@@ -1,6 +1,8 @@
 {% load project_tags %}
-{# Renders one project as a DaisyUI card.
-   Context: project (Project); optionally my_privilege (str) for badge. #}
+{% comment %}
+  Renders one project as a DaisyUI card.
+  Context: project (Project); optionally my_privilege (str) for badge.
+{% endcomment %}
 <div class="card bg-base-100 shadow hover:shadow-lg transition">
   <div class="card-body">
     <div class="flex items-start justify-between gap-2">

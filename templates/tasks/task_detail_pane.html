@@ -4,34 +4,49 @@
 <div>
 
   {# ── Header ── #}
-  <div class="sticky top-0 z-10 bg-white flex items-center justify-between px-4 py-3 border-b border-brand-light/60 gap-2">
-    <div class="flex items-center gap-2 min-w-0 overflow-hidden">
-      <a href="{{ full_page_url }}"
-         class="btn btn-ghost btn-xs btn-square shrink-0"
-         title="Open full page" aria-label="Open full task page">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-        </svg>
-      </a>
+  <div class="sticky top-0 z-10 bg-white flex flex-wrap items-center justify-between px-4 py-3 border-b border-brand-light/60 gap-2">
+    {# Completion actions on the left: the Lead's task-level toggle, then the assignee's own mark. #}
+    <div class="flex items-center gap-1 min-w-0">
+      {% include "tasks/partials/task_completion_button.html" with task=task is_project_manager=is_project_manager %}
+      {% include "tasks/partials/task_self_mark_button.html" with task=task is_assignee=status_block.is_assignee my_done=status_block.my_done %}
     </div>
     <div class="flex items-center gap-1 shrink-0">
       {% if is_project_manager %}
+        {# Trash / pencil-square, at the same stroke weight as the Open icon beside them. #}
         <button type="button"
-                class="btn btn-ghost btn-xs text-error"
+                class="btn btn-ghost btn-xs gap-1 text-error"
                 onclick="document.getElementById('task-delete-modal-{{ task.pk }}').showModal()">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+          </svg>
           Delete
         </button>
         <button type="button"
-                class="btn btn-ghost btn-xs"
+                class="btn btn-ghost btn-xs gap-1"
                 hx-get="{% url 'tasks:update' project_pk=project.pk pk=task.pk %}"
                 hx-target="#task-modal-body"
                 hx-swap="innerHTML"
                 onclick="document.getElementById('task-modal').showModal()">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+          </svg>
           Edit
         </button>
       {% endif %}
+      <a href="{{ full_page_url }}"
+         class="btn btn-ghost btn-xs gap-1 shrink-0"
+         title="Open full page" aria-label="Open full task page">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+        </svg>
+        Open
+      </a>
       <button type="button"
               class="btn btn-ghost btn-xs btn-circle"
               aria-label="Close pane"
@@ -44,125 +59,138 @@
     </div>
   </div>
 
-  {# ── Body ── #}
-  <div class="px-5 pt-5 pb-12 space-y-5">
+  {% comment %}
+    Body: one card per category — Summary, Description, Completion, Details
+    (the task's references) and Comments. The Completion card is drawn by
+    task_status_block.html itself, since HTMX swaps that element whole.
+  {% endcomment %}
+  <div class="px-5 pt-5 pb-12 space-y-4">
 
-    {# ── Section 1: Title + Meta + Description ── #}
-    <h2 class="text-lg font-semibold text-brand-navy leading-snug mt-3">{{ task.name }}</h2>
+    {# ── Summary: name, state, dates, author ── #}
+    <section class="brand-card p-4 space-y-3">
+      <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ task.name }}</h2>
 
-    {% if task.is_priority %}
-      <div>{% include "_components/priority_flag.html" %}</div>
-    {% endif %}
-
-    {# Meta directly under the title: dates, then status + completion on one line. #}
-    <div class="flex flex-col gap-2 -mt-2">
-      {% if task.start_date or task.deadline %}
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-brand-text/70">
-          {% if task.start_date %}
-            <span class="inline-flex items-center gap-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                   stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                      d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-              </svg>
-              <span>Start date</span>
-              <span class="text-brand-navy font-medium">{{ task.start_date|date:"M j, Y" }}</span>
-            </span>
-          {% endif %}
-          {% if task.deadline %}
-            <span class="inline-flex items-center gap-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                   stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                      d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-              </svg>
-              <span>Due date</span>
-              <span class="text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</span>
-            </span>
-          {% endif %}
-        </div>
-      {% endif %}
-
+      <div class="flex flex-col gap-2">
       <div class="flex flex-wrap items-center gap-2">
-        {% include "_components/status_badge.html" with status=task.container.name with_icon=True %}
+        {% if task.is_priority %}{% include "_components/priority_flag.html" with text_size="text-sm" %}{% endif %}
         {% include "tasks/partials/task_completion_chip.html" with task=task %}
+        {% include "_components/status_badge.html" with status=task.container.name plain=True %}
       </div>
-    </div>
 
-    {# Description #}
-    <div>
-      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Description</h3>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-brand-text/70">
+        {% if task.start_date %}
+          <span class="inline-flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                 stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <span>Start date</span>
+            <span class="text-brand-navy font-medium">{{ task.start_date|date:"M j, Y" }}</span>
+          </span>
+        {% endif %}
+        {% if task.deadline %}
+          <span class="inline-flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                 stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <span>Due date</span>
+            <span class="text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</span>
+          </span>
+        {% endif %}
+        {# Created by, in the same plain icon-label-value shape as the dates. #}
+        <span class="inline-flex items-center gap-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+          </svg>
+          <span>Created by</span>
+          <span class="text-brand-navy font-medium">{{ task.created_by.display_name }}</span>
+        </span>
+        </div>
+      </div>
+    </section>
+
+    {% comment %}
+      Description, clamped to three lines behind a See more toggle — but only
+      when it really overflows. Where the text wraps depends on the pane's
+      width, so the browser measures it on init rather than the server
+      guessing from character count: a description that happens to fit in
+      three lines used to get a button that revealed nothing.
+    {% endcomment %}
+    <section class="brand-card p-4">
+      <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">Description</h3>
       {% if task.description %}
-        <div class="prose prose-sm max-w-none text-brand-text">
-          {{ task.description|linebreaks }}
+        <div x-data="{ expanded: false, overflowing: false }"
+             x-init="$nextTick(() => { overflowing = $refs.body.scrollHeight > $refs.body.clientHeight + 1 })">
+          {% comment %}
+            line-clamp-3 is both a static class and a binding, and it needs to
+            be both. Bound alone it survives the first swap but not the next:
+            reopening a task re-runs the binding against Alpine's remembered
+            state for that class and it never gets re-applied, so the pane
+            comes back expanded. Static alone could not be removed on expand.
+            Static keeps every open collapsed; the binding takes it off.
+          {% endcomment %}
+          {% comment %}
+            text-sm to match the rest of the pane. The prose / prose-sm classes
+            this carried were inert: the Tailwind typography plugin is not
+            installed, so only DaisyUI's variable-only .prose shim exists and
+            prose-sm is not generated at all — the text rendered at the
+            inherited 16px while everything around it is 14px.
+          {% endcomment %}
+          <div x-ref="body"
+               id="task-description-{{ task.pk }}"
+               class="text-sm text-brand-text line-clamp-3"
+               :class="{ 'line-clamp-3': !expanded }">
+            {{ task.description|linebreaks }}
+          </div>
+          <button type="button" x-show="overflowing" x-cloak
+                  class="mt-1 text-xs font-medium text-brand-navy hover:underline"
+                  aria-controls="task-description-{{ task.pk }}"
+                  :aria-expanded="expanded"
+                  @click="expanded = !expanded"
+                  x-text="expanded ? 'See less' : 'See more'">See more</button>
         </div>
       {% else %}
         <p class="text-sm text-brand-text/50 italic">No description.</p>
       {% endif %}
-    </div>
+    </section>
 
     {# Completion breakdown (per-assignee state + mark-done action) #}
-    {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count all_done=status_block.all_done is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
+    {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
 
-    {# ── Section 2: People + Meta ── #}
-    {# Start date, due date and status live under the title (Section 1). #}
-
-    {% if task.milestone %}
-      <div>
-        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Milestone</h3>
-        <p class="text-sm text-brand-navy font-medium">{{ task.milestone.name }}</p>
-      </div>
+    {# ── Details: the task's references. Skipped when it has none. ── #}
+    {% if task.milestone or task.github_url %}
+      <section class="brand-card p-4 space-y-3">
+        {% if task.milestone %}
+          <div>
+            <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">Milestone</h3>
+            <p class="text-sm text-brand-navy font-medium">{{ task.milestone.name }}</p>
+          </div>
+        {% endif %}
+        {% if task.github_url %}
+          <div>
+            <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">GitHub</h3>
+            <a href="{{ task.github_url }}" target="_blank" rel="noopener"
+               class="text-sm text-brand-navy hover:text-brand-coral font-medium break-all">
+              {{ task.github_url }}
+            </a>
+          </div>
+        {% endif %}
+      </section>
     {% endif %}
 
-    {% if task.github_url %}
-      <div>
-        <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">GitHub</h3>
-        <a href="{{ task.github_url }}" target="_blank" rel="noopener"
-           class="text-sm text-brand-navy hover:text-brand-coral font-medium break-all">
-          {{ task.github_url }}
-        </a>
-      </div>
-    {% endif %}
+    {% comment %}
+      No Assignees / Reviewers sections: the Completion matrix above names the
+      assignees and reports both their marks and the reviewers' verdicts.
+    {% endcomment %}
 
-    {# Assignees #}
-    <div>
-      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Assignees</h3>
-      {% include "tasks/partials/task_assignees.html" with task=task %}
-    </div>
-
-    {# Reviewers #}
-    <div>
-      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Reviewers</h3>
-      <div class="flex flex-wrap items-center gap-2">
-        {% for m in task.reviewers.all %}
-          <span class="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-base-100 border border-brand-light text-xs text-brand-text">
-            <span aria-hidden="true" class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
-              {{ m.display_name|slice:":1"|upper }}
-            </span>
-            {{ m.display_name }}
-          </span>
-        {% empty %}
-          <span class="text-sm text-brand-text/60">No reviewers assigned.</span>
-        {% endfor %}
-      </div>
-    </div>
-
-    {# Created by #}
-    <div>
-      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-2">Created by</h3>
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="inline-flex items-center gap-1.5 pl-1 pr-2 py-0.5 rounded-full bg-base-100 border border-brand-light text-xs text-brand-text">
-          <span aria-hidden="true" class="w-5 h-5 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold">
-            {{ task.created_by.display_name|slice:":1"|upper }}
-          </span>
-          {{ task.created_by.display_name }}
-        </span>
-      </div>
-    </div>
-
-    {# ── Section 3: Comments ── #}
-    <div>
-      <h3 class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-3">
+    {# ── Comments ── #}
+    <section class="brand-card p-4">
+      <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-3">
         Comments{% if task.comments.count %} ({{ task.comments.count }}){% endif %}
       </h3>
 
@@ -189,11 +217,12 @@
           </button>
         </div>
       </form>
-    </div>
+    </section>
 
   </div>
 
-  {# ── Delete confirmation modal ── #}
+  {# ── Delete confirmation modal (Lead-only, like the button that opens it) ── #}
+  {% if is_project_manager %}
   <dialog id="task-delete-modal-{{ task.pk }}" class="modal" aria-label="Delete task confirmation">
     <div class="modal-box max-w-xl bg-base-100 border border-error/40">
       <form method="dialog">
@@ -225,5 +254,6 @@
     </div>
     <form method="dialog" class="modal-backdrop"><button>close</button></form>
   </dialog>
+  {% endif %}
 
 </div>

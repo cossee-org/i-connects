@@ -1,6 +1,8 @@
-{# Standalone list of comments under a TaskLog. Not currently used as an
-   HTMX swap target (task_log_item.html embeds comment_item.html directly),
-   but kept for templates that want the full list wrapper. #}
+{% comment %}
+  Standalone list of comments under a TaskLog. Not currently used as an
+  HTMX swap target (task_log_item.html embeds comment_item.html directly),
+  but kept for templates that want the full list wrapper.
+{% endcomment %}
 <div id="comments-for-log-{{ task_log.pk }}" class="space-y-3">
   {% for comment in task_log.comments.all %}
     {% include "comments/comment_item.html" with comment=comment task=task task_log=task_log %}
