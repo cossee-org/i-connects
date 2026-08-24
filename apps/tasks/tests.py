@@ -1978,3 +1978,32 @@ def test_editing_a_task_into_inverted_dates_is_refused(client, user):
     task.refresh_from_db()
     assert task.start_date == datetime(2026, 3, 10, tzinfo=dt_timezone.utc)
     assert task.deadline == datetime(2026, 3, 12, tzinfo=dt_timezone.utc)
+
+
+@pytest.mark.django_db
+def test_pane_section_labels_are_neutral(client, user):
+    """Description, Completion and friends read as quiet labels, not red ones.
+
+    Coral is reserved for accents and actions (the page eyebrow, the See more
+    toggle), so no section label should carry it.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Labelled",
+        description="Some text.",
+    )
+    client.force_login(user)
+
+    label = "text-xs uppercase tracking-wider text-brand-text/70 font-semibold"
+    coral_label = "text-xs uppercase tracking-wider text-brand-coral font-semibold"
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert coral_label not in pane
+    assert pane.count(label) >= 4, "expected the pane's section labels to be neutral"
+    for heading in ("Description", "Completion", "Assignees", "Reviewers"):
+        assert heading in pane
