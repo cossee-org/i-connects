@@ -7,11 +7,8 @@
   {% if task.is_priority %}
     <div class="mb-1">{% include "_components/priority_flag.html" %}</div>
   {% endif %}
+  {# Name only — the description belongs to the side pane, not the card. #}
   <span class="font-medium text-brand-navy text-sm leading-tight block">{{ task.name }}</span>
-
-  {% if task.description %}
-    <p class="text-xs text-brand-text/70 line-clamp-2 mt-1">{{ task.description }}</p>
-  {% endif %}
 
   {# No status pill here — the column heading the card sits under already names it. #}
   {% if task.github_url or task.deadline or task.start_date or task.assigned_members.all %}

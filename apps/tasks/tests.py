@@ -1299,3 +1299,40 @@ def test_kanban_card_has_no_status_pill_but_the_column_heading_names_it(client, 
     assert "Carded" in card
     assert col1.name not in card
     assert "rounded-full text-xs font-medium" not in card
+
+
+@pytest.mark.django_db
+def test_task_descriptions_stay_out_of_the_kanban_list_and_day_views(client, user):
+    """Descriptions live in the side pane; the browsing views show names only.
+    Search still reads the description server-side."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Documented", description="a description nobody should see here",
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+
+    views = {
+        "kanban": (reverse("tasks:board_kanban", kwargs={"project_pk": project.pk}), {}),
+        "list": (reverse("tasks:board_list", kwargs={"project_pk": project.pk}), {}),
+        "calendar day": (
+            reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+            {"view": "day", "date": "2026-03-12"},
+        ),
+    }
+    for name, (url, params) in views.items():
+        content = client.get(url, params).content.decode()
+        assert "Documented" in content, f"{name} view lost the task name"
+        assert "nobody should see here" not in content, f"{name} view still shows the description"
+
+    # The pane is where the description belongs.
+    pane = client.get(
+        reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": Task.objects.get().pk})
+    ).content.decode()
+    assert "nobody should see here" in pane
+
+    # ...and searching on it still works even though it is not displayed.
+    hit = client.get(views["list"][0], {"q": "nobody should see"}).content.decode()
+    assert "Documented" in hit
