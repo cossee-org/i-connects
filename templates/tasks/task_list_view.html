@@ -8,10 +8,10 @@
       {% with tasks=column.tasks.all %}
       <section>
         {# Column header — a real heading, with the status colour reduced to a dot. #}
-        <div class="flex items-center gap-2.5 mb-3 px-1">
+        <div class="flex items-center gap-3 mb-3 px-1">
           {% include "_components/status_dot.html" with status=column.name %}
           <h2 class="text-lg font-semibold text-brand-navy leading-snug min-w-0 truncate">{{ column.name }}</h2>
-          <span class="text-xs text-brand-text/50 shrink-0"
+          <span class="text-xs text-brand-text/50 shrink-0 ml-1"
                 data-list-column-count="{{ column.pk }}">{{ tasks.count }} task{{ tasks.count|pluralize }}</span>
         </div>
 
