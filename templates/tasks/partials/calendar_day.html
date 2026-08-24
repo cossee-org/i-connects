@@ -7,7 +7,7 @@
           @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=item.task.pk %}' })">
 
         <div class="flex-1 min-w-0">
-          <span class="font-medium text-brand-navy block leading-snug">{{ item.task.name }}</span>
+          <span class="font-medium text-brand-navy text-sm block leading-tight">{{ item.task.name }}</span>
           {% if item.task.description %}
             <span class="text-xs text-brand-text/55 line-clamp-1 mt-0.5 block">{{ item.task.description }}</span>
           {% endif %}

@@ -14,7 +14,7 @@ Eight Django apps ported from the original Prisma / Blitz schema:
 | `core`           | Shared enums, email backends (console / SMTP / Resend / SES), `setup_cron` management command, base templates. |
 | `projects`       | Project CRUD, membership, privileges (PM / contributor), invitations with URL-safe tokens, member row HTMX partials. |
 | `roles`          | Per-project Role model + CRUD.                                                              |
-| `tasks`          | Kanban board with drag-drop (HTMX move endpoint), task CRUD, task completion + approval, milestones, task logs for audit trail. |
+| `tasks`          | Kanban board with drag-drop (HTMX move endpoint), List view with search / filter / sort, calendar view, task CRUD, task completion + approval, milestones, task logs for audit trail. |
 | `comments`       | Threaded comments on task logs.                                                             |
 | `notifications`  | In-app notifications (M2M recipients), badge / dropdown partials, admin announcements.      |
 | `notes`          | Project notes with three visibility tiers (private / PM-only / contributors), markdown rendering with raw HTML escaping. |

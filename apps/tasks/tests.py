@@ -961,3 +961,226 @@ def test_board_calendar_month_view_renders_range_bar_markup(client, user):
     assert "Ranged task" in content
     assert "col-start-2" in content
     assert "col-end-5" in content
+
+
+# ---------------------------------------------------------------------------
+# List view: search / filter / sort
+# ---------------------------------------------------------------------------
+
+
+def _list_url(project):
+    return reverse("tasks:board_list", kwargs={"project_pk": project.pk})
+
+
+def _row_order(content: str, names) -> list[str]:
+    """Names in the order they appear in the rendered rows."""
+    return sorted(
+        (name for name in names if name in content),
+        key=content.index,
+    )
+
+
+@pytest.mark.django_db
+def test_board_list_search_matches_name_description_and_assignee(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    by_name = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Widget wiring",
+    )
+    by_desc = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=1, name="Unrelated", description="mentions widget here",
+    )
+    by_assignee = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=2, name="Assigned elsewhere",
+    )
+    by_assignee.assigned_members.add(member)
+    miss = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=3, name="Nothing to see",
+    )
+
+    client.force_login(user)
+    content = client.get(_list_url(project), {"q": "widget"}).content.decode()
+    assert by_name.name in content
+    assert by_desc.name in content
+    assert miss.name not in content
+
+    # The member's display name falls back to the user's name, "Alice".
+    content = client.get(_list_url(project), {"q": "alice"}).content.decode()
+    assert by_assignee.name in content
+    assert miss.name not in content
+
+
+@pytest.mark.django_db
+def test_board_list_filters_by_column_completion_and_priority(client, user):
+    project, col1, col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    plain = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Plain task",
+    )
+    done = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=1, name="Finished task", status=TaskStatus.COMPLETED,
+    )
+    urgent = Task.objects.create(
+        project=project, created_by=member, container=col2,
+        container_task_order=0, name="Urgent task", is_priority=True,
+    )
+    client.force_login(user)
+
+    content = client.get(_list_url(project), {"col": col2.pk}).content.decode()
+    assert urgent.name in content
+    assert plain.name not in content
+    # Empty columns are dropped while filtering rather than left as dead sections.
+    assert f'data-list-column-id="{col2.pk}"' in content
+    assert f'data-list-column-id="{col1.pk}"' not in content
+
+    content = client.get(_list_url(project), {"done": "complete"}).content.decode()
+    assert done.name in content
+    assert plain.name not in content
+
+    content = client.get(_list_url(project), {"done": "not_complete"}).content.decode()
+    assert plain.name in content
+    assert done.name not in content
+
+    content = client.get(_list_url(project), {"priority": "high"}).content.decode()
+    assert urgent.name in content
+    assert plain.name not in content
+
+
+@pytest.mark.django_db
+def test_board_list_filters_by_assignee_and_unassigned(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    mine = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Mine",
+    )
+    mine.assigned_members.add(member)
+    nobodys = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=1, name="Unclaimed",
+    )
+    client.force_login(user)
+
+    content = client.get(_list_url(project), {"assignee": member.pk}).content.decode()
+    assert mine.name in content
+    assert nobodys.name not in content
+
+    content = client.get(_list_url(project), {"assignee": "none"}).content.decode()
+    assert nobodys.name in content
+    assert mine.name not in content
+
+
+@pytest.mark.django_db
+def test_board_list_sort_orders_rows_and_puts_undated_last(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    names = ["Beta", "Alpha", "Gamma"]
+    for order, name in enumerate(names):
+        Task.objects.create(
+            project=project, created_by=member, container=col1,
+            container_task_order=order, name=name,
+            deadline=(
+                datetime(2026, 3, 5, tzinfo=dt_timezone.utc) if name == "Beta"
+                else datetime(2026, 3, 1, tzinfo=dt_timezone.utc) if name == "Alpha"
+                else None
+            ),
+        )
+    client.force_login(user)
+
+    content = client.get(_list_url(project)).content.decode()
+    assert _row_order(content, names) == ["Beta", "Alpha", "Gamma"]
+
+    content = client.get(_list_url(project), {"sort": "name_asc"}).content.decode()
+    assert _row_order(content, names) == ["Alpha", "Beta", "Gamma"]
+
+    content = client.get(_list_url(project), {"sort": "name_desc"}).content.decode()
+    assert _row_order(content, names) == ["Gamma", "Beta", "Alpha"]
+
+    # Undated tasks sort last in both directions, never ahead of dated ones.
+    content = client.get(_list_url(project), {"sort": "deadline_asc"}).content.decode()
+    assert _row_order(content, names) == ["Alpha", "Beta", "Gamma"]
+
+    content = client.get(_list_url(project), {"sort": "deadline_desc"}).content.decode()
+    assert _row_order(content, names) == ["Beta", "Alpha", "Gamma"]
+
+
+@pytest.mark.django_db
+def test_board_list_results_param_renders_rows_without_the_control_bar(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Only task",
+    )
+    client.force_login(user)
+
+    full = client.get(_list_url(project)).content.decode()
+    assert 'id="list-filters"' in full
+    assert 'id="list-results"' in full
+
+    rows = client.get(_list_url(project), {"results": "1"}).content.decode()
+    assert "Only task" in rows
+    # The bar sits outside the swap target so typing never loses focus.
+    assert 'id="list-filters"' not in rows
+
+
+@pytest.mark.django_db
+def test_board_list_drag_handle_only_shows_in_unfiltered_board_order(client, pm_user):
+    project, col1, _col2 = _make_project_with_board(pm_user)
+    member = _primary_member(project, pm_user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Draggable",
+    )
+    client.force_login(pm_user)
+
+    assert "task-drag-handle" in client.get(_list_url(project)).content.decode()
+
+    sorted_rows = client.get(_list_url(project), {"sort": "name_asc"}).content.decode()
+    assert "task-drag-handle" not in sorted_rows
+
+    filtered = client.get(_list_url(project), {"q": "Drag"}).content.decode()
+    assert "task-drag-handle" not in filtered
+
+
+@pytest.mark.django_db
+def test_board_list_reports_no_matches_and_ignores_unknown_params(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Real task",
+    )
+    client.force_login(user)
+
+    content = client.get(_list_url(project), {"q": "nothing matches this"}).content.decode()
+    assert "No matching tasks" in content
+    assert "Real task" not in content
+
+    # Junk filter/sort values fall back to "no filter" rather than 500ing.
+    content = client.get(
+        _list_url(project),
+        {"sort": "bogus", "done": "bogus", "priority": "bogus",
+         "col": "9999", "assignee": "9999"},
+    ).content.decode()
+    assert "Real task" in content
+    assert "No matching tasks" not in content
+
+
+@pytest.mark.django_db
+def test_board_page_shows_manage_columns_for_every_view(client, pm_user):
+    """The button used to be Kanban-only; columns are edited from any view."""
+    project, _col1, _col2 = _make_project_with_board(pm_user)
+    client.force_login(pm_user)
+    response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
+    content = response.content.decode()
+    assert "Manage columns" in content
+    # No x-show gate on the button itself (the view switcher still uses one).
+    button = content[content.rindex("<button", 0, content.index("Manage columns")):]
+    assert "x-show" not in button[: button.index("</button>")]
