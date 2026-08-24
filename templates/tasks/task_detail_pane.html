@@ -59,14 +59,18 @@
     </div>
   </div>
 
-  {# ── Body ── #}
-  <div class="px-5 pt-5 pb-12 space-y-5">
+  {% comment %}
+    Body: one card per category — Summary, Description, Completion, Details
+    (the task's references) and Comments. The Completion card is drawn by
+    task_status_block.html itself, since HTMX swaps that element whole.
+  {% endcomment %}
+  <div class="px-5 pt-5 pb-12 space-y-4">
 
-    {# ── Section 1: Title + Meta + Description ── #}
-    <h2 class="text-lg font-semibold text-brand-navy leading-snug mt-3">{{ task.name }}</h2>
+    {# ── Summary: name, state, dates, author ── #}
+    <section class="brand-card p-4 space-y-3">
+      <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ task.name }}</h2>
 
-    {# Meta directly under the title: one pill row, then the dates under it. #}
-    <div class="flex flex-col gap-2 -mt-2">
+      <div class="flex flex-col gap-2">
       <div class="flex flex-wrap items-center gap-2">
         {% if task.is_priority %}{% include "_components/priority_flag.html" %}{% endif %}
         {% include "tasks/partials/task_completion_chip.html" with task=task %}
@@ -106,8 +110,9 @@
           <span>Created by</span>
           <span class="text-brand-navy font-medium">{{ task.created_by.display_name }}</span>
         </span>
+        </div>
       </div>
-    </div>
+    </section>
 
     {% comment %}
       Description, clamped to three lines behind a See more toggle — but only
@@ -116,7 +121,7 @@
       guessing from character count: a description that happens to fit in
       three lines used to get a button that revealed nothing.
     {% endcomment %}
-    <div>
+    <section class="brand-card p-4">
       <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">Description</h3>
       {% if task.description %}
         <div x-data="{ expanded: false, overflowing: false }"
@@ -143,29 +148,30 @@
       {% else %}
         <p class="text-sm text-brand-text/50 italic">No description.</p>
       {% endif %}
-    </div>
+    </section>
 
     {# Completion breakdown (per-assignee state + mark-done action) #}
     {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager is_team_mode=status_block.is_team_mode assignee_states=status_block.assignee_states done_count=status_block.done_count assignee_count=status_block.assignee_count is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
 
-    {# ── Section 2: People + Meta ── #}
-    {# Start date, due date and status live under the title (Section 1). #}
-
-    {% if task.milestone %}
-      <div>
-        <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">Milestone</h3>
-        <p class="text-sm text-brand-navy font-medium">{{ task.milestone.name }}</p>
-      </div>
-    {% endif %}
-
-    {% if task.github_url %}
-      <div>
-        <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">GitHub</h3>
-        <a href="{{ task.github_url }}" target="_blank" rel="noopener"
-           class="text-sm text-brand-navy hover:text-brand-coral font-medium break-all">
-          {{ task.github_url }}
-        </a>
-      </div>
+    {# ── Details: the task's references. Skipped when it has none. ── #}
+    {% if task.milestone or task.github_url %}
+      <section class="brand-card p-4 space-y-3">
+        {% if task.milestone %}
+          <div>
+            <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">Milestone</h3>
+            <p class="text-sm text-brand-navy font-medium">{{ task.milestone.name }}</p>
+          </div>
+        {% endif %}
+        {% if task.github_url %}
+          <div>
+            <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">GitHub</h3>
+            <a href="{{ task.github_url }}" target="_blank" rel="noopener"
+               class="text-sm text-brand-navy hover:text-brand-coral font-medium break-all">
+              {{ task.github_url }}
+            </a>
+          </div>
+        {% endif %}
+      </section>
     {% endif %}
 
     {% comment %}
@@ -173,8 +179,8 @@
       assignees and reports both their marks and the reviewers' verdicts.
     {% endcomment %}
 
-    {# ── Section 3: Comments ── #}
-    <div>
+    {# ── Comments ── #}
+    <section class="brand-card p-4">
       <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-3">
         Comments{% if task.comments.count %} ({{ task.comments.count }}){% endif %}
       </h3>
@@ -202,7 +208,7 @@
           </button>
         </div>
       </form>
-    </div>
+    </section>
 
   </div>
 

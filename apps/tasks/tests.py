@@ -2345,3 +2345,60 @@ def test_full_task_page_keeps_its_own_self_mark_button(client, user, other_user)
     assert "Mark my part done" in detail
     # ...in the block itself, not via a top-bar partial it does not have.
     assert 'id="task-self-mark-button"' not in detail
+
+
+@pytest.mark.django_db
+def test_pane_groups_its_content_into_cards(client, user, other_user):
+    """One card per category, in order, and Details only when it has content."""
+    from apps.core.enums import CompletedAs
+    from apps.tasks.models import Milestone
+
+    project, task, _lead, _contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    task.description = "Some description."
+    task.github_url = "https://github.com/x/y/pull/1"
+    task.milestone = Milestone.objects.create(project=project, name="M1")
+    task.save()
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    # Summary, Description, Completion, Details, Comments.
+    assert pane.count("brand-card") == 5
+    assert (
+        pane.index("Moded")               # the task name, in the summary card
+        < pane.index(">Description<")
+        < pane.index(">Completion<")
+        < pane.index(">Milestone<")
+        < pane.index(">GitHub<")
+        < pane.index("Comments")
+    )
+
+    # A task with no milestone and no GitHub link loses that card entirely
+    # rather than showing an empty one.
+    task.milestone = None
+    task.github_url = ""
+    task.save()
+    bare = client.get(_pane_url(project, task)).content.decode()
+    assert bare.count("brand-card") == 4
+    assert ">Milestone<" not in bare
+    assert ">GitHub<" not in bare
+
+
+@pytest.mark.django_db
+def test_completion_card_survives_its_own_swap(client, user, other_user):
+    """The block is the swap target, so it has to carry the card itself."""
+    from apps.core.enums import CompletedAs
+
+    project, task, _lead, _contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    client.force_login(user)
+
+    swapped = client.post(
+        reverse("tasks:complete", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    opening_tag = swapped[: swapped.index(">", swapped.index('id="task-status-block"'))]
+    assert "brand-card" in opening_tag, "the swap would drop the card"
