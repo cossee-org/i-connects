@@ -4,21 +4,10 @@
 <div>
 
   {# ── Header ── #}
-  <div class="sticky top-0 z-10 bg-white flex items-center justify-between px-4 py-3 border-b border-brand-light/60 gap-2">
-    <div class="flex items-center gap-2 min-w-0 overflow-hidden">
-      <a href="{{ full_page_url }}"
-         class="btn btn-ghost btn-xs btn-square shrink-0"
-         title="Open full page" aria-label="Open full task page">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
-        </svg>
-      </a>
-    </div>
+  <div class="sticky top-0 z-10 bg-white flex items-center justify-end px-4 py-3 border-b border-brand-light/60 gap-2">
     <div class="flex items-center gap-1 shrink-0">
       {% if is_project_manager %}
-        {# Trash / pencil-square, matching the stroke weight of the expand icon above. #}
+        {# Trash / pencil-square, at the same stroke weight as the Open icon beside them. #}
         <button type="button"
                 class="btn btn-ghost btn-xs gap-1 text-error"
                 onclick="document.getElementById('task-delete-modal-{{ task.pk }}').showModal()">
@@ -43,6 +32,16 @@
           Edit
         </button>
       {% endif %}
+      <a href="{{ full_page_url }}"
+         class="btn btn-ghost btn-xs gap-1 shrink-0"
+         title="Open full page" aria-label="Open full task page">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+        </svg>
+        Open
+      </a>
       <button type="button"
               class="btn btn-ghost btn-xs btn-circle"
               aria-label="Close pane"
