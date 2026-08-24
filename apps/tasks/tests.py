@@ -1438,6 +1438,52 @@ def test_pane_completion_button_is_lead_only(client, user, other_user):
 
 
 @pytest.mark.django_db
+def test_pane_pills_share_one_row_above_the_dates(client, user):
+    """Priority, completion and column status read left to right, over the dates."""
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=lead,
+        container=col1,
+        container_task_order=0,
+        name="Pilled",
+        is_priority=True,
+        start_date=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+
+    assert (
+        pane.index("High priority")
+        < pane.index("Not Complete")
+        < pane.index(col1.name)
+        < pane.index("Start date")
+    ), "expected High priority, completion, status, then the dates"
+
+
+@pytest.mark.django_db
+def test_pane_pill_row_drops_the_flag_when_not_priority(client, user):
+    """The flag is conditional; the other two pills still lead the row."""
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=lead,
+        container=col1,
+        container_task_order=0,
+        name="Unflagged",
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+
+    assert "High priority" not in pane
+    assert pane.index("Not Complete") < pane.index(col1.name) < pane.index("Due date")
+
+
+@pytest.mark.django_db
 def test_pane_completion_button_sits_next_to_the_task_name(client, user):
     """The button shares the title row, ahead of the Completion block."""
     from apps.core.enums import CompletedAs
