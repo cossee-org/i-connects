@@ -86,3 +86,6 @@
     {% endif %}
   {% endif %}
 </div>
+
+{# Keep the pane's Complete / Not Complete chip (under the title) in sync with this swap. #}
+{% if pane_mode %}{% include "tasks/partials/task_completion_chip.html" with task=task oob=True %}{% endif %}
