@@ -16,17 +16,6 @@
         {% endif %}
 
         {% include "_components/task_dates.html" with task=item.task hide_on_mobile=True %}
-
-        {% if item.task.assigned_members.all %}
-          <div class="flex -space-x-1.5 shrink-0" aria-hidden="true">
-            {% for m in item.task.assigned_members.all|slice:":4" %}
-              <div class="w-6 h-6 rounded-full bg-brand-navy text-white flex items-center justify-center text-[10px] font-semibold ring-1 ring-white"
-                   title="{{ m }}">
-                {{ m|stringformat:"s"|slice:":1"|upper }}
-              </div>
-            {% endfor %}
-          </div>
-        {% endif %}
       </li>
     {% endfor %}
   </ul>

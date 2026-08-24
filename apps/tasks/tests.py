@@ -1336,3 +1336,45 @@ def test_task_descriptions_stay_out_of_the_kanban_list_and_day_views(client, use
     # ...and searching on it still works even though it is not displayed.
     hit = client.get(views["list"][0], {"q": "nobody should see"}).content.decode()
     assert "Documented" in hit
+
+
+@pytest.mark.django_db
+def test_assignee_avatars_stay_out_of_the_kanban_list_and_day_views(client, user):
+    """Assignees are shown in the side pane, not stacked onto browsing rows."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Staffed", deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    task.assigned_members.add(member)
+    # The avatar carried str(member) as its title and display_name is what the
+    # pane lists, so pin both and assert neither reaches a browsing view.
+    member.name = "Assignee Avatarson"
+    member.save(update_fields=["name"])
+    titled, listed = str(member), member.display_name
+    client.force_login(user)
+
+    views = {
+        "kanban": (reverse("tasks:board_kanban", kwargs={"project_pk": project.pk}), {}),
+        "list": (reverse("tasks:board_list", kwargs={"project_pk": project.pk}), {}),
+        "calendar day": (
+            reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+            {"view": "day", "date": "2026-03-12"},
+        ),
+    }
+    for name, (url, params) in views.items():
+        content = client.get(url, params).content.decode()
+        assert "Staffed" in content, f"{name} view lost the task name"
+        assert titled not in content, f"{name} view still shows an assignee avatar"
+        assert listed not in content, f"{name} view still names the assignee"
+
+    # The pane still lists them.
+    pane = client.get(
+        reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    assert listed in pane
+
+    # ...and the List view still searches by assignee even without showing them.
+    hit = client.get(views["list"][0], {"q": "Avatarson"}).content.decode()
+    assert "Staffed" in hit

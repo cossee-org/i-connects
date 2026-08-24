@@ -295,7 +295,7 @@ def _calendar_context(request, project) -> dict:
     anchor = parse_view_date(request.GET.get("date"))
     tasks = Task.objects.filter(project=project).filter(
         Q(deadline__isnull=False) | Q(start_date__isnull=False)
-    ).prefetch_related("assigned_members")
+    )
 
     context = {
         "calendar_view": view,
@@ -411,7 +411,7 @@ def _list_view_context(request, project, columns) -> dict:
     if assignee not in member_pks and assignee != "none":
         assignee = ""
 
-    tasks = Task.objects.filter(project=project).prefetch_related("assigned_members")
+    tasks = Task.objects.filter(project=project)
 
     if q:
         tasks = tasks.filter(
@@ -481,7 +481,7 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         columns = (
             KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks__assigned_members")
+            .prefetch_related("tasks")
             .order_by("container_order")
         )
         context["columns"] = columns
@@ -525,7 +525,7 @@ class BoardKanbanPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateVi
         context = super().get_context_data(**kwargs)
         context["columns"] = (
             KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks__assigned_members")
+            .prefetch_related("tasks")
             .order_by("container_order")
         )
         return context
