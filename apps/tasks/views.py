@@ -1021,6 +1021,9 @@ def _task_status_context(task, *, project_member, is_project_manager):
             {
                 "member": member,
                 "done": log is not None and log.status == TaskStatus.COMPLETED,
+                # Null on entries completed before completed_at existed, so the
+                # cell shows the check with no date rather than a wrong one.
+                "done_at": log.completed_at if log is not None else None,
                 # approved is nullable: None is "not reviewed yet", False is a
                 # rejection. Only an explicit True counts as reviewed.
                 "reviewed": log is not None and log.approved is True,

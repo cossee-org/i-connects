@@ -1,7 +1,8 @@
 {% comment %}
   Task completion status block (HTMX swap target: #task-status-block).
   Context comes from views._task_status_context: task, is_project_manager,
-  assignee_states, done_count, assignee_count, is_assignee, my_done.
+  assignee_states (each with member, done, done_at, reviewed), done_count,
+  assignee_count, is_assignee, my_done.
 {% endcomment %}
 <div id="task-status-block"
      {% if pane_mode %}
@@ -62,7 +63,7 @@
             {% for s in assignee_states %}
               <tr>
                 <th scope="row" class="text-left font-normal text-brand-navy py-1.5 pr-2">{{ s.member.display_name }}</th>
-                <td class="py-1.5 px-2">{% include "tasks/partials/task_matrix_cell.html" with on=s.done %}</td>
+                <td class="py-1.5 px-2">{% include "tasks/partials/task_matrix_cell.html" with on=s.done at=s.done_at %}</td>
                 <td class="py-1.5">{% include "tasks/partials/task_matrix_cell.html" with on=s.reviewed %}</td>
               </tr>
             {% endfor %}

@@ -8,6 +8,7 @@ focused on request/response handling and concentrate the mutation logic
 from __future__ import annotations
 
 from django.db import transaction
+from django.utils import timezone
 
 from apps.audit.services import AuditAction, log_action
 from apps.core.enums import CompletedAs, TaskStatus
@@ -95,6 +96,7 @@ def complete_task(
             completed_by=completed_by,
             status=TaskStatus.COMPLETED,
             completed_as=completed_as,
+            completed_at=timezone.now(),
         )
         logs.append(log)
 
@@ -155,6 +157,7 @@ def mark_own_done(*, task: Task, member: ProjectMember) -> TaskLog:
     log.status = TaskStatus.COMPLETED
     log.completed_by = member
     log.completed_as = CompletedAs.INDIVIDUAL
+    log.completed_at = timezone.now()
     log.save()
     return log
 
@@ -166,7 +169,8 @@ def reopen_own(*, task: Task, member: ProjectMember) -> TaskLog | None:
     if log is None:
         return None
     log.status = TaskStatus.NOT_COMPLETED
-    log.save(update_fields=["status"])
+    log.completed_at = None
+    log.save(update_fields=["status", "completed_at"])
     return log
 
 

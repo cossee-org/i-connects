@@ -253,6 +253,16 @@ class TaskLog(models.Model):
         related_name="task_logs",
     )
     approved = models.BooleanField(null=True, blank=True)
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When this entry was marked COMPLETED. Distinct from created_at, "
+            "which is when the entry was seeded on assignment. Null on entries "
+            "that are not complete, and on ones completed before this field "
+            "existed."
+        ),
+    )
 
     class Meta:
         ordering = ["-created_at"]

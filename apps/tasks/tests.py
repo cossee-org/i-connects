@@ -2430,3 +2430,52 @@ def test_priority_flag_keeps_its_smaller_size_off_the_pane(client, user):
     i = detail.index('title="High priority"')
     flag = detail[detail.rfind("<span", 0, i) : i]
     assert "text-xs" in flag and "text-sm" not in flag
+
+
+@pytest.mark.django_db
+def test_matrix_shows_when_an_assignee_marked_done(client, user, other_user):
+    """The check in Marked Done carries the date the assignee set it."""
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _two_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    log = task.task_logs.filter(assigned_to=contrib).order_by("-created_at").first()
+    assert log.completed_at is not None
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    stamped = log.completed_at.strftime("%b %-d, %Y")
+    assert stamped in pane
+    # In the Marked Done cell, right after that row's check.
+    row = pane[pane.index(contrib.display_name) : pane.index("</tr>", pane.index(contrib.display_name))]
+    assert row.index('aria-label="Yes"') < row.index(stamped)
+
+
+@pytest.mark.django_db
+def test_undoing_a_mark_clears_its_date(client, user, other_user):
+    """An undone mark must not keep the date it briefly had."""
+    from apps.tasks.services import mark_own_done, reopen_own
+
+    project, task, _lead, contrib = _two_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    reopen_own(task=task, member=contrib)
+
+    log = task.task_logs.filter(assigned_to=contrib).order_by("-created_at").first()
+    assert log.status == TaskStatus.NOT_COMPLETED
+    assert log.completed_at is None
+
+
+@pytest.mark.django_db
+def test_a_mark_made_before_the_date_existed_still_shows_its_check(client, user, other_user):
+    """completed_at is null on old entries; the cell shows the check alone."""
+    project, task, _lead, contrib = _two_assignee_task(user, other_user)
+    log = task.task_logs.filter(assigned_to=contrib).order_by("-created_at").first()
+    log.status = TaskStatus.COMPLETED
+    log.completed_at = None
+    log.save(update_fields=["status", "completed_at"])
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert pane.count('aria-label="Yes"') == 1
+    # No stray date, and no placeholder where one would have gone.
+    assert "None" not in pane
