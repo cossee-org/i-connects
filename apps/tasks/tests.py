@@ -1876,3 +1876,105 @@ def test_is_long_filter_bounds():
     assert is_long("x" * (LONG_TEXT_CHARS + 1)) is True
     assert is_long("a\nb\nc") is False  # three lines fit
     assert is_long("a\nb\nc\nd") is True  # a fourth does not
+
+
+# ---------------------------------------------------------------------------
+# Task dates: start must not fall after the due date
+# ---------------------------------------------------------------------------
+
+
+def _task_form_data(column, **overrides):
+    """A minimally valid TaskForm payload, so date errors are the only ones."""
+    from apps.core.enums import CompletedAs
+
+    data = {
+        "name": "Dated",
+        "container": str(column.pk),
+        "completion_mode": CompletedAs.INDIVIDUAL,
+    }
+    data.update(overrides)
+    return data
+
+
+@pytest.mark.django_db
+def test_task_form_rejects_a_start_after_the_due_date(user):
+    project, col1, _col2 = _make_project_with_board(user)
+    form = TaskForm(
+        data=_task_form_data(
+            col1, start_date="2026-03-12T09:00", deadline="2026-03-10T09:00"
+        ),
+        project=project,
+    )
+    assert not form.is_valid()
+    assert "start_date" in form.errors
+    assert "before or equal to the due date" in str(form.errors["start_date"])
+
+
+@pytest.mark.django_db
+def test_task_form_accepts_dates_in_order_or_equal(user):
+    """In order and same-instant both pass; the rule is <=, not <."""
+    project, col1, _col2 = _make_project_with_board(user)
+    for label, start, deadline in (
+        ("in order", "2026-03-10T09:00", "2026-03-12T09:00"),
+        ("same instant", "2026-03-10T09:00", "2026-03-10T09:00"),
+    ):
+        form = TaskForm(
+            data=_task_form_data(col1, start_date=start, deadline=deadline),
+            project=project,
+        )
+        assert form.is_valid(), f"{label} should validate, got {form.errors!r}"
+
+
+@pytest.mark.django_db
+def test_task_form_leaves_a_lone_date_unconstrained(user):
+    """Both dates are optional, and one on its own has nothing to compare to."""
+    project, col1, _col2 = _make_project_with_board(user)
+    for label, data in (
+        ("neither", {}),
+        ("start only", {"start_date": "2026-03-12T09:00"}),
+        ("due only", {"deadline": "2026-03-10T09:00"}),
+    ):
+        form = TaskForm(data=_task_form_data(col1, **data), project=project)
+        assert form.is_valid(), f"{label} should validate, got {form.errors!r}"
+
+
+@pytest.mark.django_db
+def test_creating_a_task_with_inverted_dates_is_refused(client, user):
+    """The rule holds through the create view, and the error reaches the page."""
+    project, col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+
+    response = client.post(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        _task_form_data(
+            col1, start_date="2026-03-12T09:00", deadline="2026-03-10T09:00"
+        ),
+    )
+    assert not Task.objects.filter(name="Dated").exists()
+    assert "before or equal to the due date" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_editing_a_task_into_inverted_dates_is_refused(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Dated",
+        start_date=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        _task_form_data(
+            col1, start_date="2026-03-12T09:00", deadline="2026-03-10T09:00"
+        ),
+    )
+    task.refresh_from_db()
+    assert task.start_date == datetime(2026, 3, 10, tzinfo=dt_timezone.utc)
+    assert task.deadline == datetime(2026, 3, 12, tzinfo=dt_timezone.utc)

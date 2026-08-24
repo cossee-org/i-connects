@@ -210,6 +210,21 @@ class TaskForm(forms.ModelForm):
                 self.fields[field_name].queryset = members
                 self.fields[field_name].label_from_instance = member_label
 
+    def clean(self):
+        """A task cannot be due before it starts.
+
+        Same rule and wording as ``MilestoneForm`` below; equal dates are
+        fine, and either date on its own is unconstrained.
+        """
+        cleaned = super().clean()
+        start = cleaned.get("start_date")
+        deadline = cleaned.get("deadline")
+        if start and deadline and start > deadline:
+            self.add_error(
+                "start_date", "Start date must be before or equal to the due date."
+            )
+        return cleaned
+
 
 class MilestoneForm(forms.ModelForm):
     start_date = forms.DateTimeField(
