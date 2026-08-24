@@ -1831,6 +1831,9 @@ def test_pane_clamps_a_long_description(client, user):
     assert "line-clamp-3" in pane
     assert "See more" in pane
     assert "See less" in pane  # the toggle's expanded label
+    # The toggle reads as a link in the palette's blue, not the coral accent.
+    assert "text-brand-navy hover:underline" in pane
+    assert "text-brand-coral hover:underline" not in pane
     # The button is wired to the block it collapses.
     assert f'aria-controls="task-description-{task.pk}"' in pane
     assert f'id="task-description-{task.pk}"' in pane
