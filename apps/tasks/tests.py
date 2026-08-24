@@ -2108,3 +2108,71 @@ def test_pane_matrix_says_so_when_nobody_is_assigned(client, user):
     pane = client.get(_pane_url(project, task)).content.decode()
     assert "Nobody is assigned to this task yet." in pane
     assert "Marked Done" not in pane
+
+
+@pytest.mark.django_db
+def test_kanban_check_sits_in_the_card_corner_above_the_name(client, user):
+    """The check leads the card, ahead of the task name, in its top row."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Cornered", status=TaskStatus.COMPLETED,
+    )
+    client.force_login(user)
+
+    card = client.get(
+        reverse("tasks:board_kanban", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    assert card.index('aria-label="Complete"') < card.index("Cornered")
+
+
+@pytest.mark.django_db
+def test_kanban_check_and_priority_flag_share_the_top_row(client, user):
+    """Flag on the left, check on the right, both above the name."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Both", status=TaskStatus.COMPLETED, is_priority=True,
+    )
+    client.force_login(user)
+
+    card = client.get(
+        reverse("tasks:board_kanban", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    assert (
+        card.index("High priority")
+        < card.index('aria-label="Complete"')
+        < card.index("Both")
+    )
+
+
+@pytest.mark.django_db
+def test_list_and_day_rows_end_with_the_check(client, user):
+    """On a row the check is last, so it pins to the right-hand edge."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Trailing", status=TaskStatus.COMPLETED, is_priority=True,
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    task.assigned_members.add(member)
+    client.force_login(user)
+
+    calendar_url = reverse("tasks:board_calendar", kwargs={"project_pk": project.pk})
+    rows = {
+        "list": (reverse("tasks:board_list", kwargs={"project_pk": project.pk}), {}),
+        "calendar day": (calendar_url, {"view": "day", "date": "2026-03-12"}),
+    }
+    for name, (url, params) in rows.items():
+        content = client.get(url, params).content.decode()
+        check_at = content.index('aria-label="Complete"')
+        # Everything else on the row comes first.
+        assert content.index("Trailing") < check_at, f"{name}: check precedes the name"
+        assert content.index("High priority") < check_at, f"{name}: check precedes the flag"
+        assert content.index("Due Mar 12") < check_at, f"{name}: check precedes the dates"
+        assert content.index("1 assigned member") < check_at, (
+            f"{name}: check precedes the assignee count"
+        )

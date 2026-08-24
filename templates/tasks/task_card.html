@@ -4,14 +4,18 @@
     class="task-card brand-card p-3 hover:shadow-md cursor-pointer mb-2 bg-white{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
     @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
 
-  {% if task.is_priority %}
-    <div class="mb-1">{% include "_components/priority_flag.html" %}</div>
+  {% comment %}
+    Top row: priority on the left, the completed check in the right corner.
+    Rendered only when there is something to put in it.
+  {% endcomment %}
+  {% if task.is_priority or task.status == "COMPLETED" %}
+    <div class="flex items-center justify-between gap-2 mb-1">
+      <span class="min-w-0">{% if task.is_priority %}{% include "_components/priority_flag.html" %}{% endif %}</span>
+      {% include "_components/completion_check.html" with task=task %}
+    </div>
   {% endif %}
   {# Name only — the description belongs to the side pane, not the card. #}
-  <div class="flex items-start gap-1.5">
-    {% include "_components/completion_check.html" with task=task nudge=True %}
-    <span class="font-medium text-brand-navy text-sm leading-tight min-w-0">{{ task.name }}</span>
-  </div>
+  <span class="font-medium text-brand-navy text-sm leading-tight block">{{ task.name }}</span>
 
   {# No status pill here — the column heading the card sits under already names it. #}
   {% with assignees=task.assigned_members.all|length %}
