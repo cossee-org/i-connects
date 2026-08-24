@@ -1671,3 +1671,41 @@ def test_completed_calendar_range_bar_shows_a_check(client, user):
         assert content.count('aria-label="Complete"') == 1, (
             f"calendar {view} should mark the completed range bar"
         )
+
+
+@pytest.mark.django_db
+def test_delete_confirmation_markup_is_lead_only(client, user, other_user):
+    """Members get no delete dialog on any task surface.
+
+    The dialog carries a POST form to tasks:delete. The endpoint is Lead-only
+    either way, so this is tidiness rather than a hole — but a member had no
+    button to open it, so the markup was only ever dead weight.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=lead,
+        container=col1,
+        container_task_order=0,
+        name="Deletable",
+    )
+    _add_contributor(project, other_user)
+
+    surfaces = {
+        "pane": reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        "detail page": reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        "project page": reverse("projects:detail", kwargs={"pk": project.pk}),
+    }
+    delete_url = reverse("tasks:delete", kwargs={"project_pk": project.pk, "pk": task.pk})
+
+    client.force_login(user)
+    for name, url in surfaces.items():
+        html = client.get(url).content.decode()
+        assert delete_url in html, f"{name} lost the Lead's delete form"
+
+    client.force_login(other_user)
+    for name, url in surfaces.items():
+        html = client.get(url).content.decode()
+        assert "Delete task confirmation" not in html, f"{name} still ships the dialog"
+        assert delete_url not in html, f"{name} still ships the delete form"
