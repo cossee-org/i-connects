@@ -579,7 +579,7 @@ def test_individual_mode_lead_closes_with_nobody_done(client, user, other_user):
 
 
 @pytest.mark.django_db
-def test_team_mode_lead_closes_for_everyone(client, user, other_user):
+def test_team_mode_lead_closes_without_marking_assignees(client, user, other_user):
     from apps.core.enums import CompletedAs
 
     project, task, lead, contrib = _two_assignee_task(
@@ -594,14 +594,16 @@ def test_team_mode_lead_closes_for_everyone(client, user, other_user):
     # A member cannot close (Lead-only).
     assert client.post(reverse("tasks:close", kwargs={"pk": task.pk})).status_code == 403
 
-    # The Lead closes once for everyone.
+    # The Lead closes the task for everyone...
     client.force_login(user)
     ok = client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
     assert ok.status_code in (200, 302)
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
-    # Every assignee ends up done.
-    assert task.all_assignees_done
+    # ...but marks nobody done on their behalf. TEAM assignees have no
+    # self-mark action, so a closed TEAM task carries no individual marks.
+    assert task.assignees_done_count == 0
+    assert not task.all_assignees_done
 
 
 @pytest.mark.django_db
@@ -2222,3 +2224,57 @@ def test_list_and_day_rows_end_with_the_check(client, user):
             < content.index('aria-label="High priority"')
             < content.index('aria-label="Complete"')
         ), f"{name}: unexpected row order"
+
+
+@pytest.mark.django_db
+def test_closing_and_reopening_leaves_assignee_marks_alone(client, user, other_user):
+    """The Lead's toggle moves Task.status and nothing else.
+
+    "Marked done" belongs to the assignee who set it, so neither direction of
+    the Lead's Mark Completed / Mark Not Complete toggle may write or erase
+    one — including the round trip, which used to wipe every mark on reopen.
+    """
+    from apps.core.enums import CompletedAs
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    mark_own_done(task=task, member=contrib)
+    assert task.assignees_done_count == 1
+    log_count = task.task_logs.count()
+
+    client.force_login(user)
+
+    client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+    assert task.assignees_done_count == 1, "closing changed an assignee's mark"
+
+    client.post(reverse("tasks:reopen", kwargs={"pk": task.pk}))
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+    assert task.assignees_done_count == 1, "reopening erased an assignee's mark"
+
+    # And neither direction appended log rows on the assignees' behalf.
+    assert task.task_logs.count() == log_count
+
+
+@pytest.mark.django_db
+def test_pane_matrix_survives_the_lead_closing_the_task(client, user, other_user):
+    """The matrix still shows who actually marked done after a close."""
+    from apps.core.enums import CompletedAs
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+    client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    # One assignee marked done, one did not — not two, as a bulk close
+    # would have produced.
+    assert pane.count('aria-label="Yes"') == 1
+    assert "Individual &middot; 1 / 2 done" in pane

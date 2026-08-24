@@ -70,7 +70,6 @@ from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskA
 from apps.tasks.services import (
     approve_completion,
     close_task,
-    complete_task,
     mark_own_done,
     move_task,
     reopen_own,
@@ -1127,8 +1126,7 @@ class TaskReopenView(
     """A Project Lead reopens a closed task, clearing all completion state."""
 
     def post(self, request, *args, **kwargs):
-        reopener = self.project_member or _fallback_member(request.user, self.project)
-        reopen_task(task=self.task, completed_by=reopener)
+        reopen_task(task=self.task)
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,

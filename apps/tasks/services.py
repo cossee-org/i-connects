@@ -120,35 +120,16 @@ def complete_task(
 
 
 @transaction.atomic
-def reopen_task(
-    *,
-    task: Task,
-    completed_by: ProjectMember,
-    completed_as: str = CompletedAs.INDIVIDUAL,
-) -> TaskLog:
-    """Append a NOT_COMPLETED TaskLog entry and flip Task.status back."""
+def reopen_task(*, task: Task) -> Task:
+    """Reopen a closed task (Lead action), flipping ``Task.status`` back.
 
-    assignees = list(task.assigned_members.all())
-    if not assignees:
-        assignees = [completed_by]
-
-    logs = []
-    for assignee in assignees:
-        log = TaskLog.objects.create(
-            task=task,
-            assigned_to=assignee,
-            completed_by=completed_by,
-            status=TaskStatus.NOT_COMPLETED,
-            completed_as=completed_as,
-        )
-        logs.append(log)
-
+    The mirror of :func:`close_task`, and status-only for the same reason:
+    the assignees' own marks survive, so a Lead toggling a task closed and
+    open again does not wipe what they recorded.
+    """
     task.status = TaskStatus.NOT_COMPLETED
     task.save(update_fields=["status", "updated_at"])
-    for log in logs:
-        if log.assigned_to_id == completed_by.id:
-            return log
-    return logs[0]
+    return task
 
 
 def _current_log_for(task: Task, member: ProjectMember) -> TaskLog | None:
@@ -196,19 +177,18 @@ def close_task(*, task: Task, closed_by: ProjectMember) -> Task:
     Always allowed: a Lead can close a task whenever they judge it done,
     whether or not every assignee has marked their own part.
 
-    TEAM mode completes every assignee at once. INDIVIDUAL mode leaves the
-    per-assignee TaskLogs exactly as they are, so an outstanding assignee stays
-    outstanding in the audit trail rather than being credited with work they did
-    not mark — that gap is what the All tasks view surfaces as "Closed without
-    your mark". This does not write contributions — the separate PM approval
-    flow remains the ledger event.
-    """
-    if task.completion_mode == CompletedAs.TEAM:
-        complete_task(task=task, completed_by=closed_by, completed_as=CompletedAs.TEAM)
-        task.refresh_from_db()
-        return task
+    Only the task's own status moves. Per-assignee TaskLogs are left exactly
+    as they are in *both* completion modes: "marked done" is an assignee's
+    statement about their own work, and nothing a Lead does writes one on
+    their behalf. So an outstanding assignee stays outstanding rather than
+    being credited with work they never marked — the gap the All tasks view
+    surfaces as "Closed without your mark". In TEAM mode, where assignees
+    have no self-mark action at all, that means a closed task simply carries
+    no individual marks.
 
-    # INDIVIDUAL mode.
+    This does not write contributions — the separate PM approval flow remains
+    the ledger event.
+    """
     task.status = TaskStatus.COMPLETED
     task.save(update_fields=["status", "updated_at"])
     log_action(
