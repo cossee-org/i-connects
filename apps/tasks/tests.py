@@ -1827,65 +1827,59 @@ def _task_with_description(project, member, column, description):
 
 
 @pytest.mark.django_db
-def test_pane_clamps_a_long_description(client, user):
-    """A long description is clamped to three lines with a See more toggle."""
+def test_pane_description_ships_a_measured_toggle(client, user):
+    """The clamp and toggle are always rendered; the browser decides.
+
+    Where the text wraps depends on the pane's width, so a character count
+    cannot tell whether three lines will overflow. The server ships the
+    machinery for every description and Alpine measures on init, hiding the
+    button when there is nothing behind it.
+    """
     project, col1, _col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
-    task = _task_with_description(project, member, col1, "word " * 80)
     client.force_login(user)
 
+    for label, description in (("short", "One short line."), ("long", "word " * 200)):
+        task = _task_with_description(project, member, col1, description)
+        pane = client.get(_pane_url(project, task)).content.decode()
+
+        # Clamp bound, not static: if Alpine never runs, nothing is hidden.
+        assert "line-clamp-3" in pane, label
+        assert 'class="prose prose-sm max-w-none text-brand-text"' in pane, label
+        # Measured on init, and the button hidden until that says otherwise.
+        assert "$refs.body.scrollHeight" in pane, label
+        assert 'x-show="overflowing"' in pane, label
+        assert "x-cloak" in pane, label
+        # Wired to the block it collapses, both labels available to x-text.
+        assert f'aria-controls="task-description-{task.pk}"' in pane, label
+        assert "See more" in pane and "See less" in pane, label
+        # The toggle reads as a link in the palette's blue, not the coral accent.
+        assert "text-brand-navy hover:underline" in pane, label
+        assert "text-brand-coral hover:underline" not in pane, label
+
+    # Nothing is truncated server-side — the full text is always delivered.
+    task = _task_with_description(project, member, col1, "word " * 200)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "line-clamp-3" in pane
-    assert "See more" in pane
-    assert "See less" in pane  # the toggle's expanded label
-    # The toggle reads as a link in the palette's blue, not the coral accent.
-    assert "text-brand-navy hover:underline" in pane
-    assert "text-brand-coral hover:underline" not in pane
-    # The button is wired to the block it collapses.
-    assert f'aria-controls="task-description-{task.pk}"' in pane
-    assert f'id="task-description-{task.pk}"' in pane
-    # The text itself is all still there — only its height is capped.
-    assert pane.count("word") >= 80
+    assert pane.count("word") >= 200
 
 
 @pytest.mark.django_db
-def test_pane_leaves_a_short_description_alone(client, user):
-    """A short description gets no clamp and no toggle."""
+def test_pane_skips_the_toggle_when_there_is_no_description(client, user):
     project, col1, _col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
-    task = _task_with_description(project, member, col1, "Just the one line.")
+    task = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Bare",
+    )
     client.force_login(user)
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Just the one line." in pane
-    assert "line-clamp-3" not in pane
+    assert "No description." in pane
     assert "See more" not in pane
-
-
-@pytest.mark.django_db
-def test_pane_clamps_a_description_that_is_long_by_line_breaks(client, user):
-    """Length is not the only way to overflow: hard line breaks count too."""
-    project, col1, _col2 = _make_project_with_board(user)
-    member = _primary_member(project, user)
-    client.force_login(user)
-
-    four_lines = _task_with_description(project, member, col1, "a\nb\nc\nd")
-    assert "See more" in client.get(_pane_url(project, four_lines)).content.decode()
-
-    three_lines = _task_with_description(project, member, col1, "a\nb\nc")
-    assert "See more" not in client.get(_pane_url(project, three_lines)).content.decode()
-
-
-def test_is_long_filter_bounds():
-    """The filter's thresholds, which the clamp markup keys off."""
-    from apps.tasks.templatetags.task_tags import LONG_TEXT_CHARS, is_long
-
-    assert is_long(None) is False
-    assert is_long("") is False
-    assert is_long("x" * LONG_TEXT_CHARS) is False
-    assert is_long("x" * (LONG_TEXT_CHARS + 1)) is True
-    assert is_long("a\nb\nc") is False  # three lines fit
-    assert is_long("a\nb\nc\nd") is True  # a fourth does not
+    assert 'x-show="overflowing"' not in pane
 
 
 # ---------------------------------------------------------------------------

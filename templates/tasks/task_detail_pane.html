@@ -1,5 +1,5 @@
 {# Side-pane partial — no {% extends %}. Injected via HTMX into #task-pane-body. #}
-{% load static task_tags %}
+{% load static %}
 
 <div>
 
@@ -109,28 +109,37 @@
       </div>
     </div>
 
-    {# Description — a long one is clamped to three lines behind a See more toggle. #}
+    {% comment %}
+      Description, clamped to three lines behind a See more toggle — but only
+      when it really overflows. Where the text wraps depends on the pane's
+      width, so the browser measures it on init rather than the server
+      guessing from character count: a description that happens to fit in
+      three lines used to get a button that revealed nothing.
+    {% endcomment %}
     <div>
       <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">Description</h3>
       {% if task.description %}
-        {% with long=task.description|is_long %}
-          <div {% if long %}x-data="{ expanded: false }"{% endif %}>
-            {# The clamp is bound, not static, so expanding can take it off again. #}
-            <div id="task-description-{{ task.pk }}"
-                 class="prose prose-sm max-w-none text-brand-text"
-                 {% if long %}:class="expanded ? '' : 'line-clamp-3'"{% endif %}>
-              {{ task.description|linebreaks }}
-            </div>
-            {% if long %}
-              <button type="button"
-                      class="mt-1 text-xs font-medium text-brand-navy hover:underline"
-                      aria-controls="task-description-{{ task.pk }}"
-                      aria-expanded="false" :aria-expanded="expanded"
-                      @click="expanded = !expanded"
-                      x-text="expanded ? 'See less' : 'See more'">See more</button>
-            {% endif %}
+        <div x-data="{ expanded: false, overflowing: false }"
+             x-init="$nextTick(() => { overflowing = $refs.body.scrollHeight > $refs.body.clientHeight + 1 })">
+          {% comment %}
+            The clamp is bound rather than a static class, so if Alpine never
+            runs the description stays fully visible instead of being cut off
+            with no way to open it — and x-cloak keeps the then-dead button
+            hidden.
+          {% endcomment %}
+          <div x-ref="body"
+               id="task-description-{{ task.pk }}"
+               class="prose prose-sm max-w-none text-brand-text"
+               :class="{ 'line-clamp-3': !expanded }">
+            {{ task.description|linebreaks }}
           </div>
-        {% endwith %}
+          <button type="button" x-show="overflowing" x-cloak
+                  class="mt-1 text-xs font-medium text-brand-navy hover:underline"
+                  aria-controls="task-description-{{ task.pk }}"
+                  :aria-expanded="expanded"
+                  @click="expanded = !expanded"
+                  x-text="expanded ? 'See less' : 'See more'">See more</button>
+        </div>
       {% else %}
         <p class="text-sm text-brand-text/50 italic">No description.</p>
       {% endif %}
