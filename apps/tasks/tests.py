@@ -2407,3 +2407,39 @@ def test_completion_card_survives_its_own_swap(client, user, other_user):
     ).content.decode()
     opening_tag = swapped[: swapped.index(">", swapped.index('id="task-status-block"'))]
     assert "brand-card" in opening_tag, "the swap would drop the card"
+
+
+@pytest.mark.django_db
+def test_pane_status_is_a_dot_and_text_not_a_pill(client, user):
+    """In the pane the status matches the priority flag and completion chip.
+
+    All three are icon-plus-plain-text in the status colour, with no filled
+    pill behind them. Other surfaces keep the pill.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Styled",
+        is_priority=True,
+    )
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "px-2.5 py-0.5 rounded-full" not in pane, "the pane's status is still a pill"
+    # The column name, its dot, and the two tags it now matches.
+    assert col1.name in pane
+    assert 'viewBox="0 0 8 8"' in pane, "no status dot"
+    assert "High priority" in pane
+    assert "Not Complete" in pane
+    # Same shape for all three: inline-flex, text-xs, font-medium, no chrome.
+    assert pane.count("inline-flex items-center") >= 3
+
+    # The full task page and the projects list keep the filled pill.
+    detail = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    assert "px-2.5 py-0.5 rounded-full" in detail
