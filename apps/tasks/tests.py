@@ -1378,3 +1378,114 @@ def test_assignee_avatars_stay_out_of_the_kanban_list_and_day_views(client, user
     # ...and the List view still searches by assignee even without showing them.
     hit = client.get(views["list"][0], {"q": "Avatarson"}).content.decode()
     assert "Staffed" in hit
+
+
+# ---------------------------------------------------------------------------
+# Side-pane completion button (Lead only)
+# ---------------------------------------------------------------------------
+
+
+def _pane_url(project, task):
+    return reverse(
+        "tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk}
+    )
+
+
+@pytest.mark.django_db
+def test_pane_completion_button_is_lead_only(client, user, other_user):
+    """The pane's completion toggle shows for Leads and not for plain Members."""
+    from apps.core.enums import CompletedAs
+
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=lead,
+        container=col1,
+        container_task_order=0,
+        name="Closable",
+        completion_mode=CompletedAs.TEAM,
+    )
+    _add_contributor(project, other_user)
+
+    client.force_login(user)
+    lead_pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Mark Completed" in lead_pane
+    assert reverse("tasks:close", kwargs={"pk": task.pk}) in lead_pane
+
+    client.force_login(other_user)
+    member_pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Mark Completed" not in member_pane
+    assert reverse("tasks:close", kwargs={"pk": task.pk}) not in member_pane
+
+
+@pytest.mark.django_db
+def test_pane_completion_button_toggles_not_complete_to_completed(client, user):
+    """A Lead clicking the pane button flips the task, and the button inverts."""
+    from apps.core.enums import CompletedAs
+
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=lead,
+        container=col1,
+        container_task_order=0,
+        name="Toggling",
+        completion_mode=CompletedAs.TEAM,
+    )
+    task.assigned_members.add(lead)
+    client.force_login(user)
+
+    # Not Complete -> Completed.
+    done = client.post(
+        reverse("tasks:close", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    )
+    assert done.status_code == 200
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+    # The swapped block offers the reverse action and syncs the pane chip.
+    body = done.content.decode()
+    assert "Mark Not Complete" in body
+    assert reverse("tasks:reopen", kwargs={"pk": task.pk}) in body
+    assert 'id="task-completion-chip"' in body
+    assert "Not Complete</span>" not in body
+
+    # Completed -> Not Complete.
+    undone = client.post(
+        reverse("tasks:reopen", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    )
+    assert undone.status_code == 200
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+    assert "Mark Completed" in undone.content.decode()
+
+
+@pytest.mark.django_db
+def test_pane_completion_button_waits_for_individual_assignees(client, user, other_user):
+    """In INDIVIDUAL mode the Lead's button is disabled until everyone is done."""
+    from apps.core.enums import CompletedAs
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    client.force_login(user)
+
+    blocked = client.get(_pane_url(project, task)).content.decode()
+    assert "Mark Completed" in blocked
+    assert 'disabled aria-describedby="task-complete-blocked"' in blocked
+    assert "Every assignee must mark their part done" in blocked
+    # Disabled means no close endpoint is wired up to the button.
+    assert reverse("tasks:close", kwargs={"pk": task.pk}) not in blocked
+
+    mark_own_done(task=task, member=lead)
+    mark_own_done(task=task, member=contrib)
+
+    ready = client.get(_pane_url(project, task)).content.decode()
+    assert reverse("tasks:close", kwargs={"pk": task.pk}) in ready
+    assert "Every assignee must mark their part done" not in ready
