@@ -1034,7 +1034,6 @@ def _task_status_context(task, *, project_member, is_project_manager):
         "task": task,
         "project": task.project,
         "is_project_manager": is_project_manager,
-        "is_team_mode": task.completion_mode == CompletedAs.TEAM,
         "assignee_states": assignee_states,
         "done_count": sum(1 for s in assignee_states if s["done"]),
         "assignee_count": len(assignee_states),
@@ -1075,10 +1074,6 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     def post(self, request, *args, **kwargs):
         if self.project_member is None:
             return HttpResponseBadRequest("No project membership.")
-        if self.task.completion_mode == CompletedAs.TEAM:
-            return HttpResponseBadRequest(
-                "This task is completed as a team; a Lead closes it."
-            )
         if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
             return HttpResponseForbidden("Only an assignee can mark their part done.")
         mark_own_done(task=self.task, member=self.project_member)

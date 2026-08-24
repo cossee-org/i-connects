@@ -147,7 +147,6 @@ class TaskForm(forms.ModelForm):
             "start_date",
             "deadline",
             "contribution_type",
-            "completion_mode",
             "is_priority",
         ]
         widgets = {
@@ -166,7 +165,6 @@ class TaskForm(forms.ModelForm):
             "assigned_members": MemberMultiSelect(),
             "reviewers": MemberMultiSelect(),
             "contribution_type": forms.Select(attrs={"class": _daisy_select}),
-            "completion_mode": forms.Select(attrs={"class": _daisy_select}),
             "is_priority": forms.CheckboxInput(attrs={"class": "checkbox checkbox-sm"}),
         }
 
@@ -176,13 +174,12 @@ class TaskForm(forms.ModelForm):
         self.fields["name"].label = "Task name"
         self.fields["assigned_members"].label = "Assignees"
         self.fields["reviewers"].label = "Reviewers"
-        self.fields["completion_mode"].label = "Completion"
         self.fields["deadline"].label = "Due date"
         self.fields["is_priority"].label = "Mark as high priority"
-        self.fields["container"].label = "Status"
+        self.fields["container"].label = "Kanban column"
         self.fields["container"].required = True
         # Prompt text shown for the unselected (blank) choice.
-        self.fields["container"].empty_label = "Select status"
+        self.fields["container"].empty_label = "Select Kanban column"
         # Show only the container's name in the dropdown (e.g. "In Progress"),
         # not the model's default "{name} (project {id})" representation.
         self.fields["container"].label_from_instance = lambda obj: obj.name

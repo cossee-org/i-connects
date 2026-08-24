@@ -304,7 +304,6 @@ def test_edit_form_seeds_assignee_logs(client, user, other_user):
             "name": "EditSeed",
             "container": col1.pk,
             "contribution_type": "OTHER",
-            "completion_mode": "INDIVIDUAL",
             "assigned_members": [pm_member.pk, extra_member.pk],
         },
     )
@@ -322,7 +321,6 @@ def test_create_form_sets_is_priority(client, user):
             "name": "Urgent task",
             "container": col1.pk,
             "contribution_type": "OTHER",
-            "completion_mode": "INDIVIDUAL",
             "is_priority": "on",
         },
     )
@@ -341,7 +339,6 @@ def test_create_form_defaults_is_priority_false(client, user):
             "name": "Normal task",
             "container": col1.pk,
             "contribution_type": "OTHER",
-            "completion_mode": "INDIVIDUAL",
         },
     )
     assert response.status_code in (200, 302)
@@ -504,9 +501,7 @@ def test_member_can_view_comment_and_complete(client, user, other_user):
 # ---------------------------------------------------------------------------
 
 
-def _two_assignee_task(user, other_user, *, mode):
-    from apps.core.enums import CompletedAs
-
+def _two_assignee_task(user, other_user):
     project, col1, _col2 = _make_project_with_board(user)
     lead = _primary_member(project, user)
     contrib = ProjectMember.objects.create(project=project)
@@ -520,7 +515,6 @@ def _two_assignee_task(user, other_user, *, mode):
         container=col1,
         container_task_order=0,
         name="Moded",
-        completion_mode=mode,
     )
     task.assigned_members.add(lead, contrib)
     TaskLog.objects.create(task=task, assigned_to=lead)
@@ -536,11 +530,7 @@ def test_individual_mode_lead_closes_with_assignees_outstanding(client, user, ot
     not credit them with a mark they never made — the gap the All tasks view
     reports as "Closed without your mark".
     """
-    from apps.core.enums import CompletedAs
-
-    project, task, lead, contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
 
     # One of the two assignees marks their own part done.
     client.force_login(other_user)
@@ -563,11 +553,7 @@ def test_individual_mode_lead_closes_with_assignees_outstanding(client, user, ot
 @pytest.mark.django_db
 def test_individual_mode_lead_closes_with_nobody_done(client, user, other_user):
     """The Lead's close works from a standing start, with no self-marks at all."""
-    from apps.core.enums import CompletedAs
-
-    project, task, lead, contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
     assert task.assignees_done_count == 0
 
     client.force_login(user)
@@ -579,31 +565,31 @@ def test_individual_mode_lead_closes_with_nobody_done(client, user, other_user):
 
 
 @pytest.mark.django_db
-def test_team_mode_lead_closes_without_marking_assignees(client, user, other_user):
-    from apps.core.enums import CompletedAs
+def test_any_assignee_can_self_mark_but_only_a_lead_closes(client, user, other_user):
+    """Self-marking is every assignee's; closing is the Lead's.
 
-    project, task, lead, contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.TEAM
-    )
+    Self-marking used to be refused on a team-mode task. With completion
+    modes gone there is no such task, so an assignee can always mark their
+    own part — while closing stays Lead-only.
+    """
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
 
-    # A member cannot self-mark in TEAM mode.
     client.force_login(other_user)
-    resp = client.post(reverse("tasks:complete", kwargs={"pk": task.pk}))
-    assert resp.status_code == 400
+    marked = client.post(reverse("tasks:complete", kwargs={"pk": task.pk}))
+    assert marked.status_code in (200, 302)
+    task.refresh_from_db()
+    assert task.assignees_done_count == 1
 
-    # A member cannot close (Lead-only).
+    # ...but a member still cannot close the task.
     assert client.post(reverse("tasks:close", kwargs={"pk": task.pk})).status_code == 403
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
 
-    # The Lead closes the task for everyone...
     client.force_login(user)
     ok = client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
     assert ok.status_code in (200, 302)
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
-    # ...but marks nobody done on their behalf. TEAM assignees have no
-    # self-mark action, so a closed TEAM task carries no individual marks.
-    assert task.assignees_done_count == 0
-    assert not task.all_assignees_done
 
 
 @pytest.mark.django_db
@@ -1418,8 +1404,6 @@ def _pane_url(project, task):
 @pytest.mark.django_db
 def test_pane_completion_button_is_lead_only(client, user, other_user):
     """The pane's completion toggle shows for Leads and not for plain Members."""
-    from apps.core.enums import CompletedAs
-
     project, col1, _col2 = _make_project_with_board(user)
     lead = _primary_member(project, user)
     task = Task.objects.create(
@@ -1428,7 +1412,6 @@ def test_pane_completion_button_is_lead_only(client, user, other_user):
         container=col1,
         container_task_order=0,
         name="Closable",
-        completion_mode=CompletedAs.TEAM,
     )
     _add_contributor(project, other_user)
 
@@ -1492,8 +1475,6 @@ def test_pane_pill_row_drops_the_flag_when_not_priority(client, user):
 @pytest.mark.django_db
 def test_pane_completion_button_sits_in_the_top_bar(client, user):
     """The button leads the top bar, ahead of the task name and everything else."""
-    from apps.core.enums import CompletedAs
-
     project, col1, _col2 = _make_project_with_board(user)
     lead = _primary_member(project, user)
     task = Task.objects.create(
@@ -1502,7 +1483,6 @@ def test_pane_completion_button_sits_in_the_top_bar(client, user):
         container=col1,
         container_task_order=0,
         name="Titled",
-        completion_mode=CompletedAs.TEAM,
     )
     client.force_login(user)
 
@@ -1523,8 +1503,6 @@ def test_pane_completion_button_sits_in_the_top_bar(client, user):
 @pytest.mark.django_db
 def test_pane_completion_button_toggles_not_complete_to_completed(client, user):
     """A Lead clicking the pane button flips the task, and the button inverts."""
-    from apps.core.enums import CompletedAs
-
     project, col1, _col2 = _make_project_with_board(user)
     lead = _primary_member(project, user)
     task = Task.objects.create(
@@ -1533,7 +1511,6 @@ def test_pane_completion_button_toggles_not_complete_to_completed(client, user):
         container=col1,
         container_task_order=0,
         name="Toggling",
-        completion_mode=CompletedAs.TEAM,
     )
     task.assigned_members.add(lead)
     client.force_login(user)
@@ -1569,12 +1546,9 @@ def test_pane_completion_button_toggles_not_complete_to_completed(client, user):
 @pytest.mark.django_db
 def test_pane_completion_button_is_live_with_assignees_outstanding(client, user, other_user):
     """The Lead's button is actionable however many assignees are outstanding."""
-    from apps.core.enums import CompletedAs
     from apps.tasks.services import mark_own_done
 
-    project, task, lead, contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
     client.force_login(user)
     close_url = reverse("tasks:close", kwargs={"pk": task.pk})
 
@@ -1894,12 +1868,9 @@ def test_pane_skips_the_toggle_when_there_is_no_description(client, user):
 
 def _task_form_data(column, **overrides):
     """A minimally valid TaskForm payload, so date errors are the only ones."""
-    from apps.core.enums import CompletedAs
-
     data = {
         "name": "Dated",
         "container": str(column.pk),
-        "completion_mode": CompletedAs.INDIVIDUAL,
     }
     data.update(overrides)
     return data
@@ -2031,12 +2002,9 @@ def test_pane_section_labels_are_neutral(client, user):
 @pytest.mark.django_db
 def test_pane_completion_matrix_reports_marks_and_reviews(client, user, other_user):
     """Each assignee gets a row: their own mark, then a reviewer's verdict."""
-    from apps.core.enums import CompletedAs
     from apps.tasks.services import mark_own_done
 
-    project, task, lead, contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
     # The lead marked their part done and a reviewer approved that submission;
     # the contributor has done neither.
     mark_own_done(task=task, member=lead)
@@ -2060,12 +2028,9 @@ def test_pane_completion_matrix_reports_marks_and_reviews(client, user, other_us
 @pytest.mark.django_db
 def test_pane_matrix_treats_an_unreviewed_mark_as_not_reviewed(client, user, other_user):
     """A done mark alone is one check, not two: review is a separate verdict."""
-    from apps.core.enums import CompletedAs
     from apps.tasks.services import mark_own_done
 
-    project, task, lead, _contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, lead, _contrib = _two_assignee_task(user, other_user)
     mark_own_done(task=task, member=lead)
 
     client.force_login(user)
@@ -2078,11 +2043,7 @@ def test_pane_matrix_treats_an_unreviewed_mark_as_not_reviewed(client, user, oth
 @pytest.mark.django_db
 def test_pane_drops_the_assignees_and_reviewers_sections(client, user, other_user):
     """Those two lists are gone; the matrix is the only place people appear."""
-    from apps.core.enums import CompletedAs
-
-    project, task, _lead, _contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     task.reviewers.add(_lead)
     client.force_login(user)
 
@@ -2237,12 +2198,9 @@ def test_closing_and_reopening_leaves_assignee_marks_alone(client, user, other_u
     the Lead's Mark Completed / Mark Not Complete toggle may write or erase
     one — including the round trip, which used to wipe every mark on reopen.
     """
-    from apps.core.enums import CompletedAs
     from apps.tasks.services import mark_own_done
 
-    project, task, _lead, contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, _lead, contrib = _two_assignee_task(user, other_user)
     mark_own_done(task=task, member=contrib)
     assert task.assignees_done_count == 1
     log_count = task.task_logs.count()
@@ -2266,12 +2224,9 @@ def test_closing_and_reopening_leaves_assignee_marks_alone(client, user, other_u
 @pytest.mark.django_db
 def test_pane_matrix_survives_the_lead_closing_the_task(client, user, other_user):
     """The matrix still shows who actually marked done after a close."""
-    from apps.core.enums import CompletedAs
     from apps.tasks.services import mark_own_done
 
-    project, task, _lead, contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, _lead, contrib = _two_assignee_task(user, other_user)
     mark_own_done(task=task, member=contrib)
     client.force_login(user)
     client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
@@ -2280,17 +2235,13 @@ def test_pane_matrix_survives_the_lead_closing_the_task(client, user, other_user
     # One assignee marked done, one did not — not two, as a bulk close
     # would have produced.
     assert pane.count('aria-label="Yes"') == 1
-    assert "Individual &middot; 1 / 2 done" in pane
+    assert "1 / 2 done" in pane
 
 
 @pytest.mark.django_db
 def test_pane_top_bar_carries_both_completion_actions(client, user, other_user):
     """A Lead who is also an assignee gets both buttons, in the bar, with icons."""
-    from apps.core.enums import CompletedAs
-
-    project, task, _lead, _contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
 
@@ -2306,11 +2257,7 @@ def test_pane_top_bar_carries_both_completion_actions(client, user, other_user):
 @pytest.mark.django_db
 def test_pane_self_mark_button_survives_the_status_block_swap(client, user, other_user):
     """It lives outside the block, so the swap must refresh it out of band."""
-    from apps.core.enums import CompletedAs
-
-    project, task, _lead, _contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     client.force_login(user)
 
     marked = client.post(
@@ -2337,11 +2284,7 @@ def test_pane_self_mark_button_survives_the_status_block_swap(client, user, othe
 @pytest.mark.django_db
 def test_full_task_page_keeps_its_own_self_mark_button(client, user, other_user):
     """Only the pane moved its buttons; the detail page is unchanged."""
-    from apps.core.enums import CompletedAs
-
-    project, task, _lead, _contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     client.force_login(user)
 
     detail = client.get(
@@ -2355,12 +2298,9 @@ def test_full_task_page_keeps_its_own_self_mark_button(client, user, other_user)
 @pytest.mark.django_db
 def test_pane_groups_its_content_into_cards(client, user, other_user):
     """One card per category, in order, and Details only when it has content."""
-    from apps.core.enums import CompletedAs
     from apps.tasks.models import Milestone
 
-    project, task, _lead, _contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     task.description = "Some description."
     task.github_url = "https://github.com/x/y/pull/1"
     task.milestone = Milestone.objects.create(project=project, name="M1")
@@ -2393,11 +2333,7 @@ def test_pane_groups_its_content_into_cards(client, user, other_user):
 @pytest.mark.django_db
 def test_completion_card_survives_its_own_swap(client, user, other_user):
     """The block is the swap target, so it has to carry the card itself."""
-    from apps.core.enums import CompletedAs
-
-    project, task, _lead, _contrib = _two_assignee_task(
-        user, other_user, mode=CompletedAs.INDIVIDUAL
-    )
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     client.force_login(user)
 
     swapped = client.post(

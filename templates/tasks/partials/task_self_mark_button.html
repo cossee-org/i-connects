@@ -1,17 +1,17 @@
 {% comment %}
-  An assignee's own mark on an INDIVIDUAL-mode task: Mark my part done <-> Undo.
+  An assignee's own mark on the task: Mark my part done <-> Undo.
 
   Sits beside the Lead's completion toggle in the side pane's top bar, so like
   that one it lives outside #task-status-block and is re-rendered out of band
-  (oob=True) alongside the block's swap. Expects task, is_team_mode, is_assignee
-  and my_done from views._task_status_context.
+  (oob=True) alongside the block's swap. Expects task, is_assignee and my_done
+  from views._task_status_context.
 
   The wrapper always renders so the out-of-band swap has something to replace
   even when the button inside it is currently hidden — otherwise marking a task
   complete would leave a stale button on screen with no element to swap into.
 {% endcomment %}
 <span id="task-self-mark-button"{% if oob %} hx-swap-oob="true"{% endif %} class="shrink-0">
-  {% if is_assignee and not is_team_mode and task.status != "COMPLETED" %}
+  {% if is_assignee and task.status != "COMPLETED" %}
     {% if my_done %}
       <button class="btn btn-ghost btn-xs gap-1"
               hx-post="{% url 'tasks:undo' pk=task.pk %}"

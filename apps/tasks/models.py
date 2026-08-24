@@ -117,17 +117,6 @@ class Task(models.Model):
         default=TaskStatus.NOT_COMPLETED,
     )
 
-    completion_mode = models.CharField(
-        max_length=16,
-        choices=CompletedAs.choices,
-        default=CompletedAs.INDIVIDUAL,
-        help_text=(
-            "How the task is completed. INDIVIDUAL: each assignee marks their "
-            "own part done and a Lead closes once everyone is done. TEAM: a "
-            "Lead closes the task at once for all assignees."
-        ),
-    )
-
     assigned_members = models.ManyToManyField(
         "projects.ProjectMember",
         blank=True,
