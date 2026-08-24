@@ -132,9 +132,16 @@
             with no way to open it — and x-cloak keeps the then-dead button
             hidden.
           {% endcomment %}
+          {% comment %}
+            text-sm to match the rest of the pane. The prose / prose-sm classes
+            this carried were inert: the Tailwind typography plugin is not
+            installed, so only DaisyUI's variable-only .prose shim exists and
+            prose-sm is not generated at all — the text rendered at the
+            inherited 16px while everything around it is 14px.
+          {% endcomment %}
           <div x-ref="body"
                id="task-description-{{ task.pk }}"
-               class="prose prose-sm max-w-none text-brand-text"
+               class="text-sm text-brand-text"
                :class="{ 'line-clamp-3': !expanded }">
             {{ task.description|linebreaks }}
           </div>

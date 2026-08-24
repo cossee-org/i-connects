@@ -1845,7 +1845,10 @@ def test_pane_description_ships_a_measured_toggle(client, user):
 
         # Clamp bound, not static: if Alpine never runs, nothing is hidden.
         assert "line-clamp-3" in pane, label
-        assert 'class="prose prose-sm max-w-none text-brand-text"' in pane, label
+        # text-sm, matching the pane's other body text — not the inherited
+        # 16px the inert prose classes used to leave it at.
+        assert 'class="text-sm text-brand-text"' in pane, label
+        assert "prose" not in pane, label
         # Measured on init, and the button hidden until that says otherwise.
         assert "$refs.body.scrollHeight" in pane, label
         assert 'x-show="overflowing"' in pane, label
