@@ -2163,8 +2163,8 @@ def test_kanban_pairs_the_priority_flag_with_the_check(client, user):
 
 
 @pytest.mark.django_db
-def test_only_the_kanban_card_drops_the_priority_label(client, user):
-    """Every other surface keeps the words; the card is where space is tight."""
+def test_only_the_roomy_surfaces_keep_the_priority_label(client, user):
+    """The browsing views go icon-only; the pane and detail page keep the words."""
     project, col1, _col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
     task = Task.objects.create(
@@ -2176,14 +2176,22 @@ def test_only_the_kanban_card_drops_the_priority_label(client, user):
 
     calendar_url = reverse("tasks:board_calendar", kwargs={"project_pk": project.pk})
     wordy = {
-        "list": (reverse("tasks:board_list", kwargs={"project_pk": project.pk}), {}),
-        "calendar day": (calendar_url, {"view": "day", "date": "2026-03-12"}),
         "pane": (reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk}), {}),
         "detail page": (reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}), {}),
     }
     for name, (url, params) in wordy.items():
         content = client.get(url, params).content.decode()
         assert "<span>High priority</span>" in content, f"{name} lost the label"
+
+    icon_only = {
+        "kanban": (reverse("tasks:board_kanban", kwargs={"project_pk": project.pk}), {}),
+        "list": (reverse("tasks:board_list", kwargs={"project_pk": project.pk}), {}),
+        "calendar day": (calendar_url, {"view": "day", "date": "2026-03-12"}),
+    }
+    for name, (url, params) in icon_only.items():
+        content = client.get(url, params).content.decode()
+        assert "<span>High priority</span>" not in content, f"{name} still spells it out"
+        assert 'aria-label="High priority"' in content, f"{name} lost the accessible name"
 
 
 @pytest.mark.django_db
@@ -2206,11 +2214,11 @@ def test_list_and_day_rows_end_with_the_check(client, user):
     }
     for name, (url, params) in rows.items():
         content = client.get(url, params).content.decode()
-        check_at = content.index('aria-label="Complete"')
-        # Everything else on the row comes first.
-        assert content.index("Trailing") < check_at, f"{name}: check precedes the name"
-        assert content.index("High priority") < check_at, f"{name}: check precedes the flag"
-        assert content.index("Due Mar 12") < check_at, f"{name}: check precedes the dates"
-        assert content.index("1 assigned member") < check_at, (
-            f"{name}: check precedes the assignee count"
-        )
+        # Name, then the metadata, then the flag paired with the check at the end.
+        assert (
+            content.index("Trailing")
+            < content.index("Due Mar 12")
+            < content.index("1 assigned member")
+            < content.index('aria-label="High priority"')
+            < content.index('aria-label="Complete"')
+        ), f"{name}: unexpected row order"
