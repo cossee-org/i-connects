@@ -1277,3 +1277,25 @@ def test_kanban_list_and_calendar_render_the_same_date_span(client, user):
         assert span in content, f"{view_name} view is missing the shared date span"
         # The old deadline-only rendering is gone from all three.
         assert "Mar 12, 2026<" not in content
+
+
+@pytest.mark.django_db
+def test_kanban_card_has_no_status_pill_but_the_column_heading_names_it(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Carded",
+    )
+    client.force_login(user)
+    content = client.get(
+        reverse("tasks:board_kanban", kwargs={"project_pk": project.pk})
+    ).content.decode()
+
+    assert "Carded" in content
+    # The column header still carries the status; the card no longer repeats it.
+    card = content[content.index('id="task-card-'):]
+    card = card[: card.index("</li>")]
+    assert "Carded" in card
+    assert col1.name not in card
+    assert "rounded-full text-xs font-medium" not in card

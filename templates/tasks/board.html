@@ -358,31 +358,6 @@
             refreshColumnCount(sourceColumnId);
             refreshColumnCount(newColumnId);
 
-            // Update the status badge label and colour instantly.
-            var colHeader = evt.to.closest('.kanban-column');
-            if (colHeader) {
-              var colName = colHeader.querySelector('h2').childNodes[0].textContent.trim();
-              var badge = evt.item.querySelector('.inline-flex.items-center.rounded-full');
-              if (badge && colName) {
-                badge.textContent = colName;
-                var s = colName.toLowerCase();
-                badge.className = badge.className.replace(/bg-\S+\s*text-\S+/g, '').trim();
-                var colours;
-                if (s === 'in progress' || s === 'in_progress' || s === 'active' || s === 'open') {
-                  colours = 'bg-success/10 text-success';
-                } else if (s === 'done' || s === 'completed' || s === 'closed' || s === 'archived') {
-                  colours = 'bg-brand-navy/10 text-brand-navy';
-                } else if (s === 'to do' || s === 'to-do' || s === 'todo' || s === 'pending' || s === 'new' || s === 'draft') {
-                  colours = 'bg-warning/10 text-warning';
-                } else if (s === 'overdue' || s === 'blocked' || s === 'error') {
-                  colours = 'bg-error/10 text-error';
-                } else {
-                  colours = 'bg-brand-light/50 text-brand-text';
-                }
-                badge.classList.add(...colours.split(' '));
-              }
-            }
-
             htmx.ajax('POST', '/tasks/' + taskId + '/move/', {
               values: { container_id: newColumnId, order: newIndex },
               headers: { 'X-CSRFToken': csrfToken },
