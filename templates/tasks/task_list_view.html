@@ -3,7 +3,8 @@
 {# and pre-sorted from views._list_view_context. #}
 
 {% if columns %}
-  {% include "tasks/partials/list_controls.html" %}
+  {# The search / filter / sort bar is hidden for now; the view still honours #}
+  {# ?q= / ?col= / ?done= / ?assignee= / ?priority= / ?sort= if they arrive by URL. #}
   <div id="list-results">
     {% include "tasks/partials/list_results.html" %}
   </div>

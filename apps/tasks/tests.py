@@ -1111,7 +1111,9 @@ def test_board_list_sort_orders_rows_and_puts_undated_last(client, user):
 
 
 @pytest.mark.django_db
-def test_board_list_results_param_renders_rows_without_the_control_bar(client, user):
+def test_board_list_renders_rows_without_a_control_bar(client, user):
+    """The search / filter / sort bar is hidden; the rows still render, and
+    ?results=1 still returns them on their own."""
     project, col1, _col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
     Task.objects.create(
@@ -1121,13 +1123,15 @@ def test_board_list_results_param_renders_rows_without_the_control_bar(client, u
     client.force_login(user)
 
     full = client.get(_list_url(project)).content.decode()
-    assert 'id="list-filters"' in full
+    assert "Only task" in full
     assert 'id="list-results"' in full
+    assert 'id="list-filters"' not in full
+    assert 'name="q"' not in full
+    assert 'name="sort"' not in full
 
     rows = client.get(_list_url(project), {"results": "1"}).content.decode()
     assert "Only task" in rows
-    # The bar sits outside the swap target so typing never loses focus.
-    assert 'id="list-filters"' not in rows
+    assert 'id="list-results"' not in rows
 
 
 @pytest.mark.django_db

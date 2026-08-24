@@ -1,4 +1,5 @@
-{# Grouped List view rows — the swap target of the search / filter / sort bar. #}
+{# Grouped List view rows. Kept as its own partial so ?results=1 can render #}
+{# the rows alone for a search / filter / sort bar to swap into. #}
 {# Context comes from views._list_view_context. #}
 
 {% if list_is_filtered or not list_reorderable %}
@@ -7,9 +8,6 @@
       <span class="text-sm text-brand-text/60" role="status">
         {{ list_match_count }} matching task{{ list_match_count|pluralize }}
       </span>
-      <button type="button" class="btn btn-ghost btn-xs" onclick="clearListFilters()">
-        Clear filters
-      </button>
     {% endif %}
     {% if is_project_manager and not list_reorderable %}
       <span class="text-xs text-brand-text/45">
@@ -112,7 +110,7 @@
     {% endfor %}
   </div>
 {% elif list_is_filtered %}
-  {% include "_components/empty_state.html" with title="No matching tasks" body="No tasks match the current search and filters. Try widening them or clearing the filters." %}
+  {% include "_components/empty_state.html" with title="No matching tasks" body="No tasks match the current search and filters." %}
 {% else %}
   {% include "_components/empty_state.html" with title="No tasks yet" body="Tasks added to this project's columns show up here." %}
 {% endif %}

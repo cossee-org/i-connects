@@ -286,19 +286,6 @@
     };
   }
 
-  // Reset the List view's search / filter / sort bar, then reload the rows.
-  // The bar lives outside the swapped region, so it has to be cleared here.
-  function clearListFilters() {
-    var form = document.getElementById('list-filters');
-    if (!form) return;
-    var search = document.getElementById('list-search');
-    if (search) search.value = '';
-    // Every select's first option is its "all" / default choice.
-    form.querySelectorAll('select').forEach(function (select) { select.selectedIndex = 0; });
-    var trigger = form.querySelector('[hx-trigger="change"]');
-    if (trigger) htmx.trigger(trigger, 'change');
-  }
-
   (function initKanban() {
     var csrfToken = '{{ csrf_token }}';
 
