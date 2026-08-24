@@ -1,8 +1,8 @@
 {% comment %}
   Task completion status block (HTMX swap target: #task-status-block).
   Context comes from views._task_status_context: task, is_project_manager,
-  is_team_mode, assignee_states, done_count, assignee_count, all_done,
-  is_assignee, my_done.
+  is_team_mode, assignee_states, done_count, assignee_count, is_assignee,
+  my_done.
 {% endcomment %}
 <div id="task-status-block"
      {% if pane_mode %}
@@ -55,25 +55,14 @@
                   hx-vals='{"pane_mode": "1"}'>Mark Not Complete</button>
         {% else %}
           <button class="btn btn-primary btn-sm"
-                  {% if not is_team_mode and not all_done %}
-                    disabled aria-describedby="task-complete-blocked"
-                  {% else %}
-                    hx-post="{% url 'tasks:close' pk=task.pk %}"
-                    hx-target="#task-status-block"
-                    hx-swap="outerHTML"
-                    hx-vals='{"pane_mode": "1"}'
-                  {% endif %}>Mark Completed</button>
+                  hx-post="{% url 'tasks:close' pk=task.pk %}"
+                  hx-target="#task-status-block"
+                  hx-swap="outerHTML"
+                  hx-vals='{"pane_mode": "1"}'>Mark Completed</button>
         {% endif %}
       {% endif %}
     </div>
   </div>
-
-  {# Why the Lead's Mark Completed button is disabled. #}
-  {% if pane_mode and is_project_manager and task.status != "COMPLETED" and not is_team_mode and not all_done %}
-    <p id="task-complete-blocked" class="mt-2 text-xs text-brand-text/60">
-      Every assignee must mark their part done before you can complete this task.
-    </p>
-  {% endif %}
 
   {# Per-assignee checklist #}
   {% if pane_mode %}

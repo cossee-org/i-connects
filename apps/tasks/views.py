@@ -68,7 +68,6 @@ from apps.tasks.mixins import (
 )
 from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
 from apps.tasks.services import (
-    TaskNotReadyToClose,
     approve_completion,
     close_task,
     complete_task,
@@ -1029,7 +1028,6 @@ def _task_status_context(task, *, project_member, is_project_manager):
         "assignee_states": assignee_states,
         "done_count": sum(1 for s in assignee_states if s["done"]),
         "assignee_count": len(assignee_states),
-        "all_done": task.all_assignees_done,
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
     }
@@ -1104,10 +1102,7 @@ class TaskCloseView(
 
     def post(self, request, *args, **kwargs):
         closer = self.project_member or _fallback_member(request.user, self.project)
-        try:
-            close_task(task=self.task, closed_by=closer)
-        except TaskNotReadyToClose as exc:
-            return HttpResponseBadRequest(str(exc))
+        close_task(task=self.task, closed_by=closer)
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,

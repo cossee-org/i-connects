@@ -525,35 +525,53 @@ def _two_assignee_task(user, other_user, *, mode):
 
 
 @pytest.mark.django_db
-def test_individual_mode_close_blocked_until_all_done(client, user, other_user):
+def test_individual_mode_lead_closes_with_assignees_outstanding(client, user, other_user):
+    """A Lead can close an INDIVIDUAL-mode task whenever they judge it done.
+
+    The outstanding assignee's TaskLog is left alone, so the audit trail does
+    not credit them with a mark they never made — the gap the All tasks view
+    reports as "Closed without your mark".
+    """
     from apps.core.enums import CompletedAs
 
     project, task, lead, contrib = _two_assignee_task(
         user, other_user, mode=CompletedAs.INDIVIDUAL
     )
 
-    # A member marks only their own part done.
+    # One of the two assignees marks their own part done.
     client.force_login(other_user)
     client.post(reverse("tasks:complete", kwargs={"pk": task.pk}))
     task.refresh_from_db()
-    assert task.status == TaskStatus.NOT_COMPLETED  # not all done yet
+    assert task.status == TaskStatus.NOT_COMPLETED  # self-marks never close it
     assert task.assignees_done_count == 1
 
-    # Lead cannot close while someone is still outstanding.
+    # The Lead closes it anyway, with the other assignee still outstanding.
     client.force_login(user)
-    blocked = client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
-    assert blocked.status_code == 400
-    task.refresh_from_db()
-    assert task.status == TaskStatus.NOT_COMPLETED
-
-    # The remaining assignee (the lead) marks their part; now close succeeds.
-    from apps.tasks.services import mark_own_done
-
-    mark_own_done(task=task, member=lead)
     ok = client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
     assert ok.status_code in (200, 302)
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
+    # Still 1 of 2: closing the task did not mark the outstanding assignee done.
+    assert task.assignees_done_count == 1
+    assert not task.all_assignees_done
+
+
+@pytest.mark.django_db
+def test_individual_mode_lead_closes_with_nobody_done(client, user, other_user):
+    """The Lead's close works from a standing start, with no self-marks at all."""
+    from apps.core.enums import CompletedAs
+
+    project, task, lead, contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    assert task.assignees_done_count == 0
+
+    client.force_login(user)
+    ok = client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    assert ok.status_code in (200, 302)
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+    assert task.assignees_done_count == 0
 
 
 @pytest.mark.django_db
@@ -1466,8 +1484,8 @@ def test_pane_completion_button_toggles_not_complete_to_completed(client, user):
 
 
 @pytest.mark.django_db
-def test_pane_completion_button_waits_for_individual_assignees(client, user, other_user):
-    """In INDIVIDUAL mode the Lead's button is disabled until everyone is done."""
+def test_pane_completion_button_is_live_with_assignees_outstanding(client, user, other_user):
+    """The Lead's button is actionable however many assignees are outstanding."""
     from apps.core.enums import CompletedAs
     from apps.tasks.services import mark_own_done
 
@@ -1475,20 +1493,16 @@ def test_pane_completion_button_waits_for_individual_assignees(client, user, oth
         user, other_user, mode=CompletedAs.INDIVIDUAL
     )
     client.force_login(user)
+    close_url = reverse("tasks:close", kwargs={"pk": task.pk})
 
-    blocked = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark Completed" in blocked
-    assert 'disabled aria-describedby="task-complete-blocked"' in blocked
-    assert "Every assignee must mark their part done" in blocked
-    # Disabled means no close endpoint is wired up to the button.
-    assert reverse("tasks:close", kwargs={"pk": task.pk}) not in blocked
-
-    mark_own_done(task=task, member=lead)
-    mark_own_done(task=task, member=contrib)
-
-    ready = client.get(_pane_url(project, task)).content.decode()
-    assert reverse("tasks:close", kwargs={"pk": task.pk}) in ready
-    assert "Every assignee must mark their part done" not in ready
+    # Nobody done, one of two done, everyone done: same live button throughout.
+    for done, marker in enumerate((None, lead, contrib)):
+        if marker is not None:
+            mark_own_done(task=task, member=marker)
+        pane = client.get(_pane_url(project, task)).content.decode()
+        assert "Mark Completed" in pane, f"{done} done: button missing"
+        assert close_url in pane, f"{done} done: button not wired to close"
+        assert "disabled" not in pane, f"{done} done: button disabled"
 
 
 # ---------------------------------------------------------------------------

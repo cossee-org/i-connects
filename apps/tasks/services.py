@@ -15,10 +15,6 @@ from apps.projects.models import ProjectMember
 from apps.tasks.models import ActivityEvent, KanbanBoard, Task, TaskActivity, TaskLog
 
 
-class TaskNotReadyToClose(Exception):
-    """Raised when an INDIVIDUAL-mode task is closed before all assignees are done."""
-
-
 @transaction.atomic
 def move_task(task: Task, *, container_id: int, order: int) -> Task:
     """Move ``task`` to ``container_id`` at position ``order``.
@@ -197,10 +193,15 @@ def reopen_own(*, task: Task, member: ProjectMember) -> TaskLog | None:
 def close_task(*, task: Task, closed_by: ProjectMember) -> Task:
     """Close a task (Lead action), finalising ``Task.status`` to COMPLETED.
 
-    TEAM mode: completes every assignee at once. INDIVIDUAL mode: only allowed
-    once every assignee has marked their own part done, otherwise raises
-    :class:`TaskNotReadyToClose`. This does not write contributions — the
-    separate PM approval flow remains the ledger event.
+    Always allowed: a Lead can close a task whenever they judge it done,
+    whether or not every assignee has marked their own part.
+
+    TEAM mode completes every assignee at once. INDIVIDUAL mode leaves the
+    per-assignee TaskLogs exactly as they are, so an outstanding assignee stays
+    outstanding in the audit trail rather than being credited with work they did
+    not mark — that gap is what the All tasks view surfaces as "Closed without
+    your mark". This does not write contributions — the separate PM approval
+    flow remains the ledger event.
     """
     if task.completion_mode == CompletedAs.TEAM:
         complete_task(task=task, completed_by=closed_by, completed_as=CompletedAs.TEAM)
@@ -208,11 +209,6 @@ def close_task(*, task: Task, closed_by: ProjectMember) -> Task:
         return task
 
     # INDIVIDUAL mode.
-    if not task.all_assignees_done:
-        raise TaskNotReadyToClose(
-            "Every assigned member must mark their part done before the task "
-            "can be closed."
-        )
     task.status = TaskStatus.COMPLETED
     task.save(update_fields=["status", "updated_at"])
     log_action(
