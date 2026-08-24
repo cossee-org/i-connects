@@ -1490,8 +1490,8 @@ def test_pane_pill_row_drops_the_flag_when_not_priority(client, user):
 
 
 @pytest.mark.django_db
-def test_pane_completion_button_sits_next_to_the_task_name(client, user):
-    """The button shares the title row, ahead of the Completion block."""
+def test_pane_completion_button_sits_in_the_top_bar(client, user):
+    """The button leads the top bar, ahead of the task name and everything else."""
     from apps.core.enums import CompletedAs
 
     project, col1, _col2 = _make_project_with_board(user)
@@ -1507,14 +1507,15 @@ def test_pane_completion_button_sits_next_to_the_task_name(client, user):
     client.force_login(user)
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    name_at = pane.index("Titled")
-    button_at = pane.index("Mark Completed")
-    completion_at = pane.index(">Completion<")
-    assert name_at < button_at < completion_at, (
-        "the button should follow the task name and precede the Completion block"
+    # In the bar, so ahead of the title and the Delete / Edit / Open group.
+    assert (
+        pane.index("Mark Completed")
+        < pane.index('aria-label="Open full task page"')
+        < pane.index("Titled")
+        < pane.index(">Completion<")
     )
-    # It lives outside #task-status-block now, so the block's swap has to reach
-    # it out of band.
+    # It lives outside #task-status-block, so the block's swap has to reach it
+    # out of band.
     assert 'id="task-completion-button"' in pane
     assert pane.index('id="task-completion-button"') < pane.index('id="task-status-block"')
 
@@ -2278,3 +2279,72 @@ def test_pane_matrix_survives_the_lead_closing_the_task(client, user, other_user
     # would have produced.
     assert pane.count('aria-label="Yes"') == 1
     assert "Individual &middot; 1 / 2 done" in pane
+
+
+@pytest.mark.django_db
+def test_pane_top_bar_carries_both_completion_actions(client, user, other_user):
+    """A Lead who is also an assignee gets both buttons, in the bar, with icons."""
+    from apps.core.enums import CompletedAs
+
+    project, task, _lead, _contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+
+    assert 'id="task-completion-button"' in pane
+    assert 'id="task-self-mark-button"' in pane
+    # Both sit in the bar, before the task name.
+    assert pane.index("Mark Completed") < pane.index("Mark my part done") < pane.index("Moded")
+    # Both carry an icon.
+    bar = pane[: pane.index("Moded")]
+    assert bar.count("<svg") >= 6  # 2 completion + trash + pencil + expand + close
+
+
+@pytest.mark.django_db
+def test_pane_self_mark_button_survives_the_status_block_swap(client, user, other_user):
+    """It lives outside the block, so the swap must refresh it out of band."""
+    from apps.core.enums import CompletedAs
+
+    project, task, _lead, _contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    client.force_login(user)
+
+    marked = client.post(
+        reverse("tasks:complete", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert 'id="task-self-mark-button" hx-swap-oob="true"' in marked
+    assert "Undo my mark" in marked
+
+    # Closing the task hides the self-mark action; the wrapper still comes back
+    # so the swap has something to replace, otherwise a stale button would sit
+    # in the bar with nothing to clear it.
+    closed = client.post(
+        reverse("tasks:close", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert 'id="task-self-mark-button" hx-swap-oob="true"' in closed
+    assert "Undo my mark" not in closed
+    assert "Mark my part done" not in closed
+
+
+@pytest.mark.django_db
+def test_full_task_page_keeps_its_own_self_mark_button(client, user, other_user):
+    """Only the pane moved its buttons; the detail page is unchanged."""
+    from apps.core.enums import CompletedAs
+
+    project, task, _lead, _contrib = _two_assignee_task(
+        user, other_user, mode=CompletedAs.INDIVIDUAL
+    )
+    client.force_login(user)
+
+    detail = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    assert "Mark my part done" in detail
+    # ...in the block itself, not via a top-bar partial it does not have.
+    assert 'id="task-self-mark-button"' not in detail

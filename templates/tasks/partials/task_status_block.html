@@ -25,26 +25,26 @@
       </span>
     </div>
 
-    <div class="flex items-center gap-2">
-      {% if task.status != "COMPLETED" %}
-        {# Individual self-mark (assignee only, not team mode) #}
-        {% if not is_team_mode and is_assignee %}
-          {% if my_done %}
-            <button class="btn btn-ghost btn-sm"
-                    hx-post="{% url 'tasks:undo' pk=task.pk %}"
-                    hx-target="#task-status-block"
-                    hx-swap="outerHTML"
-                    {% if pane_mode %}hx-vals='{"pane_mode": "1"}'{% endif %}>Undo my mark</button>
-          {% else %}
-            <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                    hx-post="{% url 'tasks:complete' pk=task.pk %}"
-                    hx-target="#task-status-block"
-                    hx-swap="outerHTML"
-                    {% if pane_mode %}hx-vals='{"pane_mode": "1"}'{% endif %}>Mark my part done</button>
-          {% endif %}
+    {% comment %}
+      In the pane both completion actions live in the top bar, refreshed out of
+      band at the bottom of this template. Only the full detail page keeps its
+      self-mark button here.
+    {% endcomment %}
+    {% if not pane_mode and task.status != "COMPLETED" and not is_team_mode and is_assignee %}
+      <div class="flex items-center gap-2">
+        {% if my_done %}
+          <button class="btn btn-ghost btn-sm"
+                  hx-post="{% url 'tasks:undo' pk=task.pk %}"
+                  hx-target="#task-status-block"
+                  hx-swap="outerHTML">Undo my mark</button>
+        {% else %}
+          <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                  hx-post="{% url 'tasks:complete' pk=task.pk %}"
+                  hx-target="#task-status-block"
+                  hx-swap="outerHTML">Mark my part done</button>
         {% endif %}
-      {% endif %}
-    </div>
+      </div>
+    {% endif %}
   </div>
 
   {# Per-assignee matrix: who is on the task, their own mark, a reviewer's verdict. #}
@@ -94,8 +94,12 @@
   {% endif %}
 </div>
 
-{# Keep the pane's chip and completion button (both by the title) in sync with this swap. #}
+{% comment %}
+  Keep the pane's chip and its two top-bar buttons in sync with this swap: all
+  three sit outside #task-status-block, so the swap cannot reach them in place.
+{% endcomment %}
 {% if pane_mode %}
   {% include "tasks/partials/task_completion_chip.html" with task=task oob=True %}
   {% include "tasks/partials/task_completion_button.html" with task=task is_project_manager=is_project_manager oob=True %}
+  {% include "tasks/partials/task_self_mark_button.html" with task=task is_team_mode=is_team_mode is_assignee=is_assignee my_done=my_done oob=True %}
 {% endif %}
