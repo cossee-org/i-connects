@@ -228,7 +228,7 @@ def test_the_comment_body_sits_close_under_its_name(commentable):
     html = render_to_string(
         "comments/comment_item.html", {"comment": comment, "task": task}
     )
-    # The margin sits on the box that wraps the text and its Show more toggle.
+    # The margin sits on the box that wraps the text and its See more toggle.
     assert '<div class="mt-0.5"' in html
 
 
@@ -326,8 +326,8 @@ def test_the_panes_comment_label_points_at_its_box(client, commentable, user):
 
 
 @pytest.mark.django_db
-def test_a_comment_is_clamped_behind_a_show_more_toggle(commentable):
-    """Three lines, then Show more — wired to the body it controls.
+def test_a_comment_is_clamped_behind_a_see_more_toggle(commentable):
+    """Three lines, then See more — wired to the body it controls.
 
     The markup ships on every comment because only the browser can tell
     whether the text overflows: where it wraps depends on how wide the pane
@@ -354,4 +354,4 @@ def test_a_comment_is_clamped_behind_a_show_more_toggle(commentable):
     assert 'x-show="overflowing"' in html
     assert "x-cloak" in html  # no flash of an unmeasured toggle
     assert ":aria-expanded" in toggle
-    assert "'Show less' : 'Show more'" in toggle
+    assert "'See less' : 'See more'" in toggle

@@ -53,7 +53,7 @@
       {% endif %}
     </div>
     {% comment %}
-      A long comment is clamped to three lines behind Show more, the same way
+      A long comment is clamped to three lines behind See more, the same way
       the task pane clamps a long description — and with the same two details
       that took fixing there:
 
@@ -83,7 +83,7 @@
               aria-controls="comment-body-{{ comment.pk }}"
               :aria-expanded="expanded"
               @click="expanded = !expanded"
-              x-text="expanded ? 'Show less' : 'Show more'">Show more</button>
+              x-text="expanded ? 'See less' : 'See more'">See more</button>
     </div>
   </div>
 </div>
