@@ -5,7 +5,8 @@
 {# rather than relying on the green (A11Y_GUIDE #7). Pass compact=True for the #}
 {# smaller calendar pills. #}
 {% if task.status == "COMPLETED" %}
-  <span class="inline-flex shrink-0 text-success" role="img" aria-label="Complete" title="Complete">
+  <span class="inline-flex shrink-0 text-success{% if tooltip %} hover-tooltip{% endif %}" role="img" aria-label="Complete"
+        {% if tooltip %}data-tooltip="Task marked complete"{% else %}title="Complete"{% endif %}>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
          class="{% if compact %}w-3 h-3{% else %}w-4 h-4{% endif %}" fill="currentColor" aria-hidden="true">
       <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm4.7-9.3a1 1 0 0 0-1.4-1.4L9 11.6 6.7 9.3a1 1 0 0 0-1.4 1.4l3 3a1 1 0 0 0 1.4 0l5-5Z" clip-rule="evenodd" />

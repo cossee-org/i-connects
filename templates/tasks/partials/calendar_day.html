@@ -11,15 +11,17 @@
           <span class="font-medium text-brand-navy text-sm block leading-tight truncate">{{ item.task.name }}</span>
         </div>
 
-        {% include "_components/task_dates.html" with task=item.task hide_on_mobile=True %}
+        {% include "_components/task_dates.html" with task=item.task hide_on_mobile=True tooltip=True %}
 
-        {% include "_components/assignee_count.html" with count=item.task.assigned_members.all|length %}
+        {% include "_components/assignee_count.html" with count=item.task.assigned_members.all|length tooltip=True %}
+
+        {% include "_components/reviewer_count.html" with count=item.task.reviewers.all|length tooltip=True %}
 
         {# Priority flag and completed check, paired at the row's end. #}
         {% if item.task.is_priority or item.task.status == "COMPLETED" %}
           <span class="flex items-center gap-1 shrink-0">
-            {% if item.task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True %}{% endif %}
-            {% include "_components/completion_check.html" with task=item.task %}
+            {% if item.task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True tooltip=True %}{% endif %}
+            {% include "_components/completion_check.html" with task=item.task tooltip=True %}
           </span>
         {% endif %}
       </li>

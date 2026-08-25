@@ -40,9 +40,7 @@
                   {{ jr.get_requested_privilege_display }}
                 </span>
               </td>
-              <td class="max-w-xs text-sm text-brand-text/80 whitespace-pre-line">
-                {{ jr.message|default:"—" }}
-              </td>
+              <td class="max-w-xs text-sm text-brand-text/80 whitespace-pre-line">{{ jr.message|default:"—" }}</td>
               <td class="text-sm text-brand-text/70">{{ jr.created_at|date:"Y-m-d H:i" }}</td>
               <td class="text-right">
                 <a href="{% url 'projects:review_join_request' pk=jr.project.pk join_request_pk=jr.pk %}?source=incoming"
