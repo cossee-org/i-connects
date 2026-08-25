@@ -128,8 +128,8 @@ def test_the_marker_says_when_it_was_edited(commentable, client, user):
 
 
 @pytest.mark.django_db
-def test_comment_actions_carry_icons(commentable):
-    """Edit and Delete each pair their label with a glyph."""
+def test_comment_actions_are_text_only(commentable):
+    """Edit and Delete are labels, no glyphs."""
     from django.template.loader import render_to_string
 
     _project, task, member = commentable
@@ -139,20 +139,18 @@ def test_comment_actions_carry_icons(commentable):
         "comments/comment_item.html",
         {"comment": comment, "task": task, "project_member": member},
     )
-    assert own.count("<svg") == 2, "expected one icon for Edit and one for Delete"
-    buttons = ["<button" + fragment for fragment in own.split("<button")[1:]]
+    assert "<svg" not in own
     for label in ("Edit", "Delete"):
-        button = next(b for b in buttons if f'aria-label="{label} comment"' in b)
-        assert "<svg" in button, f"{label} has no icon"
-        # The glyph leads the visible label (rindex skips the aria-label copy).
-        assert button.index("<svg") < button.rindex(label)
+        assert f'aria-label="{label} comment"' in own
+        assert f">{label}</button>" in own
 
-    # A Lead looking at someone else's comment gets Delete alone, still iconed.
+    # A Lead looking at someone else's comment gets Delete alone.
     lead_view = render_to_string(
         "comments/comment_item.html",
         {"comment": comment, "task": task, "is_project_manager": True},
     )
-    assert lead_view.count("<svg") == 1
+    assert "<svg" not in lead_view
+    assert ">Delete</button>" in lead_view
     assert "Edit" not in lead_view
 
 
