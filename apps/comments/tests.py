@@ -210,3 +210,18 @@ def test_the_local_time_helper_is_loaded_for_every_page(client, user):
     client.force_login(user)
     page = client.get(reverse("projects:list")).content.decode()
     assert "window.localTime = function" in page
+
+
+@pytest.mark.django_db
+def test_the_comment_body_sits_close_under_its_name(commentable):
+    """The body's top margin is the half step, not the full one."""
+    from django.template.loader import render_to_string
+
+    _project, task, member = commentable
+    comment = Comment.objects.create(task=task, author=member, content="x")
+
+    html = render_to_string(
+        "comments/comment_item.html", {"comment": comment, "task": task}
+    )
+    body = html[html.rindex('<div class="text-sm text-brand-text') :]
+    assert "mt-0.5" in body[: body.index(">")]
