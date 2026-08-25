@@ -248,3 +248,26 @@ def test_the_comment_body_carries_no_whitespace_of_its_own(commentable):
     body = html[html.rindex('<div class="text-sm text-brand-text') :]
     rendered = body[body.index(">") + 1 : body.index("</div>")]
     assert rendered == "first line\nsecond line"  # no leading or trailing break
+
+
+@pytest.mark.django_db
+def test_the_avatar_is_small_and_the_same_in_both_states(commentable):
+    """A 24px initial, and the edit form matches so the row does not jump."""
+    from django.template.loader import render_to_string
+
+    from apps.comments.forms import CommentForm
+
+    _project, task, member = commentable
+    comment = Comment.objects.create(task=task, author=member, content="x")
+
+    avatar = "w-6 h-6 rounded-full bg-brand-navy"
+    row = render_to_string(
+        "comments/comment_item.html", {"comment": comment, "task": task}
+    )
+    editing = render_to_string(
+        "comments/comment_edit_form.html",
+        {"comment": comment, "form": CommentForm(instance=comment)},
+    )
+    for name, html in (("row", row), ("edit form", editing)):
+        assert avatar in html, f"the {name}'s avatar is not the small one"
+        assert "w-8 h-8" not in html, f"the {name} kept the old size"

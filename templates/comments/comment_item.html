@@ -4,7 +4,7 @@
      hx-post="{% url 'comments:mark_read' pk=comment.pk %}"
      hx-trigger="intersect once"
      hx-swap="none">
-  <div class="w-8 h-8 rounded-full bg-brand-navy text-white flex items-center justify-center text-sm font-semibold shrink-0" aria-hidden="true">
+  <div class="w-6 h-6 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0" aria-hidden="true">
     <span>{{ comment.author.display_name|slice:":1"|upper }}</span>
   </div>
   <div class="flex-1 min-w-0">
