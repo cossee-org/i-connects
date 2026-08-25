@@ -225,3 +225,26 @@ def test_the_comment_body_sits_close_under_its_name(commentable):
     )
     body = html[html.rindex('<div class="text-sm text-brand-text') :]
     assert "mt-0.5" in body[: body.index(">")]
+
+
+@pytest.mark.django_db
+def test_the_comment_body_carries_no_whitespace_of_its_own(commentable):
+    """The text sits flush in its box, so pre-line adds no phantom lines.
+
+    whitespace-pre-line renders newlines, which is what carries the author's
+    own line breaks — and what turned the template's indentation into a blank
+    line above the text and another below it.
+    """
+    from django.template.loader import render_to_string
+
+    _project, task, member = commentable
+    comment = Comment.objects.create(
+        task=task, author=member, content="first line\nsecond line"
+    )
+
+    html = render_to_string(
+        "comments/comment_item.html", {"comment": comment, "task": task}
+    )
+    body = html[html.rindex('<div class="text-sm text-brand-text') :]
+    rendered = body[body.index(">") + 1 : body.index("</div>")]
+    assert rendered == "first line\nsecond line"  # no leading or trailing break

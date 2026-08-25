@@ -77,9 +77,13 @@
         </button>
       {% endif %}
     </div>
-    {# Tight under the name line — mt-0.5, half the old gap. #}
-    <div class="text-sm text-brand-text mt-0.5 whitespace-pre-line break-words">
-      {{ comment.content }}
-    </div>
+    {% comment %}
+      Tight under the name line: mt-0.5, and the content flush against the
+      tags. whitespace-pre-line keeps newlines — that is the point, it is what
+      renders the author's own line breaks — so the indentation this used to
+      sit on became a blank line above the text and another below it. The text
+      ended up further from the name that owns it than from the next comment.
+    {% endcomment %}
+    <div class="text-sm text-brand-text mt-0.5 whitespace-pre-line break-words">{{ comment.content }}</div>
   </div>
 </div>
