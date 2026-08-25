@@ -123,3 +123,54 @@ def test_the_marker_says_when_it_was_edited(commentable, client, user):
         "comments/comment_item.html", {"comment": comment, "task": task}
     )
     assert f'title="Edited {comment.updated_at.strftime("%b %-d, %Y %H:%M")}"' in html
+
+
+@pytest.mark.django_db
+def test_comment_actions_carry_icons(commentable):
+    """Edit and Delete each pair their label with a glyph."""
+    from django.template.loader import render_to_string
+
+    _project, task, member = commentable
+    comment = Comment.objects.create(task=task, author=member, content="x")
+
+    own = render_to_string(
+        "comments/comment_item.html",
+        {"comment": comment, "task": task, "project_member": member},
+    )
+    assert own.count("<svg") == 2, "expected one icon for Edit and one for Delete"
+    buttons = ["<button" + fragment for fragment in own.split("<button")[1:]]
+    for label in ("Edit", "Delete"):
+        button = next(b for b in buttons if f'aria-label="{label} comment"' in b)
+        assert "<svg" in button, f"{label} has no icon"
+        # The glyph leads the visible label (rindex skips the aria-label copy).
+        assert button.index("<svg") < button.rindex(label)
+
+    # A Lead looking at someone else's comment gets Delete alone, still iconed.
+    lead_view = render_to_string(
+        "comments/comment_item.html",
+        {"comment": comment, "task": task, "is_project_manager": True},
+    )
+    assert lead_view.count("<svg") == 1
+    assert "Edit" not in lead_view
+
+
+@pytest.mark.django_db
+def test_the_comment_button_is_not_coral(commentable):
+    """Coral is the page's one primary CTA; a comment box is not it."""
+    from django.template.loader import render_to_string
+
+    from apps.comments.forms import CommentForm
+
+    _project, task, member = commentable
+    comment = Comment.objects.create(task=task, author=member, content="x")
+
+    posting = render_to_string(
+        "comments/comment_form.html", {"task": task, "form": CommentForm()}
+    )
+    editing = render_to_string(
+        "comments/comment_edit_form.html",
+        {"comment": comment, "form": CommentForm(instance=comment)},
+    )
+    for name, html in (("Comment", posting), ("Save", editing)):
+        assert "brand-coral" not in html, f"the {name} button is still coral"
+        assert "btn-primary" in html, f"the {name} button lost its confirm style"
