@@ -15,6 +15,13 @@ from apps.projects.services import create_project_with_owner
 from apps.tasks.models import KanbanBoard, Task
 
 
+def _body_text(html, comment):
+    """The rendered text inside a comment's body box, exactly as it stands."""
+    start = html.index(f'id="comment-body-{comment.pk}"')
+    open_end = html.index(">", start) + 1
+    return html[open_end : html.index("</div>", open_end)]
+
+
 @pytest.fixture
 def commentable(db, user):
     """A task the fixture user can comment on, plus their membership."""
@@ -221,8 +228,8 @@ def test_the_comment_body_sits_close_under_its_name(commentable):
     html = render_to_string(
         "comments/comment_item.html", {"comment": comment, "task": task}
     )
-    body = html[html.rindex('<div class="text-sm text-brand-text') :]
-    assert "mt-0.5" in body[: body.index(">")]
+    # The margin sits on the box that wraps the text and its Show more toggle.
+    assert '<div class="mt-0.5"' in html
 
 
 @pytest.mark.django_db
@@ -243,9 +250,8 @@ def test_the_comment_body_carries_no_whitespace_of_its_own(commentable):
     html = render_to_string(
         "comments/comment_item.html", {"comment": comment, "task": task}
     )
-    body = html[html.rindex('<div class="text-sm text-brand-text') :]
-    rendered = body[body.index(">") + 1 : body.index("</div>")]
-    assert rendered == "first line\nsecond line"  # no leading or trailing break
+    # No leading or trailing break.
+    assert _body_text(html, comment) == "first line\nsecond line"
 
 
 @pytest.mark.django_db
@@ -317,3 +323,35 @@ def test_the_panes_comment_label_points_at_its_box(client, commentable, user):
     label = pane[pane.index('class="sr-only">Comment<') - 200 : pane.index('class="sr-only">Comment<')]
     field_id = label[label.index('for="') + 5 : label.index('"', label.index('for="') + 5)]
     assert f'id="{field_id}"' in pane, f"no element carries id={field_id}"
+
+
+@pytest.mark.django_db
+def test_a_comment_is_clamped_behind_a_show_more_toggle(commentable):
+    """Three lines, then Show more — wired to the body it controls.
+
+    The markup ships on every comment because only the browser can tell
+    whether the text overflows: where it wraps depends on how wide the pane
+    is. The toggle stays hidden (x-show plus x-cloak) until that measurement
+    says otherwise, which is why a comment that fits shows no toggle.
+    """
+    from django.template.loader import render_to_string
+
+    _project, task, member = commentable
+    comment = Comment.objects.create(task=task, author=member, content="x")
+
+    html = render_to_string(
+        "comments/comment_item.html", {"comment": comment, "task": task}
+    )
+    body_tag = html[html.index(f'id="comment-body-{comment.pk}"') :]
+    body_tag = body_tag[: body_tag.index(">")]
+    # Static class and binding both: the binding alone does not survive a
+    # second HTMX swap, the static alone cannot come off on expand.
+    assert "line-clamp-3" in body_tag
+    assert "'line-clamp-3': !expanded" in body_tag
+
+    toggle = html[html.index(f'aria-controls="comment-body-{comment.pk}"') :]
+    toggle = toggle[: toggle.index("</button>")]
+    assert 'x-show="overflowing"' in html
+    assert "x-cloak" in html  # no flash of an unmeasured toggle
+    assert ":aria-expanded" in toggle
+    assert "'Show less' : 'Show more'" in toggle

@@ -53,12 +53,37 @@
       {% endif %}
     </div>
     {% comment %}
-      Tight under the name line: mt-0.5, and the content flush against the
+      A long comment is clamped to three lines behind Show more, the same way
+      the task pane clamps a long description — and with the same two details
+      that took fixing there:
+
+      * Whether it overflows is measured in the browser on init, not guessed
+        from the character count server-side, because where the text wraps
+        depends on how wide the pane is. A comment that happens to fit gets no
+        toggle at all.
+      * line-clamp-3 is both a static class and a binding, and needs to be
+        both. Bound alone it survives one swap but not the next: Alpine
+        remembers the class's state per element, so a re-rendered comment
+        comes back expanded. Static alone could not come off on expand.
+
+      Tight under the name line: mt-0.5, and the content flush against its
       tags. whitespace-pre-line keeps newlines — that is the point, it is what
-      renders the author's own line breaks — so the indentation this used to
-      sit on became a blank line above the text and another below it. The text
-      ended up further from the name that owns it than from the next comment.
+      renders the author's own line breaks — so indentation inside the box
+      becomes a blank line above the text and another below it.
     {% endcomment %}
-    <div class="text-sm text-brand-text mt-0.5 whitespace-pre-line break-words">{{ comment.content }}</div>
+    <div class="mt-0.5"
+         x-data="{ expanded: false, overflowing: false }"
+         x-init="$nextTick(() => { overflowing = $refs.body.scrollHeight > $refs.body.clientHeight + 1 })">
+      <div x-ref="body"
+           id="comment-body-{{ comment.pk }}"
+           class="text-sm text-brand-text whitespace-pre-line break-words line-clamp-3"
+           :class="{ 'line-clamp-3': !expanded }">{{ comment.content }}</div>
+      <button type="button" x-show="overflowing" x-cloak
+              class="mt-0.5 text-xs font-medium text-brand-navy hover:underline"
+              aria-controls="comment-body-{{ comment.pk }}"
+              :aria-expanded="expanded"
+              @click="expanded = !expanded"
+              x-text="expanded ? 'Show less' : 'Show more'">Show more</button>
+    </div>
   </div>
 </div>
