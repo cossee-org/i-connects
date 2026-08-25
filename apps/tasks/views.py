@@ -1069,6 +1069,23 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # (Leads only) on its done mark. Both close once the task is
                 # completed, the same rule the endpoints enforce.
                 "can_review": viewer_reviews and not locked,
+                # Undoing is narrower than making: a reviewer may withdraw
+                # their own verdict and no one else's, while a Lead can clear
+                # any of them. A review whose reviewer's membership row was
+                # deleted has no owner left to withdraw it, so it too is the
+                # Lead's alone.
+                "can_unreview": (
+                    not locked
+                    and (
+                        is_project_manager
+                        or (
+                            viewer_reviews
+                            and log is not None
+                            and project_member is not None
+                            and log.reviewed_by_id == project_member.pk
+                        )
+                    )
+                ),
                 "can_mark_done": is_project_manager and not locked,
                 # The entry the review buttons act on. None until the member
                 # has one seeded, in which case there is nothing to review.
@@ -1355,7 +1372,9 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     membership.
 
     Both directions close once the task is marked completed, like the
-    assignees' own marks.
+    assignees' own marks. Withdrawing is the narrower of the two: a reviewer
+    may take back their own verdict and no one else's, while a Lead can clear
+    any review on the task.
 
     POST ``reviewed=0`` withdraws the review; anything else records one.
     """
@@ -1372,6 +1391,14 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseForbidden(_LOCKED_MESSAGE)
 
         if request.POST.get("reviewed") in {"0", "false", "no"}:
+            if not self.is_project_manager and not (
+                self.project_member is not None
+                and log.reviewed_by_id == self.project_member.pk
+            ):
+                return HttpResponseForbidden(
+                    "Only the reviewer who signed this off, or a Lead, can "
+                    "withdraw it."
+                )
             clear_review(task_log=log, cleared_by=self.project_member)
         else:
             if not log.is_reviewable:

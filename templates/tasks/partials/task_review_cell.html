@@ -11,6 +11,10 @@
   task's live reviewer set on every render, so a reviewer added or removed
   gains or loses these buttons immediately.
 
+  ``s.can_unreview`` is the narrower of the two, and why the two buttons read
+  different flags: a reviewer may withdraw the verdict they gave and no one
+  else's. A Lead can clear any of them.
+
   Marking the task completed retires these buttons, exactly as it retires the
   assignee's own mark: a completed task's marks and reviews are frozen until a
   Lead marks it not complete again.
@@ -31,7 +35,7 @@
         by a former member
       {% endif %}
     </span>
-    {% if s.can_review %}
+    {% if s.can_unreview %}
       <button type="button"
               class="btn btn-ghost btn-xs gap-1"
               hx-post="{% url 'tasks:review_log' pk=task.pk log_pk=s.log.pk %}"

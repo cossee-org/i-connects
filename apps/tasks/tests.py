@@ -3355,3 +3355,137 @@ def test_a_cleared_mark_takes_its_setters_name_with_it(client, user, other_user)
     row = _row_for(client.get(_pane_url(project, task)).content.decode(), contrib)
     done_cell = _done_cell(row)
     assert "by " not in done_cell
+
+
+# ---------------------------------------------------------------------------
+# Withdrawing a review: the author's, or any of them if you are a Lead
+# ---------------------------------------------------------------------------
+
+
+def _two_reviewer_task(user, other_user):
+    """A done submission and two plain reviewers, neither of them a Lead.
+
+    Returns ``(project, task, log, first, second)`` where ``first`` and
+    ``second`` are the reviewers and ``log`` is the submission they review.
+    ``user`` stays the project's Lead and its lone assignee.
+    """
+    from apps.tasks.services import mark_own_done
+
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    first = _add_contributor(project, other_user)
+    second = _add_contributor(project, _new_user("dave@test.com"))
+    task = Task.objects.create(
+        project=project, created_by=lead, container=col1,
+        container_task_order=0, name="Reviewed twice over",
+    )
+    task.assigned_members.add(lead)
+    task.reviewers.add(first, second)
+    TaskLog.objects.create(task=task, assigned_to=lead)
+    mark_own_done(task=task, member=lead)
+    return project, task, _current_log(task, lead), first, second
+
+
+@pytest.mark.django_db
+def test_a_reviewer_can_withdraw_their_own_review(client, user, other_user):
+    """The reviewer who signed it off gets the button, and it works."""
+    project, task, log, first, _second = _two_reviewer_task(user, other_user)
+
+    client.force_login(other_user)
+    client.post(
+        _review_url(task, log), {"reviewed": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    )
+    log.refresh_from_db()
+    assert log.reviewed_by == first
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Mark not reviewed" in pane
+
+    response = client.post(
+        _review_url(task, log), {"reviewed": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    )
+    assert response.status_code == 200
+    log.refresh_from_db()
+    assert not log.is_reviewed
+
+
+@pytest.mark.django_db
+def test_a_reviewer_cannot_withdraw_another_reviewers_review(client, user, other_user):
+    """Someone else's verdict is not theirs to take back."""
+    from apps.tasks.services import mark_reviewed
+
+    project, task, log, first, second = _two_reviewer_task(user, other_user)
+    mark_reviewed(task_log=log, reviewer=second)
+
+    # ``other_user`` is ``first``: a reviewer on this task, but not this one's.
+    client.force_login(other_user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Mark not reviewed" not in pane
+    # They can still see the verdict and who gave it.
+    assert f"by {second.display_name}" in pane
+
+    response = client.post(
+        _review_url(task, log), {"reviewed": "0"}, HTTP_HX_REQUEST="true"
+    )
+    assert response.status_code == 403
+    log.refresh_from_db()
+    assert log.reviewed_by == second
+
+
+@pytest.mark.django_db
+def test_a_lead_can_withdraw_any_review(client, user, other_user):
+    """A Lead is not held to the author rule."""
+    from apps.tasks.services import mark_reviewed
+
+    project, task, log, _first, second = _two_reviewer_task(user, other_user)
+    mark_reviewed(task_log=log, reviewer=second)
+
+    client.force_login(user)  # the Lead, and not the reviewer who signed it
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Mark not reviewed" in pane
+
+    response = client.post(
+        _review_url(task, log), {"reviewed": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    )
+    assert response.status_code == 200
+    log.refresh_from_db()
+    assert not log.is_reviewed
+    assert log.reviewed_by is None
+
+
+@pytest.mark.django_db
+def test_a_review_left_by_a_deleted_member_is_the_leads_to_clear(client, user, other_user):
+    """With no author left to withdraw it, only a Lead can."""
+    from apps.tasks.services import mark_reviewed
+
+    project, task, log, first, second = _two_reviewer_task(user, other_user)
+    mark_reviewed(task_log=log, reviewer=second)
+    second.delete()  # hard delete nulls reviewed_by; the review still stands
+    log.refresh_from_db()
+    assert log.is_reviewed and log.reviewed_by is None
+
+    client.force_login(other_user)  # ``first``, a reviewer on the task
+    assert "Mark not reviewed" not in client.get(_pane_url(project, task)).content.decode()
+    assert client.post(
+        _review_url(task, log), {"reviewed": "0"}, HTTP_HX_REQUEST="true"
+    ).status_code == 403
+
+    client.force_login(user)
+    assert "Mark not reviewed" in client.get(_pane_url(project, task)).content.decode()
+    assert client.post(
+        _review_url(task, log), {"reviewed": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    ).status_code == 200
+
+
+@pytest.mark.django_db
+def test_making_a_review_is_still_open_to_every_reviewer(client, user, other_user):
+    """The new rule narrows withdrawing only — signing off is unchanged."""
+    project, task, log, _first, _second = _two_reviewer_task(user, other_user)
+
+    client.force_login(other_user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Mark reviewed" in pane
+
+    assert client.post(
+        _review_url(task, log), {"reviewed": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    ).status_code == 200
