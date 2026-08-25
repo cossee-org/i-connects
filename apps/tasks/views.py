@@ -677,12 +677,13 @@ class TaskDetailPaneView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
             # The pane still lists no reviewers of its own; it reports review
             # state per assignee from task_logs. ``reviewers`` is here because
             # it decides who sees the review buttons, and the chained
-            # ``task_logs__reviewed_by`` keeps the matrix from firing a query
-            # per row to name each reviewer.
+            # ``task_logs__reviewed_by`` / ``__completed_by`` keep the matrix
+            # from firing a query per row to name who reviewed and who marked.
             .prefetch_related(
                 "assigned_members",
                 "reviewers",
                 "task_logs__reviewed_by",
+                "task_logs__completed_by",
                 "comments__author",
             ),
             project=self.project,
@@ -718,7 +719,7 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            .prefetch_related("assigned_members", "reviewers", "task_logs__comments__author", "task_logs__reviewed_by", "comments__author", "activities__actor", "activities__member")
+            .prefetch_related("assigned_members", "reviewers", "task_logs__comments__author", "task_logs__reviewed_by", "task_logs__completed_by", "comments__author", "activities__actor", "activities__member")
             .filter(project=self.project),
             pk=kwargs["pk"],
         )
@@ -1076,6 +1077,15 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # Null on entries completed before completed_at existed, so the
                 # cell shows the check with no date rather than a wrong one.
                 "done_at": log.completed_at if log is not None else None,
+                # Who set the mark. Null on entries that recorded no one, and
+                # on one whose setter's membership row was deleted outright.
+                "done_by": log.completed_by if log is not None else None,
+                # A mark the assignee set themselves needs no name beside it —
+                # the row already carries theirs. Only a mark set *for* them,
+                # by a Lead, has something to add.
+                "done_by_self": bool(
+                    log is not None and log.completed_by_id == member.id
+                ),
                 "reviewed": reviewed,
                 # Null on a review whose reviewer's membership row was deleted
                 # outright; the cell then reports the review without a name.

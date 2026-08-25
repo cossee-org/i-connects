@@ -6,6 +6,9 @@
   and ``task``. Buttons swap #task-status-block, the same target every other
   completion action uses.
 
+  A mark set for an assignee by a Lead is named here, so the matrix does not
+  read as if they had claimed it themselves.
+
   The mark itself belongs to the assignee, who sets it from the pane's top
   bar; ``s.can_mark_done`` is a Lead-only borrow of that action, per row, for
   recording a mark someone never clicked or clearing one set in error. It
@@ -16,6 +19,22 @@
 {% endcomment %}
 <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
   {% include "tasks/partials/task_matrix_cell.html" with on=s.done at=s.done_at %}
+
+  {% comment %}
+    Who set the mark, named only when it was not the assignee themselves —
+    which is to say when a Lead recorded it for them. A self-mark would just
+    repeat the name in the row's first column.
+  {% endcomment %}
+  {% if s.done and not s.done_by_self %}
+    <span class="text-xs text-brand-text/60 whitespace-nowrap">
+      {% if s.done_by %}
+        by {{ s.done_by.display_name }}
+      {% else %}
+        {# The setter's membership row is gone, or none was recorded. #}
+        by a former member
+      {% endif %}
+    </span>
+  {% endif %}
 
   {% if s.can_mark_done %}
     {% if s.done %}

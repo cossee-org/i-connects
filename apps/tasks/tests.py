@@ -3269,3 +3269,89 @@ def test_a_reviewer_who_is_not_assigned_gets_every_row(client, user, other_user)
     assert response.status_code == 200
     log.refresh_from_db()
     assert log.reviewed_by == reviewer
+
+
+# ---------------------------------------------------------------------------
+# Who set a done mark
+# ---------------------------------------------------------------------------
+
+
+def _done_cell(row):
+    """The Marked Done cell of a matrix row, without the name column beside it."""
+    first = row.index("<td")
+    return row[first : row.index("<td", first + 1)]
+
+
+@pytest.mark.django_db
+def test_matrix_names_the_lead_who_marked_an_assignee_done(client, user, other_user):
+    """A mark set for someone carries the name of whoever set it."""
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+
+    client.force_login(user)
+    client.post(
+        _done_url(task, contrib), {"done": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    )
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    row = _row_for(pane, contrib)
+    done_cell = _done_cell(row)
+    assert f"by {lead.display_name}" in done_cell
+    # The date comes first, then who set it.
+    log = _current_log(task, contrib)
+    assert done_cell.index(log.completed_at.strftime("%b %-d, %Y")) < done_cell.index("by ")
+
+
+@pytest.mark.django_db
+def test_matrix_does_not_name_an_assignee_on_their_own_mark(client, user, other_user):
+    """A self-mark needs no name: the row's first column already has it."""
+    project, task, _lead, contrib = _two_assignee_task(user, other_user)
+
+    client.force_login(other_user)
+    client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+
+    client.force_login(user)
+    row = _row_for(client.get(_pane_url(project, task)).content.decode(), contrib)
+    done_cell = _done_cell(row)
+    # No provenance note at all — not even their own name. (They are still
+    # named in the Lead's button label, which is what it is labelling.)
+    assert "by " not in done_cell
+    assert f"by {contrib.display_name}" not in done_cell
+
+
+@pytest.mark.django_db
+def test_matrix_survives_a_mark_that_recorded_nobody(client, user, other_user):
+    """Old entries name no setter; the cell shows the mark without a name."""
+    project, task, _lead, contrib = _two_assignee_task(user, other_user)
+    log = _current_log(task, contrib)
+    log.status = TaskStatus.COMPLETED
+    log.completed_by = None
+    log.save(update_fields=["status", "completed_by"])
+
+    client.force_login(user)
+    row = _row_for(client.get(_pane_url(project, task)).content.decode(), contrib)
+    done_cell = _done_cell(row)
+    assert "by a former member" in done_cell
+    assert "None" not in done_cell
+
+
+@pytest.mark.django_db
+def test_a_cleared_mark_takes_its_setters_name_with_it(client, user, other_user):
+    """No mark, no name — and re-marking it themselves drops the Lead's."""
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    client.force_login(user)
+    client.post(
+        _done_url(task, contrib), {"done": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    )
+    client.post(
+        _done_url(task, contrib), {"done": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    )
+
+    row = _row_for(client.get(_pane_url(project, task)).content.decode(), contrib)
+    assert lead.display_name not in row
+
+    client.force_login(other_user)
+    client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    client.force_login(user)
+    row = _row_for(client.get(_pane_url(project, task)).content.decode(), contrib)
+    done_cell = _done_cell(row)
+    assert "by " not in done_cell

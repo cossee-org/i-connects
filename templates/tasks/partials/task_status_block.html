@@ -1,8 +1,9 @@
 {% comment %}
   Task completion status block (HTMX swap target: #task-status-block).
   Context comes from views._task_status_context: task, is_project_manager,
-  assignee_states (each with member, log, done, done_at, reviewed,
-  reviewed_by, reviewed_at, awaiting_review, can_mark_done, can_review),
+  assignee_states (each with member, log, done, done_at, done_by,
+  done_by_self, reviewed, reviewed_by, reviewed_at, awaiting_review,
+  can_mark_done, can_review),
   done_count, reviewed_count, assignee_count, is_assignee, my_done,
   marks_locked, reviewers.
 {% endcomment %}
