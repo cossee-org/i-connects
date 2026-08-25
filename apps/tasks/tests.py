@@ -2325,7 +2325,10 @@ def test_a_full_task_page_shows_no_project_section_tabs(client, user):
     assert 'aria-label="Project sections"' not in detail
     # ...the markup, not the rule: base.html styles .project-subnav on every page.
     assert 'class="project-subnav"' not in detail
-    header = detail[detail.index("<header") : detail.index("</header>")]
+    # The page's own header, not base.html's topbar — which happens to carry
+    # the same border classes.
+    start = detail.index('<header class="mb-6')
+    header = detail[start : detail.index("</header>", start)]
     assert "border-b border-brand-light" in header, "the header lost the strip's rule"
 
     # The board is a section, and keeps them.
@@ -2333,6 +2336,51 @@ def test_a_full_task_page_shows_no_project_section_tabs(client, user):
         reverse("tasks:board", kwargs={"project_pk": project.pk})
     ).content.decode()
     assert 'aria-label="Project sections"' in board
+
+
+@pytest.mark.django_db
+def test_full_task_page_orders_its_sections_like_the_pane(client, user, other_user):
+    """Summary in the heading, then the actions, then the pane's card order.
+
+    The pane opens with a summary card — name, tags, dates, author — because it
+    has no page heading of its own. The page reads the same things out of the
+    heading it already had, puts the pane's top bar in a row of its own below
+    it, and then runs the same cards in the same order.
+    """
+    from datetime import datetime, timezone as dt_tz
+
+    from apps.tasks.models import Milestone
+
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+    task.description = "Some description."
+    task.github_url = "https://github.com/x/y/pull/1"
+    task.milestone = Milestone.objects.create(project=project, name="M1")
+    task.start_date = datetime(2026, 3, 10, tzinfo=dt_tz.utc)
+    task.deadline = datetime(2026, 3, 12, tzinfo=dt_tz.utc)
+    task.is_priority = True
+    task.save()
+    client.force_login(user)
+
+    detail = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+
+    start = detail.index('<header class="mb-6')
+    header = detail[start : detail.index("</header>", start)]
+    for piece in ("Moded", "High priority", "Not Complete", "Start date", "Due date", "Created by"):
+        assert piece in header, f"the heading is missing {piece}"
+
+    body = detail[detail.index("</header>", start) :]
+    assert (
+        body.index('id="task-completion-button"')   # the action row
+        < body.index(">Description<")
+        < body.index(">Completion<")
+        < body.index(">Milestone<")
+        < body.index(">GitHub<")
+        < body.index("Comments")
+    )
+    # The dates are read in the heading, so no card repeats them.
+    assert "Start date" not in body
 
 
 @pytest.mark.django_db
