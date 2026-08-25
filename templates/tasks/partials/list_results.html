@@ -57,11 +57,11 @@
                   </div>
 
                   {# Dates #}
-                  {% include "_components/task_dates.html" with task=task hide_on_mobile=True %}
+                  {% include "_components/task_dates.html" with task=task hide_on_mobile=True tooltip=True %}
 
                   {# Assignee and reviewer counts #}
-                  {% include "_components/assignee_count.html" with count=task.assigned_members.all|length %}
-                  {% include "_components/reviewer_count.html" with count=task.reviewers.all|length %}
+                  {% include "_components/assignee_count.html" with count=task.assigned_members.all|length tooltip=True %}
+                  {% include "_components/reviewer_count.html" with count=task.reviewers.all|length tooltip=True %}
 
                   {# GitHub icon #}
                   {% if task.github_url %}
@@ -74,8 +74,8 @@
                   {# Priority flag and completed check, paired at the row's end. #}
                   {% if task.is_priority or task.status == "COMPLETED" %}
                     <span class="flex items-center gap-1 shrink-0">
-                      {% if task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True %}{% endif %}
-                      {% include "_components/completion_check.html" with task=task %}
+                      {% if task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True tooltip=True %}{% endif %}
+                      {% include "_components/completion_check.html" with task=task tooltip=True %}
                     </span>
                   {% endif %}
 

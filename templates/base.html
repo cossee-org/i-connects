@@ -95,9 +95,15 @@
     .project-tab.active { color: #f03d30; border-bottom-color: #f03d30; }
     .project-tab svg { width: 1rem; height: 1rem; flex-shrink: 0; opacity: 0.7; }
 
-    /* ── Top bar tooltips (open downward) ── */
-    .topbar-tooltip { position: relative; }
-    .topbar-tooltip::after {
+    {% comment %}
+      Hover tooltips, opening downward. Used by the top bar's icon buttons and
+      by the icons on Kanban cards, List rows and the Calendar Day agenda.
+      Not for the dense calendar month/week cells: that grid is
+      overflow-hidden and would clip anything hanging below a cell, so those
+      pills keep a plain title attribute.
+    {% endcomment %}
+    .hover-tooltip { position: relative; }
+    .hover-tooltip::after {
       content: attr(data-tooltip);
       position: absolute;
       top: calc(100% + 6px);
@@ -117,7 +123,7 @@
       z-index: 60;
       box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
     }
-    .topbar-tooltip::before {
+    .hover-tooltip::before {
       content: "";
       position: absolute;
       top: calc(100% + 1px);
@@ -130,8 +136,8 @@
       transition: opacity 0.15s ease;
       z-index: 60;
     }
-    .topbar-tooltip:hover::after,
-    .topbar-tooltip:hover::before { opacity: 1; }
+    .hover-tooltip:hover::after,
+    .hover-tooltip:hover::before { opacity: 1; }
   </style>
 
   {% comment %}
@@ -221,7 +227,7 @@
 
       <!-- Create project -->
       <a href="{% url 'projects:create' %}"
-         class="topbar-tooltip inline-flex items-center p-1.5 rounded-md bg-white border border-gray-300 text-brand-navy hover:bg-gray-50 transition-colors shrink-0"
+         class="hover-tooltip inline-flex items-center p-1.5 rounded-md bg-white border border-gray-300 text-brand-navy hover:bg-gray-50 transition-colors shrink-0"
          data-tooltip="New project" aria-label="New project">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 shrink-0">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -230,7 +236,7 @@
 
       <!-- Projects -->
       <a href="{% url 'projects:my_list' %}"
-         class="topbar-tooltip inline-flex items-center p-1.5 rounded-md bg-white border border-gray-300 text-brand-navy hover:bg-gray-50 transition-colors shrink-0"
+         class="hover-tooltip inline-flex items-center p-1.5 rounded-md bg-white border border-gray-300 text-brand-navy hover:bg-gray-50 transition-colors shrink-0"
          data-tooltip="Projects" aria-label="Projects">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -241,7 +247,7 @@
       <!-- Avatar dropdown -->
       <div class="relative">
         <button @click="topbarMenuOpen = !topbarMenuOpen"
-                class="topbar-tooltip flex items-center px-2 py-1.5 rounded-md hover:bg-brand-lighter transition-colors"
+                class="hover-tooltip flex items-center px-2 py-1.5 rounded-md hover:bg-brand-lighter transition-colors"
                 :aria-expanded="topbarMenuOpen"
                 data-tooltip="{{ user.name|default:user.email }}">
           <div class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">{{ user.name|default:user.email|slice:":1"|upper }}</div>

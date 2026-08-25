@@ -5,9 +5,9 @@
 {# assigned_members to keep this off the per-task query path. The bare number needs #}
 {# naming for assistive tech, hence role="img" plus a spelt-out label. #}
 {% if count %}
-  <span class="inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0"
+  <span class="inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0{% if tooltip %} hover-tooltip{% endif %}"
         role="img" aria-label="{{ count }} assigned member{{ count|pluralize }}"
-        title="{{ count }} assigned member{{ count|pluralize }}">
+        {% if tooltip %}data-tooltip="{{ count }} assigned member{{ count|pluralize }}"{% else %}title="{{ count }} assigned member{{ count|pluralize }}"{% endif %}>
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
          stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
       <path stroke-linecap="round" stroke-linejoin="round"

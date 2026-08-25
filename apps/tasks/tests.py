@@ -3489,3 +3489,74 @@ def test_making_a_review_is_still_open_to_every_reviewer(client, user, other_use
     assert client.post(
         _review_url(task, log), {"reviewed": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
     ).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Tooltips on the browsing views' task icons
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_browsing_views_put_a_tooltip_on_every_task_icon(client, user, other_user):
+    """Kanban, List and Day: all five icons name themselves on hover."""
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    contrib = _add_contributor(project, other_user)
+    task = Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=0,
+        name="Everything", is_priority=True, status=TaskStatus.COMPLETED,
+        start_date=datetime(2026, 3, 10, tzinfo=dt_timezone.utc),
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    task.assigned_members.add(lead, contrib)
+    task.reviewers.add(lead)
+    client.force_login(user)
+
+    expected = [
+        'data-tooltip="High priority"',
+        'data-tooltip="Task marked complete"',
+        'data-tooltip="Mar 10, 2026 – Mar 12, 2026"',
+        'data-tooltip="2 assigned members"',
+        'data-tooltip="1 reviewer"',
+    ]
+    for name, (url, params) in _assignee_count_views(project).items():
+        content = client.get(url, params).content.decode()
+        for tip in expected:
+            assert tip in content, f"{name} view is missing {tip}"
+        # The styled tooltip replaces the plain title rather than joining it,
+        # so a hover shows one bubble and not two.
+        assert 'title="High priority"' not in content, f"{name} view shows both"
+        assert 'title="Complete"' not in content, f"{name} view shows both"
+        assert content.count("hover-tooltip") >= 5, f"{name} view lost the class"
+
+
+@pytest.mark.django_db
+def test_the_calendar_month_grid_keeps_plain_titles(client, user):
+    """That grid is overflow-hidden, so a hanging tooltip would be clipped."""
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=0,
+        name="Dated", is_priority=True, status=TaskStatus.COMPLETED,
+        deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+    )
+    client.force_login(user)
+
+    month = client.get(
+        reverse("tasks:board_calendar", kwargs={"project_pk": project.pk}),
+        {"view": "month", "date": "2026-03-12"},
+    ).content.decode()
+    # The month pill's only icon is the completion check — priority shows there
+    # as a left border, not the flag — and it keeps its plain title.
+    assert 'title="Complete"' in month
+    assert "data-tooltip" not in month
+    assert "hover-tooltip" not in month
+
+
+@pytest.mark.django_db
+def test_the_tooltip_class_is_styled_by_the_page_shell(client, user):
+    """The card icons ask for hover-tooltip, so base.html has to define it."""
+    client.force_login(user)
+    page = client.get(reverse("projects:list")).content.decode()
+    assert ".hover-tooltip { position: relative; }" in page
+    assert "content: attr(data-tooltip);" in page
