@@ -122,7 +122,9 @@ def test_the_marker_says_when_it_was_edited(commentable, client, user):
     html = render_to_string(
         "comments/comment_item.html", {"comment": comment, "task": task}
     )
-    assert f'title="Edited {comment.updated_at.strftime("%b %-d, %Y %H:%M")}"' in html
+    # Twelve-hour, and carrying the instant for the browser to restate locally.
+    assert f'title="Edited {comment.updated_at.strftime("%b %-d, %Y %-I:%M %p")}"' in html
+    assert f'data-epoch="{int(comment.updated_at.timestamp())}"' in html
 
 
 @pytest.mark.django_db
@@ -174,3 +176,37 @@ def test_the_comment_button_is_not_coral(commentable):
     for name, html in (("Comment", posting), ("Save", editing)):
         assert "brand-coral" not in html, f"the {name} button is still coral"
         assert "btn-primary" in html, f"the {name} button lost its confirm style"
+
+
+@pytest.mark.django_db
+def test_comment_timestamp_is_small_twelve_hour_and_convertible(commentable):
+    """The date reads as a note, in 12-hour form, ready for local restatement."""
+    from django.template.loader import render_to_string
+
+    _project, task, member = commentable
+    comment = Comment.objects.create(task=task, author=member, content="x")
+    comment.refresh_from_db()
+
+    html = render_to_string(
+        "comments/comment_item.html", {"comment": comment, "task": task}
+    )
+    time_el = html[html.index("<time") : html.index("</time>")]
+
+    # Same size as the dates in the completion matrix.
+    assert "text-xs" in time_el and "text-sm" not in time_el
+    # AM/PM, not 24-hour. (The visible text only — the datetime attribute
+    # beside it is the machine-readable ISO instant.)
+    visible = time_el[time_el.rindex(">") + 1 :].strip()
+    assert visible == comment.created_at.strftime("%b %-d, %Y %-I:%M %p")
+    # The instant is there twice: for machines, and for the browser to convert.
+    assert f'data-epoch="{int(comment.created_at.timestamp())}"' in time_el
+    assert 'datetime="' in time_el
+    assert "window.localTime" in time_el
+
+
+@pytest.mark.django_db
+def test_the_local_time_helper_is_loaded_for_every_page(client, user):
+    """The partial calls window.localTime, so the shell has to define it."""
+    client.force_login(user)
+    page = client.get(reverse("projects:list")).content.decode()
+    assert "window.localTime = function" in page

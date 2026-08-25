@@ -11,10 +11,21 @@
     <div class="flex items-baseline justify-between gap-2">
       <div class="min-w-0">
         <span class="font-medium text-brand-navy text-sm">{{ comment.author.display_name }}</span>
-        <time class="text-sm text-brand-text/50 ml-2">{{ comment.created_at|date:"M j, Y H:i" }}</time>
+        {% comment %}
+          text-xs to match the dates in the completion matrix; the timestamp is
+          a note on the comment, not part of its body.
+        {% endcomment %}
+        {% include "_components/local_time.html" with at=comment.created_at css="text-xs text-brand-text/50 ml-2" %}
         {% if comment.is_edited %}
-          <span class="text-sm text-brand-text/40 ml-1"
-                title="Edited {{ comment.updated_at|date:'M j, Y H:i' }}">(edited)</span>
+          {% comment %}
+            The edit time lives in a tooltip, which cannot hold an element, so
+            this restates it in place the way local_time.html does its text.
+          {% endcomment %}
+          <span class="text-xs text-brand-text/40 ml-1"
+                data-epoch="{{ comment.updated_at|date:'U' }}"
+                x-data
+                x-init="$el.title = 'Edited ' + (window.localTime($el.dataset.epoch) || $el.title.replace('Edited ', ''))"
+                title="Edited {{ comment.updated_at|date:'M j, Y g:i A' }}">(edited)</span>
         {% endif %}
       </div>
       {% comment %}

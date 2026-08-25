@@ -1,0 +1,20 @@
+{% comment %}
+  A timestamp in the viewer's own timezone.
+
+    {% include "_components/local_time.html" with at=comment.created_at css="text-xs text-brand-text/50" %}
+
+  The text the server renders is the instant it recorded, in the server's zone
+  — the fallback when scripting is off, and what a crawler or a plain-text
+  reader sees. On init Alpine restates it in the browser's zone and locale,
+  reading the epoch seconds off the element so no date string has to survive
+  parsing. ``datetime`` carries the machine-readable instant either way.
+
+  Alpine picks this up inside HTMX-swapped content too, which is how the side
+  pane's own toggles work, so a comment appended to a thread converts as well
+  as one rendered with the page.
+{% endcomment %}
+<time class="{{ css }}"
+      datetime="{{ at|date:'c' }}"
+      data-epoch="{{ at|date:'U' }}"
+      x-data
+      x-init="$el.textContent = window.localTime($el.dataset.epoch) || $el.textContent">{{ at|date:"M j, Y g:i A" }}</time>
