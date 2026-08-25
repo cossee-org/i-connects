@@ -2043,17 +2043,24 @@ def test_pane_matrix_treats_an_unreviewed_mark_as_not_reviewed(client, user, oth
 
 @pytest.mark.django_db
 def test_pane_drops_the_assignees_and_reviewers_sections(client, user, other_user):
-    """Those two lists are gone; the matrix is the only place people appear."""
-    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
-    task.reviewers.add(_lead)
+    """Neither list is a section of its own; the Completion card carries both.
+
+    The assignees are the matrix rows, and the reviewers are named under it as
+    an h4 inside that card rather than a second h3 section beside it.
+    """
+    project, task, lead, _contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
     client.force_login(user)
 
     pane = client.get(_pane_url(project, task)).content.decode()
     assert "Assignees</h3>" not in pane
     assert "Reviewers</h3>" not in pane
-    assert "No reviewers assigned." not in pane
     # The Completion block is still there, carrying the matrix.
     assert ">Completion</h3>" in pane
+    # ... and the reviewers, inside it.
+    completion = pane[pane.index(">Completion</h3>") :]
+    assert "Reviewers</h4>" in completion
+    assert lead.display_name in completion
 
     # The full task page is a separate surface and keeps its own lists.
     detail = client.get(
@@ -2803,3 +2810,145 @@ def test_review_writes_no_contribution_record(client, user, other_user):
     project, task, lead, contrib = _reviewed_task(user, other_user, reviewer_is_lead=True)
     mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
     assert not ContributionRecord.objects.filter(task=task).exists()
+
+
+# ---------------------------------------------------------------------------
+# Reviewers: named in the pane, counted on the browsing views
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_pane_names_the_reviewers(client, user, other_user, pm_user):
+    """The Completion card lists who the Reviewed column is waiting on."""
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    outsider = _add_contributor(project, pm_user)
+    task.reviewers.add(contrib, outsider)
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    reviewers = pane[pane.index("Reviewers</h4>") : pane.index("</div>", pane.index("Reviewers</h4>"))]
+    assert contrib.display_name in reviewers
+    # A reviewer who is not assigned still gets named — the matrix has no row
+    # for them, so this line is the only place they appear.
+    assert outsider.display_name in reviewers
+    assert outsider.display_name not in pane[: pane.index("Reviewers</h4>")]
+
+
+@pytest.mark.django_db
+def test_pane_says_when_a_task_has_no_reviewers(client, user, other_user):
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Reviewers</h4>" in pane
+    assert "No reviewers assigned." in pane
+
+
+@pytest.mark.django_db
+def test_pane_reviewer_list_follows_the_task(client, user, other_user):
+    """Adding and removing a reviewer is reflected on the next render."""
+    project, task, _lead, contrib = _two_assignee_task(user, other_user)
+    client.force_login(user)
+
+    task.reviewers.add(contrib)
+    assert contrib.display_name in client.get(_pane_url(project, task)).content.decode()
+
+    task.reviewers.remove(contrib)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    reviewers = pane[pane.index("Reviewers</h4>") : pane.index("</div>", pane.index("Reviewers</h4>"))]
+    assert contrib.display_name not in reviewers
+    assert "No reviewers assigned." in pane
+
+
+@pytest.mark.django_db
+def test_browsing_views_show_the_reviewer_count(client, user, other_user, pm_user):
+    """Kanban, List and Calendar Day each count reviewers, and stay quiet at zero."""
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    contrib = _add_contributor(project, other_user)
+    third = _add_contributor(project, pm_user)
+    due = datetime(2026, 3, 12, tzinfo=dt_timezone.utc)
+
+    one = Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=0,
+        name="OneReviewer", deadline=due,
+    )
+    one.reviewers.add(lead)
+    two = Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=1,
+        name="TwoReviewers", deadline=due,
+    )
+    two.reviewers.add(contrib, third)
+    # Assigned but unreviewed: the people count shows, the reviewer count does not.
+    Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=2,
+        name="NoReviewer", deadline=due,
+    ).assigned_members.add(lead)
+    client.force_login(user)
+
+    for name, (url, params) in _assignee_count_views(project).items():
+        content = client.get(url, params).content.decode()
+        assert "NoReviewer" in content, f"{name} view lost the unreviewed task"
+        assert content.count('aria-label="1 reviewer"') == 1, (
+            f"{name} view missed the single reviewer"
+        )
+        assert content.count('aria-label="2 reviewers"') == 1, (
+            f"{name} view missed the pair"
+        )
+        assert content.count('aria-label="0 reviewer') == 0, (
+            f"{name} view marked a task with no reviewers"
+        )
+        # A count, not a roll-call: names stay in the side pane.
+        assert contrib.display_name not in content, f"{name} view named a reviewer"
+
+
+@pytest.mark.django_db
+def test_kanban_card_meta_row_appears_for_reviewers_alone(client, user):
+    """A task with only reviewers still gets the meta row that carries them."""
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=0,
+        name="ReviewersOnly",
+    )
+    task.reviewers.add(lead)
+    client.force_login(user)
+
+    content = client.get(
+        reverse("tasks:board_kanban", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    assert 'aria-label="1 reviewer"' in content
+
+
+@pytest.mark.django_db
+def test_reviewer_count_does_not_add_a_query_per_task(client, user):
+    """The count reads a prefetch, so query volume stays flat in task count."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    client.force_login(user)
+
+    def queries_for(task_total):
+        Task.objects.filter(project=project).delete()
+        for i in range(task_total):
+            task = Task.objects.create(
+                project=project, created_by=lead, container=col1,
+                container_task_order=i, name=f"R{i}",
+                deadline=datetime(2026, 3, 12, tzinfo=dt_timezone.utc),
+            )
+            task.reviewers.add(lead)
+        counts = {}
+        for name, (url, params) in _assignee_count_views(project).items():
+            with CaptureQueriesContext(connection) as ctx:
+                client.get(url, params)
+            counts[name] = len(ctx)
+        return counts
+
+    few = queries_for(2)
+    many = queries_for(20)
+    for name, count in many.items():
+        assert count <= few[name], (
+            f"{name} view went from {few[name]} to {count} queries over 18 more "
+            f"tasks — the reviewer count is querying per task"
+        )

@@ -15,6 +15,8 @@
 
         {% include "_components/assignee_count.html" with count=item.task.assigned_members.all|length %}
 
+        {% include "_components/reviewer_count.html" with count=item.task.reviewers.all|length %}
+
         {# Priority flag and completed check, paired at the row's end. #}
         {% if item.task.is_priority or item.task.status == "COMPLETED" %}
           <span class="flex items-center gap-1 shrink-0">

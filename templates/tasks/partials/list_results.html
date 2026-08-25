@@ -59,8 +59,9 @@
                   {# Dates #}
                   {% include "_components/task_dates.html" with task=task hide_on_mobile=True %}
 
-                  {# Assignee count #}
+                  {# Assignee and reviewer counts #}
                   {% include "_components/assignee_count.html" with count=task.assigned_members.all|length %}
+                  {% include "_components/reviewer_count.html" with count=task.reviewers.all|length %}
 
                   {# GitHub icon #}
                   {% if task.github_url %}

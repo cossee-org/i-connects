@@ -3,7 +3,7 @@
   Context comes from views._task_status_context: task, is_project_manager,
   assignee_states (each with member, log, done, done_at, reviewed,
   reviewed_by, reviewed_at, awaiting_review), done_count, reviewed_count,
-  assignee_count, is_assignee, my_done.
+  assignee_count, is_assignee, my_done, reviewers.
 {% endcomment %}
 <div id="task-status-block"
      {% if pane_mode %}
@@ -78,6 +78,23 @@
     {% else %}
       <p class="mt-3 text-sm text-brand-text/60">Nobody is assigned to this task yet.</p>
     {% endif %}
+
+    {% comment %}
+      Who the Reviewed column is waiting on. It belongs to this card rather
+      than a section of its own: reviewers exist here to produce that column,
+      and sitting inside the swap target means adding or removing one shows up
+      with the next refresh. h4 under the card's h3, not a second h3.
+    {% endcomment %}
+    <div class="mt-3 pt-3 border-t border-brand-light/60">
+      <h4 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-1">Reviewers</h4>
+      {% if reviewers %}
+        <p class="text-sm text-brand-navy">
+          {% for reviewer in reviewers %}{{ reviewer.display_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        </p>
+      {% else %}
+        <p class="text-sm text-brand-text/50 italic">No reviewers assigned.</p>
+      {% endif %}
+    </div>
   {% else %}
     {% if assignee_states %}
       <ul class="mt-3 flex flex-col gap-1">
