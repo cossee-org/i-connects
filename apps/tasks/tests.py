@@ -2071,12 +2071,17 @@ def test_pane_drops_the_assignees_and_reviewers_sections(client, user, other_use
     assert "Reviewers</h4>" in completion
     assert lead.display_name in completion
 
-    # The full task page is a separate surface and keeps its own lists.
+    # The full task page carries the same card, and drops the same two lists
+    # for the same reason.
     detail = client.get(
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
-    assert "Assignees</h3>" in detail
-    assert "Reviewers</h3>" in detail
+    for heading in ("Assignees</h2>", "Assignees</h3>", "Reviewers</h2>", "Reviewers</h3>"):
+        assert heading not in detail, f"the page still has a {heading} section"
+    assert ">Completion</h3>" in detail
+    detail_completion = detail[detail.index(">Completion</h3>") :]
+    assert "Reviewers</h4>" in detail_completion
+    assert lead.display_name in detail_completion
 
 
 @pytest.mark.django_db
@@ -2299,17 +2304,36 @@ def test_pane_self_mark_button_survives_the_status_block_swap(client, user, othe
 
 
 @pytest.mark.django_db
-def test_full_task_page_keeps_its_own_self_mark_button(client, user, other_user):
-    """Only the pane moved its buttons; the detail page is unchanged."""
+def test_task_surfaces_carry_one_copy_of_each_action_bar_control(client, user, other_user):
+    """The page took the pane's action bar: the same three, once each.
+
+    Once each is the point. The completion block re-renders all three out of
+    band alongside its own swap, because they sit outside it — so a *first*
+    render that emitted them too would leave a second copy of each sitting in
+    the markup, discarded unseen in the pane but plainly visible on a page the
+    browser loads itself.
+    """
     project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     client.force_login(user)
 
-    detail = client.get(
-        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
-    ).content.decode()
-    assert "Mark my part done" in detail
-    # ...in the block itself, not via a top-bar partial it does not have.
-    assert 'id="task-self-mark-button"' not in detail
+    surfaces = {
+        "detail page": reverse(
+            "tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}
+        ),
+        "pane": _pane_url(project, task),
+    }
+    controls = (
+        'id="task-completion-chip"',
+        'id="task-completion-button"',
+        'id="task-self-mark-button"',
+    )
+    for name, url in surfaces.items():
+        html = client.get(url).content.decode()
+        assert "Mark my part done" in html, f"{name} lost the assignee's own mark"
+        assert "Mark Completed" in html, f"{name} lost the Lead's toggle"
+        for control in controls:
+            assert html.count(control) == 1, f"{name} has {html.count(control)}x {control}"
+        assert "hx-swap-oob" not in html, f"{name} ships an out-of-band copy on first render"
 
 
 @pytest.mark.django_db
@@ -2391,11 +2415,20 @@ def test_pane_status_is_a_dot_and_text_not_a_pill(client, user):
     # Same shape for all three: inline-flex, text-xs, font-medium, no chrome.
     assert pane.count("inline-flex items-center") >= 3
 
-    # The full task page and the projects list keep the filled pill.
+    # The full task page reads the same as the pane, tag for tag.
     detail = client.get(
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
-    assert "px-2.5 py-0.5 rounded-full" in detail
+    assert "px-2.5 py-0.5 rounded-full" not in detail, "the page's status is still a pill"
+    assert 'viewBox="0 0 8 8"' in detail, "no status dot"
+    assert "High priority" in detail
+    assert "Not Complete" in detail
+
+    # The pill lives on where a *project* is badged, which is what it was for.
+    project_page = client.get(
+        reverse("projects:detail", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "px-2.5 py-0.5 rounded-full" in project_page
 
 
 @pytest.mark.django_db
@@ -2428,8 +2461,8 @@ def test_pane_body_text_is_one_size(client, user, other_user):
 
 
 @pytest.mark.django_db
-def test_priority_flag_keeps_its_smaller_size_off_the_pane(client, user):
-    """text_size is opt-in: the browsing rows and My tasks sit at text-xs."""
+def test_priority_flag_keeps_its_smaller_size_off_the_task_surfaces(client, user):
+    """text_size is opt-in: My tasks sits at text-xs, the task surfaces at text-sm."""
     from datetime import datetime, timezone as dt_tz
 
     project, col1, _col2 = _make_project_with_board(user)
@@ -2439,13 +2472,12 @@ def test_priority_flag_keeps_its_smaller_size_off_the_pane(client, user):
         name="Flagged", is_priority=True,
         deadline=datetime(2026, 3, 12, tzinfo=dt_tz.utc),
     )
+    task.assigned_members.add(member)
     client.force_login(user)
 
-    detail = client.get(
-        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
-    ).content.decode()
-    i = detail.index('title="High priority"')
-    flag = detail[detail.rfind("<span", 0, i) : i]
+    rows = client.get(reverse("tasks:my_list")).content.decode()
+    i = rows.index('title="High priority"')
+    flag = rows[rows.rfind("<span", 0, i) : i]
     assert "text-xs" in flag and "text-sm" not in flag
 
 

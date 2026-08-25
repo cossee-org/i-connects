@@ -29,9 +29,10 @@
     </div>
 
     {% comment %}
-      In the pane both completion actions live in the top bar, refreshed out of
-      band at the bottom of this template. Only the full detail page keeps its
-      self-mark button here.
+      In the matrix layout both completion actions live in the surrounding
+      action bar — the pane's top bar, the task page's header — and are
+      refreshed out of band at the bottom of this template. Only the plain
+      layout keeps a self-mark button of its own here.
     {% endcomment %}
     {% if not pane_mode and task.status != "COMPLETED" and is_assignee %}
       <div class="flex items-center gap-2">
@@ -131,10 +132,17 @@
 </div>
 
 {% comment %}
-  Keep the pane's chip and its two top-bar buttons in sync with this swap: all
+  Keep the chip and the two action-bar buttons in sync with this swap: all
   three sit outside #task-status-block, so the swap cannot reach them in place.
+
+  Only on a swap response, which is what ``oob`` marks — the views that render
+  one set it. A first render (the pane's fragment, the full task page) already
+  ships those three in the markup around this block, so emitting them again
+  would draw a second copy of each: harmless in the pane, where HTMX discards
+  out-of-band elements that match nothing yet, but plainly visible on a page
+  the browser loads itself.
 {% endcomment %}
-{% if pane_mode %}
+{% if pane_mode and oob %}
   {% include "tasks/partials/task_completion_chip.html" with task=task oob=True %}
   {% include "tasks/partials/task_completion_button.html" with task=task is_project_manager=is_project_manager oob=True %}
   {% include "tasks/partials/task_self_mark_button.html" with task=task is_assignee=is_assignee my_done=my_done oob=True %}

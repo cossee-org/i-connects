@@ -1147,6 +1147,11 @@ def _respond_status_block(request, task, *, project_member, is_project_manager):
             task, project_member=project_member, is_project_manager=is_project_manager
         )
         ctx["pane_mode"] = pane_mode
+        # A swap response: the chip and the two action-bar buttons sit outside
+        # the block on every surface that renders it, so they come back out of
+        # band with it. First renders leave this off — the markup around the
+        # block already carries them.
+        ctx["oob"] = True
         return render(request, "tasks/partials/task_status_block.html", ctx)
     return redirect("tasks:detail", project_pk=task.project_id, pk=task.pk)
 
@@ -1162,6 +1167,7 @@ class TaskStatusBlockView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             is_project_manager=self.is_project_manager,
         )
         ctx["pane_mode"] = pane_mode
+        ctx["oob"] = True  # a swap response — see _respond_status_block
         return render(request, "tasks/partials/task_status_block.html", ctx)
 
 
