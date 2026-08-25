@@ -441,9 +441,17 @@
       <div class="{% block main_wrapper %}container mx-auto px-4 sm:px-6 lg:px-8 pt-8 max-w-7xl{% endblock %}">
         {% block breadcrumbs %}{% endblock %}
         {% block page_header %}{% endblock %}
-        {% if user.is_authenticated and project and is_project_member %}
-          {% include "_components/project_tabs.html" %}
-        {% endif %}
+        {% comment %}
+          Project section tabs, on the project-scoped pages that *are* a
+          section of the project. A page that is a leaf inside one — a single
+          task on its own page — overrides this block with nothing and draws
+          its own rule instead; see tasks/task_detail.html.
+        {% endcomment %}
+        {% block project_tabs %}
+          {% if user.is_authenticated and project and is_project_member %}
+            {% include "_components/project_tabs.html" %}
+          {% endif %}
+        {% endblock %}
       </div>
       <div class="{% block main_wrapper_content %}container mx-auto px-4 sm:px-6 lg:px-8 pb-8 max-w-7xl{% endblock %}">
         {% block content %}{% endblock %}

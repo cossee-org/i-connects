@@ -2304,6 +2304,38 @@ def test_pane_self_mark_button_survives_the_status_block_swap(client, user, othe
 
 
 @pytest.mark.django_db
+def test_a_full_task_page_shows_no_project_section_tabs(client, user):
+    """A task is a leaf reached from a section, not a section of its own.
+
+    The strip would light up Tasks while the reader is off the board. It also
+    drew the rule between the page's chrome and its content, so the header has
+    to carry one of its own once the strip is gone.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Leaf",
+    )
+    client.force_login(user)
+
+    detail = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    assert 'aria-label="Project sections"' not in detail
+    # ...the markup, not the rule: base.html styles .project-subnav on every page.
+    assert 'class="project-subnav"' not in detail
+    header = detail[detail.index("<header") : detail.index("</header>")]
+    assert "border-b border-brand-light" in header, "the header lost the strip's rule"
+
+    # The board is a section, and keeps them.
+    board = client.get(
+        reverse("tasks:board", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    assert 'aria-label="Project sections"' in board
+
+
+@pytest.mark.django_db
 def test_task_surfaces_carry_one_copy_of_each_action_bar_control(client, user, other_user):
     """The page took the pane's action bar: the same three, once each.
 

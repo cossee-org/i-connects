@@ -25,8 +25,17 @@
   </a>
 {% endblock %}
 
+{% comment %}
+  No project section tabs on a task. The tabs name the project's sections, and
+  a single task is a leaf reached from one rather than a section of its own —
+  the strip would light up Tasks while you are off the board, and the back link
+  above is the way out. The header takes over the rule the strip used to draw
+  between the page's chrome and its content.
+{% endcomment %}
+{% block project_tabs %}{% endblock %}
+
 {% block page_header %}
-  <header class="mb-6 flex flex-wrap items-start justify-between gap-3">
+  <header class="mb-6 pb-4 border-b border-brand-light flex flex-wrap items-start justify-between gap-3">
 
     {% comment %}
       flex-1 min-w-0 so the title takes the room that is left and wraps, rather
