@@ -4,6 +4,8 @@
 {# rest (A11Y_GUIDE #7 — never colour alone). #}
 {# Pass at=<datetime> to print when it happened beside the glyph. Entries #}
 {# completed before that was recorded have none, and show the glyph alone. #}
+{# The date is a note on the cell rather than its content, so it sits a step #}
+{# below the table's text-sm — three of these can share one narrow column. #}
 <span class="inline-flex items-center gap-1.5">
   <span role="img" aria-label="{% if on %}Yes{% else %}No{% endif %}"
         class="inline-flex shrink-0 {% if on %}text-success{% else %}text-brand-text/30{% endif %}">
@@ -16,6 +18,6 @@
     {% endif %}
   </span>
   {% if on and at %}
-    <span class="text-brand-text/60 whitespace-nowrap">{{ at|date:"M j, Y" }}</span>
+    <span class="text-xs text-brand-text/60 whitespace-nowrap">{{ at|date:"M j, Y" }}</span>
   {% endif %}
 </span>

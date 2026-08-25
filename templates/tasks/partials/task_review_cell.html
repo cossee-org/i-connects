@@ -15,12 +15,16 @@
   Closing the task does not retire these buttons the way it retires the
   assignee's own mark: a Lead may well close first and have the reviewers sign
   off after.
+
+  The name and the awaiting note are text-xs, matching the date the cell
+  prints beside them: this column can carry a check, a date, a name and a
+  button at once, and at the table's text-sm that wraps in a narrow pane.
 {% endcomment %}
 <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
   {% include "tasks/partials/task_matrix_cell.html" with on=s.reviewed at=s.reviewed_at %}
 
   {% if s.reviewed %}
-    <span class="text-brand-text/60 whitespace-nowrap">
+    <span class="text-xs text-brand-text/60 whitespace-nowrap">
       {% if s.reviewed_by %}
         by {{ s.reviewed_by.display_name }}
       {% else %}
@@ -62,7 +66,7 @@
       </button>
     {% else %}
       {# Everyone else just sees that it is waiting on a reviewer. #}
-      <span class="text-brand-text/60 whitespace-nowrap">Awaiting review</span>
+      <span class="text-xs text-brand-text/60 whitespace-nowrap">Awaiting review</span>
     {% endif %}
   {% endif %}
 </div>
