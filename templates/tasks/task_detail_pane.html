@@ -209,7 +209,7 @@
             hx-swap="beforeend"
             hx-on::after-request="if(event.detail.successful) this.reset()">
         {% csrf_token %}
-        <label for="pane-comment-{{ task.pk }}" class="sr-only">Comment</label>
+        <label for="{{ comment_form.content.id_for_label }}" class="sr-only">Comment</label>
         {{ comment_form.content }}
         <div class="flex justify-end">
           <button type="submit"

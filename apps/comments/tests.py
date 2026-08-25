@@ -288,3 +288,32 @@ def test_the_edit_forms_actions_sit_right_with_cancel_first(commentable):
     actions = html[html.index('<div class="flex gap-2') :]
     assert "justify-end" in actions[: actions.index(">")]
     assert actions.index("Cancel") < actions.index("Save")
+
+
+@pytest.mark.django_db
+def test_the_comment_box_is_one_row_tall(commentable):
+    """A one-liner, the height of a single-line input."""
+    from django.template.loader import render_to_string
+
+    from apps.comments.forms import CommentForm
+
+    _project, task, _member = commentable
+    html = render_to_string(
+        "comments/comment_form.html", {"task": task, "form": CommentForm()}
+    )
+    textarea = html[html.index("<textarea") : html.index(">", html.index("<textarea"))]
+    assert 'rows="1"' in textarea
+
+
+@pytest.mark.django_db
+def test_the_panes_comment_label_points_at_its_box(client, commentable, user):
+    """An sr-only label is only a label if its for= finds the field."""
+    project, task, _member = commentable
+    client.force_login(user)
+
+    pane = client.get(
+        reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    label = pane[pane.index('class="sr-only">Comment<') - 200 : pane.index('class="sr-only">Comment<')]
+    field_id = label[label.index('for="') + 5 : label.index('"', label.index('for="') + 5)]
+    assert f'id="{field_id}"' in pane, f"no element carries id={field_id}"
