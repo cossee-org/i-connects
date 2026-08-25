@@ -1205,9 +1205,14 @@ def test_board_page_shows_manage_columns_for_every_view(client, pm_user):
     response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
     content = response.content.decode()
     assert "Manage columns" in content
-    # No x-show gate on the button itself (the view switcher still uses one).
     button = content[content.rindex("<button", 0, content.index("Manage columns")):]
-    assert "x-show" not in button[: button.index("</button>")]
+    markup = button[: button.index("</button>")]
+    # No x-show gate on the button itself (the view switcher still uses one).
+    assert "x-show" not in markup
+    # An icon, like the three view buttons beside it — and hidden from the
+    # accessibility tree, since the label already carries the meaning.
+    assert "<svg" in markup, "the button lost its icon"
+    assert 'aria-hidden="true"' in markup
 
 
 # ---------------------------------------------------------------------------
@@ -2071,12 +2076,17 @@ def test_pane_drops_the_assignees_and_reviewers_sections(client, user, other_use
     assert "Reviewers</h4>" in completion
     assert lead.display_name in completion
 
-    # The full task page is a separate surface and keeps its own lists.
+    # The full task page carries the same card, and drops the same two lists
+    # for the same reason.
     detail = client.get(
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
-    assert "Assignees</h3>" in detail
-    assert "Reviewers</h3>" in detail
+    for heading in ("Assignees</h2>", "Assignees</h3>", "Reviewers</h2>", "Reviewers</h3>"):
+        assert heading not in detail, f"the page still has a {heading} section"
+    assert ">Completion</h3>" in detail
+    detail_completion = detail[detail.index(">Completion</h3>") :]
+    assert "Reviewers</h4>" in detail_completion
+    assert lead.display_name in detail_completion
 
 
 @pytest.mark.django_db
@@ -2299,17 +2309,255 @@ def test_pane_self_mark_button_survives_the_status_block_swap(client, user, othe
 
 
 @pytest.mark.django_db
-def test_full_task_page_keeps_its_own_self_mark_button(client, user, other_user):
-    """Only the pane moved its buttons; the detail page is unchanged."""
-    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+def test_a_full_task_page_shows_no_project_section_tabs(client, user):
+    """A task is a leaf reached from a section, not a section of its own.
+
+    The strip would light up Tasks while the reader is off the board. It also
+    drew the rule between the page's chrome and its content, so the header has
+    to carry one of its own once the strip is gone.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Leaf",
+    )
     client.force_login(user)
 
     detail = client.get(
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
-    assert "Mark my part done" in detail
-    # ...in the block itself, not via a top-bar partial it does not have.
-    assert 'id="task-self-mark-button"' not in detail
+    assert 'aria-label="Project sections"' not in detail
+    # ...the markup, not the rule: base.html styles .project-subnav on every page.
+    assert 'class="project-subnav"' not in detail
+    # The page's own header, not base.html's topbar — which happens to carry
+    # the same border classes.
+    start = detail.index('<header class="mb-6')
+    header = detail[start : detail.index("</header>", start)]
+    assert "border-b border-brand-light" in header, "the header lost the strip's rule"
+
+    # The board is a section, and keeps them.
+    board = client.get(
+        reverse("tasks:board", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    assert 'aria-label="Project sections"' in board
+
+
+@pytest.mark.django_db
+def test_full_task_page_orders_its_sections_like_the_pane(client, user, other_user):
+    """Summary in the heading, then the actions, then the pane's card order.
+
+    The pane opens with a summary card — name, tags, dates, author — because it
+    has no page heading of its own. The page reads the same things out of the
+    heading it already had, puts the pane's top bar in a row of its own below
+    it, and then runs the same cards in the same order.
+    """
+    from datetime import datetime, timezone as dt_tz
+
+    from apps.tasks.models import Milestone
+
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+    task.description = "Some description."
+    task.github_url = "https://github.com/x/y/pull/1"
+    task.milestone = Milestone.objects.create(project=project, name="M1")
+    task.start_date = datetime(2026, 3, 10, tzinfo=dt_tz.utc)
+    task.deadline = datetime(2026, 3, 12, tzinfo=dt_tz.utc)
+    task.is_priority = True
+    task.save()
+    client.force_login(user)
+
+    detail = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+
+    start = detail.index('<header class="mb-6')
+    header = detail[start : detail.index("</header>", start)]
+    for piece in ("Moded", "High priority", "Not Complete", "Start date", "Due date", "Created by"):
+        assert piece in header, f"the heading is missing {piece}"
+
+    body = detail[detail.index("</header>", start) :]
+    assert (
+        body.index('id="task-completion-button"')   # the action row
+        < body.index(">Description<")
+        < body.index(">Completion<")
+        < body.index(">Milestone<")
+        < body.index(">GitHub<")
+        < body.index("Comments")
+    )
+    # The dates are read in the heading, so no card repeats them.
+    assert "Start date" not in body
+
+
+def _task_surfaces(project, task):
+    """The two places a task is read in full, by name."""
+    return {
+        "detail page": reverse(
+            "tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}
+        ),
+        "pane": _pane_url(project, task),
+    }
+
+
+@pytest.mark.django_db
+def test_the_comment_box_sits_above_the_thread_and_posts_to_the_top(client, user):
+    """Write at the top, read down from the newest."""
+    from apps.comments.models import Comment
+
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Threaded",
+    )
+    Comment.objects.create(task=task, author=member, content="only one")
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        # Whichever container this surface names its thread.
+        thread_id = next(
+            marker
+            for marker in ('id="task-comments"', f'id="task-pane-comments-{task.pk}"')
+            if marker in html
+        )
+        posts_to = f'hx-post="{reverse("comments:create", kwargs={"task_pk": task.pk})}"'
+        assert html.index(posts_to) < html.index(
+            thread_id
+        ), f"{name} still has the box under the thread"
+        assert 'hx-swap="afterbegin"' in html, f"{name} still appends to the end"
+
+
+@pytest.mark.django_db
+def test_a_long_thread_hides_its_older_comments_behind_see_more(client, user):
+    """Three newest in the open, the rest behind the toggle."""
+    from apps.comments.models import Comment
+
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Chatty",
+    )
+    for i in range(5):
+        Comment.objects.create(task=task, author=member, content=f"comment {i}")
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        rest = html[html.index("comments-rest") :]
+        rest = rest[: rest.index("</div>")]
+        assert 'x-show="expanded"' in rest, f"{name} shows the older comments outright"
+        assert "See more" in html and "See less" in html, f"{name} lost the toggle"
+        # The two newest are in the open; the oldest is not.
+        head = html[: html.index("comments-rest")]
+        assert "comment 4" in head and "comment 3" in head and "comment 2" in head
+        assert "comment 0" not in head, f"{name} shows a fourth comment up front"
+
+
+@pytest.mark.django_db
+def test_a_short_thread_gets_no_see_more(client, user):
+    """Nothing hidden, so nothing to offer."""
+    from apps.comments.models import Comment
+
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Terse",
+    )
+    for i in range(3):
+        Comment.objects.create(task=task, author=member, content=f"comment {i}")
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        assert "comments-rest" not in html, f"{name} built an empty hidden list"
+
+
+@pytest.mark.django_db
+def test_the_matrix_hides_its_later_rows_and_keeps_them_open_across_a_swap(
+    client, user, other_user
+):
+    """Rows past the third wait behind See more — and stay open when acted on.
+
+    The state has to live in the surrounding template, not in the block: the
+    block is the swap target, so state kept inside it would snap back to
+    collapsed on every mark and review and take the row just acted on with it.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=lead, container=col1,
+        container_task_order=0, name="Crowded",
+    )
+    members = [lead] + [
+        ProjectMember.objects.create(project=project, name=f"M{i}") for i in range(4)
+    ]
+    task.assigned_members.set(members)
+    for m in members:
+        TaskLog.objects.create(task=task, assigned_to=m)
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        assert html.count('x-show="rowsExpanded"') == 2, f"{name} hid the wrong rows"
+        assert 'x-data="{ rowsExpanded: false }"' in html, f"{name} has nowhere to keep it"
+
+    # The swap response carries the rows but not the state — that stayed put.
+    swapped = client.post(
+        reverse("tasks:complete", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert 'x-show="rowsExpanded"' in swapped
+    assert "rowsExpanded: false" not in swapped, "the swap would reset the toggle"
+
+
+@pytest.mark.django_db
+def test_a_short_matrix_gets_no_see_more(client, user, other_user):
+    """Two assignees, nothing hidden, no toggle."""
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        assert 'x-show="rowsExpanded"' not in html, f"{name} hid a row it should not"
+        block = html[html.index('id="task-status-block"') :]
+        block = block[: block.index("</div>")]
+        assert "See more" not in block, f"{name} offers a toggle with nothing behind it"
+
+
+@pytest.mark.django_db
+def test_task_surfaces_carry_one_copy_of_each_action_bar_control(client, user, other_user):
+    """The page took the pane's action bar: the same three, once each.
+
+    Once each is the point. The completion block re-renders all three out of
+    band alongside its own swap, because they sit outside it — so a *first*
+    render that emitted them too would leave a second copy of each sitting in
+    the markup, discarded unseen in the pane but plainly visible on a page the
+    browser loads itself.
+    """
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+    client.force_login(user)
+
+    surfaces = {
+        "detail page": reverse(
+            "tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}
+        ),
+        "pane": _pane_url(project, task),
+    }
+    controls = (
+        'id="task-completion-chip"',
+        'id="task-completion-button"',
+        'id="task-self-mark-button"',
+    )
+    for name, url in surfaces.items():
+        html = client.get(url).content.decode()
+        assert "Mark my part done" in html, f"{name} lost the assignee's own mark"
+        assert "Mark Completed" in html, f"{name} lost the Lead's toggle"
+        for control in controls:
+            assert html.count(control) == 1, f"{name} has {html.count(control)}x {control}"
+        assert "hx-swap-oob" not in html, f"{name} ships an out-of-band copy on first render"
 
 
 @pytest.mark.django_db
@@ -2391,11 +2639,20 @@ def test_pane_status_is_a_dot_and_text_not_a_pill(client, user):
     # Same shape for all three: inline-flex, text-xs, font-medium, no chrome.
     assert pane.count("inline-flex items-center") >= 3
 
-    # The full task page and the projects list keep the filled pill.
+    # The full task page reads the same as the pane, tag for tag.
     detail = client.get(
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
-    assert "px-2.5 py-0.5 rounded-full" in detail
+    assert "px-2.5 py-0.5 rounded-full" not in detail, "the page's status is still a pill"
+    assert 'viewBox="0 0 8 8"' in detail, "no status dot"
+    assert "High priority" in detail
+    assert "Not Complete" in detail
+
+    # The pill lives on where a *project* is badged, which is what it was for.
+    project_page = client.get(
+        reverse("projects:detail", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "px-2.5 py-0.5 rounded-full" in project_page
 
 
 @pytest.mark.django_db
@@ -2428,8 +2685,8 @@ def test_pane_body_text_is_one_size(client, user, other_user):
 
 
 @pytest.mark.django_db
-def test_priority_flag_keeps_its_smaller_size_off_the_pane(client, user):
-    """text_size is opt-in: the browsing rows and My tasks sit at text-xs."""
+def test_priority_flag_keeps_its_smaller_size_off_the_task_surfaces(client, user):
+    """text_size is opt-in: My tasks sits at text-xs, the task surfaces at text-sm."""
     from datetime import datetime, timezone as dt_tz
 
     project, col1, _col2 = _make_project_with_board(user)
@@ -2439,13 +2696,12 @@ def test_priority_flag_keeps_its_smaller_size_off_the_pane(client, user):
         name="Flagged", is_priority=True,
         deadline=datetime(2026, 3, 12, tzinfo=dt_tz.utc),
     )
+    task.assigned_members.add(member)
     client.force_login(user)
 
-    detail = client.get(
-        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
-    ).content.decode()
-    i = detail.index('title="High priority"')
-    flag = detail[detail.rfind("<span", 0, i) : i]
+    rows = client.get(reverse("tasks:my_list")).content.decode()
+    i = rows.index('title="High priority"')
+    flag = rows[rows.rfind("<span", 0, i) : i]
     assert "text-xs" in flag and "text-sm" not in flag
 
 
@@ -3241,6 +3497,219 @@ def test_completed_task_says_why_the_row_actions_are_gone(client, user, other_us
     ).content.decode()
     assert note not in reopened
     assert "Mark not done" in reopened
+
+
+def _sole_assignee_task(user, other_user, *, name="Reviewed to done"):
+    """A task with one assignee and the Lead as its only reviewer.
+
+    The plain review case, and the one where completion-on-review matters
+    most: the reviewer is not an assignee, so their All tasks page judges the
+    task by ``Task.status`` alone.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    contrib = _add_contributor(project, other_user)
+    task = Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=0,
+        name=name,
+    )
+    task.assigned_members.add(contrib)
+    task.reviewers.add(lead)
+    return project, task, lead, contrib
+
+
+@pytest.mark.django_db
+def test_reviewing_the_last_submission_completes_the_task(client, user, other_user):
+    """Every submission signed off means the task is done.
+
+    And done means gone from the lists. A reviewer is not an assignee, so
+    their All tasks page reads ``Task.status`` and nothing else — while that
+    stayed NOT_COMPLETED a fully-reviewed task sat there with nothing left for
+    them to do.
+    """
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _sole_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+
+    # Waiting on the reviewer, so it is on their list.
+    assert task.name in client.get(reverse("tasks:my_list")).content.decode()
+
+    client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+    assert task.name not in client.get(reverse("tasks:my_list")).content.decode()
+
+
+@pytest.mark.django_db
+def test_the_swap_that_closes_the_task_comes_back_saying_so(client, user, other_user):
+    """The review that closes the task has to report it in the same response.
+
+    The rule flips ``Task.status`` through ``task_log.task``, a different
+    instance from the one the view renders from — so without a re-read the
+    chip and the Lead's toggle came back showing the state from before the
+    click, and caught up only on the next one.
+    """
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _sole_assignee_task(
+        user, other_user, name="Swapped shut"
+    )
+    mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+
+    closed = client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    ).content.decode()
+    assert "<span>Complete</span>" in closed, "the chip lagged the click"
+    assert "Mark Not Complete" in closed, "the Lead's toggle lagged the click"
+    assert "Mark Completed" not in closed
+    # Closed by the reviews, so the verdict is still there to withdraw.
+    assert "Mark not reviewed" in closed
+    assert "marks and reviews are locked" not in closed
+
+    reopened = client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "0", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    ).content.decode()
+    assert "<span>Not Complete</span>" in reopened
+    assert "Mark Completed" in reopened
+
+
+@pytest.mark.django_db
+def test_reviewing_one_of_two_submissions_leaves_the_task_open(client, user, other_user):
+    """"All of them" means all: one outstanding submission keeps it open."""
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=contrib)
+    mark_own_done(task=task, member=lead)
+    client.force_login(user)
+
+    client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+
+    # The second verdict is the one that finishes it.
+    client.post(
+        _review_url(task, _current_log(task, lead)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+
+@pytest.mark.django_db
+def test_withdrawing_the_verdict_that_closed_the_task_reopens_it(client, user, other_user):
+    """Completion follows the reviews, so it follows them back.
+
+    And the verdict stays withdrawable while it stands: locking a
+    review-closed task would delete "withdraw my review" outright for the
+    one-assignee tasks that are most of them, since the last sign-off would
+    seal itself.
+    """
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _sole_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+    client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+    # Completed, but not locked: the row still offers the way back.
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "marks and reviews are locked" not in pane
+    assert "Mark not reviewed" in pane
+
+    response = client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "0", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    assert response.status_code == 200
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+    assert not _current_log(task, contrib).is_reviewed
+
+
+@pytest.mark.django_db
+def test_undoing_the_done_mark_under_a_verdict_reopens_the_task(client, user, other_user):
+    """The other way to unpick it: the assignee takes their submission back.
+
+    Reverting a mark clears the review standing on it, so the task that those
+    reviews closed has to reopen with it.
+    """
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _sole_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+    client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+    # The Lead clears the mark from the matrix row.
+    client.post(
+        _done_url(task, contrib),
+        {"done": "0", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+    log = _current_log(task, contrib)
+    assert log.status == TaskStatus.NOT_COMPLETED and not log.is_reviewed
+
+
+@pytest.mark.django_db
+def test_a_lead_closed_task_is_not_reopened_by_the_review_rule(client, user, other_user):
+    """A Lead's close is a judgement over the verdicts, not a sum of them.
+
+    So it stays closed and stays locked, with an outstanding submission that
+    the rule would never have closed on its own.
+    """
+    from apps.tasks.services import close_task, mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=contrib)
+    close_task(task=task, closed_by=lead)
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "marks and reviews are locked" in pane
+
+    # Every per-member action is refused, in both directions.
+    for url, data in (
+        (_review_url(task, _current_log(task, contrib)), {"reviewed": "1"}),
+        (_done_url(task, contrib), {"done": "0"}),
+    ):
+        assert client.post(url, data, HTTP_HX_REQUEST="true").status_code == 403
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
 
 
 @pytest.mark.django_db

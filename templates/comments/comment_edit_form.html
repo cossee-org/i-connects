@@ -14,15 +14,18 @@
       where the Comment button does, so the action does not move when a
       comment flips between reading and editing. Matches every other form in
       the app (STYLE_GUIDE: cancel, ghost, to the left of the submit).
+
+      btn-xs like that Comment button, and like the actions above the thread:
+      the task surfaces run every button at that size.
     {% endcomment %}
     <div class="flex gap-2 justify-end">
       <button type="button"
-              class="btn btn-sm btn-ghost"
+              class="btn btn-xs btn-ghost"
               hx-get="{% url 'comments:edit' pk=comment.pk %}?cancel=1"
               hx-target="#comment-{{ comment.pk }}"
               hx-swap="outerHTML">Cancel</button>
       <button type="submit"
-              class="btn btn-sm btn-primary">Save</button>
+              class="btn btn-xs btn-primary">Save</button>
     </div>
   </form>
 </div>

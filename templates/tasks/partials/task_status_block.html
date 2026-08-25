@@ -29,9 +29,10 @@
     </div>
 
     {% comment %}
-      In the pane both completion actions live in the top bar, refreshed out of
-      band at the bottom of this template. Only the full detail page keeps its
-      self-mark button here.
+      In the matrix layout both completion actions live in the surrounding
+      action bar — the pane's top bar, the task page's header — and are
+      refreshed out of band at the bottom of this template. Only the plain
+      layout keeps a self-mark button of its own here.
     {% endcomment %}
     {% if not pane_mode and task.status != "COMPLETED" and is_assignee %}
       <div class="flex items-center gap-2">
@@ -78,9 +79,18 @@
               <th scope="col" class="text-left font-semibold pb-1.5 whitespace-nowrap">Reviewed</th>
             </tr>
           </thead>
+          {% comment %}
+            Past the third row the matrix waits behind See more: a task with a
+            dozen assignees would otherwise be a wall of names above the
+            reviewers and the comments. ``rowsExpanded`` comes from an x-data
+            wrapper *outside* this block, which the surrounding template owns —
+            this element is an HTMX swap target, so state kept inside it would
+            snap back to collapsed on every mark and review, taking the row
+            you had just acted on with it.
+          {% endcomment %}
           <tbody class="divide-y divide-brand-light/60">
             {% for s in assignee_states %}
-              <tr>
+              <tr{% if forloop.counter > 3 %} x-show="rowsExpanded" x-cloak{% endif %}>
                 <th scope="row" class="text-left font-normal text-brand-navy py-1.5 pr-2">{{ s.member.display_name }}</th>
                 <td class="py-1.5 px-2">{% include "tasks/partials/task_done_cell.html" with s=s task=task %}</td>
                 <td class="py-1.5">{% include "tasks/partials/task_review_cell.html" with s=s task=task %}</td>
@@ -89,6 +99,13 @@
           </tbody>
         </table>
       </div>
+      {% if assignee_count > 3 %}
+        <button type="button"
+                class="mt-2 text-xs font-medium text-brand-navy hover:underline"
+                :aria-expanded="rowsExpanded"
+                @click="rowsExpanded = !rowsExpanded"
+                x-text="rowsExpanded ? 'See less' : 'See more'">See more</button>
+      {% endif %}
     {% else %}
       <p class="mt-3 text-sm text-brand-text/60">Nobody is assigned to this task yet.</p>
     {% endif %}
@@ -131,10 +148,17 @@
 </div>
 
 {% comment %}
-  Keep the pane's chip and its two top-bar buttons in sync with this swap: all
+  Keep the chip and the two action-bar buttons in sync with this swap: all
   three sit outside #task-status-block, so the swap cannot reach them in place.
+
+  Only on a swap response, which is what ``oob`` marks — the views that render
+  one set it. A first render (the pane's fragment, the full task page) already
+  ships those three in the markup around this block, so emitting them again
+  would draw a second copy of each: harmless in the pane, where HTMX discards
+  out-of-band elements that match nothing yet, but plainly visible on a page
+  the browser loads itself.
 {% endcomment %}
-{% if pane_mode %}
+{% if pane_mode and oob %}
   {% include "tasks/partials/task_completion_chip.html" with task=task oob=True %}
   {% include "tasks/partials/task_completion_button.html" with task=task is_project_manager=is_project_manager oob=True %}
   {% include "tasks/partials/task_self_mark_button.html" with task=task is_assignee=is_assignee my_done=my_done oob=True %}

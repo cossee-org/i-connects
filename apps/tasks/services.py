@@ -187,6 +187,10 @@ def reopen_own(
     log = _current_log_for(task, member)
     if log is None:
         return None
+    # Whether the task's completion rests on its reviews — see clear_review.
+    completed_on_reviews = (
+        task.status == TaskStatus.COMPLETED and all_submissions_reviewed(task)
+    )
     had_review = log.is_reviewed or log.reviewed_by_id is not None
     log.status = TaskStatus.NOT_COMPLETED
     log.completed_at = None
@@ -202,15 +206,24 @@ def reopen_own(
             actor_member=actor or member,
             reason="the done mark it stood on was reverted",
         )
+    if completed_on_reviews:
+        # This mark was one of the reviewed submissions the task's completion
+        # rested on, and it no longer is.
+        reopen_task(task=task)
     return log
 
 
 @transaction.atomic
-def close_task(*, task: Task, closed_by: ProjectMember) -> Task:
-    """Close a task (Lead action), finalising ``Task.status`` to COMPLETED.
+def close_task(
+    *, task: Task, closed_by: ProjectMember, reason: str | None = None
+) -> Task:
+    """Close a task, finalising ``Task.status`` to COMPLETED.
 
     Always allowed: a Lead can close a task whenever they judge it done,
-    whether or not every assignee has marked their own part.
+    whether or not every assignee has marked their own part. The other way in
+    is :func:`mark_reviewed` signing off the last outstanding submission,
+    which passes a ``reason`` so the audit row says the task closed itself
+    rather than reading as a Lead's click.
 
     Only the task's own status moves. Per-assignee TaskLogs are left exactly
     as they are in *both* completion modes: "marked done" is an assignee's
@@ -226,15 +239,45 @@ def close_task(*, task: Task, closed_by: ProjectMember) -> Task:
     """
     task.status = TaskStatus.COMPLETED
     task.save(update_fields=["status", "updated_at"])
+    metadata = {"name": task.name}
+    if reason:
+        metadata["reason"] = reason
     log_action(
         AuditAction.TASK_COMPLETED,
         actor=closed_by.users.first(),
         entity=task,
         project=task.project,
-        metadata={"name": task.name},
+        metadata=metadata,
     )
     _notify_task_completed(task=task, completed_by=closed_by)
     return task
+
+
+def all_submissions_reviewed(task: Task) -> bool:
+    """True when every assignee has marked their part done and had it reviewed.
+
+    Read from the task's *current* assignees and their current TaskLog, so it
+    follows the same live sets the completion matrix does: a member added to
+    the task brings an unreviewed row with them, and one taken off stops being
+    counted.
+
+    False for a task nobody is assigned to. There are no submissions there to
+    have reviewed, so "all of them are" would close a task on which no work
+    was ever recorded.
+    """
+    current = {}
+    for log in task.task_logs.all():  # newest-first; first seen is current
+        current.setdefault(log.assigned_to_id, log)
+    # Read off the prefetched set rather than values_list, which would issue a
+    # query of its own on every render of the completion matrix.
+    assignee_ids = [member.pk for member in task.assigned_members.all()]
+    if not assignee_ids:
+        return False
+    for member_id in assignee_ids:
+        log = current.get(member_id)
+        if log is None or log.status != TaskStatus.COMPLETED or not log.is_reviewed:
+            return False
+    return True
 
 
 @transaction.atomic
@@ -257,6 +300,15 @@ def mark_reviewed(*, task_log: TaskLog, reviewer: ProjectMember) -> TaskLog:
         AuditAction.TASK_REVIEWED, task_log=task_log, actor_member=reviewer
     )
     _notify_submission_reviewed(task_log=task_log, reviewer=reviewer)
+    # Signing off the last outstanding submission finishes the task. Without
+    # this a fully-reviewed task stayed NOT_COMPLETED, and the task lists judge
+    # "active" by ``Task.status`` for anyone who is not an assignee — so it sat
+    # on its reviewers' All tasks page with nothing left for them to do.
+    task = task_log.task
+    if task.status != TaskStatus.COMPLETED and all_submissions_reviewed(task):
+        close_task(
+            task=task, closed_by=reviewer, reason="all submissions reviewed"
+        )
     return task_log
 
 
@@ -267,9 +319,19 @@ def clear_review(
     """Withdraw the review on a submission, leaving the assignee's mark alone.
 
     A no-op on an unreviewed entry, so a double-clicked Undo is harmless.
+
+    Withdrawing the last standing verdict on a task that reviews had closed
+    reopens it: completion follows the reviews there, so it has to follow them
+    back. A task a Lead closed by hand is untouched — that completion was
+    their judgement, not a sum of verdicts, and the endpoints do not let a
+    review be withdrawn on one anyway.
     """
     if not task_log.is_reviewed and task_log.reviewed_by_id is None:
         return task_log
+    task = task_log.task
+    completed_on_reviews = (
+        task.status == TaskStatus.COMPLETED and all_submissions_reviewed(task)
+    )
     task_log.reviewed_by = None
     task_log.reviewed_at = None
     task_log.save(update_fields=["reviewed_by", "reviewed_at"])
@@ -278,6 +340,8 @@ def clear_review(
         task_log=task_log,
         actor_member=cleared_by,
     )
+    if completed_on_reviews:
+        reopen_task(task=task)
     return task_log
 
 

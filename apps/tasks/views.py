@@ -68,6 +68,7 @@ from apps.tasks.mixins import (
 )
 from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
 from apps.tasks.services import (
+    all_submissions_reviewed,
     approve_completion,
     clear_review,
     close_task,
@@ -1023,14 +1024,21 @@ _LOCKED_MESSAGE = (
 
 
 def _marks_locked(task) -> bool:
-    """True when a task is completed, which freezes every per-member action.
+    """True when a Lead's judgement closed the task, freezing every per-member
+    action.
 
-    Marking done, undoing a mark and reviewing all stop at that point — for
-    assignees, reviewers and Leads alike. A Lead who needs to change one marks
-    the task Not Complete first, which is the only action a completed task
-    still offers.
+    Marking done, undoing a mark and reviewing all stop there — for assignees,
+    reviewers and Leads alike. A Lead who needs to change one marks the task
+    Not Complete first, which is the only action such a task still offers.
+
+    A task the reviews closed is *not* locked, even though it is completed:
+    its completion is the sum of those verdicts rather than a decision over
+    them, so each one stays withdrawable and taking one back reopens the task
+    (see services.clear_review). Locking there would delete "withdraw my
+    review" outright for the single-assignee tasks that are most of them —
+    the last sign-off would seal itself.
     """
-    return task.status == TaskStatus.COMPLETED
+    return task.status == TaskStatus.COMPLETED and not all_submissions_reviewed(task)
 
 
 def _task_status_context(task, *, project_member, is_project_manager):
@@ -1142,11 +1150,22 @@ def _task_status_context(task, *, project_member, is_project_manager):
 def _respond_status_block(request, task, *, project_member, is_project_manager):
     """Render the status block for HTMX, or redirect to the task for full GETs."""
     if request.headers.get("HX-Request"):
+        # Every caller reaches here having just mutated something, and not all
+        # of it lands on this instance: the review rule closes and reopens the
+        # task through ``task_log.task``, which is a separate object from the
+        # one the view loaded. Re-read before rendering, or the swap shows the
+        # state from before the click and the chip lags a click behind.
+        task.refresh_from_db()
         pane_mode = request.POST.get("pane_mode") == "1"
         ctx = _task_status_context(
             task, project_member=project_member, is_project_manager=is_project_manager
         )
         ctx["pane_mode"] = pane_mode
+        # A swap response: the chip and the two action-bar buttons sit outside
+        # the block on every surface that renders it, so they come back out of
+        # band with it. First renders leave this off — the markup around the
+        # block already carries them.
+        ctx["oob"] = True
         return render(request, "tasks/partials/task_status_block.html", ctx)
     return redirect("tasks:detail", project_pk=task.project_id, pk=task.pk)
 
@@ -1162,6 +1181,7 @@ class TaskStatusBlockView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             is_project_manager=self.is_project_manager,
         )
         ctx["pane_mode"] = pane_mode
+        ctx["oob"] = True  # a swap response — see _respond_status_block
         return render(request, "tasks/partials/task_status_block.html", ctx)
 
 
