@@ -211,9 +211,10 @@
         {% csrf_token %}
         <label for="{{ comment_form.content.id_for_label }}" class="sr-only">Comment</label>
         {{ comment_form.content }}
+        {# btn-xs, matching the top bar's actions and the matrix's buttons. #}
         <div class="flex justify-end">
           <button type="submit"
-                  class="btn btn-sm btn-primary">
+                  class="btn btn-xs btn-primary">
             Comment
           </button>
         </div>

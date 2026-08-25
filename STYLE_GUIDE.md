@@ -66,7 +66,7 @@ Use these rather than rewriting the markup each time:
 - **Secondary / confirm:** `class="btn btn-primary"` (navy)
 - **Neutral:** `class="btn btn-ghost"`
 - **Destructive:** `class="btn btn-outline btn-error"`
-- **Size:** default `btn-md`, `btn-sm` for inline/table row actions.
+- **Size:** default `btn-md`, `btn-sm` for inline/table row actions, `btn-xs` for the dense action rows on a surface that is all actions — the task pane and page, a Kanban column header, a member row. Pick one size per surface and keep every button on it.
 - **Never** use bright gradients, emoji, or rounded-pill buttons with gradients. Institutional clarity, not SaaS gamification.
 
 ### Cards / panels

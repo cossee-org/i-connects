@@ -184,6 +184,33 @@ def test_the_comment_button_is_not_coral(commentable):
 
 
 @pytest.mark.django_db
+def test_the_comment_buttons_are_the_size_the_task_surfaces_use(commentable):
+    """One button size per surface, and the task surfaces run at btn-xs.
+
+    Comment, Save and Cancel sit under a thread whose card sits under Mark
+    Completed, the self-mark and the matrix's row buttons — all btn-xs. At
+    btn-sm they were the only buttons on the page at their own size.
+    """
+    from django.template.loader import render_to_string
+
+    from apps.comments.forms import CommentForm
+
+    _project, task, member = commentable
+    comment = Comment.objects.create(task=task, author=member, content="x")
+
+    posting = render_to_string(
+        "comments/comment_form.html", {"task": task, "form": CommentForm()}
+    )
+    editing = render_to_string(
+        "comments/comment_edit_form.html",
+        {"comment": comment, "form": CommentForm(instance=comment)},
+    )
+    for name, html, count in (("Comment", posting, 1), ("Save / Cancel", editing, 2)):
+        assert html.count("btn-xs") == count, f"{name} is not at btn-xs"
+        assert "btn-sm" not in html, f"{name} still carries btn-sm"
+
+
+@pytest.mark.django_db
 def test_comment_timestamp_is_small_twelve_hour_and_convertible(commentable):
     """The date reads as a note, in 12-hour form, ready for local restatement."""
     from django.template.loader import render_to_string
