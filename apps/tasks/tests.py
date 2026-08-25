@@ -3355,6 +3355,219 @@ def test_completed_task_says_why_the_row_actions_are_gone(client, user, other_us
     assert "Mark not done" in reopened
 
 
+def _sole_assignee_task(user, other_user, *, name="Reviewed to done"):
+    """A task with one assignee and the Lead as its only reviewer.
+
+    The plain review case, and the one where completion-on-review matters
+    most: the reviewer is not an assignee, so their All tasks page judges the
+    task by ``Task.status`` alone.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    contrib = _add_contributor(project, other_user)
+    task = Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=0,
+        name=name,
+    )
+    task.assigned_members.add(contrib)
+    task.reviewers.add(lead)
+    return project, task, lead, contrib
+
+
+@pytest.mark.django_db
+def test_reviewing_the_last_submission_completes_the_task(client, user, other_user):
+    """Every submission signed off means the task is done.
+
+    And done means gone from the lists. A reviewer is not an assignee, so
+    their All tasks page reads ``Task.status`` and nothing else — while that
+    stayed NOT_COMPLETED a fully-reviewed task sat there with nothing left for
+    them to do.
+    """
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _sole_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+
+    # Waiting on the reviewer, so it is on their list.
+    assert task.name in client.get(reverse("tasks:my_list")).content.decode()
+
+    client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+    assert task.name not in client.get(reverse("tasks:my_list")).content.decode()
+
+
+@pytest.mark.django_db
+def test_the_swap_that_closes_the_task_comes_back_saying_so(client, user, other_user):
+    """The review that closes the task has to report it in the same response.
+
+    The rule flips ``Task.status`` through ``task_log.task``, a different
+    instance from the one the view renders from — so without a re-read the
+    chip and the Lead's toggle came back showing the state from before the
+    click, and caught up only on the next one.
+    """
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _sole_assignee_task(
+        user, other_user, name="Swapped shut"
+    )
+    mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+
+    closed = client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    ).content.decode()
+    assert "<span>Complete</span>" in closed, "the chip lagged the click"
+    assert "Mark Not Complete" in closed, "the Lead's toggle lagged the click"
+    assert "Mark Completed" not in closed
+    # Closed by the reviews, so the verdict is still there to withdraw.
+    assert "Mark not reviewed" in closed
+    assert "marks and reviews are locked" not in closed
+
+    reopened = client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "0", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    ).content.decode()
+    assert "<span>Not Complete</span>" in reopened
+    assert "Mark Completed" in reopened
+
+
+@pytest.mark.django_db
+def test_reviewing_one_of_two_submissions_leaves_the_task_open(client, user, other_user):
+    """"All of them" means all: one outstanding submission keeps it open."""
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=contrib)
+    mark_own_done(task=task, member=lead)
+    client.force_login(user)
+
+    client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+
+    # The second verdict is the one that finishes it.
+    client.post(
+        _review_url(task, _current_log(task, lead)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+
+@pytest.mark.django_db
+def test_withdrawing_the_verdict_that_closed_the_task_reopens_it(client, user, other_user):
+    """Completion follows the reviews, so it follows them back.
+
+    And the verdict stays withdrawable while it stands: locking a
+    review-closed task would delete "withdraw my review" outright for the
+    one-assignee tasks that are most of them, since the last sign-off would
+    seal itself.
+    """
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _sole_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+    client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+    # Completed, but not locked: the row still offers the way back.
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "marks and reviews are locked" not in pane
+    assert "Mark not reviewed" in pane
+
+    response = client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "0", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    assert response.status_code == 200
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+    assert not _current_log(task, contrib).is_reviewed
+
+
+@pytest.mark.django_db
+def test_undoing_the_done_mark_under_a_verdict_reopens_the_task(client, user, other_user):
+    """The other way to unpick it: the assignee takes their submission back.
+
+    Reverting a mark clears the review standing on it, so the task that those
+    reviews closed has to reopen with it.
+    """
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _sole_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+    client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+    # The Lead clears the mark from the matrix row.
+    client.post(
+        _done_url(task, contrib),
+        {"done": "0", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+    log = _current_log(task, contrib)
+    assert log.status == TaskStatus.NOT_COMPLETED and not log.is_reviewed
+
+
+@pytest.mark.django_db
+def test_a_lead_closed_task_is_not_reopened_by_the_review_rule(client, user, other_user):
+    """A Lead's close is a judgement over the verdicts, not a sum of them.
+
+    So it stays closed and stays locked, with an outstanding submission that
+    the rule would never have closed on its own.
+    """
+    from apps.tasks.services import close_task, mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=contrib)
+    close_task(task=task, closed_by=lead)
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "marks and reviews are locked" in pane
+
+    # Every per-member action is refused, in both directions.
+    for url, data in (
+        (_review_url(task, _current_log(task, contrib)), {"reviewed": "1"}),
+        (_done_url(task, contrib), {"done": "0"}),
+    ):
+        assert client.post(url, data, HTTP_HX_REQUEST="true").status_code == 403
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+
 @pytest.mark.django_db
 def test_a_reviewer_who_is_not_assigned_gets_every_row(client, user, other_user):
     """The plain reviewer case: on the task's reviewer list, assigned to none of it."""
