@@ -9,14 +9,20 @@
         hx-swap="outerHTML">
     {% csrf_token %}
     {{ form.content }}
-    <div class="flex gap-2">
-      <button type="submit"
-              class="btn btn-sm btn-primary">Save</button>
+    {% comment %}
+      Right-aligned, and Cancel before Save: the submit sits at the right edge
+      where the Comment button does, so the action does not move when a
+      comment flips between reading and editing. Matches every other form in
+      the app (STYLE_GUIDE: cancel, ghost, to the left of the submit).
+    {% endcomment %}
+    <div class="flex gap-2 justify-end">
       <button type="button"
               class="btn btn-sm btn-ghost"
               hx-get="{% url 'comments:edit' pk=comment.pk %}?cancel=1"
               hx-target="#comment-{{ comment.pk }}"
               hx-swap="outerHTML">Cancel</button>
+      <button type="submit"
+              class="btn btn-sm btn-primary">Save</button>
     </div>
   </form>
 </div>

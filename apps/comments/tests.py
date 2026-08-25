@@ -269,3 +269,22 @@ def test_the_avatar_is_small_and_the_same_in_both_states(commentable):
     for name, html in (("row", row), ("edit form", editing)):
         assert avatar in html, f"the {name}'s avatar is not the small one"
         assert "w-8 h-8" not in html, f"the {name} kept the old size"
+
+
+@pytest.mark.django_db
+def test_the_edit_forms_actions_sit_right_with_cancel_first(commentable):
+    """Save lands where the Comment button does, with Cancel to its left."""
+    from django.template.loader import render_to_string
+
+    from apps.comments.forms import CommentForm
+
+    _project, task, member = commentable
+    comment = Comment.objects.create(task=task, author=member, content="x")
+
+    html = render_to_string(
+        "comments/comment_edit_form.html",
+        {"comment": comment, "form": CommentForm(instance=comment)},
+    )
+    actions = html[html.index('<div class="flex gap-2') :]
+    assert "justify-end" in actions[: actions.index(">")]
+    assert actions.index("Cancel") < actions.index("Save")
