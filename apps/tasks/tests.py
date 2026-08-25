@@ -1205,9 +1205,14 @@ def test_board_page_shows_manage_columns_for_every_view(client, pm_user):
     response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
     content = response.content.decode()
     assert "Manage columns" in content
-    # No x-show gate on the button itself (the view switcher still uses one).
     button = content[content.rindex("<button", 0, content.index("Manage columns")):]
-    assert "x-show" not in button[: button.index("</button>")]
+    markup = button[: button.index("</button>")]
+    # No x-show gate on the button itself (the view switcher still uses one).
+    assert "x-show" not in markup
+    # An icon, like the three view buttons beside it — and hidden from the
+    # accessibility tree, since the label already carries the meaning.
+    assert "<svg" in markup, "the button lost its icon"
+    assert 'aria-hidden="true"' in markup
 
 
 # ---------------------------------------------------------------------------
