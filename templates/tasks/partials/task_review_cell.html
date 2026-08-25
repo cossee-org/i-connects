@@ -1,0 +1,68 @@
+{% comment %}
+  The Reviewed cell of one completion-matrix row: the verdict, who gave it,
+  when — and the reviewer's own buttons.
+
+  Expects ``s`` (one entry of views._task_status_context's assignee_states)
+  and ``task``. The buttons swap #task-status-block, the same target the
+  assignee's own mark uses, so one round trip re-renders the whole matrix and
+  the pane's top bar with it.
+
+  Nothing here is stored per viewer: ``s.can_review`` is recomputed from the
+  task's live reviewer set on every render, so a reviewer added or removed
+  gains or loses these buttons immediately — and it is false on the viewer's
+  own row, since signing off your own submission is not a peer review.
+
+  Closing the task does not retire these buttons the way it retires the
+  assignee's own mark: a Lead may well close first and have the reviewers sign
+  off after.
+{% endcomment %}
+<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+  {% include "tasks/partials/task_matrix_cell.html" with on=s.reviewed at=s.reviewed_at %}
+
+  {% if s.reviewed %}
+    <span class="text-brand-text/60 whitespace-nowrap">
+      {% if s.reviewed_by %}
+        by {{ s.reviewed_by.display_name }}
+      {% else %}
+        {# The reviewer's membership row is gone; the review still stands. #}
+        by a former member
+      {% endif %}
+    </span>
+    {% if s.can_review %}
+      <button type="button"
+              class="btn btn-ghost btn-xs gap-1"
+              hx-post="{% url 'tasks:review_log' pk=task.pk log_pk=s.log.pk %}"
+              hx-vals='{"reviewed": "0", "pane_mode": "1"}'
+              hx-target="#task-status-block"
+              hx-swap="outerHTML"
+              aria-label="Undo the review of {{ s.member.display_name }}'s part">
+        {# arrow-uturn-left #}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+        </svg>
+        Undo review
+      </button>
+    {% endif %}
+  {% elif s.awaiting_review and s.log %}
+    {% if s.can_review %}
+      <button type="button"
+              class="btn btn-primary btn-xs gap-1"
+              hx-post="{% url 'tasks:review_log' pk=task.pk log_pk=s.log.pk %}"
+              hx-vals='{"reviewed": "1", "pane_mode": "1"}'
+              hx-target="#task-status-block"
+              hx-swap="outerHTML"
+              aria-label="Mark {{ s.member.display_name }}'s part reviewed">
+        {# check-circle #}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+        Mark reviewed
+      </button>
+    {% else %}
+      {# Everyone else just sees that it is waiting on a reviewer. #}
+      <span class="text-brand-text/60 whitespace-nowrap">Awaiting review</span>
+    {% endif %}
+  {% endif %}
+</div>

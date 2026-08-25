@@ -69,8 +69,10 @@ from apps.tasks.mixins import (
 from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
 from apps.tasks.services import (
     approve_completion,
+    clear_review,
     close_task,
     mark_own_done,
+    mark_reviewed,
     move_task,
     reopen_own,
     reopen_task,
@@ -670,9 +672,17 @@ class TaskDetailPaneView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            # No "reviewers": the pane reports review state per assignee from
-            # task_logs, and no longer lists the reviewers themselves.
-            .prefetch_related("assigned_members", "task_logs", "comments__author"),
+            # The pane still lists no reviewers of its own; it reports review
+            # state per assignee from task_logs. ``reviewers`` is here because
+            # it decides who sees the review buttons, and the chained
+            # ``task_logs__reviewed_by`` keeps the matrix from firing a query
+            # per row to name each reviewer.
+            .prefetch_related(
+                "assigned_members",
+                "reviewers",
+                "task_logs__reviewed_by",
+                "comments__author",
+            ),
             project=self.project,
             pk=kwargs["pk"],
         )
@@ -706,7 +716,7 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            .prefetch_related("assigned_members", "reviewers", "task_logs__comments__author", "comments__author", "activities__actor", "activities__member")
+            .prefetch_related("assigned_members", "reviewers", "task_logs__comments__author", "task_logs__reviewed_by", "comments__author", "activities__actor", "activities__member")
             .filter(project=self.project),
             pk=kwargs["pk"],
         )
@@ -1008,25 +1018,53 @@ def _task_status_context(task, *, project_member, is_project_manager):
 
     Each assignee state carries the two verdicts the pane's completion matrix
     shows side by side: ``done`` is the member's own mark on their current
-    TaskLog, ``reviewed`` is a reviewer's approval of that same submission.
+    TaskLog, ``reviewed`` is a reviewer's sign-off on that same submission,
+    named and dated.
+
+    Everything here is derived from the task's *current* assignee and
+    reviewer sets, so the matrix follows membership changes on its own: a
+    member added to the task gets a row on the next render, one removed loses
+    theirs (their TaskLog survives for the audit trail), and a reviewer added
+    or removed gains or loses the review buttons with no stored permission to
+    migrate.
     """
     current = {}
     for log in task.task_logs.all():  # newest-first; first seen is current
         current.setdefault(log.assigned_to_id, log)
     assignees = list(task.assigned_members.all())
+    # A Lead can review as well as the task's named reviewers — they already
+    # carry the heavier approval action on the full task page.
+    viewer_reviews = bool(is_project_manager or task.is_reviewer(project_member))
     assignee_states = []
     for member in assignees:
         log = current.get(member.id)
+        done = log is not None and log.status == TaskStatus.COMPLETED
+        reviewed = log is not None and log.is_reviewed
         assignee_states.append(
             {
                 "member": member,
-                "done": log is not None and log.status == TaskStatus.COMPLETED,
+                # Whether *this viewer* may act on *this row's* review. A
+                # reviewer never gets it on their own row: a submission signed
+                # off by the person who made it is not a peer review, so their
+                # row waits for somebody else (the same rule the endpoint
+                # enforces).
+                "can_review": viewer_reviews and not (
+                    project_member is not None and member.id == project_member.id
+                ),
+                # The entry the review buttons act on. None until the member
+                # has one seeded, in which case there is nothing to review.
+                "log": log,
+                "done": done,
                 # Null on entries completed before completed_at existed, so the
                 # cell shows the check with no date rather than a wrong one.
                 "done_at": log.completed_at if log is not None else None,
-                # approved is nullable: None is "not reviewed yet", False is a
-                # rejection. Only an explicit True counts as reviewed.
-                "reviewed": log is not None and log.approved is True,
+                "reviewed": reviewed,
+                # Null on a review whose reviewer's membership row was deleted
+                # outright; the cell then reports the review without a name.
+                "reviewed_by": log.reviewed_by if log is not None else None,
+                "reviewed_at": log.reviewed_at if log is not None else None,
+                # Marked done and still waiting on a reviewer.
+                "awaiting_review": done and not reviewed,
             }
         )
     my_state = next(
@@ -1039,9 +1077,13 @@ def _task_status_context(task, *, project_member, is_project_manager):
         "is_project_manager": is_project_manager,
         "assignee_states": assignee_states,
         "done_count": sum(1 for s in assignee_states if s["done"]),
+        "reviewed_count": sum(1 for s in assignee_states if s["reviewed"]),
         "assignee_count": len(assignee_states),
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
+        # Whether the viewer reviews on this task at all. The per-row
+        # ``can_review`` above is what actually gates the buttons.
+        "viewer_reviews": viewer_reviews,
     }
 
 
@@ -1214,6 +1256,61 @@ class TaskActivityView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             _task_activity_context(
                 self.task, is_project_manager=self.is_project_manager
             ),
+        )
+
+
+class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """A task reviewer marks one assignee's submission reviewed, or undoes it.
+
+    Permission is read from the task's live ``reviewers`` set (plus the Lead
+    privilege) on every request, so adding or removing a reviewer takes effect
+    at once and a member removed from the project loses the action with their
+    membership.
+
+    A reviewer's own submission is out of bounds either way: peer review means
+    somebody else looked at it.
+
+    POST ``reviewed=0`` withdraws the review; anything else records one.
+    """
+
+    def post(self, request, *args, **kwargs):
+        log = get_object_or_404(
+            TaskLog.objects.filter(task=self.task), pk=kwargs["log_pk"]
+        )
+        if not (self.is_project_manager or self.task.is_reviewer(self.project_member)):
+            return HttpResponseForbidden(
+                "Only a reviewer on this task can review submissions."
+            )
+        if (
+            self.project_member is not None
+            and log.assigned_to_id == self.project_member.pk
+        ):
+            return HttpResponseForbidden(
+                "A reviewer cannot review their own submission."
+            )
+
+        if request.POST.get("reviewed") in {"0", "false", "no"}:
+            clear_review(task_log=log, cleared_by=self.project_member)
+        else:
+            if not log.is_reviewable:
+                return HttpResponseBadRequest(
+                    "That assignee has not marked their part done yet."
+                )
+            # Reviewing someone who has since been taken off the task would
+            # write a verdict the matrix no longer has a row for.
+            if not self.task.assigned_members.filter(pk=log.assigned_to_id).exists():
+                return HttpResponseBadRequest(
+                    "That member is no longer assigned to this task."
+                )
+            reviewer = self.project_member or _fallback_member(
+                request.user, self.project
+            )
+            mark_reviewed(task_log=log, reviewer=reviewer)
+
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
         )
 
 

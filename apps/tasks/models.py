@@ -219,6 +219,28 @@ class Task(models.Model):
         """
         return self.assignees_done_count >= self.assignee_count
 
+    @property
+    def assignees_reviewed_count(self) -> int:
+        """Number of assignees whose current TaskLog carries a review."""
+        current = self._current_logs_by_member()
+        return sum(
+            1
+            for member in self.assigned_members.all()
+            if (log := current.get(member.id)) is not None and log.is_reviewed
+        )
+
+    # -- Review helpers -----------------------------------------------------
+    def is_reviewer(self, member) -> bool:
+        """True when ``member`` is currently a reviewer on this task.
+
+        Asked of the live ``reviewers`` set on every render rather than
+        cached anywhere, so adding or removing a reviewer takes effect
+        immediately — including for a member who is also an assignee.
+        """
+        if member is None or member.pk is None:
+            return False
+        return self.reviewers.filter(pk=member.pk).exists()
+
 
 class TaskLog(models.Model):
     """Audit trail of task assignment and completion events."""
@@ -263,6 +285,28 @@ class TaskLog(models.Model):
             "existed."
         ),
     )
+    reviewed_by = models.ForeignKey(
+        "projects.ProjectMember",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_logs_reviewed",
+        help_text=(
+            "The reviewer who signed this submission off. Kept as written "
+            "even if they later stop being a reviewer on the task, so the "
+            "record still names who reviewed it; nulled only if their "
+            "membership row is deleted outright."
+        ),
+    )
+    reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When a reviewer signed this submission off. Null means not "
+            "reviewed: the pair is cleared when the reviewer undoes their "
+            "review, and when the assignee reverts their own done mark."
+        ),
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -270,10 +314,26 @@ class TaskLog(models.Model):
             models.Index(fields=["task"]),
             models.Index(fields=["assigned_to"]),
             models.Index(fields=["completed_by"]),
+            models.Index(fields=["reviewed_by"]),
         ]
 
     def __str__(self) -> str:
         return f"TaskLog #{self.pk} (task {self.task_id})"
+
+    @property
+    def is_reviewed(self) -> bool:
+        """True when a reviewer has signed this submission off.
+
+        ``reviewed_at`` is the flag: it is the field the review flow sets and
+        clears together with ``reviewed_by``. Distinct from ``approved``,
+        which is the Lead's ledger-writing verdict on the full detail page.
+        """
+        return self.reviewed_at is not None
+
+    @property
+    def is_reviewable(self) -> bool:
+        """True when there is a submission here for a reviewer to act on."""
+        return self.status == TaskStatus.COMPLETED
 
 
 class ActivityEvent(models.TextChoices):

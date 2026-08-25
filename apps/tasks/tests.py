@@ -2004,13 +2004,14 @@ def test_pane_completion_matrix_reports_marks_and_reviews(client, user, other_us
     """Each assignee gets a row: their own mark, then a reviewer's verdict."""
     from apps.tasks.services import mark_own_done
 
+    from apps.tasks.services import mark_reviewed
+
     project, task, lead, contrib = _two_assignee_task(user, other_user)
-    # The lead marked their part done and a reviewer approved that submission;
-    # the contributor has done neither.
+    # The lead marked their part done and a reviewer signed that submission
+    # off; the contributor has done neither.
     mark_own_done(task=task, member=lead)
     log = task.task_logs.filter(assigned_to=lead).order_by("-created_at").first()
-    log.approved = True
-    log.save(update_fields=["approved"])
+    mark_reviewed(task_log=log, reviewer=contrib)
 
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
@@ -2479,3 +2480,326 @@ def test_a_mark_made_before_the_date_existed_still_shows_its_check(client, user,
     assert pane.count('aria-label="Yes"') == 1
     # No stray date, and no placeholder where one would have gone.
     assert "None" not in pane
+
+
+# ---------------------------------------------------------------------------
+# Peer review: a task's reviewers sign off on each assignee's submission
+# ---------------------------------------------------------------------------
+
+
+def _reviewed_task(user, other_user, *, reviewer_is_lead=False):
+    """A two-assignee task where one assignee has marked their part done.
+
+    Returns ``(project, task, lead, contrib)``. ``contrib`` is the assignee who
+    marked done; the reviewer is the lead (already a Lead by privilege) unless
+    ``reviewer_is_lead`` is False, in which case nobody is a named reviewer yet
+    so the caller can add one.
+    """
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    if reviewer_is_lead:
+        task.reviewers.add(lead)
+    return project, task, lead, contrib
+
+
+def _current_log(task, member):
+    return task.task_logs.filter(assigned_to=member).order_by("-created_at").first()
+
+
+def _review_url(task, log):
+    return reverse("tasks:review_log", kwargs={"pk": task.pk, "log_pk": log.pk})
+
+
+def _row_for(pane, member):
+    """The matrix row of ``member`` in the rendered pane.
+
+    Scoped to the table body so a name that also appears elsewhere in the pane
+    (Created by, for one) cannot be mistaken for the row.
+    """
+    body = pane[pane.index("<tbody") : pane.index("</tbody>")]
+    start = body.index(member.display_name)
+    return body[body.rindex("<tr", 0, start) : body.index("</tr>", start)]
+
+
+@pytest.mark.django_db
+def test_reviewer_marks_a_submission_reviewed(client, user, other_user):
+    """A reviewer signs off a done mark; the pane then names them and the date."""
+    project, task, lead, contrib = _reviewed_task(user, other_user, reviewer_is_lead=True)
+    log = _current_log(task, contrib)
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Mark reviewed" in pane
+
+    response = client.post(_review_url(task, log), {"reviewed": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true")
+    assert response.status_code == 200
+
+    log.refresh_from_db()
+    assert log.reviewed_by == lead
+    assert log.reviewed_at is not None
+    assert log.is_reviewed
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    row = _row_for(pane, contrib)
+    assert f"by {lead.display_name}" in row
+    assert log.reviewed_at.strftime("%b %-d, %Y") in row
+    # Two checks now: the assignee's own mark and the review of it.
+    assert row.count('aria-label="Yes"') == 2
+    assert "1 reviewed" in pane
+
+
+@pytest.mark.django_db
+def test_review_waits_on_the_assignees_own_mark(client, user, other_user):
+    """Nothing to review until the assignee says they are done."""
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    log = _current_log(task, contrib)
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Mark reviewed" not in pane
+
+    response = client.post(_review_url(task, log), {"reviewed": "1"}, HTTP_HX_REQUEST="true")
+    assert response.status_code == 400
+    log.refresh_from_db()
+    assert not log.is_reviewed
+
+
+@pytest.mark.django_db
+def test_only_a_reviewer_or_lead_can_review(client, user, other_user):
+    """A plain assignee gets neither the buttons nor the endpoint."""
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _reviewed_task(user, other_user)
+    mark_own_done(task=task, member=lead)
+    ProjectPrivilege.objects.filter(project=project, user=other_user).update(
+        privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    lead_log = _current_log(task, lead)
+
+    # ``contrib`` is an assignee but not a reviewer, and not a Lead.
+    client.force_login(other_user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Mark reviewed" not in pane
+    assert "Awaiting review" in pane  # they can see it is waiting on someone
+
+    response = client.post(
+        _review_url(task, lead_log), {"reviewed": "1"}, HTTP_HX_REQUEST="true"
+    )
+    assert response.status_code == 403
+    lead_log.refresh_from_db()
+    assert not lead_log.is_reviewed
+
+    # Named a reviewer on the task, the same member can act.
+    task.reviewers.add(contrib)
+    ok = client.post(
+        _review_url(task, lead_log),
+        {"reviewed": "1", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    assert ok.status_code == 200
+    lead_log.refresh_from_db()
+    assert lead_log.reviewed_by == contrib
+
+
+@pytest.mark.django_db
+def test_a_reviewer_cannot_sign_off_their_own_submission(client, user, other_user):
+    """Peer review means somebody else looked: own rows carry no button."""
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _reviewed_task(user, other_user, reviewer_is_lead=True)
+    mark_own_done(task=task, member=lead)
+    own_log = _current_log(task, lead)
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    own_row = _row_for(pane, lead)
+    assert "Mark reviewed" not in own_row
+    assert "Awaiting review" in own_row
+    # The other assignee's row is still theirs to review.
+    assert "Mark reviewed" in _row_for(pane, contrib)
+
+    response = client.post(
+        _review_url(task, own_log), {"reviewed": "1"}, HTTP_HX_REQUEST="true"
+    )
+    assert response.status_code == 403
+    own_log.refresh_from_db()
+    assert not own_log.is_reviewed
+
+
+@pytest.mark.django_db
+def test_reviewer_can_undo_their_review(client, user, other_user):
+    """Undo clears the verdict and leaves the assignee's own mark standing."""
+    from apps.tasks.services import mark_reviewed
+
+    project, task, lead, contrib = _reviewed_task(user, other_user, reviewer_is_lead=True)
+    log = _current_log(task, contrib)
+    mark_reviewed(task_log=log, reviewer=lead)
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "Undo review" in pane
+
+    response = client.post(_review_url(task, log), {"reviewed": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true")
+    assert response.status_code == 200
+
+    log.refresh_from_db()
+    assert not log.is_reviewed
+    assert log.reviewed_by is None
+    assert log.reviewed_at is None
+    assert log.status == TaskStatus.COMPLETED  # the done mark survives
+
+
+@pytest.mark.django_db
+def test_reverting_a_done_mark_drops_the_review(client, user, other_user):
+    """Withdrawing the submission withdraws the verdict on it."""
+    from apps.tasks.services import mark_reviewed
+
+    project, task, lead, contrib = _reviewed_task(user, other_user, reviewer_is_lead=True)
+    log = _current_log(task, contrib)
+    mark_reviewed(task_log=log, reviewer=lead)
+
+    # The assignee undoes their own mark.
+    client.force_login(other_user)
+    response = client.post(
+        reverse("tasks:undo", kwargs={"pk": task.pk}), {"pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    )
+    assert response.status_code == 200
+
+    log.refresh_from_db()
+    assert log.status == TaskStatus.NOT_COMPLETED
+    assert log.reviewed_by is None and log.reviewed_at is None
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    row = _row_for(pane, contrib)
+    assert lead.display_name not in row
+    assert row.count('aria-label="Yes"') == 0
+    assert "reviewed" not in pane.split(">Assignee<")[0].split("done")[-1]
+
+    # Marking done again comes back unreviewed, waiting on a fresh look.
+    client.force_login(other_user)
+    client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    log.refresh_from_db()
+    assert log.status == TaskStatus.COMPLETED
+    assert not log.is_reviewed
+
+
+@pytest.mark.django_db
+def test_reviewer_changes_move_the_buttons(client, user, other_user):
+    """Review rights are read from the task's live reviewer set every render."""
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _reviewed_task(user, other_user)
+    mark_own_done(task=task, member=lead)
+    ProjectPrivilege.objects.filter(project=project, user=other_user).update(
+        privilege=MemberPrivileges.CONTRIBUTOR
+    )
+
+    client.force_login(other_user)
+    assert "Mark reviewed" not in client.get(_pane_url(project, task)).content.decode()
+
+    task.reviewers.add(contrib)
+    assert "Mark reviewed" in client.get(_pane_url(project, task)).content.decode()
+
+    task.reviewers.remove(contrib)
+    assert "Mark reviewed" not in client.get(_pane_url(project, task)).content.decode()
+
+
+@pytest.mark.django_db
+def test_a_removed_reviewers_signoff_still_names_them(client, user, other_user):
+    """Taking someone off the reviewer list does not rewrite their verdict."""
+    from apps.tasks.services import mark_reviewed
+
+    project, task, lead, contrib = _reviewed_task(user, other_user, reviewer_is_lead=True)
+    log = _current_log(task, contrib)
+    mark_reviewed(task_log=log, reviewer=lead)
+    task.reviewers.remove(lead)
+
+    client.force_login(user)
+    row = _row_for(client.get(_pane_url(project, task)).content.decode(), contrib)
+    assert f"by {lead.display_name}" in row
+
+
+@pytest.mark.django_db
+def test_dropping_an_assignee_drops_their_row_and_blocks_review(client, user, other_user):
+    """An unassigned member has no row to review, and cannot be reviewed."""
+    project, task, lead, contrib = _reviewed_task(user, other_user, reviewer_is_lead=True)
+    log = _current_log(task, contrib)
+    task.assigned_members.remove(contrib)
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert contrib.display_name not in pane
+    assert lead.display_name in pane  # the remaining assignee is untouched
+
+    response = client.post(_review_url(task, log), {"reviewed": "1"}, HTTP_HX_REQUEST="true")
+    assert response.status_code == 400
+    log.refresh_from_db()
+    assert not log.is_reviewed
+
+
+@pytest.mark.django_db
+def test_a_new_assignee_starts_unreviewed(client, user, other_user, pm_user):
+    """Adding someone to the task adds an unreviewed row, nothing more."""
+    project, task, lead, contrib = _reviewed_task(user, other_user, reviewer_is_lead=True)
+    from apps.tasks.services import mark_reviewed
+
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+
+    late = ProjectMember.objects.create(project=project)
+    late.users.add(pm_user)
+    task.assigned_members.add(late)
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    row = _row_for(pane, late)
+    assert row.count('aria-label="Yes"') == 0
+    assert "Mark reviewed" not in row  # they have not marked their part done
+    assert task.assignees_reviewed_count == 1
+
+
+@pytest.mark.django_db
+def test_review_notifies_the_assignee(client, user, other_user):
+    """The assignee hears that their submission was reviewed."""
+    from apps.notifications.models import Notification
+    from apps.tasks.services import mark_reviewed
+
+    project, task, lead, contrib = _reviewed_task(user, other_user, reviewer_is_lead=True)
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+
+    note = Notification.objects.filter(recipients=other_user).order_by("-id").first()
+    assert note is not None
+    assert task.name in note.message
+    assert lead.display_name in note.message
+    # The reviewer does not notify themselves.
+    assert not Notification.objects.filter(
+        recipients=user, message__contains="Submission reviewed"
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_review_events_are_audited(client, user, other_user):
+    """Both the sign-off and its withdrawal land in the audit log."""
+    from apps.tasks.services import clear_review, mark_reviewed
+
+    project, task, lead, contrib = _reviewed_task(user, other_user, reviewer_is_lead=True)
+    log = _current_log(task, contrib)
+    mark_reviewed(task_log=log, reviewer=lead)
+    assert AuditLog.objects.filter(action=AuditAction.TASK_REVIEWED).exists()
+
+    clear_review(task_log=log, cleared_by=lead)
+    assert AuditLog.objects.filter(action=AuditAction.TASK_REVIEW_CLEARED).exists()
+
+
+@pytest.mark.django_db
+def test_review_writes_no_contribution_record(client, user, other_user):
+    """Peer review is reversible, so it stays out of the immutable ledger."""
+    from apps.contributions.models import ContributionRecord
+    from apps.tasks.services import mark_reviewed
+
+    project, task, lead, contrib = _reviewed_task(user, other_user, reviewer_is_lead=True)
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+    assert not ContributionRecord.objects.filter(task=task).exists()

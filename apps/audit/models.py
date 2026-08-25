@@ -70,6 +70,8 @@ class AuditAction(models.TextChoices):
     TASK_COMPLETED = "task.completed", "Task marked complete"
     TASK_APPROVED = "task.approved", "Task completion approved"
     TASK_REJECTED = "task.rejected", "Task completion rejected"
+    TASK_REVIEWED = "task.reviewed", "Task submission reviewed"
+    TASK_REVIEW_CLEARED = "task.review_cleared", "Task submission review cleared"
 
     # ---- Admin --------------------------------------------------------------
     ACCOUNT_SUSPENDED = "admin.account_suspended", "Account suspended"

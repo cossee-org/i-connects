@@ -123,6 +123,11 @@ urlpatterns = [
         views.TaskLogApproveView.as_view(),
         name="approve_log",
     ),
+    path(
+        "tasks/<int:pk>/logs/<int:log_pk>/review/",
+        views.TaskLogReviewView.as_view(),
+        name="review_log",
+    ),
     # Board columns
     path(
         "projects/<int:project_pk>/boards/",
