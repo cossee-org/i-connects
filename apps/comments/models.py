@@ -33,7 +33,10 @@ class Comment(models.Model):
     )
 
     class Meta:
-        ordering = ["created_at"]
+        # Newest first: the box that posts a comment sits at the top of the
+        # thread on both task surfaces, so what you just wrote appears where
+        # you wrote it rather than at the far end of a long list.
+        ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["task"]),
             models.Index(fields=["task_log"]),

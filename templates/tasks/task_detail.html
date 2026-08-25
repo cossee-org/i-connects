@@ -184,8 +184,16 @@
       No Assignees / Reviewers sections of their own, for the same reason the
       pane dropped them: this card names the assignees, reports their marks and
       the reviewers' verdicts, and names the reviewers under the matrix.
+
+      The matrix's See more state lives out here rather than inside the block,
+      because the block is an HTMX swap target: state within it would reset to
+      collapsed on every mark and review, so expanding to reach the sixth
+      assignee and acting on them would make the row you were working in
+      vanish. Out here it survives the swap.
     {% endcomment %}
-    {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager assignee_states=status_block.assignee_states done_count=status_block.done_count marks_locked=status_block.marks_locked reviewed_count=status_block.reviewed_count reviewers=status_block.reviewers assignee_count=status_block.assignee_count is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
+    <div x-data="{ rowsExpanded: false }">
+      {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager assignee_states=status_block.assignee_states done_count=status_block.done_count marks_locked=status_block.marks_locked reviewed_count=status_block.reviewed_count reviewers=status_block.reviewers assignee_count=status_block.assignee_count is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
+    </div>
 
     {% comment %}
       Details: the task's references. Skipped when it has none, rather than
@@ -226,19 +234,48 @@
       </section>
     {% endif %}
 
-    <section class="brand-card p-4">
-      <h2 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-3">
-        Comments{% if task.comments.count %} ({{ task.comments.count }}){% endif %}
-      </h2>
-      <div id="task-comments" class="flex flex-col gap-3">
-        {% for comment in task.comments.all %}
-          {% include "comments/comment_item.html" with comment=comment task=task project_member=project_member is_project_manager=is_project_manager %}
-        {% empty %}
-          <p class="text-sm text-brand-text/50">No comments yet.</p>
-        {% endfor %}
-      </div>
-      {% include "comments/comment_form.html" with task=task form=comment_form %}
-    </section>
+    {% comment %}
+      Comments, newest first, with the box that writes one at the top: posting
+      is what people come to this card to do, and what they write lands where
+      they wrote it instead of at the far end of the thread.
+
+      Only the newest few are drawn; the rest wait behind See more. A task can
+      collect a long argument, and a card that grows without bound pushes
+      everything above it off the screen.
+    {% endcomment %}
+    {% with total=task.comments.count %}
+      <section class="brand-card p-4">
+        <h2 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-3">
+          Comments{% if total %} ({{ total }}){% endif %}
+        </h2>
+
+        {% include "comments/comment_form.html" with task=task form=comment_form %}
+
+        <div x-data="{ expanded: false }" class="mt-4">
+          <div id="task-comments" class="flex flex-col gap-3">
+            {% for comment in task.comments.all|slice:":3" %}
+              {% include "comments/comment_item.html" with comment=comment task=task project_member=project_member is_project_manager=is_project_manager %}
+            {% empty %}
+              <p class="text-sm text-brand-text/50">No comments yet.</p>
+            {% endfor %}
+          </div>
+
+          {% if total > 3 %}
+            <div id="task-comments-rest" x-show="expanded" x-cloak class="flex flex-col gap-3 mt-3">
+              {% for comment in task.comments.all|slice:"3:" %}
+                {% include "comments/comment_item.html" with comment=comment task=task project_member=project_member is_project_manager=is_project_manager %}
+              {% endfor %}
+            </div>
+            <button type="button"
+                    class="mt-2 text-xs font-medium text-brand-navy hover:underline"
+                    aria-controls="task-comments-rest"
+                    :aria-expanded="expanded"
+                    @click="expanded = !expanded"
+                    x-text="expanded ? 'See less' : 'See more'">See more</button>
+          {% endif %}
+        </div>
+      </section>
+    {% endwith %}
 
   </div>
 

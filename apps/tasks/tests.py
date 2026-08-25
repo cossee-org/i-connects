@@ -2388,6 +2388,145 @@ def test_full_task_page_orders_its_sections_like_the_pane(client, user, other_us
     assert "Start date" not in body
 
 
+def _task_surfaces(project, task):
+    """The two places a task is read in full, by name."""
+    return {
+        "detail page": reverse(
+            "tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}
+        ),
+        "pane": _pane_url(project, task),
+    }
+
+
+@pytest.mark.django_db
+def test_the_comment_box_sits_above_the_thread_and_posts_to_the_top(client, user):
+    """Write at the top, read down from the newest."""
+    from apps.comments.models import Comment
+
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Threaded",
+    )
+    Comment.objects.create(task=task, author=member, content="only one")
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        # Whichever container this surface names its thread.
+        thread_id = next(
+            marker
+            for marker in ('id="task-comments"', f'id="task-pane-comments-{task.pk}"')
+            if marker in html
+        )
+        posts_to = f'hx-post="{reverse("comments:create", kwargs={"task_pk": task.pk})}"'
+        assert html.index(posts_to) < html.index(
+            thread_id
+        ), f"{name} still has the box under the thread"
+        assert 'hx-swap="afterbegin"' in html, f"{name} still appends to the end"
+
+
+@pytest.mark.django_db
+def test_a_long_thread_hides_its_older_comments_behind_see_more(client, user):
+    """Three newest in the open, the rest behind the toggle."""
+    from apps.comments.models import Comment
+
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Chatty",
+    )
+    for i in range(5):
+        Comment.objects.create(task=task, author=member, content=f"comment {i}")
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        rest = html[html.index("comments-rest") :]
+        rest = rest[: rest.index("</div>")]
+        assert 'x-show="expanded"' in rest, f"{name} shows the older comments outright"
+        assert "See more" in html and "See less" in html, f"{name} lost the toggle"
+        # The two newest are in the open; the oldest is not.
+        head = html[: html.index("comments-rest")]
+        assert "comment 4" in head and "comment 3" in head and "comment 2" in head
+        assert "comment 0" not in head, f"{name} shows a fourth comment up front"
+
+
+@pytest.mark.django_db
+def test_a_short_thread_gets_no_see_more(client, user):
+    """Nothing hidden, so nothing to offer."""
+    from apps.comments.models import Comment
+
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Terse",
+    )
+    for i in range(3):
+        Comment.objects.create(task=task, author=member, content=f"comment {i}")
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        assert "comments-rest" not in html, f"{name} built an empty hidden list"
+
+
+@pytest.mark.django_db
+def test_the_matrix_hides_its_later_rows_and_keeps_them_open_across_a_swap(
+    client, user, other_user
+):
+    """Rows past the third wait behind See more — and stay open when acted on.
+
+    The state has to live in the surrounding template, not in the block: the
+    block is the swap target, so state kept inside it would snap back to
+    collapsed on every mark and review and take the row just acted on with it.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=lead, container=col1,
+        container_task_order=0, name="Crowded",
+    )
+    members = [lead] + [
+        ProjectMember.objects.create(project=project, name=f"M{i}") for i in range(4)
+    ]
+    task.assigned_members.set(members)
+    for m in members:
+        TaskLog.objects.create(task=task, assigned_to=m)
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        assert html.count('x-show="rowsExpanded"') == 2, f"{name} hid the wrong rows"
+        assert 'x-data="{ rowsExpanded: false }"' in html, f"{name} has nowhere to keep it"
+
+    # The swap response carries the rows but not the state — that stayed put.
+    swapped = client.post(
+        reverse("tasks:complete", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert 'x-show="rowsExpanded"' in swapped
+    assert "rowsExpanded: false" not in swapped, "the swap would reset the toggle"
+
+
+@pytest.mark.django_db
+def test_a_short_matrix_gets_no_see_more(client, user, other_user):
+    """Two assignees, nothing hidden, no toggle."""
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        assert 'x-show="rowsExpanded"' not in html, f"{name} hid a row it should not"
+        block = html[html.index('id="task-status-block"') :]
+        block = block[: block.index("</div>")]
+        assert "See more" not in block, f"{name} offers a toggle with nothing behind it"
+
+
 @pytest.mark.django_db
 def test_task_surfaces_carry_one_copy_of_each_action_bar_control(client, user, other_user):
     """The page took the pane's action bar: the same three, once each.

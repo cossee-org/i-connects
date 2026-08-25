@@ -1,8 +1,13 @@
-{# Inline comment form. Submits to the comments:create HTMX endpoint. #}
-<form class="mt-3 space-y-2"
+{% comment %}
+  Inline comment form. Submits to the comments:create HTMX endpoint.
+
+  It sits above the thread, so a new comment goes in at the top — afterbegin,
+  matching the newest-first order the list is rendered in.
+{% endcomment %}
+<form class="space-y-2"
       hx-post="{% url 'comments:create' task_pk=task.pk %}"
       hx-target="#task-comments"
-      hx-swap="beforeend"
+      hx-swap="afterbegin"
       hx-on::after-request="if(event.detail.successful) this.reset()">
   {% csrf_token %}
   <div class="w-full">

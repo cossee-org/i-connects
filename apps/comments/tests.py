@@ -184,6 +184,26 @@ def test_the_comment_button_is_not_coral(commentable):
 
 
 @pytest.mark.django_db
+def test_comments_come_back_newest_first(commentable):
+    """The box that writes a comment sits above the thread, so the newest go on
+    top — what you just wrote appears where you wrote it."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    _project, task, member = commentable
+    older = Comment.objects.create(task=task, author=member, content="older")
+    newer = Comment.objects.create(task=task, author=member, content="newer")
+    # auto_now_add can land both within the same microsecond on SQLite; space
+    # them so the assertion is about the ordering, not the clock.
+    Comment.objects.filter(pk=older.pk).update(
+        created_at=timezone.now() - timedelta(hours=1)
+    )
+
+    assert [c.pk for c in task.comments.all()] == [newer.pk, older.pk]
+
+
+@pytest.mark.django_db
 def test_the_comment_buttons_are_the_size_the_task_surfaces_use(commentable):
     """One button size per surface, and the task surfaces run at btn-xs.
 
