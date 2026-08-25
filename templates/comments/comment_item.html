@@ -12,8 +12,9 @@
       <div class="min-w-0">
         <span class="font-medium text-brand-navy text-sm">{{ comment.author.display_name }}</span>
         <time class="text-sm text-brand-text/50 ml-2">{{ comment.created_at|date:"M j, Y H:i" }}</time>
-        {% if comment.updated_at != comment.created_at %}
-          <span class="text-sm text-brand-text/40 ml-1">(edited)</span>
+        {% if comment.is_edited %}
+          <span class="text-sm text-brand-text/40 ml-1"
+                title="Edited {{ comment.updated_at|date:'M j, Y H:i' }}">(edited)</span>
         {% endif %}
       </div>
       {% if project_member and comment.author_id == project_member.id %}
