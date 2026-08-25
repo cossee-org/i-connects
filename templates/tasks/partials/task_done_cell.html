@@ -1,0 +1,53 @@
+{% comment %}
+  The Marked Done cell of one completion-matrix row: the mark, its date, and
+  the Lead's buttons for setting or clearing it.
+
+  Expects ``s`` (one entry of views._task_status_context's assignee_states)
+  and ``task``. Buttons swap #task-status-block, the same target every other
+  completion action uses.
+
+  The mark itself belongs to the assignee, who sets it from the pane's top
+  bar; ``s.can_mark_done`` is a Lead-only borrow of that action, per row, for
+  recording a mark someone never clicked or clearing one set in error. It
+  posts by member, not by TaskLog, so it works on a row whose entry has yet
+  to be seeded — the service creates one. It is
+  false once the task is marked completed, when every mark on the task
+  freezes until a Lead marks it not complete again.
+{% endcomment %}
+<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+  {% include "tasks/partials/task_matrix_cell.html" with on=s.done at=s.done_at %}
+
+  {% if s.can_mark_done %}
+    {% if s.done %}
+      <button type="button"
+              class="btn btn-ghost btn-xs gap-1"
+              hx-post="{% url 'tasks:member_done' pk=task.pk member_pk=s.member.pk %}"
+              hx-vals='{"done": "0", "pane_mode": "1"}'
+              hx-target="#task-status-block"
+              hx-swap="outerHTML"
+              aria-label="Mark {{ s.member.display_name }}'s part not done">
+        {# arrow-uturn-left #}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+        </svg>
+        Mark not done
+      </button>
+    {% else %}
+      <button type="button"
+              class="btn btn-primary btn-xs gap-1"
+              hx-post="{% url 'tasks:member_done' pk=task.pk member_pk=s.member.pk %}"
+              hx-vals='{"done": "1", "pane_mode": "1"}'
+              hx-target="#task-status-block"
+              hx-swap="outerHTML"
+              aria-label="Mark {{ s.member.display_name }}'s part done">
+        {# check #}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+        </svg>
+        Mark done
+      </button>
+    {% endif %}
+  {% endif %}
+</div>

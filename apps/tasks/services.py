@@ -142,12 +142,19 @@ def _current_log_for(task: Task, member: ProjectMember) -> TaskLog | None:
 
 
 @transaction.atomic
-def mark_own_done(*, task: Task, member: ProjectMember) -> TaskLog:
+def mark_own_done(
+    *, task: Task, member: ProjectMember, actor: ProjectMember | None = None
+) -> TaskLog:
     """Mark a single assignee's part of an INDIVIDUAL-mode task done.
 
     Updates the member's current TaskLog in place (or seeds one) and leaves
     ``Task.status`` untouched — closing the whole task is a separate, Lead-only
     action handled by :func:`close_task`.
+
+    ``actor`` is who clicked, recorded as ``completed_by``; it defaults to
+    ``member``, the assignee marking their own part. A Lead marking someone
+    else done passes themselves, so the entry says who really set it rather
+    than crediting the assignee with a click they never made.
     """
     log = _current_log_for(task, member)
     if log is None:
@@ -155,7 +162,7 @@ def mark_own_done(*, task: Task, member: ProjectMember) -> TaskLog:
             task=task, assigned_to=member, completed_as=CompletedAs.INDIVIDUAL
         )
     log.status = TaskStatus.COMPLETED
-    log.completed_by = member
+    log.completed_by = actor or member
     log.completed_as = CompletedAs.INDIVIDUAL
     log.completed_at = timezone.now()
     log.save()
@@ -163,7 +170,9 @@ def mark_own_done(*, task: Task, member: ProjectMember) -> TaskLog:
 
 
 @transaction.atomic
-def reopen_own(*, task: Task, member: ProjectMember) -> TaskLog | None:
+def reopen_own(
+    *, task: Task, member: ProjectMember, actor: ProjectMember | None = None
+) -> TaskLog | None:
     """Undo a single assignee's INDIVIDUAL-mode completion.
 
     A review is a verdict on a submission, so withdrawing the submission
@@ -171,6 +180,9 @@ def reopen_own(*, task: Task, member: ProjectMember) -> TaskLog | None:
     rather than left standing over work that is no longer marked done. If the
     member marks their part done again it comes back unreviewed, waiting on a
     fresh look.
+
+    ``actor`` is who clicked, used for the audit row; it defaults to
+    ``member``, the assignee undoing their own mark.
     """
     log = _current_log_for(task, member)
     if log is None:
@@ -187,8 +199,8 @@ def reopen_own(*, task: Task, member: ProjectMember) -> TaskLog | None:
         _log_review_action(
             AuditAction.TASK_REVIEW_CLEARED,
             task_log=log,
-            actor_member=member,
-            reason="assignee reverted their done mark",
+            actor_member=actor or member,
+            reason="the done mark it stood on was reverted",
         )
     return log
 

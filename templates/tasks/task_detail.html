@@ -53,7 +53,7 @@
         </div>
       </section>
 
-      {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager assignee_states=status_block.assignee_states done_count=status_block.done_count reviewed_count=status_block.reviewed_count assignee_count=status_block.assignee_count is_assignee=status_block.is_assignee my_done=status_block.my_done %}
+      {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager assignee_states=status_block.assignee_states done_count=status_block.done_count marks_locked=status_block.marks_locked reviewed_count=status_block.reviewed_count assignee_count=status_block.assignee_count is_assignee=status_block.is_assignee my_done=status_block.my_done %}
 
       <section class="brand-card p-6">
         <h2 class="text-lg font-semibold text-brand-navy mb-3">Comments</h2>

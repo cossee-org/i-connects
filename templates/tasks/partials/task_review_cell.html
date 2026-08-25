@@ -9,12 +9,11 @@
 
   Nothing here is stored per viewer: ``s.can_review`` is recomputed from the
   task's live reviewer set on every render, so a reviewer added or removed
-  gains or loses these buttons immediately — and it is false on the viewer's
-  own row, since signing off your own submission is not a peer review.
+  gains or loses these buttons immediately.
 
-  Closing the task does not retire these buttons the way it retires the
-  assignee's own mark: a Lead may well close first and have the reviewers sign
-  off after.
+  Marking the task completed retires these buttons, exactly as it retires the
+  assignee's own mark: a completed task's marks and reviews are frozen until a
+  Lead marks it not complete again.
 
   The name and the awaiting note are text-xs, matching the date the cell
   prints beside them: this column can carry a check, a date, a name and a
@@ -39,13 +38,13 @@
               hx-vals='{"reviewed": "0", "pane_mode": "1"}'
               hx-target="#task-status-block"
               hx-swap="outerHTML"
-              aria-label="Undo the review of {{ s.member.display_name }}'s part">
+              aria-label="Mark {{ s.member.display_name }}'s part not reviewed">
         {# arrow-uturn-left #}
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
              stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
         </svg>
-        Undo review
+        Mark not reviewed
       </button>
     {% endif %}
   {% elif s.awaiting_review and s.log %}
@@ -64,8 +63,11 @@
         </svg>
         Mark reviewed
       </button>
-    {% else %}
-      {# Everyone else just sees that it is waiting on a reviewer. #}
+    {% elif not marks_locked %}
+      {% comment %}
+        Everyone else just sees that it is waiting on a reviewer — but only
+        while it really is: a completed task takes reviewing off the table.
+      {% endcomment %}
       <span class="text-xs text-brand-text/60 whitespace-nowrap">Awaiting review</span>
     {% endif %}
   {% endif %}

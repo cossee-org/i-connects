@@ -124,6 +124,11 @@ urlpatterns = [
         name="approve_log",
     ),
     path(
+        "tasks/<int:pk>/members/<int:member_pk>/done/",
+        views.TaskMemberDoneView.as_view(),
+        name="member_done",
+    ),
+    path(
         "tasks/<int:pk>/logs/<int:log_pk>/review/",
         views.TaskLogReviewView.as_view(),
         name="review_log",

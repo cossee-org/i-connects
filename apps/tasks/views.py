@@ -1015,6 +1015,23 @@ class TaskChangeColumnView(
         )
 
 
+_LOCKED_MESSAGE = (
+    "This task is marked completed. A Lead has to mark it not complete before "
+    "its marks and reviews can change."
+)
+
+
+def _marks_locked(task) -> bool:
+    """True when a task is completed, which freezes every per-member action.
+
+    Marking done, undoing a mark and reviewing all stop at that point — for
+    assignees, reviewers and Leads alike. A Lead who needs to change one marks
+    the task Not Complete first, which is the only action a completed task
+    still offers.
+    """
+    return task.status == TaskStatus.COMPLETED
+
+
 def _task_status_context(task, *, project_member, is_project_manager):
     """Context for the completion status block (per-assignee done state).
 
@@ -1034,9 +1051,11 @@ def _task_status_context(task, *, project_member, is_project_manager):
     for log in task.task_logs.all():  # newest-first; first seen is current
         current.setdefault(log.assigned_to_id, log)
     assignees = list(task.assigned_members.all())
-    # A Lead can review as well as the task's named reviewers — they already
-    # carry the heavier approval action on the full task page.
+    # A Lead can review as well as the task's named reviewers, and a Lead can
+    # also set or clear anyone's done mark — the two per-member actions they
+    # borrow from assignees and reviewers.
     viewer_reviews = bool(is_project_manager or task.is_reviewer(project_member))
+    locked = _marks_locked(task)
     assignee_states = []
     for member in assignees:
         log = current.get(member.id)
@@ -1045,14 +1064,11 @@ def _task_status_context(task, *, project_member, is_project_manager):
         assignee_states.append(
             {
                 "member": member,
-                # Whether *this viewer* may act on *this row's* review. A
-                # reviewer never gets it on their own row: a submission signed
-                # off by the person who made it is not a peer review, so their
-                # row waits for somebody else (the same rule the endpoint
-                # enforces).
-                "can_review": viewer_reviews and not (
-                    project_member is not None and member.id == project_member.id
-                ),
+                # Whether *this viewer* may act on *this row's* review, and
+                # (Leads only) on its done mark. Both close once the task is
+                # completed, the same rule the endpoints enforce.
+                "can_review": viewer_reviews and not locked,
+                "can_mark_done": is_project_manager and not locked,
                 # The entry the review buttons act on. None until the member
                 # has one seeded, in which case there is nothing to review.
                 "log": log,
@@ -1086,6 +1102,9 @@ def _task_status_context(task, *, project_member, is_project_manager):
         # Whether the viewer reviews on this task at all. The per-row
         # ``can_review`` above is what actually gates the buttons.
         "viewer_reviews": viewer_reviews,
+        # A completed task's marks are frozen; only the Lead's own Mark Not
+        # Complete stays live.
+        "marks_locked": locked,
         # Named in the pane under the matrix, so it is clear who the Reviewed
         # column is waiting on. Read live, like everything else here: a
         # reviewer added or removed shows up on the next render.
@@ -1127,6 +1146,8 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseBadRequest("No project membership.")
         if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
             return HttpResponseForbidden("Only an assignee can mark their part done.")
+        if _marks_locked(self.task):
+            return HttpResponseForbidden(_LOCKED_MESSAGE)
         mark_own_done(task=self.task, member=self.project_member)
         return _respond_status_block(
             request, self.task,
@@ -1143,6 +1164,8 @@ class TaskUndoOwnView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseBadRequest("No project membership.")
         if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
             return HttpResponseForbidden("Only an assignee can undo their mark.")
+        if _marks_locked(self.task):
+            return HttpResponseForbidden(_LOCKED_MESSAGE)
         reopen_own(task=self.task, member=self.project_member)
         return _respond_status_block(
             request, self.task,
@@ -1265,6 +1288,54 @@ class TaskActivityView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         )
 
 
+class TaskMemberDoneView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """A Lead sets or clears one assignee's done mark from the matrix.
+
+    The assignees' own two actions stay in the pane's top bar; this is the
+    Lead borrowing them per row, so they can record a mark for someone who
+    finished without clicking, or clear one that was set in error. The entry
+    records the Lead as ``completed_by``, so it never reads as the assignee's
+    own click.
+
+    Deliberately *not* what Mark Completed does: closing a task still writes
+    no marks on anybody's behalf. This is a separate, explicit, per-person
+    action, and like every other mark it closes once the task is completed.
+
+    Keyed by member rather than by TaskLog, unlike its review sibling: a mark
+    belongs to a person and ``mark_own_done`` will seed the entry, so this
+    still works for an assignee added without one. A review, by contrast, is a
+    verdict on a specific submission that must already exist.
+
+    POST ``done=0`` clears the mark; anything else sets it.
+
+    The Lead check is inline rather than ``ProjectManagerRequiredMixin``: that
+    mixin declines to resolve a project from a URL carrying ``pk`` plus a
+    second key, and would refuse every caller. The sibling log views check the
+    same way.
+    """
+
+    def post(self, request, *args, **kwargs):
+        if not self.is_project_manager:
+            return HttpResponseForbidden(
+                "Only a Lead can set another member's done mark."
+            )
+        if _marks_locked(self.task):
+            return HttpResponseForbidden(_LOCKED_MESSAGE)
+        member = get_object_or_404(
+            self.task.assigned_members.all(), pk=kwargs["member_pk"]
+        )
+        actor = self.project_member or _fallback_member(request.user, self.project)
+        if request.POST.get("done") in {"0", "false", "no"}:
+            reopen_own(task=self.task, member=member, actor=actor)
+        else:
+            mark_own_done(task=self.task, member=member, actor=actor)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
 class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     """A task reviewer marks one assignee's submission reviewed, or undoes it.
 
@@ -1273,8 +1344,8 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     at once and a member removed from the project loses the action with their
     membership.
 
-    A reviewer's own submission is out of bounds either way: peer review means
-    somebody else looked at it.
+    Both directions close once the task is marked completed, like the
+    assignees' own marks.
 
     POST ``reviewed=0`` withdraws the review; anything else records one.
     """
@@ -1287,13 +1358,8 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseForbidden(
                 "Only a reviewer on this task can review submissions."
             )
-        if (
-            self.project_member is not None
-            and log.assigned_to_id == self.project_member.pk
-        ):
-            return HttpResponseForbidden(
-                "A reviewer cannot review their own submission."
-            )
+        if _marks_locked(self.task):
+            return HttpResponseForbidden(_LOCKED_MESSAGE)
 
         if request.POST.get("reviewed") in {"0", "false", "no"}:
             clear_review(task_log=log, cleared_by=self.project_member)
