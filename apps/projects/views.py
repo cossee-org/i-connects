@@ -117,11 +117,16 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     template_name = "dashboard.html"
 
+    # The dashboard shows a preview of each list, not the whole thing — the
+    # Tasks and Requests pages are where the full, filterable lists live.
+    ACTIVE_TASK_LIMIT = 5
+    REQUEST_LIMIT = 5
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
-        from django.db.models import Count, Exists, OuterRef, Subquery, Q
+        from django.db.models import Count, Exists, F, OuterRef, Subquery, Q
         from django.utils import timezone
         from apps.core.enums import TaskStatus, MemberPrivileges
         from apps.tasks.models import Task, TaskLog
@@ -181,27 +186,43 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             .count()
         )
 
-        # Combined count for the dashboard's single "Tasks" tile -- counts a
-        # task once even if the user is both assigned to and reviewing it,
-        # matching the Tasks page's and sidebar's merged total (summing
-        # active_task_count + review_task_count would double-count those).
-        context["active_tasks_total"] = (
+        # Every task still open for the user, whether they are assigned to it
+        # or reviewing it -- the source of both the "Tasks" tile count and the
+        # active-task list below it. A task the user is both assigned to and
+        # reviewing appears once, matching the Tasks page's and sidebar's
+        # merged total (summing active_task_count + review_task_count would
+        # double-count those).
+        active_tasks_qs = (
             Task.objects.filter(
                 Q(assigned_members__users=user) | Q(reviewers__users=user),
                 status=TaskStatus.NOT_COMPLETED,
             )
             .annotate(
-                _user_log_status=latest_log_status,
-                _is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
+                user_log_status=latest_log_status,
+                is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
+                is_reviewing=Exists(user_member_qs.filter(reviewed_tasks=OuterRef("pk"))),
             )
             .filter(
-                Q(_is_assigned=False)
-                | Q(_user_log_status__isnull=True)
-                | ~Q(_user_log_status=TaskStatus.COMPLETED)
+                Q(is_assigned=False)
+                | Q(user_log_status__isnull=True)
+                | ~Q(user_log_status=TaskStatus.COMPLETED)
             )
             .distinct()
-            .count()
         )
+
+        context["active_tasks_total"] = active_tasks_qs.count()
+
+        # Soonest deadline first so the list leads with what is closest to
+        # due; undated tasks sort last rather than first (SQLite orders NULLs
+        # before everything by default, Postgres after -- nulls_last pins it).
+        context["active_tasks"] = list(
+            active_tasks_qs.select_related("project", "container")
+            .prefetch_related("assigned_members")
+            .order_by(F("deadline").asc(nulls_last=True), "-created_at", "id")[
+                : self.ACTIVE_TASK_LIMIT
+            ]
+        )
+        context["now"] = timezone.now()
 
         # --- Pending approvals (PM only) -----------------------------------
         if pm_project_ids:
@@ -243,6 +264,17 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         )
         context["invitation_requests"] = invitation_requests
         context["invitation_request_count"] = len(invitation_requests)
+
+        # --- Incoming requests list -------------------------------------------
+        # Join requests awaiting the user's review plus invitations addressed
+        # to them, merged and tagged by kind so a single list can render both
+        # -- the same item shape the Requests page's "Incoming" tab uses.
+        incoming_requests = [
+            {"kind": "join_request", "obj": jr} for jr in pending_join_requests
+        ] + [{"kind": "invitation", "obj": inv} for inv in invitation_requests]
+        incoming_requests.sort(key=lambda item: item["obj"].created_at, reverse=True)
+        context["incoming_request_count"] = len(incoming_requests)
+        context["incoming_requests"] = incoming_requests[: self.REQUEST_LIMIT]
 
         # --- Notifications -------------------------------------------------
         context["recent_notifications"] = list(
