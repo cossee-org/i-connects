@@ -125,7 +125,26 @@ class DashboardView(LoginRequiredMixin, TemplateView):
     # Controls on the "Active tasks and requests" section. "" is no type
     # filter (both groups); "date" sort is the default reading order --
     # tasks by how soon they are due, requests newest first.
-    _TYPES = ("tasks", "requests")
+    #
+    # Each type narrows to one group and, for the finer ones, to a slice of
+    # it. Which map a type appears in is what decides whether that group
+    # renders at all; the value is the noun its "All N ..." link and its
+    # empty line use, so both say what was actually filtered to.
+    _TASK_TYPE_LABELS = {
+        "": "tasks",
+        "tasks": "tasks",
+        "overdue": "overdue tasks",
+        "review": "tasks to review",
+    }
+    _REQUEST_TYPE_LABELS = {
+        "": "requests",
+        "requests": "requests",
+        "join_requests": "join requests",
+        "invitations": "invitations",
+    }
+    _TYPES = tuple(
+        t for t in (*_TASK_TYPE_LABELS, *_REQUEST_TYPE_LABELS) if t
+    )
     _SORTS = ("date", "name")
 
     def get_context_data(self, **kwargs):
@@ -147,6 +166,14 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             current_sort = "date"
         context["current_type"] = current_type
         context["current_sort"] = current_sort
+        shows_tasks = current_type in self._TASK_TYPE_LABELS
+        shows_requests = current_type in self._REQUEST_TYPE_LABELS
+        context["shows_tasks"] = shows_tasks
+        context["shows_requests"] = shows_requests
+        context["active_tasks_label"] = self._TASK_TYPE_LABELS.get(current_type, "tasks")
+        context["incoming_requests_label"] = self._REQUEST_TYPE_LABELS.get(
+            current_type, "requests"
+        )
 
         # --- Privilege map -------------------------------------------------
         privs = ProjectPrivilege.objects.filter(user=user).select_related("project")
@@ -227,6 +254,18 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         )
 
         context["active_tasks_total"] = active_tasks_qs.count()
+        now = timezone.now()
+        context["now"] = now
+
+        # The finer task types narrow the same queryset; the count follows,
+        # so the section's badge and the "All N ..." link below the rows
+        # both describe the filtered set rather than the whole one.
+        if current_type == "overdue":
+            matching_tasks_qs = active_tasks_qs.filter(deadline__lt=now)
+        elif current_type == "review":
+            matching_tasks_qs = active_tasks_qs.filter(is_reviewing=True)
+        else:
+            matching_tasks_qs = active_tasks_qs
 
         # "date" leads with what is closest to due; undated tasks sort last
         # rather than first (SQLite orders NULLs before everything by
@@ -236,15 +275,20 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         else:
             task_order = (F("deadline").asc(nulls_last=True), "-created_at", "id")
 
-        if current_type == "requests":
+        if not shows_tasks:
             context["active_tasks"] = []
+            context["active_tasks_match_count"] = 0
         else:
             context["active_tasks"] = list(
-                active_tasks_qs.select_related("project", "container")
+                matching_tasks_qs.select_related("project", "container")
                 .prefetch_related("assigned_members")
                 .order_by(*task_order)[: self.ACTIVE_TASK_LIMIT]
             )
-        context["now"] = timezone.now()
+            context["active_tasks_match_count"] = (
+                matching_tasks_qs.count()
+                if matching_tasks_qs is not active_tasks_qs
+                else context["active_tasks_total"]
+            )
 
         # --- Pending approvals (PM only) -----------------------------------
         if pm_project_ids:
@@ -301,20 +345,24 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         else:
             incoming_requests.sort(key=lambda item: item["obj"].created_at, reverse=True)
         context["incoming_request_count"] = len(incoming_requests)
-        context["incoming_requests"] = (
-            [] if current_type == "tasks" else incoming_requests[: self.REQUEST_LIMIT]
-        )
+
+        if current_type == "join_requests":
+            matching_requests = [i for i in incoming_requests if i["kind"] == "join_request"]
+        elif current_type == "invitations":
+            matching_requests = [i for i in incoming_requests if i["kind"] == "invitation"]
+        else:
+            matching_requests = incoming_requests
+
+        if not shows_requests:
+            matching_requests = []
+        context["incoming_request_match_count"] = len(matching_requests)
+        context["incoming_requests"] = matching_requests[: self.REQUEST_LIMIT]
 
         # The count badge on the section's heading covers what the type
         # filter leaves showing, not what the (unfiltered) stat tiles count.
-        if current_type == "tasks":
-            context["active_task_and_request_total"] = context["active_tasks_total"]
-        elif current_type == "requests":
-            context["active_task_and_request_total"] = len(incoming_requests)
-        else:
-            context["active_task_and_request_total"] = (
-                context["active_tasks_total"] + len(incoming_requests)
-            )
+        context["active_task_and_request_total"] = (
+            context["active_tasks_match_count"] + len(matching_requests)
+        )
 
         # --- Notifications -------------------------------------------------
         context["recent_notifications"] = list(

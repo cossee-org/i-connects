@@ -84,10 +84,10 @@ heading of its own.
       </li>
     {% endfor %}
   </ul>
-  {% if incoming_request_count > incoming_requests|length %}
+  {% if incoming_request_match_count > incoming_requests|length %}
     <a href="{% url 'projects:requests' %}"
        class="inline-flex items-center gap-1 self-start text-sm text-brand-navy hover:text-brand-coral">
-      All {{ incoming_request_count }} requests
+      All {{ incoming_request_match_count }} {{ incoming_requests_label }}
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
@@ -96,5 +96,5 @@ heading of its own.
   {% endif %}
 {% else %}
   {# One muted line, not a full panel: the other group's rows sit right above. #}
-  <p class="text-sm text-brand-text/60 px-1">No requests waiting on you right now.</p>
+  <p class="text-sm text-brand-text/60 px-1">No {{ incoming_requests_label }} waiting on you right now.</p>
 {% endif %}

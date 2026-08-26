@@ -114,8 +114,12 @@
           open: false,
           options: [
             {value: '', label: 'All'},
-            {value: 'tasks', label: 'Tasks only'},
-            {value: 'requests', label: 'Requests only'}
+            {value: 'tasks', label: 'Tasks'},
+            {value: 'overdue', label: 'Overdue'},
+            {value: 'review', label: 'To Review'},
+            {value: 'requests', label: 'Requests'},
+            {value: 'join_requests', label: 'Join Requests'},
+            {value: 'invitations', label: 'Invitations'}
           ],
           current: '{{ current_type }}',
           get label() {
@@ -139,7 +143,7 @@
           <div x-cloak x-show="open"
                x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
                x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-               class="absolute right-0 mt-1 w-40 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+               class="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
             <template x-for="opt in options" :key="opt.value">
               <button type="button" @click="pick(opt.value)"
                       class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
@@ -191,8 +195,12 @@
           <label class="sr-only" for="type-select-open-work">Show</label>
           <select id="type-select-open-work" name="type">
             <option value="" {% if not current_type %}selected{% endif %}>All</option>
-            <option value="tasks" {% if current_type == 'tasks' %}selected{% endif %}>Tasks only</option>
-            <option value="requests" {% if current_type == 'requests' %}selected{% endif %}>Requests only</option>
+            <option value="tasks" {% if current_type == 'tasks' %}selected{% endif %}>Tasks</option>
+            <option value="overdue" {% if current_type == 'overdue' %}selected{% endif %}>Overdue</option>
+            <option value="review" {% if current_type == 'review' %}selected{% endif %}>To Review</option>
+            <option value="requests" {% if current_type == 'requests' %}selected{% endif %}>Requests</option>
+            <option value="join_requests" {% if current_type == 'join_requests' %}selected{% endif %}>Join Requests</option>
+            <option value="invitations" {% if current_type == 'invitations' %}selected{% endif %}>Invitations</option>
           </select>
           <label class="sr-only" for="sort-select-open-work">Sort by</label>
           <select id="sort-select-open-work" name="sort">
@@ -212,10 +220,10 @@
       {% endcomment %}
       <div tabindex="0" role="group" aria-label="Active tasks and requests"
            class="flex flex-col gap-3 max-h-96 overflow-y-auto pr-2">
-        {% if current_type != 'requests' %}
+        {% if shows_tasks %}
           {% include "projects/partials/dashboard_active_tasks.html" %}
         {% endif %}
-        {% if current_type != 'tasks' %}
+        {% if shows_requests %}
           {% include "projects/partials/dashboard_requests.html" %}
         {% endif %}
       </div>
