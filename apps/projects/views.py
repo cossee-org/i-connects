@@ -276,6 +276,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["incoming_request_count"] = len(incoming_requests)
         context["incoming_requests"] = incoming_requests[: self.REQUEST_LIMIT]
 
+        # Everything the "Active tasks and requests" section covers, for the
+        # one count badge on its shared heading.
+        context["active_task_and_request_total"] = (
+            context["active_tasks_total"] + len(incoming_requests)
+        )
+
         # --- Notifications -------------------------------------------------
         context["recent_notifications"] = list(
             Notification.objects.unread_for_user(user)

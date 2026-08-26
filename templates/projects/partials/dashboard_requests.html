@@ -1,28 +1,16 @@
 {% comment %}
-Dashboard preview of the requests waiting on the current user — join
-requests to projects they manage, plus invitations addressed to them,
-merged and tagged by kind. Capped at DashboardView.REQUEST_LIMIT; the
-Requests page carries the full, filterable list including outgoing ones.
+The requests column of the dashboard's "Active tasks and requests"
+section — join requests to projects the current user manages, plus
+invitations addressed to them, merged and tagged by kind. Capped at
+DashboardView.REQUEST_LIMIT; the Requests page carries the full,
+filterable list including outgoing ones. The section's heading lives in
+dashboard.html, so the column labels itself for screen readers through
+the list's aria-label rather than a heading of its own.
 {% endcomment %}
 
-<section aria-labelledby="dashboard-requests-heading" class="flex flex-col gap-3">
-  <div class="flex items-center gap-3">
-    <h2 id="dashboard-requests-heading" class="text-lg font-semibold text-brand-navy">Requests</h2>
-    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ incoming_request_count }}</span>
-    {% if incoming_request_count > incoming_requests|length %}
-      <a href="{% url 'projects:requests' %}"
-         class="ml-auto inline-flex items-center gap-1 text-sm text-brand-navy hover:text-brand-coral shrink-0">
-        All {{ incoming_request_count }} requests
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
-        </svg>
-      </a>
-    {% endif %}
-  </div>
-
+<div class="flex flex-col gap-3">
   {% if incoming_requests %}
-    <ul class="flex flex-col gap-3 list-none p-0 m-0">
+    <ul aria-label="Requests" class="flex flex-col gap-3 list-none p-0 m-0">
       {% for item in incoming_requests %}
         <li class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
           {% if item.kind == 'join_request' %}
@@ -75,7 +63,17 @@ Requests page carries the full, filterable list including outgoing ones.
         </li>
       {% endfor %}
     </ul>
+    {% if incoming_request_count > incoming_requests|length %}
+      <a href="{% url 'projects:requests' %}"
+         class="inline-flex items-center gap-1 self-start text-sm text-brand-navy hover:text-brand-coral">
+        All {{ incoming_request_count }} requests
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+        </svg>
+      </a>
+    {% endif %}
   {% else %}
     {% include "_components/empty_state.html" with title="No requests waiting" body="Join requests to the projects you manage, and invitations you've received, will appear here." %}
   {% endif %}
-</section>
+</div>

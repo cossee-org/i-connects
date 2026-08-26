@@ -837,7 +837,7 @@ def test_dashboard_active_task_list_leads_with_the_soonest_deadline_and_caps(cli
     content = response.content.decode()
 
     assert response.status_code == 200
-    assert 'id="dashboard-active-tasks-heading"' in content
+    assert 'id="dashboard-open-work-heading"' in content
     # Soonest first, capped: the earliest deadlines are shown...
     for i in range(DashboardView.ACTIVE_TASK_LIMIT):
         assert f"Dated task {i}" in content
@@ -896,7 +896,11 @@ def test_dashboard_active_task_list_shows_an_empty_state(client, user):
     content = response.content.decode()
 
     assert response.status_code == 200
-    assert "No active tasks" in content
+    # Both halves of the section are empty, so it collapses to one panel
+    # rather than stacking a "no tasks" and a "no requests" one.
+    assert "Nothing waiting on you" in content
+    assert "No active tasks" not in content
+    assert "No requests waiting" not in content
     # Nothing is hidden, so there is no "view the rest" link to render.
     assert "All 0 tasks" not in content
 
@@ -928,7 +932,7 @@ def test_dashboard_request_list_merges_join_requests_and_invitations(client, use
     content = response.content.decode()
 
     assert response.status_code == 200
-    assert 'id="dashboard-requests-heading"' in content
+    assert 'id="dashboard-open-work-heading"' in content
     assert response.context["incoming_request_count"] == 2
     assert other_user.name in content
     assert "Invited" in content
@@ -965,6 +969,10 @@ def test_dashboard_request_list_ignores_requests_the_user_cannot_act_on(client, 
     create_join_request(
         project=theirs, user=user, requested_privilege=MemberPrivileges.CONTRIBUTOR
     )
+    # An active task keeps the section from collapsing to its combined
+    # empty state, so the requests column's own empty panel is what shows.
+    member = ProjectMember.objects.filter(project=mine, users=user).first()
+    _task(mine, member, "Something to do").assigned_members.add(member)
 
     client.force_login(user)
     response = client.get(reverse("projects:dashboard"))
@@ -973,3 +981,4 @@ def test_dashboard_request_list_ignores_requests_the_user_cannot_act_on(client, 
     assert response.status_code == 200
     assert response.context["incoming_request_count"] == 0
     assert "No requests waiting" in content
+    assert "All 0 requests" not in content

@@ -90,13 +90,25 @@
   </div>
 
   {% comment %}
-  Active tasks + incoming requests — a preview of each; the Tasks and
+  Everything waiting on the user, under one heading — their active tasks
+  beside the requests they can act on. A preview of each; the Tasks and
   Requests pages carry the full, filterable lists.
   {% endcomment %}
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-    {% include "projects/partials/dashboard_active_tasks.html" %}
-    {% include "projects/partials/dashboard_requests.html" %}
-  </div>
+  <section aria-labelledby="dashboard-open-work-heading" class="flex flex-col gap-3">
+    <div class="flex items-center gap-3">
+      <h2 id="dashboard-open-work-heading" class="text-lg font-semibold text-brand-navy">Active tasks and requests</h2>
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ active_task_and_request_total }}</span>
+    </div>
+
+    {% if active_tasks or incoming_requests %}
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {% include "projects/partials/dashboard_active_tasks.html" %}
+        {% include "projects/partials/dashboard_requests.html" %}
+      </div>
+    {% else %}
+      {% include "_components/empty_state.html" with title="Nothing waiting on you" body="Tasks assigned to you or awaiting your review, join requests to the projects you manage, and invitations you've received will all appear here." %}
+    {% endif %}
+  </section>
 
 </div>{# end main content #}
 
