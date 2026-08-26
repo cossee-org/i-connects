@@ -982,3 +982,134 @@ def test_dashboard_request_list_ignores_requests_the_user_cannot_act_on(client, 
     assert response.context["incoming_request_count"] == 0
     assert "No requests waiting" in content
     assert "All 0 requests" not in content
+
+
+@pytest.mark.django_db
+def test_dashboard_type_filter_shows_one_group_at_a_time(client, user, other_user):
+    """"Tasks only" drops the request rows and "Requests only" drops the
+    task rows, and the section's count follows what is left showing."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Filtered", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    _task(project, member, "A task of mine").assigned_members.add(member)
+    create_join_request(
+        project=project, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+
+    client.force_login(user)
+    url = reverse("projects:dashboard")
+
+    both = client.get(url).content.decode()
+    assert "A task of mine" in both
+    assert other_user.name in both
+
+    tasks_only = client.get(url, {"type": "tasks"})
+    content = tasks_only.content.decode()
+    assert "A task of mine" in content
+    assert other_user.name not in content
+    # Not the "no requests" line either -- they were filtered out, not absent.
+    assert "No requests waiting" not in content
+    assert tasks_only.context["active_task_and_request_total"] == 1
+
+    requests_only = client.get(url, {"type": "requests"})
+    content = requests_only.content.decode()
+    assert other_user.name in content
+    assert "A task of mine" not in content
+    assert "No active tasks" not in content
+    assert requests_only.context["active_task_and_request_total"] == 1
+
+
+@pytest.mark.django_db
+def test_dashboard_sort_by_name_orders_tasks_alphabetically(client, user):
+    """The default "date" sort leads with the soonest deadline; "name"
+    re-orders the same tasks A-Z regardless of when they are due."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Sorted", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    now = timezone.now()
+    # Alphabetical order is the reverse of deadline order.
+    _task(project, member, "Alpha", deadline=now + timedelta(days=3)).assigned_members.add(member)
+    _task(project, member, "Zulu", deadline=now + timedelta(days=1)).assigned_members.add(member)
+
+    client.force_login(user)
+    url = reverse("projects:dashboard")
+
+    by_date = client.get(url)
+    assert [t.name for t in by_date.context["active_tasks"]] == ["Zulu", "Alpha"]
+    assert by_date.context["current_sort"] == "date"
+
+    by_name = client.get(url, {"sort": "name"})
+    assert [t.name for t in by_name.context["active_tasks"]] == ["Alpha", "Zulu"]
+    assert by_name.context["current_sort"] == "name"
+
+
+@pytest.mark.django_db
+def test_dashboard_sort_by_name_orders_requests_by_project(client, user, other_user):
+    """A request has no name of its own, so "name" sorts requests by the
+    project they concern -- newest-first is what "date" gives."""
+    zulu = create_project_with_owner(
+        user=user,
+        form_data={"name": "Zulu Project", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    alpha = create_project_with_owner(
+        user=user,
+        form_data={"name": "Alpha Project", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    # Requested oldest-first on Zulu, so date and name orders disagree.
+    create_join_request(
+        project=zulu, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    create_join_request(
+        project=alpha, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+
+    client.force_login(user)
+    url = reverse("projects:dashboard")
+
+    by_date = client.get(url)
+    assert [
+        item["obj"].project.name for item in by_date.context["incoming_requests"]
+    ] == ["Alpha Project", "Zulu Project"]
+
+    by_name = client.get(url, {"sort": "name"})
+    assert [
+        item["obj"].project.name for item in by_name.context["incoming_requests"]
+    ] == ["Alpha Project", "Zulu Project"]
+
+    # Flip the projects so date order can't coincide with name order.
+    zulu.name = "Aardvark Project"
+    zulu.save(update_fields=["name"])
+    by_name = client.get(url, {"sort": "name"})
+    assert [
+        item["obj"].project.name for item in by_name.context["incoming_requests"]
+    ] == ["Aardvark Project", "Alpha Project"]
+
+
+@pytest.mark.django_db
+def test_dashboard_ignores_unknown_filter_and_sort_values(client, user):
+    """A hand-edited query string falls back to the defaults rather than
+    erroring or dropping the list."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Defaults", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    _task(project, member, "Still listed").assigned_members.add(member)
+
+    client.force_login(user)
+    response = client.get(
+        reverse("projects:dashboard"), {"type": "bogus", "sort": "whatever"}
+    )
+
+    assert response.status_code == 200
+    assert response.context["current_type"] == ""
+    assert response.context["current_sort"] == "date"
+    assert "Still listed" in response.content.decode()

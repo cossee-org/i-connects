@@ -96,12 +96,115 @@
   filterable lists.
   {% endcomment %}
   <section aria-labelledby="dashboard-open-work-heading" class="flex flex-col gap-3">
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-3 flex-wrap">
       <h2 id="dashboard-open-work-heading" class="text-lg font-semibold text-brand-navy">Active tasks and requests</h2>
       <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ active_task_and_request_total }}</span>
+
+      {% comment %}
+      Type / Sort controls. Same Alpine dropdown the Tasks and Requests
+      pages use, except the button shows the current choice: those pages
+      spell the active filters out in a results-summary line, and this
+      section has no room for one.
+      {% endcomment %}
+      <form method="get" id="filter-form-open-work" class="ml-auto flex items-center gap-2">
+        <input type="hidden" name="type" id="type-input-open-work" value="{{ current_type }}">
+        <input type="hidden" name="sort" id="sort-input-open-work" value="{{ current_sort }}">
+
+        <div x-data="{
+          open: false,
+          options: [
+            {value: '', label: 'All'},
+            {value: 'tasks', label: 'Tasks only'},
+            {value: 'requests', label: 'Requests only'}
+          ],
+          current: '{{ current_type }}',
+          get label() {
+            const opt = this.options.find(o => o.value === this.current);
+            return this.current && opt ? opt.label : 'Type';
+          },
+          pick(val) {
+            this.current = val;
+            document.getElementById('type-input-open-work').value = val;
+            this.open = false;
+            document.getElementById('filter-form-open-work').submit();
+          }
+        }" class="relative" @keydown.escape="open = false" @click.outside="open = false">
+          <button type="button" @click="open = !open" :aria-expanded="open"
+                  class="inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+            <span x-text="label"></span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0" aria-hidden="true">
+              <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+            </svg>
+          </button>
+          <div x-cloak x-show="open"
+               x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+               x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+               class="absolute right-0 mt-1 w-40 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+            <template x-for="opt in options" :key="opt.value">
+              <button type="button" @click="pick(opt.value)"
+                      class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                      :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                      x-text="opt.label"></button>
+            </template>
+          </div>
+        </div>
+
+        <div x-data="{
+          open: false,
+          options: [
+            {value: 'date', label: 'Date'},
+            {value: 'name', label: 'Name'}
+          ],
+          current: '{{ current_sort }}',
+          get label() {
+            const opt = this.options.find(o => o.value === this.current);
+            return 'Sort: ' + (opt ? opt.label : 'Date');
+          },
+          pick(val) {
+            this.current = val;
+            document.getElementById('sort-input-open-work').value = val;
+            this.open = false;
+            document.getElementById('filter-form-open-work').submit();
+          }
+        }" class="relative" @keydown.escape="open = false" @click.outside="open = false">
+          <button type="button" @click="open = !open" :aria-expanded="open"
+                  class="inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+            <span x-text="label"></span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0" aria-hidden="true">
+              <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+            </svg>
+          </button>
+          <div x-cloak x-show="open"
+               x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+               x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+               class="absolute right-0 mt-1 w-32 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+            <template x-for="opt in options" :key="opt.value">
+              <button type="button" @click="pick(opt.value)"
+                      class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                      :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                      x-text="opt.label"></button>
+            </template>
+          </div>
+        </div>
+
+        <noscript>
+          <label class="sr-only" for="type-select-open-work">Show</label>
+          <select id="type-select-open-work" name="type">
+            <option value="" {% if not current_type %}selected{% endif %}>All</option>
+            <option value="tasks" {% if current_type == 'tasks' %}selected{% endif %}>Tasks only</option>
+            <option value="requests" {% if current_type == 'requests' %}selected{% endif %}>Requests only</option>
+          </select>
+          <label class="sr-only" for="sort-select-open-work">Sort by</label>
+          <select id="sort-select-open-work" name="sort">
+            <option value="date" {% if current_sort == 'date' %}selected{% endif %}>Date</option>
+            <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Name</option>
+          </select>
+          <button type="submit" class="btn btn-xs">Apply</button>
+        </noscript>
+      </form>
     </div>
 
-    {% if active_tasks or incoming_requests %}
+    {% if active_tasks or incoming_requests or current_type %}
       {% comment %}
       One scrolling column: tasks first, then requests. tabindex makes the
       scroll box reachable by keyboard, which a scrollable region needs
@@ -109,8 +212,12 @@
       {% endcomment %}
       <div tabindex="0" role="group" aria-label="Active tasks and requests"
            class="flex flex-col gap-3 max-h-96 overflow-y-auto pr-2">
-        {% include "projects/partials/dashboard_active_tasks.html" %}
-        {% include "projects/partials/dashboard_requests.html" %}
+        {% if current_type != 'requests' %}
+          {% include "projects/partials/dashboard_active_tasks.html" %}
+        {% endif %}
+        {% if current_type != 'tasks' %}
+          {% include "projects/partials/dashboard_requests.html" %}
+        {% endif %}
       </div>
     {% else %}
       {% include "_components/empty_state.html" with title="Nothing waiting on you" body="Tasks assigned to you or awaiting your review, join requests to the projects you manage, and invitations you've received will all appear here." %}

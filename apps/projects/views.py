@@ -122,6 +122,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
     ACTIVE_TASK_LIMIT = 5
     REQUEST_LIMIT = 5
 
+    # Controls on the "Active tasks and requests" section. "" is no type
+    # filter (both groups); "date" sort is the default reading order --
+    # tasks by how soon they are due, requests newest first.
+    _TYPES = ("tasks", "requests")
+    _SORTS = ("date", "name")
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
@@ -131,6 +137,16 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         from apps.core.enums import TaskStatus, MemberPrivileges
         from apps.tasks.models import Task, TaskLog
         from apps.notifications.models import Notification
+
+        # --- "Active tasks and requests" controls --------------------------
+        current_type = self.request.GET.get("type", "")
+        if current_type not in self._TYPES:
+            current_type = ""
+        current_sort = self.request.GET.get("sort", "")
+        if current_sort not in self._SORTS:
+            current_sort = "date"
+        context["current_type"] = current_type
+        context["current_sort"] = current_sort
 
         # --- Privilege map -------------------------------------------------
         privs = ProjectPrivilege.objects.filter(user=user).select_related("project")
@@ -212,16 +228,22 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         context["active_tasks_total"] = active_tasks_qs.count()
 
-        # Soonest deadline first so the list leads with what is closest to
-        # due; undated tasks sort last rather than first (SQLite orders NULLs
-        # before everything by default, Postgres after -- nulls_last pins it).
-        context["active_tasks"] = list(
-            active_tasks_qs.select_related("project", "container")
-            .prefetch_related("assigned_members")
-            .order_by(F("deadline").asc(nulls_last=True), "-created_at", "id")[
-                : self.ACTIVE_TASK_LIMIT
-            ]
-        )
+        # "date" leads with what is closest to due; undated tasks sort last
+        # rather than first (SQLite orders NULLs before everything by
+        # default, Postgres after -- nulls_last pins it either way).
+        if current_sort == "name":
+            task_order = ("name", "id")
+        else:
+            task_order = (F("deadline").asc(nulls_last=True), "-created_at", "id")
+
+        if current_type == "requests":
+            context["active_tasks"] = []
+        else:
+            context["active_tasks"] = list(
+                active_tasks_qs.select_related("project", "container")
+                .prefetch_related("assigned_members")
+                .order_by(*task_order)[: self.ACTIVE_TASK_LIMIT]
+            )
         context["now"] = timezone.now()
 
         # --- Pending approvals (PM only) -----------------------------------
@@ -272,15 +294,27 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         incoming_requests = [
             {"kind": "join_request", "obj": jr} for jr in pending_join_requests
         ] + [{"kind": "invitation", "obj": inv} for inv in invitation_requests]
-        incoming_requests.sort(key=lambda item: item["obj"].created_at, reverse=True)
+        # A request has no name of its own, so "name" sorts these by project,
+        # the way the Requests page's "Project A-Z" does.
+        if current_sort == "name":
+            incoming_requests.sort(key=lambda item: item["obj"].project.name.lower())
+        else:
+            incoming_requests.sort(key=lambda item: item["obj"].created_at, reverse=True)
         context["incoming_request_count"] = len(incoming_requests)
-        context["incoming_requests"] = incoming_requests[: self.REQUEST_LIMIT]
-
-        # Everything the "Active tasks and requests" section covers, for the
-        # one count badge on its shared heading.
-        context["active_task_and_request_total"] = (
-            context["active_tasks_total"] + len(incoming_requests)
+        context["incoming_requests"] = (
+            [] if current_type == "tasks" else incoming_requests[: self.REQUEST_LIMIT]
         )
+
+        # The count badge on the section's heading covers what the type
+        # filter leaves showing, not what the (unfiltered) stat tiles count.
+        if current_type == "tasks":
+            context["active_task_and_request_total"] = context["active_tasks_total"]
+        elif current_type == "requests":
+            context["active_task_and_request_total"] = len(incoming_requests)
+        else:
+            context["active_task_and_request_total"] = (
+                context["active_tasks_total"] + len(incoming_requests)
+            )
 
         # --- Notifications -------------------------------------------------
         context["recent_notifications"] = list(
