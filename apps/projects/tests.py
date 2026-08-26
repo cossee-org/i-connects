@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from apps.audit.models import AuditAction, AuditLog
@@ -1227,3 +1228,31 @@ def test_dashboard_link_and_empty_line_name_the_narrowed_set(client, user):
 
     invitations = client.get(url, {"type": "invitations"}).content.decode()
     assert "No invitations waiting on you right now" in invitations
+
+
+@pytest.mark.django_db
+def test_dashboard_request_rows_pill_lead_requests_only(client, user, other_user):
+    """"Member" is what nearly every request asks for, so only the
+    exception -- a request to lead the project -- carries a pill."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Pilled", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    create_join_request(
+        project=project, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+
+    client.force_login(user)
+    content = client.get(reverse("projects:dashboard")).content.decode()
+    assert other_user.name in content
+    assert "Member" not in content
+
+    lead_asker = get_user_model().objects.create_user(
+        email="lead@test.com", password="password123", name="Lead Asker"
+    )
+    create_join_request(
+        project=project, user=lead_asker, requested_privilege=MemberPrivileges.PROJECT_MANAGER
+    )
+    content = client.get(reverse("projects:dashboard")).content.decode()
+    assert "Lead" in content
+    assert "Member" not in content
