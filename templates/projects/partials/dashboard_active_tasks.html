@@ -1,71 +1,70 @@
 {% load task_tags %}
 
 {% comment %}
-The active-tasks column of the dashboard's "Active tasks and requests"
-section — tasks assigned to the current user and tasks they review,
-merged, soonest deadline first. Capped at DashboardView.ACTIVE_TASK_LIMIT;
-the Tasks page carries the full, filterable list. The section's heading
-lives in dashboard.html, so the column labels itself for screen readers
-through the list's aria-label rather than a heading of its own.
+The active-task rows of the dashboard's "Active tasks and requests"
+list — tasks assigned to the current user and tasks they review, merged,
+soonest deadline first. Capped at DashboardView.ACTIVE_TASK_LIMIT; the
+Tasks page carries the full, filterable list. Rows are two compact lines
+(name, then project and meta) so the scrolling list holds as many as it
+can. The section's heading lives in dashboard.html, so this group labels
+itself for screen readers through the list's aria-label rather than a
+heading of its own.
 {% endcomment %}
 
-<div class="flex flex-col gap-3">
-  {% if active_tasks %}
-    <ul aria-label="Active tasks" class="flex flex-col gap-3 list-none p-0 m-0">
-      {% for task in active_tasks %}
-        <li>
-          <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
-             class="brand-card p-4 hover:shadow-md transition flex items-start gap-4{% if task.is_priority %} border-l-2 border-l-error{% endif %}">
-            <div class="flex-1 min-w-0 flex flex-col gap-1">
-              <h3 class="text-base font-semibold text-brand-navy leading-snug">{{ task.name }}</h3>
-              <p class="text-xs text-brand-text/60">{{ task.project.name }}</p>
-
-              <div class="flex items-center gap-3 mt-1 flex-wrap">
-                {% if task.is_priority %}
-                  {% include "_components/priority_flag.html" %}
-                {% endif %}
-                {% if task.deadline %}
-                  <span class="inline-flex items-center gap-1 text-xs
-                    {% if task.deadline < now %}text-error font-medium{% else %}text-brand-text/60{% endif %}">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                         stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                    </svg>
-                    {% if task.deadline < now %}Overdue &middot; {% endif %}{{ task.deadline|date:"M j, Y" }}
-                  </span>
-                {% endif %}
-                {% with assignees=task.assigned_members.all|member_name_summary %}
-                  {% if assignees.short %}
-                    <span class="inline-flex items-center gap-1 text-xs text-brand-text/60" title="{{ assignees.full }}">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                           stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-                      </svg>
-                      {{ assignees.short }}
-                    </span>
-                  {% endif %}
-                {% endwith %}
-              </div>
+{% if active_tasks %}
+  <ul aria-label="Active tasks" class="flex flex-col gap-2 list-none p-0 m-0">
+    {% for task in active_tasks %}
+      <li>
+        <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
+           class="brand-card px-3 py-2 hover:shadow-md transition flex items-center gap-3{% if task.is_priority %} border-l-2 border-l-error{% endif %}">
+          <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+            <div class="flex items-center gap-1.5 min-w-0">
+              {% if task.is_priority %}
+                {% include "_components/priority_flag.html" with icon_only=True %}
+              {% endif %}
+              <h3 class="text-sm font-semibold text-brand-navy leading-snug truncate">{{ task.name }}</h3>
             </div>
 
-            {% if task.is_reviewing %}
-              <span class="shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">To review</span>
-            {% endif %}
-          </a>
-        </li>
-      {% endfor %}
-    </ul>
-    {% if active_tasks_total > active_tasks|length %}
-      <a href="{% url 'tasks:my_list' %}"
-         class="inline-flex items-center gap-1 self-start text-sm text-brand-navy hover:text-brand-coral">
-        All {{ active_tasks_total }} tasks
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
-        </svg>
-      </a>
-    {% endif %}
-  {% else %}
-    {% include "_components/empty_state.html" with title="No active tasks" body="Tasks assigned to you, and tasks waiting on your review, will appear here." %}
+            <div class="flex items-center gap-2 text-xs text-brand-text/60 min-w-0">
+              <span class="truncate">{{ task.project.name }}</span>
+              {% if task.deadline %}
+                <span aria-hidden="true">&middot;</span>
+                <span class="inline-flex items-center gap-1 shrink-0
+                  {% if task.deadline < now %}text-error font-medium{% endif %}">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                       stroke-width="1.8" stroke="currentColor" class="w-3 h-3 shrink-0" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  {% if task.deadline < now %}Overdue &middot; {% endif %}{{ task.deadline|date:"M j" }}
+                </span>
+              {% endif %}
+              {% with assignees=task.assigned_members.all|member_name_summary %}
+                {% if assignees.short %}
+                  <span aria-hidden="true">&middot;</span>
+                  <span class="truncate" title="{{ assignees.full }}">{{ assignees.short }}</span>
+                {% endif %}
+              {% endwith %}
+            </div>
+          </div>
+
+          {% if task.is_reviewing %}
+            <span class="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-coral/10 text-brand-coral">To review</span>
+          {% endif %}
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+  {% if active_tasks_total > active_tasks|length %}
+    <a href="{% url 'tasks:my_list' %}"
+       class="inline-flex items-center gap-1 self-start text-sm text-brand-navy hover:text-brand-coral">
+      All {{ active_tasks_total }} tasks
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+      </svg>
+    </a>
   {% endif %}
-</div>
+{% else %}
+  {# One muted line, not a full panel: the other group's rows sit right below. #}
+  <p class="text-sm text-brand-text/60 px-1">No active tasks right now.</p>
+{% endif %}

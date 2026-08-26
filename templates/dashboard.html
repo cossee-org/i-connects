@@ -91,8 +91,9 @@
 
   {% comment %}
   Everything waiting on the user, under one heading — their active tasks
-  beside the requests they can act on. A preview of each; the Tasks and
-  Requests pages carry the full, filterable lists.
+  followed by the requests they can act on, in one scrolling column. A
+  preview of each; the Tasks and Requests pages carry the full,
+  filterable lists.
   {% endcomment %}
   <section aria-labelledby="dashboard-open-work-heading" class="flex flex-col gap-3">
     <div class="flex items-center gap-3">
@@ -101,7 +102,13 @@
     </div>
 
     {% if active_tasks or incoming_requests %}
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      {% comment %}
+      One scrolling column: tasks first, then requests. tabindex makes the
+      scroll box reachable by keyboard, which a scrollable region needs
+      whenever its content overflows.
+      {% endcomment %}
+      <div tabindex="0" role="group" aria-label="Active tasks and requests"
+           class="flex flex-col gap-3 max-h-96 overflow-y-auto pr-2">
         {% include "projects/partials/dashboard_active_tasks.html" %}
         {% include "projects/partials/dashboard_requests.html" %}
       </div>
