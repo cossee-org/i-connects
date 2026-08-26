@@ -145,7 +145,15 @@ class DashboardView(LoginRequiredMixin, TemplateView):
     _TYPES = tuple(
         t for t in (*_TASK_TYPE_LABELS, *_REQUEST_TYPE_LABELS) if t
     )
-    _SORTS = ("date", "name")
+    # Both sorts key off the date each row already shows -- a task's
+    # deadline, a request's age -- so the order always matches what is on
+    # screen. A task with no deadline has nothing to compare, so it sorts
+    # last either way rather than leading the "oldest" list.
+    #
+    # "oldest" is the default: this list is capped at a handful of rows, and
+    # newest-first pushes the overdue and the imminent off the end of it --
+    # exactly the rows the dashboard exists to surface.
+    _SORTS = ("oldest", "newest")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -163,7 +171,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             current_type = ""
         current_sort = self.request.GET.get("sort", "")
         if current_sort not in self._SORTS:
-            current_sort = "date"
+            current_sort = "oldest"
         context["current_type"] = current_type
         context["current_sort"] = current_sort
         shows_tasks = current_type in self._TASK_TYPE_LABELS
@@ -267,13 +275,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         else:
             matching_tasks_qs = active_tasks_qs
 
-        # "date" leads with what is closest to due; undated tasks sort last
-        # rather than first (SQLite orders NULLs before everything by
-        # default, Postgres after -- nulls_last pins it either way).
-        if current_sort == "name":
-            task_order = ("name", "id")
+        # nulls_last keeps undated tasks at the end in both directions
+        # (SQLite orders NULLs before everything by default, Postgres after).
+        if current_sort == "newest":
+            task_order = (F("deadline").desc(nulls_last=True), "-created_at", "id")
         else:
-            task_order = (F("deadline").asc(nulls_last=True), "-created_at", "id")
+            task_order = (F("deadline").asc(nulls_last=True), "created_at", "id")
 
         if not shows_tasks:
             context["active_tasks"] = []
@@ -338,12 +345,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         incoming_requests = [
             {"kind": "join_request", "obj": jr} for jr in pending_join_requests
         ] + [{"kind": "invitation", "obj": inv} for inv in invitation_requests]
-        # A request has no name of its own, so "name" sorts these by project,
-        # the way the Requests page's "Project A-Z" does.
-        if current_sort == "name":
-            incoming_requests.sort(key=lambda item: item["obj"].project.name.lower())
-        else:
-            incoming_requests.sort(key=lambda item: item["obj"].created_at, reverse=True)
+        incoming_requests.sort(
+            key=lambda item: item["obj"].created_at,
+            reverse=current_sort == "newest",
+        )
         context["incoming_request_count"] = len(incoming_requests)
 
         if current_type == "join_requests":

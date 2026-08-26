@@ -809,9 +809,10 @@ def _task(project, member, name, **kwargs):
 
 
 @pytest.mark.django_db
-def test_dashboard_active_task_list_leads_with_the_soonest_deadline_and_caps(client, user):
-    """The list is ordered by deadline (undated last) and shows at most
-    ACTIVE_TASK_LIMIT rows, with a link out to the full Tasks page."""
+def test_dashboard_active_task_list_orders_by_deadline_and_caps(client, user):
+    """The list is ordered by deadline (undated last either way) and shows
+    at most ACTIVE_TASK_LIMIT rows, with a link out to the full Tasks
+    page."""
     from datetime import timedelta
 
     from django.utils import timezone
@@ -833,12 +834,12 @@ def test_dashboard_active_task_list_leads_with_the_soonest_deadline_and_caps(cli
     undated.assigned_members.add(member)
 
     client.force_login(user)
-    response = client.get(reverse("projects:dashboard"))
+    response = client.get(reverse("projects:dashboard"), {"sort": "oldest"})
     content = response.content.decode()
 
     assert response.status_code == 200
     assert 'id="dashboard-open-work-heading"' in content
-    # Soonest first, capped: the earliest deadlines are shown...
+    # Oldest first, capped: the earliest deadlines are shown...
     for i in range(DashboardView.ACTIVE_TASK_LIMIT):
         assert f"Dated task {i}" in content
     # ...and everything past the cap is not, undated tasks included even
@@ -1022,9 +1023,9 @@ def test_dashboard_type_filter_shows_one_group_at_a_time(client, user, other_use
 
 
 @pytest.mark.django_db
-def test_dashboard_sort_by_name_orders_tasks_alphabetically(client, user):
-    """The default "date" sort leads with the soonest deadline; "name"
-    re-orders the same tasks A-Z regardless of when they are due."""
+def test_dashboard_sort_runs_tasks_by_deadline_in_both_directions(client, user):
+    """Both sorts key off the deadline the row shows; a task with no
+    deadline sorts last either way rather than leading the oldest list."""
     from datetime import timedelta
 
     from django.utils import timezone
@@ -1035,62 +1036,53 @@ def test_dashboard_sort_by_name_orders_tasks_alphabetically(client, user):
     )
     member = ProjectMember.objects.filter(project=project, users=user).first()
     now = timezone.now()
-    # Alphabetical order is the reverse of deadline order.
-    _task(project, member, "Alpha", deadline=now + timedelta(days=3)).assigned_members.add(member)
-    _task(project, member, "Zulu", deadline=now + timedelta(days=1)).assigned_members.add(member)
+    _task(project, member, "Soon", deadline=now + timedelta(days=1)).assigned_members.add(member)
+    _task(project, member, "Later", deadline=now + timedelta(days=9)).assigned_members.add(member)
+    _task(project, member, "Undated").assigned_members.add(member)
 
     client.force_login(user)
     url = reverse("projects:dashboard")
 
-    by_date = client.get(url)
-    assert [t.name for t in by_date.context["active_tasks"]] == ["Zulu", "Alpha"]
-    assert by_date.context["current_sort"] == "date"
+    # Oldest first is the default: soonest due leads, undated trails.
+    oldest = client.get(url)
+    assert [t.name for t in oldest.context["active_tasks"]] == ["Soon", "Later", "Undated"]
+    assert oldest.context["current_sort"] == "oldest"
 
-    by_name = client.get(url, {"sort": "name"})
-    assert [t.name for t in by_name.context["active_tasks"]] == ["Alpha", "Zulu"]
-    assert by_name.context["current_sort"] == "name"
+    newest = client.get(url, {"sort": "newest"})
+    assert [t.name for t in newest.context["active_tasks"]] == ["Later", "Soon", "Undated"]
+    assert newest.context["current_sort"] == "newest"
 
 
 @pytest.mark.django_db
-def test_dashboard_sort_by_name_orders_requests_by_project(client, user, other_user):
-    """A request has no name of its own, so "name" sorts requests by the
-    project they concern -- newest-first is what "date" gives."""
-    zulu = create_project_with_owner(
+def test_dashboard_sort_runs_requests_by_age_in_both_directions(client, user, other_user):
+    """A request has no deadline, so its date is when it arrived."""
+    first = create_project_with_owner(
         user=user,
-        form_data={"name": "Zulu Project", "status": ProjectStatus.ACTIVE, "is_public": True},
+        form_data={"name": "First Asked", "status": ProjectStatus.ACTIVE, "is_public": True},
     )
-    alpha = create_project_with_owner(
+    second = create_project_with_owner(
         user=user,
-        form_data={"name": "Alpha Project", "status": ProjectStatus.ACTIVE, "is_public": True},
-    )
-    # Requested oldest-first on Zulu, so date and name orders disagree.
-    create_join_request(
-        project=zulu, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+        form_data={"name": "Second Asked", "status": ProjectStatus.ACTIVE, "is_public": True},
     )
     create_join_request(
-        project=alpha, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+        project=first, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    create_join_request(
+        project=second, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
     )
 
     client.force_login(user)
     url = reverse("projects:dashboard")
 
-    by_date = client.get(url)
+    oldest = client.get(url)
     assert [
-        item["obj"].project.name for item in by_date.context["incoming_requests"]
-    ] == ["Alpha Project", "Zulu Project"]
+        item["obj"].project.name for item in oldest.context["incoming_requests"]
+    ] == ["First Asked", "Second Asked"]
 
-    by_name = client.get(url, {"sort": "name"})
+    newest = client.get(url, {"sort": "newest"})
     assert [
-        item["obj"].project.name for item in by_name.context["incoming_requests"]
-    ] == ["Alpha Project", "Zulu Project"]
-
-    # Flip the projects so date order can't coincide with name order.
-    zulu.name = "Aardvark Project"
-    zulu.save(update_fields=["name"])
-    by_name = client.get(url, {"sort": "name"})
-    assert [
-        item["obj"].project.name for item in by_name.context["incoming_requests"]
-    ] == ["Aardvark Project", "Alpha Project"]
+        item["obj"].project.name for item in newest.context["incoming_requests"]
+    ] == ["Second Asked", "First Asked"]
 
 
 @pytest.mark.django_db
@@ -1111,7 +1103,7 @@ def test_dashboard_ignores_unknown_filter_and_sort_values(client, user):
 
     assert response.status_code == 200
     assert response.context["current_type"] == ""
-    assert response.context["current_sort"] == "date"
+    assert response.context["current_sort"] == "oldest"
     assert "Still listed" in response.content.decode()
 
 

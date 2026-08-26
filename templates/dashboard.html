@@ -156,13 +156,13 @@
         <div x-data="{
           open: false,
           options: [
-            {value: 'date', label: 'Date'},
-            {value: 'name', label: 'Name'}
+            {value: 'oldest', label: 'Date (oldest first)', short: 'Oldest'},
+            {value: 'newest', label: 'Date (newest first)', short: 'Newest'}
           ],
           current: '{{ current_sort }}',
           get label() {
             const opt = this.options.find(o => o.value === this.current);
-            return 'Sort: ' + (opt ? opt.label : 'Date');
+            return 'Sort: ' + (opt ? opt.short : 'Oldest');
           },
           pick(val) {
             this.current = val;
@@ -181,7 +181,7 @@
           <div x-cloak x-show="open"
                x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
                x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-               class="absolute right-0 mt-1 w-32 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+               class="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
             <template x-for="opt in options" :key="opt.value">
               <button type="button" @click="pick(opt.value)"
                       class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
@@ -204,8 +204,8 @@
           </select>
           <label class="sr-only" for="sort-select-open-work">Sort by</label>
           <select id="sort-select-open-work" name="sort">
-            <option value="date" {% if current_sort == 'date' %}selected{% endif %}>Date</option>
-            <option value="name" {% if current_sort == 'name' %}selected{% endif %}>Name</option>
+            <option value="oldest" {% if current_sort == 'oldest' %}selected{% endif %}>Date (oldest first)</option>
+            <option value="newest" {% if current_sort == 'newest' %}selected{% endif %}>Date (newest first)</option>
           </select>
           <button type="submit" class="btn btn-xs">Apply</button>
         </noscript>
