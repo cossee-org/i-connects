@@ -117,15 +117,71 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     template_name = "dashboard.html"
 
+    # The dashboard shows a preview of each list, not the whole thing — the
+    # Tasks and Requests pages are where the full, filterable lists live.
+    ACTIVE_TASK_LIMIT = 5
+    REQUEST_LIMIT = 5
+
+    # Controls on the "Active tasks and requests" section. "" is no type
+    # filter (both groups); "date" sort is the default reading order --
+    # tasks by how soon they are due, requests newest first.
+    #
+    # Each type narrows to one group and, for the finer ones, to a slice of
+    # it. Which map a type appears in is what decides whether that group
+    # renders at all; the value is the noun its "All N ..." link and its
+    # empty line use, so both say what was actually filtered to.
+    _TASK_TYPE_LABELS = {
+        "": "tasks",
+        "tasks": "tasks",
+        "overdue": "overdue tasks",
+        "review": "tasks to review",
+    }
+    _REQUEST_TYPE_LABELS = {
+        "": "requests",
+        "requests": "requests",
+        "join_requests": "join requests",
+        "invitations": "invitations",
+    }
+    _TYPES = tuple(
+        t for t in (*_TASK_TYPE_LABELS, *_REQUEST_TYPE_LABELS) if t
+    )
+    # Both sorts key off the date each row already shows -- a task's
+    # deadline, a request's age -- so the order always matches what is on
+    # screen. A task with no deadline has nothing to compare, so it sorts
+    # last either way rather than leading the "oldest" list.
+    #
+    # "oldest" is the default: this list is capped at a handful of rows, and
+    # newest-first pushes the overdue and the imminent off the end of it --
+    # exactly the rows the dashboard exists to surface.
+    _SORTS = ("oldest", "newest")
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
-        from django.db.models import Count, Exists, OuterRef, Subquery, Q
+        from django.db.models import Count, Exists, F, OuterRef, Subquery, Q
         from django.utils import timezone
         from apps.core.enums import TaskStatus, MemberPrivileges
         from apps.tasks.models import Task, TaskLog
         from apps.notifications.models import Notification
+
+        # --- "Active tasks and requests" controls --------------------------
+        current_type = self.request.GET.get("type", "")
+        if current_type not in self._TYPES:
+            current_type = ""
+        current_sort = self.request.GET.get("sort", "")
+        if current_sort not in self._SORTS:
+            current_sort = "oldest"
+        context["current_type"] = current_type
+        context["current_sort"] = current_sort
+        shows_tasks = current_type in self._TASK_TYPE_LABELS
+        shows_requests = current_type in self._REQUEST_TYPE_LABELS
+        context["shows_tasks"] = shows_tasks
+        context["shows_requests"] = shows_requests
+        context["active_tasks_label"] = self._TASK_TYPE_LABELS.get(current_type, "tasks")
+        context["incoming_requests_label"] = self._REQUEST_TYPE_LABELS.get(
+            current_type, "requests"
+        )
 
         # --- Privilege map -------------------------------------------------
         privs = ProjectPrivilege.objects.filter(user=user).select_related("project")
@@ -181,27 +237,65 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             .count()
         )
 
-        # Combined count for the dashboard's single "Tasks" tile -- counts a
-        # task once even if the user is both assigned to and reviewing it,
-        # matching the Tasks page's and sidebar's merged total (summing
-        # active_task_count + review_task_count would double-count those).
-        context["active_tasks_total"] = (
+        # Every task still open for the user, whether they are assigned to it
+        # or reviewing it -- the source of both the "Tasks" tile count and the
+        # active-task list below it. A task the user is both assigned to and
+        # reviewing appears once, matching the Tasks page's and sidebar's
+        # merged total (summing active_task_count + review_task_count would
+        # double-count those).
+        active_tasks_qs = (
             Task.objects.filter(
                 Q(assigned_members__users=user) | Q(reviewers__users=user),
                 status=TaskStatus.NOT_COMPLETED,
             )
             .annotate(
-                _user_log_status=latest_log_status,
-                _is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
+                user_log_status=latest_log_status,
+                is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
+                is_reviewing=Exists(user_member_qs.filter(reviewed_tasks=OuterRef("pk"))),
             )
             .filter(
-                Q(_is_assigned=False)
-                | Q(_user_log_status__isnull=True)
-                | ~Q(_user_log_status=TaskStatus.COMPLETED)
+                Q(is_assigned=False)
+                | Q(user_log_status__isnull=True)
+                | ~Q(user_log_status=TaskStatus.COMPLETED)
             )
             .distinct()
-            .count()
         )
+
+        context["active_tasks_total"] = active_tasks_qs.count()
+        now = timezone.now()
+        context["now"] = now
+
+        # The finer task types narrow the same queryset; the count follows,
+        # so the section's badge and the "All N ..." link below the rows
+        # both describe the filtered set rather than the whole one.
+        if current_type == "overdue":
+            matching_tasks_qs = active_tasks_qs.filter(deadline__lt=now)
+        elif current_type == "review":
+            matching_tasks_qs = active_tasks_qs.filter(is_reviewing=True)
+        else:
+            matching_tasks_qs = active_tasks_qs
+
+        # nulls_last keeps undated tasks at the end in both directions
+        # (SQLite orders NULLs before everything by default, Postgres after).
+        if current_sort == "newest":
+            task_order = (F("deadline").desc(nulls_last=True), "-created_at", "id")
+        else:
+            task_order = (F("deadline").asc(nulls_last=True), "created_at", "id")
+
+        if not shows_tasks:
+            context["active_tasks"] = []
+            context["active_tasks_match_count"] = 0
+        else:
+            context["active_tasks"] = list(
+                matching_tasks_qs.select_related("project", "container")
+                .prefetch_related("assigned_members")
+                .order_by(*task_order)[: self.ACTIVE_TASK_LIMIT]
+            )
+            context["active_tasks_match_count"] = (
+                matching_tasks_qs.count()
+                if matching_tasks_qs is not active_tasks_qs
+                else context["active_tasks_total"]
+            )
 
         # --- Pending approvals (PM only) -----------------------------------
         if pm_project_ids:
@@ -243,6 +337,37 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         )
         context["invitation_requests"] = invitation_requests
         context["invitation_request_count"] = len(invitation_requests)
+
+        # --- Incoming requests list -------------------------------------------
+        # Join requests awaiting the user's review plus invitations addressed
+        # to them, merged and tagged by kind so a single list can render both
+        # -- the same item shape the Requests page's "Incoming" tab uses.
+        incoming_requests = [
+            {"kind": "join_request", "obj": jr} for jr in pending_join_requests
+        ] + [{"kind": "invitation", "obj": inv} for inv in invitation_requests]
+        incoming_requests.sort(
+            key=lambda item: item["obj"].created_at,
+            reverse=current_sort == "newest",
+        )
+        context["incoming_request_count"] = len(incoming_requests)
+
+        if current_type == "join_requests":
+            matching_requests = [i for i in incoming_requests if i["kind"] == "join_request"]
+        elif current_type == "invitations":
+            matching_requests = [i for i in incoming_requests if i["kind"] == "invitation"]
+        else:
+            matching_requests = incoming_requests
+
+        if not shows_requests:
+            matching_requests = []
+        context["incoming_request_match_count"] = len(matching_requests)
+        context["incoming_requests"] = matching_requests[: self.REQUEST_LIMIT]
+
+        # The count badge on the section's heading covers what the type
+        # filter leaves showing, not what the (unfiltered) stat tiles count.
+        context["active_task_and_request_total"] = (
+            context["active_tasks_match_count"] + len(matching_requests)
+        )
 
         # --- Notifications -------------------------------------------------
         context["recent_notifications"] = list(
