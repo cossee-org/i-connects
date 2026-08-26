@@ -3,10 +3,17 @@
 {% comment %}
 The active-task rows of the dashboard's "Active tasks and requests"
 list — tasks assigned to the current user and tasks they review, merged,
-soonest deadline first. Capped at DashboardView.ACTIVE_TASK_LIMIT; the
-Tasks page carries the full, filterable list. Rows are two compact lines
-(name, then project and meta) so the scrolling list holds as many as it
-can. The section's heading lives in dashboard.html, so this group labels
+ordered by the section's Sort control. Capped at
+DashboardView.ACTIVE_TASK_LIMIT; the Tasks page carries the full,
+filterable list.
+
+Rows share their shape with the request rows in dashboard_requests.html
+so the two read as one list: line one names the thing at text-sm with the
+nouns in semibold navy, then a text-xs meta line runs pills first, any
+context text dot-separated after them, and the date last behind a clock.
+Keep the two partials in step.
+
+The section's heading lives in dashboard.html, so this group labels
 itself for screen readers through the list's aria-label rather than a
 heading of its own.
 {% endcomment %}
@@ -18,15 +25,24 @@ heading of its own.
         <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
            class="brand-card px-3 py-2 hover:shadow-md transition flex items-center gap-3{% if task.is_priority %} border-l-2 border-l-error{% endif %}">
           <div class="flex-1 min-w-0 flex flex-col gap-0.5">
-            <div class="flex items-center gap-1.5 min-w-0">
-              {% if task.is_priority %}
-                {% include "_components/priority_flag.html" with icon_only=True %}
-              {% endif %}
-              <h3 class="text-sm font-semibold text-brand-navy leading-snug truncate">{{ task.name }}</h3>
-            </div>
+            <p class="text-sm leading-snug truncate">
+              <span class="font-semibold text-brand-navy">{{ task.name }}</span>
+            </p>
 
             <div class="flex items-center gap-2 text-xs text-brand-text/60 min-w-0">
+              {% if task.is_priority %}
+                {% include "_components/priority_flag.html" %}
+              {% endif %}
+              {% if task.is_reviewing %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 bg-brand-coral/10 text-brand-coral">To review</span>
+              {% endif %}
               <span class="truncate">{{ task.project.name }}</span>
+              {% with assignees=task.assigned_members.all|member_name_summary %}
+                {% if assignees.short %}
+                  <span aria-hidden="true">&middot;</span>
+                  <span class="truncate" title="{{ assignees.full }}">{{ assignees.short }}</span>
+                {% endif %}
+              {% endwith %}
               {% if task.deadline %}
                 <span aria-hidden="true">&middot;</span>
                 <span class="inline-flex items-center gap-1 shrink-0
@@ -38,18 +54,8 @@ heading of its own.
                   {% if task.deadline < now %}Overdue &middot; {% endif %}{{ task.deadline|date:"M j" }}
                 </span>
               {% endif %}
-              {% with assignees=task.assigned_members.all|member_name_summary %}
-                {% if assignees.short %}
-                  <span aria-hidden="true">&middot;</span>
-                  <span class="truncate" title="{{ assignees.full }}">{{ assignees.short }}</span>
-                {% endif %}
-              {% endwith %}
             </div>
           </div>
-
-          {% if task.is_reviewing %}
-            <span class="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-coral/10 text-brand-coral">To review</span>
-          {% endif %}
         </a>
       </li>
     {% endfor %}
