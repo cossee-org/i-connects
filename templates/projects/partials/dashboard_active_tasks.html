@@ -9,8 +9,8 @@ filterable list.
 
 Rows share their shape with the request rows in dashboard_requests.html
 so the two read as one list: line one names the thing at text-sm with the
-nouns in semibold navy, then a text-xs meta line runs pills first, any
-context text dot-separated after them, and the date last behind a clock.
+nouns in semibold navy and a pill cluster at the top right, then a text-xs
+meta line of dot-separated context with the date last behind a clock.
 Keep the two partials in step.
 
 The section's heading lives in dashboard.html, so this group labels
@@ -23,19 +23,13 @@ heading of its own.
     {% for task in active_tasks %}
       <li>
         <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
-           class="brand-card px-3 py-2 hover:shadow-md transition flex items-center gap-3{% if task.is_priority %} border-l-2 border-l-error{% endif %}">
+           class="brand-card px-3 py-2 hover:shadow-md transition flex items-start gap-3{% if task.is_priority %} border-l-2 border-l-error{% endif %}">
           <div class="flex-1 min-w-0 flex flex-col gap-0.5">
             <p class="text-sm leading-snug truncate">
               <span class="font-semibold text-brand-navy">{{ task.name }}</span>
             </p>
 
             <div class="flex items-center gap-2 text-xs text-brand-text/60 min-w-0">
-              {% if task.is_priority %}
-                {% include "_components/priority_flag.html" %}
-              {% endif %}
-              {% if task.is_reviewing %}
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0 bg-brand-coral/10 text-brand-coral">To review</span>
-              {% endif %}
               <span class="truncate">{{ task.project.name }}</span>
               {% with assignees=task.assigned_members.all|member_name_summary %}
                 {% if assignees.short %}
@@ -56,6 +50,26 @@ heading of its own.
               {% endif %}
             </div>
           </div>
+
+          {% if task.is_priority or task.is_reviewing %}
+            <div class="flex items-center gap-2 shrink-0 mt-0.5">
+              {% if task.is_priority %}
+                {% comment %}
+                Icon alone: the wording moves to the tooltip and to an
+                aria-label. Plain title=, not the styled hover-tooltip --
+                this list is a scroll box, so its computed overflow-x is
+                auto and a tooltip hanging past the flag is clipped
+                (measured: it pushed scrollWidth 15px past clientWidth).
+                base.html's tooltip CSS calls out overflow containers for
+                exactly this.
+                {% endcomment %}
+                {% include "_components/priority_flag.html" with icon_only=True %}
+              {% endif %}
+              {% if task.is_reviewing %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-coral/10 text-brand-coral">To review</span>
+              {% endif %}
+            </div>
+          {% endif %}
         </a>
       </li>
     {% endfor %}
