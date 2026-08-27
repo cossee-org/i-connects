@@ -246,7 +246,7 @@ def project_member_users(project: Project) -> list[User]:
 
 
 def get_project_contributions_matrix(
-    project: Project, *, all_types: bool = False
+    project: Project, *, only_used: bool = False
 ) -> dict:
     """Build a members × CRediT-role matrix for a project.
 
@@ -257,19 +257,24 @@ def get_project_contributions_matrix(
         - ``totals``: ``{type: int}`` column totals, plus ``"grand_total"``.
                       Underscore-free keys so templates can reach them.
 
-    Every current member gets a row whether or not they have earned
-    anything, so a gap in the credit is as visible as the credit itself,
-    and anyone who has earned credit but since left the project keeps
-    theirs.
+    By default the grid is the whole picture: every CRediT role across the
+    top whether or not this project has used it, and every current member
+    down the side whether or not they have earned anything. A zero is worth
+    reading — it says which roles the project has yet to cover and who has
+    yet to be credited — and a grid whose shape depends on the data is hard
+    to compare against another project's.
 
-    Columns are the roles this project has actually used, which keeps the
-    table readable — the full taxonomy is 14 roles wide, and most projects
-    touch a handful. Pass ``all_types`` for the whole taxonomy, as the
-    matrix download does.
+    ``only_used`` trims it to what has been earned: roles with a non-zero
+    column, members with a non-zero row. The page offers it as a filter for
+    when the full grid is mostly empty.
+
+    Either way, a role off the taxonomy that the project *has* used (a task
+    left as "Other", say) keeps its column, and anyone who earned credit
+    before leaving the project keeps their row.
     """
     labels = dict(ContributionType.choices)
 
-    qs = (
+    records = list(
         ContributionRecord.objects.filter(project=project)
         .select_related("user")
         .only(
@@ -281,20 +286,13 @@ def get_project_contributions_matrix(
             "user__family_name",
         )
     )
-    records = list(qs)
 
     used_types = {rec.contribution_type for rec in records}
-    if all_types:
-        type_values = [v for v in CREDIT_ROLES] + [
-            v for v in used_types if v not in CREDIT_ROLES
-        ]
-    else:
-        # CRediT's own roles first, in the taxonomy's order, then anything
-        # off it this project has used (a task left as "Other", say).
-        type_values = [v for v in CREDIT_ROLES if v in used_types] + sorted(
-            v for v in used_types if v not in CREDIT_ROLES
-        )
-    type_choices = [(v, labels.get(v, v)) for v in type_values]
+    # CRediT's own roles in the taxonomy's order, then anything off it this
+    # project has used.
+    type_values = list(CREDIT_ROLES) + sorted(
+        v for v in used_types if v not in CREDIT_ROLES
+    )
 
     users_by_id: dict[int, User] = {u.pk: u for u in project_member_users(project)}
     per_user: dict[int, dict[str, int]] = {
@@ -306,23 +304,32 @@ def get_project_contributions_matrix(
     for rec in records:
         users_by_id.setdefault(rec.user_id, rec.user)
         counts = per_user.setdefault(rec.user_id, {v: 0 for v in type_values})
-        if rec.contribution_type in counts:
-            counts[rec.contribution_type] += 1
-            column_totals[rec.contribution_type] += 1
+        counts[rec.contribution_type] += 1
+        column_totals[rec.contribution_type] += 1
         grand_total += 1
+
+    if only_used:
+        type_values = [v for v in type_values if column_totals[v]]
 
     rows = [
         {
             "user": users_by_id[uid],
-            "counts": counts,
+            "counts": {v: counts.get(v, 0) for v in type_values},
             "total": sum(counts.values()),
         }
         for uid, counts in per_user.items()
     ]
+    if only_used:
+        rows = [row for row in rows if row["total"]]
     rows.sort(key=lambda r: (-r["total"], user_sort_key(r["user"])))
 
-    column_totals["grand_total"] = grand_total
-    return {"types": type_choices, "rows": rows, "totals": column_totals}
+    totals = {v: column_totals[v] for v in type_values}
+    totals["grand_total"] = grand_total
+    return {
+        "types": [(v, labels.get(v, v)) for v in type_values],
+        "rows": rows,
+        "totals": totals,
+    }
 
 
 def user_sort_key(user: User) -> str:

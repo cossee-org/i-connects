@@ -15,6 +15,7 @@ from apps.contributions.forms import ContributionAddForm
 from apps.contributions.models import ContributionRecord
 from apps.contributions.services import (
     add_contribution,
+    user_display_name,
     get_project_contributions_matrix,
     get_user_contributions,
 )
@@ -952,3 +953,149 @@ def test_an_invalid_add_comes_back_into_the_modal(client, user):
     )
     assert resp.status_code == 400
     assert "Please correct the following" in resp.content.decode()
+
+
+# ---------------------------------------------------------------------------
+# The section's two views
+# ---------------------------------------------------------------------------
+
+
+def _by_member_url(project):
+    return reverse("projects:contributions_by_member", kwargs={"pk": project.pk})
+
+
+def _every_url(project):
+    return reverse("projects:every_contribution", kwargs={"pk": project.pk})
+
+
+@pytest.mark.django_db
+def test_the_section_ships_both_views_and_a_switcher(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    # The switcher, in the same shape the Tasks board uses.
+    assert "$store.credit.setView('by-member')" in body
+    assert "$store.credit.setView('every')" in body
+    # Both views are in the first render, so switching is instant.
+    assert 'id="contributions-by-member-container"' in body
+    assert 'id="every-contribution-container"' in body
+
+
+@pytest.mark.django_db
+def test_the_by_member_view_renders_on_its_own(client, user, other_user):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(_by_member_url(project)).content.decode()
+    assert "Contributions by member" in body
+    assert "Software" in body
+    assert "Alice" in body
+    # It is the partial, not the whole page.
+    assert "<!DOCTYPE html>" not in body
+
+
+@pytest.mark.django_db
+def test_the_every_contribution_view_renders_on_its_own(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(_every_url(project)).content.decode()
+    assert "Every contribution" in body
+    assert "<!DOCTYPE html>" not in body
+
+
+@pytest.mark.django_db
+def test_both_views_are_closed_to_non_members(client, user, other_user):
+    project, _col, _pm = _make_project(user)
+    client.force_login(other_user)
+    assert client.get(_by_member_url(project)).status_code == 403
+    assert client.get(_every_url(project)).status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# The matrix: the whole grid by default, narrowable on request
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_the_matrix_carries_every_role_and_every_member(client, user, other_user):
+    """A zero says which roles are uncovered and who is uncredited."""
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    resp = client.get(_by_member_url(project))
+    matrix = resp.context["matrix"]
+
+    assert [value for value, _label in matrix["types"]] == list(CREDIT_ROLES)
+    # Bob has earned nothing and is still listed.
+    by_name = {user_display_name(row["user"]): row for row in matrix["rows"]}
+    assert set(by_name) == {"Alice", "Bob"}
+    assert by_name["Bob"]["total"] == 0
+    assert by_name["Alice"]["counts"][ContributionType.SOFTWARE] == 1
+    assert by_name["Alice"]["counts"][ContributionType.METHODOLOGY] == 0
+
+
+@pytest.mark.django_db
+def test_the_filter_narrows_the_matrix_to_what_has_been_earned(
+    client, user, other_user
+):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    matrix = client.get(_by_member_url(project), {"used": "1"}).context["matrix"]
+
+    assert [value for value, _label in matrix["types"]] == [ContributionType.SOFTWARE]
+    assert [user_display_name(row["user"]) for row in matrix["rows"]] == ["Alice"]
+    assert matrix["totals"]["grand_total"] == 1
+
+
+@pytest.mark.django_db
+def test_the_filter_is_off_unless_asked_for(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    for params in ({}, {"used": "0"}):
+        resp = client.get(_by_member_url(project), params)
+        assert resp.context["only_used"] is False
+        assert len(resp.context["matrix"]["types"]) == len(CREDIT_ROLES)
+
+
+@pytest.mark.django_db
+def test_a_role_off_the_taxonomy_keeps_its_column_when_used(client, user):
+    """A task left as "Other" is not a CRediT role, but it was still earned."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+
+    client.force_login(user)
+    matrix = client.get(_by_member_url(project)).context["matrix"]
+    values = [value for value, _label in matrix["types"]]
+    assert values == list(CREDIT_ROLES) + [ContributionType.OTHER]
+
+
+@pytest.mark.django_db
+def test_the_matrix_download_carries_the_whole_taxonomy(client, user):
+    """The filter is the page's; a downloaded grid keeps a stable shape."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    lines = _csv_lines(
+        client.get(
+            f"/projects/{project.pk}/contributions.csv",
+            {"format": "matrix", "used": "1"},
+        )
+    )
+    header = lines[0].split(",")
+    assert len(header) == len(CREDIT_ROLES) + 2

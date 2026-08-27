@@ -858,16 +858,12 @@ class ProjectMemberListView(
         return context
 
 
-class ContributionTrackingView(
-    ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
-):
-    """The project's credit ledger: who did what, by CRediT role.
+class ContributionTrackingMixin(ProjectMemberRequiredMixin, ProjectContextMixin):
+    """Shared context for the Contribution Tracking section and its views.
 
     Open to every project member — a contribution matrix that only its
     leads could read would be no use to the people in it.
     """
-
-    template_name = "projects/contribution_tracking.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -875,11 +871,40 @@ class ContributionTrackingView(
             context.get("user_privilege") == MemberPrivileges.PROJECT_MANAGER
         )
         if self.project.tracks_credit:
-            context["matrix"] = get_project_contributions_matrix(self.project)
+            # ``?used=1`` trims the grid to roles and members with something
+            # in them; the default is the whole taxonomy and every member.
+            only_used = self.request.GET.get("used") == "1"
+            context["only_used"] = only_used
+            context["matrix"] = get_project_contributions_matrix(
+                self.project, only_used=only_used
+            )
             context["records"] = get_project_contributions(self.project).order_by(
                 "-closed_at", "-id"
             )
         return context
+
+
+class ContributionTrackingView(ContributionTrackingMixin, TemplateView):
+    """The project's credit ledger, in two views the section switches between.
+
+    Both ship in the first render, the way the board ships its three, so the
+    switcher is instant; the partials below re-fetch whichever one is being
+    switched to, so it is never stale.
+    """
+
+    template_name = "projects/contribution_tracking.html"
+
+
+class ContributionsByMemberPartialView(ContributionTrackingMixin, TemplateView):
+    """HTMX partial: the members x CRediT-role matrix, freshly counted."""
+
+    template_name = "projects/partials/contributions_by_member.html"
+
+
+class EveryContributionPartialView(ContributionTrackingMixin, TemplateView):
+    """HTMX partial: every contribution on the project, one row each."""
+
+    template_name = "projects/partials/every_contribution.html"
 
 
 class WikiView(

@@ -1,7 +1,36 @@
 {% extends "base.html" %}
-{% load contribution_tags %}
 
 {% block title %}Contribution Tracking &mdash; {{ project.name }}{% endblock %}
+
+{% block extra_head %}
+<style>[x-cloak] { display: none !important; }</style>
+<script>
+  document.addEventListener('alpine:init', function () {
+    Alpine.store('credit', {
+      viewMode: localStorage.getItem('creditViewMode') || 'by-member',
+      setView: function (next) {
+        if (next === this.viewMode) return;
+        this.viewMode = next;
+        localStorage.setItem('creditViewMode', next);
+        {% comment %}
+          Re-fetch whichever view is being switched to. Both ship in the
+          first render so the switch is instant; this keeps the one you land
+          on current after a correction elsewhere.
+        {% endcomment %}
+        if (next === 'every') {
+          htmx.ajax('GET', '{% url "projects:every_contribution" pk=project.pk %}', {
+            target: '#every-contribution-container', swap: 'innerHTML'
+          });
+        } else {
+          htmx.ajax('GET', '{% url "projects:contributions_by_member" pk=project.pk %}', {
+            target: '#contributions-by-member-container', swap: 'innerHTML'
+          });
+        }
+      }
+    });
+  });
+</script>
+{% endblock %}
 
 {% block page_header %}
   <header class="mb-6">
@@ -24,18 +53,45 @@
   {% endif %}
 {% else %}
 
-  <div class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-    <div>
-      <h2 class="text-lg font-semibold text-brand-navy">Contributions by member</h2>
-      <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">
-        Each member's credit on this project, by
-        <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
-           class="text-brand-navy underline hover:text-brand-coral">CRediT</a>
-        role. A member earns credit on a task when they mark their own part done
-        and a lead completes the task &mdash; where the task has reviewers, once
-        their submission has been reviewed.
-      </p>
+  <p class="text-sm text-brand-text/70 mb-4 max-w-2xl">
+    Credit on this project, by
+    <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
+       class="text-brand-navy underline hover:text-brand-coral">CRediT</a>
+    role. A member earns credit on a task when they mark their own part done
+    and a lead completes the task &mdash; where the task requires review, once
+    their submission has been reviewed.
+  </p>
+
+  {% comment %}
+    View switcher on the left, downloads on the right — the same shape the
+    Tasks board uses for Kanban / List / Calendar. The two downloads line up
+    with the two views: the matrix is Contributions by member, the list is
+    Every contribution.
+  {% endcomment %}
+  <div x-data class="flex flex-wrap items-center gap-2 justify-between mb-4">
+    <div class="join">
+      <button type="button" class="btn btn-ghost btn-sm join-item"
+              :class="{ 'btn-active': $store.credit.viewMode === 'by-member' }"
+              @click="$store.credit.setView('by-member')">
+        {# table-cells #}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m0 0h-7.5m-9 0h7.5m0 0c.621 0 1.125.504 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 1.5v-1.5m0 0c0-.621.504-1.125 1.125-1.125m0 0h7.5" />
+        </svg>
+        Contributions by member
+      </button>
+      <button type="button" class="btn btn-ghost btn-sm join-item"
+              :class="{ 'btn-active': $store.credit.viewMode === 'every' }"
+              @click="$store.credit.setView('every')">
+        {# list-bullet #}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+        </svg>
+        Every contribution
+      </button>
     </div>
+
     {% if matrix.totals.grand_total > 0 %}
       {% url 'contributions:project_contributions_csv' project_pk=project.pk as csv_url %}
       {% if is_project_manager %}
@@ -46,114 +102,21 @@
     {% endif %}
   </div>
 
-  {% if matrix.totals.grand_total == 0 %}
-    {% include "_components/empty_state.html" with title="No contributions yet" body="Credit appears here as tasks are completed." %}
-    {% if is_project_manager %}
-      <div class="flex justify-center mt-4">{% include "contributions/partials/add_button.html" %}</div>
-    {% endif %}
-  {% else %}
-    <div class="brand-card overflow-x-auto mb-8">
-      <table class="table">
-        <caption class="sr-only">Contributions by member and CRediT role</caption>
-        <thead class="bg-brand-lighter text-brand-navy">
-          <tr>
-            <th scope="col">Member</th>
-            {% for value, label in matrix.types %}
-              <th scope="col" class="text-right font-medium">{{ label }}</th>
-            {% endfor %}
-            <th scope="col" class="text-right">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in matrix.rows %}
-            <tr>
-              <th scope="row" class="font-normal text-left">
-                <div class="flex items-center gap-2">
-                  <span class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0" aria-hidden="true">
-                    {{ row.user|display_name|slice:":1"|upper }}
-                  </span>
-                  <a href="{% url 'public_profile' pk=row.user.pk %}"
-                     class="truncate text-brand-navy hover:text-brand-coral">{{ row.user|display_name }}</a>
-                </div>
-              </th>
-              {% for value, label in matrix.types %}
-                <td class="text-right{% if not row.counts|get_item:value %} text-brand-text/30{% endif %}">{{ row.counts|get_item:value|default:0 }}</td>
-              {% endfor %}
-              <td class="text-right font-semibold text-brand-navy">{{ row.total }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          <tr class="font-semibold bg-brand-lighter/60 text-brand-navy">
-            <td>Total</td>
-            {% for value, label in matrix.types %}
-              <td class="text-right">{{ matrix.totals|get_item:value|default:0 }}</td>
-            {% endfor %}
-            <td class="text-right">{{ matrix.totals.grand_total }}</td>
-          </tr>
-        </tfoot>
-      </table>
+  <div x-data>
+    {# ── Contributions by member ── #}
+    <div x-show="$store.credit.viewMode === 'by-member'" x-cloak>
+      <div id="contributions-by-member-container">
+        {% include "projects/partials/contributions_by_member.html" %}
+      </div>
     </div>
 
-    <div class="flex items-center justify-between gap-3 mb-3">
-      <h2 class="text-lg font-semibold text-brand-navy">Every contribution</h2>
-      {% if is_project_manager %}{% include "contributions/partials/add_button.html" %}{% endif %}
+    {# ── Every contribution ── #}
+    <div x-show="$store.credit.viewMode === 'every'" x-cloak>
+      <div id="every-contribution-container">
+        {% include "projects/partials/every_contribution.html" %}
+      </div>
     </div>
-    <div class="brand-card overflow-x-auto">
-      <table class="table">
-        <thead class="bg-brand-lighter text-brand-navy">
-          <tr>
-            <th scope="col">Member</th>
-            <th scope="col">Task</th>
-            <th scope="col">Role</th>
-            <th scope="col">Completed</th>
-            <th scope="col">Closed by</th>
-            {% if is_project_manager %}<th scope="col" class="text-right">Actions</th>{% endif %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for record in records %}
-            <tr>
-              <th scope="row" class="font-normal text-left">
-                <a href="{% url 'public_profile' pk=record.user_id %}"
-                   class="text-brand-navy hover:text-brand-coral">{{ record.user|display_name }}</a>
-              </th>
-              <td>
-                <a href="{% url 'tasks:detail' project_pk=project.pk pk=record.task_id %}"
-                   class="text-brand-navy hover:text-brand-coral">{{ record.task.name }}</a>
-              </td>
-              <td>
-                {{ record.get_contribution_type_display }}
-                {% if record.added_by_hand %}
-                  <span class="ml-1 inline-flex items-center rounded-full border border-gray-300 px-2 py-0.5 text-xs text-brand-text/60"
-                        title="Entered by a project lead rather than earned on a task closing">Added by hand</span>
-                {% endif %}
-              </td>
-              <td class="whitespace-nowrap">{{ record.closed_at|date:"M j, Y" }}</td>
-              <td>{% if record.verified_by %}{{ record.verified_by|display_name }}{% else %}<span class="text-brand-text/40">&mdash;</span>{% endif %}</td>
-              {% if is_project_manager %}
-                <td class="text-right">
-                  <button type="button" class="btn btn-ghost btn-xs gap-1"
-                          hx-get="{% url 'contributions:contribution_edit' project_pk=project.pk pk=record.pk %}"
-                          hx-target="#contribution-modal-body"
-                          hx-swap="innerHTML"
-                          onclick="document.getElementById('contribution-modal').showModal()"
-                          aria-label="Edit {{ record.user|display_name }}'s contribution on {{ record.task.name }}">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                         stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
-                      <path stroke-linecap="round" stroke-linejoin="round"
-                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-                    </svg>
-                    Edit
-                  </button>
-                </td>
-              {% endif %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% endif %}
+  </div>
 
   {% if is_project_manager %}
     {# ── Correction modal — filled by HTMX from the Add / Edit controls ── #}

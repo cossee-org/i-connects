@@ -362,7 +362,7 @@ class ProjectContributionsCSVView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         slug = slugify(self.project.name)
         if _wants_matrix(request):
-            matrix = get_project_contributions_matrix(self.project, all_types=True)
+            matrix = get_project_contributions_matrix(self.project)
             rows = _matrix_rows(
                 matrix,
                 first_column="member",

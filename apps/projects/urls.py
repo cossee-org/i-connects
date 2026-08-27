@@ -34,6 +34,16 @@ urlpatterns = [
         name="contribution_tracking",
     ),
     path(
+        "projects/<int:pk>/contribution-tracking/by-member/",
+        views.ContributionsByMemberPartialView.as_view(),
+        name="contributions_by_member",
+    ),
+    path(
+        "projects/<int:pk>/contribution-tracking/every/",
+        views.EveryContributionPartialView.as_view(),
+        name="every_contribution",
+    ),
+    path(
         "projects/<int:pk>/wiki/",
         views.WikiView.as_view(),
         name="wiki",

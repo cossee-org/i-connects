@@ -70,8 +70,12 @@ reopened. Every correction is audit-logged.
 
 Two pages show it:
 - **Contribution Tracking** on the project (`/projects/<id>/contribution-tracking/`)
-  — members × CRediT-role matrix, then every contribution listed with its
-  task and who closed it. Visible to every project member.
+  — two views the section switches between, the same way the Tasks board
+  switches Kanban / List / Calendar: **Contributions by member** (a grid of
+  every member against all 14 CRediT roles, with a filter to narrow it to
+  the roles and members that have contributions) and **Every contribution**
+  (one row per record, naming its task and who closed it). Visible to every
+  project member.
 - **Contributions** in the sidebar (`/contributions/`) — your own credit
   across every project, filterable by project.
 
@@ -233,10 +237,11 @@ link is set. Pattern-based (regex); no API calls, no rate-limit risk.
    - With the task completed, Edit and Delete are gone; Mark Not Complete
      brings them back.
 3. **Contribution ledger + downloads**
-   - Open the project's **Contribution Tracking** tab — the matrix shows 1 in
-     the column matching the task's type, and the list names the task below.
-   - Click "Edit" on that row to correct its role, or "Add contribution" to
-     credit someone the ledger missed.
+   - Open the project's **Contribution Tracking** tab — Contributions by
+     member shows 1 in the column matching the task's type; tick "Only roles
+     and members with contributions" to narrow the grid.
+   - Switch to Every contribution and click "Edit" on that row to correct its
+     role, or "Add contribution" to credit someone the ledger missed.
    - Reopen the task from its detail view and reload — the earned credit is
      gone; close it again and it is back.
    - Download "Matrix (CSV)" and "List (CSV)" from the same page.
