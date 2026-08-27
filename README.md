@@ -38,6 +38,10 @@ test checklist.
   approval" widgets for authenticated users.
 - **Forms builder** — JSON-schema-driven per-project custom forms
   (jsoneditor).
+- **Wiki** — per-project documentation pages under the Project view:
+  markdown with `[[wiki links]]`, a contents list per page, full
+  revision history with per-edit diffs and restore, lead-only page
+  locking, and search across titles and page text.
 - **Notes** — per-project markdown notes (EasyMDE).
 - **Notifications** — HTMX-polled badge + dropdown + list page; email
   channel wired via Django's `EMAIL_BACKEND`.
@@ -140,6 +144,7 @@ iconnects-django/
     comments/       Comment threads on TaskLogs
     notifications/  In-app notification centre
     notes/          Markdown notes per project
+    wiki/           Project wiki pages + revision history
     forms_builder/  Dynamic JSON-schema forms
     contributions/  ContributionRecord ledger + matrix / list downloads
     audit/          Immutable AuditLog with viewer

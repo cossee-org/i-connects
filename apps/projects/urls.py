@@ -44,11 +44,6 @@ urlpatterns = [
         name="every_contribution",
     ),
     path(
-        "projects/<int:pk>/wiki/",
-        views.WikiView.as_view(),
-        name="wiki",
-    ),
-    path(
         "projects/<int:pk>/forms/",
         views.ProjectFormsView.as_view(),
         name="project_forms",

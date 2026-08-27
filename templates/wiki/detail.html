@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} &mdash; Wiki &mdash; {{ project.name }}{% endblock %}
+
+{% block extra_head %}
+  {% include "wiki/_prose_styles.html" %}
+{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6">
+    {% include "_components/project_header.html" %}
+  </header>
+{% endblock %}
+
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <a href="{% url 'wiki:list' project_pk=project.pk %}"
+     class="btn btn-sm btn-ghost text-brand-navy">&larr; All wiki pages</a>
+  <div class="flex flex-wrap gap-2">
+    <a href="{% url 'wiki:history' project_pk=project.pk slug=page.slug %}"
+       class="btn btn-sm btn-ghost text-brand-navy">
+      History{% if revision_count %} ({{ revision_count }}){% endif %}
+    </a>
+    {% if can_edit %}
+      <a href="{% url 'wiki:update' project_pk=project.pk slug=page.slug %}"
+         class="btn btn-sm btn-primary">Edit</a>
+    {% endif %}
+    {% if can_delete %}
+      <a href="{% url 'wiki:delete' project_pk=project.pk slug=page.slug %}"
+         class="btn btn-sm btn-outline btn-error">Delete</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="flex flex-col lg:flex-row gap-6 items-start">
+  <article class="brand-card p-6 flex-1 min-w-0">
+    <div class="flex flex-wrap items-start justify-between gap-2 pb-4 mb-4 border-b border-brand-light/60">
+      <div class="min-w-0">
+        <h1 class="text-2xl font-semibold text-brand-navy leading-tight break-words">{{ page.title }}</h1>
+        <p class="text-xs text-brand-text/60 mt-1">
+          {% if latest_revision %}
+            Revision {{ latest_revision.number }} &middot;
+            {{ latest_revision.created_at|date:"M j, Y H:i" }}
+            {% if latest_revision.editor %}
+              &middot; {{ latest_revision.editor.name|default:latest_revision.editor.email }}
+            {% endif %}
+          {% else %}
+            Updated {{ page.updated_at|date:"M j, Y H:i" }}
+          {% endif %}
+        </p>
+      </div>
+      {% if page.locked %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-light/50 text-brand-text shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+          </svg>
+          Locked &mdash; leads only
+        </span>
+      {% endif %}
+    </div>
+
+    {% if page.content_markdown %}
+      <div class="wiki-prose">{{ rendered.html }}</div>
+    {% else %}
+      <p class="text-sm text-brand-text/60 italic">
+        This page has no content yet.{% if can_edit %} Use Edit to write it.{% endif %}
+      </p>
+    {% endif %}
+
+    {% if rendered.missing_links %}
+      <div class="brand-panel p-4 mt-6">
+        <p class="text-sm text-brand-navy font-medium">Pages this one links to that don't exist yet</p>
+        <ul class="mt-2 flex flex-wrap gap-2">
+          {% for title in rendered.missing_links %}
+            <li>
+              <a class="btn btn-xs btn-ghost text-brand-coral"
+                 href="{% url 'wiki:create' project_pk=project.pk %}?title={{ title|urlencode }}">
+                + {{ title }}
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div class="text-xs text-brand-text/60 mt-6 pt-4 border-t border-brand-light/60">
+      Created {{ page.created_at|date:"M j, Y" }}
+      {% if page.created_by %} by {{ page.created_by.name|default:page.created_by.email }}{% endif %}
+    </div>
+  </article>
+
+  {% if rendered.toc %}
+    <aside class="brand-card p-4 w-full lg:w-72 shrink-0" aria-label="On this page">
+      <h2 class="text-xs uppercase tracking-wider text-brand-navy font-semibold mb-2">On this page</h2>
+      <div class="wiki-toc">{{ rendered.toc }}</div>
+    </aside>
+  {% endif %}
+</div>
+{% endblock %}

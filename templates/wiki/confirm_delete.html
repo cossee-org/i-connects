@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ page.title }} &mdash; Wiki &mdash; {{ project.name }}{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6">
+    {% include "_components/project_header.html" %}
+  </header>
+{% endblock %}
+
+{% block content %}
+<section class="brand-card max-w-lg mx-auto p-6">
+  <div class="flex items-start gap-3">
+    <div class="shrink-0 w-10 h-10 rounded-full bg-error/10 flex items-center justify-center">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.8" stroke="currentColor" class="w-5 h-5 text-error" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M12 9v3.75m0 3.75h.008v.008H12v-.008ZM10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+      </svg>
+    </div>
+    <div class="min-w-0">
+      <h2 class="text-lg font-semibold text-brand-navy">Delete this wiki page?</h2>
+      <p class="text-sm text-brand-text/70 mt-1">
+        The page and its
+        {% if revision_count == 1 %}single revision{% else %}{{ revision_count }} revisions{% endif %}
+        go with it. This cannot be undone, and links to it from other pages will
+        turn into offers to create it again.
+      </p>
+    </div>
+  </div>
+
+  <div class="brand-panel p-4 mt-5">
+    <p class="font-semibold text-brand-navy break-words">{{ page.title }}</p>
+    <p class="text-xs text-brand-text/60 mt-1">
+      /wiki/{{ page.slug }}/ &middot; updated {{ page.updated_at|date:"M j, Y" }}
+    </p>
+  </div>
+
+  <form method="post" class="flex justify-end gap-2 mt-6">
+    {% csrf_token %}
+    <a href="{% url 'wiki:detail' project_pk=project.pk slug=page.slug %}" class="btn btn-ghost">Cancel</a>
+    <button type="submit" class="btn btn-error">Delete permanently</button>
+  </form>
+</section>
+{% endblock %}

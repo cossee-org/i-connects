@@ -52,6 +52,10 @@ Rules:
 | `TASK_COMPLETED`                      | Task marked complete (status → COMPLETED)                       |
 | `TASK_APPROVED`                       | `approve_completion(approved=True)`                             |
 | `TASK_REJECTED`                       | `approve_completion(approved=False)`                            |
+| `WIKI_PAGE_CREATED`                   | Wiki page created (with its first revision)                     |
+| `WIKI_PAGE_UPDATED`                   | Wiki page saved with a change (text and/or lock)                |
+| `WIKI_PAGE_DELETED`                   | Wiki page and its history deleted                               |
+| `WIKI_PAGE_RESTORED`                  | An earlier revision restored onto the page                      |
 | Already wired:                        |                                                                 |
 | `USER_SIGNUP`, `USER_LOGIN`, `USER_LOGIN_FAILED`, `USER_LOGOUT`, `PASSWORD_*`, `PROFILE_UPDATED` | — |
 
@@ -63,6 +67,7 @@ Rules:
 - **Task actions:** `{"name": task.name}` (also consider `{"status": "COMPLETED"}` for transitions)
 - **Invitation actions:** `{"email": invitation.email}`
 - **Member / role:** `{"target_user_id": user.id}` — use IDs not full names, so logs stay compact
+- **Wiki actions:** `{"title": page.title, "slug": page.slug}` — the slug outlives a rename, so a deleted page is still identifiable
 
 ---
 

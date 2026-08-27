@@ -928,12 +928,6 @@ class EveryContributionPartialView(ContributionTrackingMixin, TemplateView):
     template_name = "projects/partials/every_contribution.html"
 
 
-class WikiView(
-    ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
-):
-    template_name = "projects/wiki.html"
-
-
 class ProjectFormsView(
     ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
 ):

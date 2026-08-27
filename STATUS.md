@@ -18,6 +18,7 @@ Eight Django apps ported from the original Prisma / Blitz schema:
 | `comments`       | Threaded comments on task logs.                                                             |
 | `notifications`  | In-app notifications (M2M recipients), badge / dropdown partials, admin announcements.      |
 | `notes`          | Project notes with three visibility tiers (private / PM-only / contributors), markdown rendering with raw HTML escaping. |
+| `wiki`           | Per-project wiki pages: markdown + `[[wiki links]]`, append-only `WikiRevision` history with diffs / restore, lead-only page locking, edit-conflict detection, search. |
 | `forms_builder`  | Dynamic JSON-Schema -> Django Form renderer, versioned `FormVersion`s, jsonschema validation. |
 
 Plus `cron/tasks.py` with four Celery-beat jobs (daily digest, weekly
