@@ -140,6 +140,29 @@ class Task(models.Model):
 
     assign_by_role = models.BooleanField(default=False)
 
+    closed_by = models.ForeignKey(
+        "projects.ProjectMember",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="closed_tasks",
+        help_text=(
+            "Who marked this task completed — the Lead who closed it, or the "
+            "reviewer whose sign-off was the last one outstanding. Kept as "
+            "written even after they leave the task, and cleared when the "
+            "task is reopened. Nulled only if their membership row is deleted "
+            "outright, which the page reports as a former member."
+        ),
+    )
+    closed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the task was marked completed. Cleared on reopening, so it "
+            "always describes the completion the task currently stands on."
+        ),
+    )
+
     requires_review = models.BooleanField(
         default=False,
         help_text=(

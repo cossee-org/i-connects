@@ -234,8 +234,9 @@ link is set. Pattern-based (regex); no API calls, no rate-limit risk.
      offering CRediT's 14 roles (it appears only on a CRediT project), and
      the "Require review" tickbox that reveals the Reviewers field.
    - Assign yourself, mark your own part done, then close the task as lead.
-   - With the task completed, Edit and Delete are gone; Mark Not Complete
-     brings them back.
+   - With the task completed, Edit and Delete are gone and the header names
+     who closed it and when; Mark Not Complete brings the buttons back and
+     takes the attribution away.
 3. **Contribution ledger + downloads**
    - Open the project's **Contribution Tracking** tab — Contributions by
      member shows 1 in the column matching the task's type; tick "Only roles

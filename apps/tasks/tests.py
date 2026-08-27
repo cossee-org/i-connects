@@ -36,7 +36,12 @@ from apps.tasks.calendar import (
 )
 from apps.tasks.forms import TaskForm
 from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
-from apps.tasks.services import approve_completion, complete_task
+from apps.tasks.services import (
+    approve_completion,
+    close_task,
+    complete_task,
+    reopen_task,
+)
 
 
 def _make_project_with_board(owner, *, name="P"):
@@ -4269,20 +4274,21 @@ def test_the_detail_page_drops_edit_and_delete_once_completed(client, user):
     edit_url = reverse(
         "tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}
     )
-    delete_url = reverse(
-        "tasks:delete", kwargs={"project_pk": project.pk, "pk": task.pk}
-    )
+    # What opens the delete dialog, rather than the dialog itself: the
+    # dialog is inert markup that renders either way, so the button is what
+    # says whether deleting is on offer.
+    delete_opener = f"task-delete-modal-{task.pk}').showModal()"
 
     body = client.get(url).content.decode()
     assert edit_url not in body
-    assert delete_url not in body
+    assert delete_opener not in body
     assert "Mark Not Complete" in body
 
     task.status = TaskStatus.NOT_COMPLETED
     task.save(update_fields=["status"])
     body = client.get(url).content.decode()
     assert edit_url in body
-    assert delete_url in body
+    assert delete_opener in body
 
 
 # ---------------------------------------------------------------------------
@@ -4404,3 +4410,143 @@ def test_a_standing_verdict_survives_the_last_reviewer_leaving(client, user, oth
     assert f"by {lead.display_name}" in pane
     assert "Reviewers</h4>" not in pane
     assert "Mark not reviewed" not in pane
+
+
+@pytest.mark.django_db
+def test_closing_from_the_pane_takes_the_lead_actions_with_it(client, user):
+    """The toggle is an HTMX swap, so the buttons have to move with it.
+
+    Otherwise a Lead who just closed a task keeps looking at two buttons
+    whose endpoints refuse, until something reloads the page.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Toggled",
+    )
+    client.force_login(user)
+    edit_url = reverse(
+        "tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}
+    )
+
+    closed = client.post(
+        reverse("tasks:close", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert 'id="task-lead-actions"' in closed  # the swap reached them...
+    assert edit_url not in closed  # ...and emptied them
+
+    reopened = client.post(
+        reverse("tasks:reopen", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert edit_url in reopened
+
+
+@pytest.mark.django_db
+def test_the_task_page_names_who_closed_it(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Named",
+    )
+    client.force_login(user)
+    url = reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+
+    # Nothing to name while it is open.
+    assert "Closed by" not in client.get(url).content.decode()
+
+    close_task(task=task, closed_by=member)
+    task.refresh_from_db()
+    assert task.closed_by_id == member.pk
+    assert task.closed_at is not None
+
+    body = client.get(url).content.decode()
+    assert "Closed by" in body
+    assert member.display_name in body
+
+
+@pytest.mark.django_db
+def test_closing_from_the_pane_names_the_closer_without_a_reload(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Named",
+    )
+    client.force_login(user)
+
+    closed = client.post(
+        reverse("tasks:close", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert "Closed by" in closed
+    assert member.display_name in closed
+
+
+@pytest.mark.django_db
+def test_reopening_clears_who_closed_it(client, user):
+    """The completion it named no longer stands."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Named",
+    )
+    close_task(task=task, closed_by=member)
+    reopen_task(task=task)
+    task.refresh_from_db()
+
+    assert task.closed_by_id is None
+    assert task.closed_at is None
+
+    client.force_login(user)
+    body = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    assert "Closed by" not in body
+
+
+@pytest.mark.django_db
+def test_a_reviewers_last_signoff_is_named_as_the_closer(client, user, other_user):
+    """The review rule closes the task, so the reviewer is who closed it."""
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    task.assigned_members.remove(lead)
+    mark_own_done(task=task, member=contrib)
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+    assert task.closed_by_id == lead.pk
+
+
+@pytest.mark.django_db
+def test_a_closer_whose_membership_is_gone_is_still_reported(client, user, other_user):
+    """SET_NULL outlives the row; the page says so rather than going short."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    closer = _add_contributor(project, other_user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Named",
+    )
+    close_task(task=task, closed_by=closer)
+    closer.delete()
+    task.refresh_from_db()
+    assert task.closed_by_id is None
+    assert task.status == TaskStatus.COMPLETED
+
+    client.force_login(user)
+    body = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    assert "Closed by" in body
+    assert "a former member" in body

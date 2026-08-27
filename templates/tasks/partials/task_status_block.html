@@ -170,4 +170,16 @@
   {% include "tasks/partials/task_completion_chip.html" with task=task oob=True %}
   {% include "tasks/partials/task_completion_button.html" with task=task is_project_manager=is_project_manager oob=True %}
   {% include "tasks/partials/task_self_mark_button.html" with task=task is_assignee=is_assignee my_done=my_done oob=True %}
+  {% comment %}
+    Closing and reopening are what write and clear the closer, so the line
+    naming them has to move with the same swap — otherwise a task just
+    closed sits there unattributed until the page is reloaded.
+  {% endcomment %}
+  {% include "tasks/partials/task_closed_by_meta.html" with task=task oob=True %}
+  {% comment %}
+    And the Lead's Delete / Edit pair, which a completed task does not
+    offer — leaving them up would hand a Lead two buttons their endpoints
+    refuse until the page happened to be reloaded.
+  {% endcomment %}
+  {% include "tasks/partials/task_lead_actions.html" with task=task project=project is_project_manager=is_project_manager oob=True %}
 {% endif %}

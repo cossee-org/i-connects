@@ -101,7 +101,11 @@ def complete_task(
         logs.append(log)
 
     task.status = TaskStatus.COMPLETED
-    task.save(update_fields=["status", "updated_at"])
+    task.closed_by = completed_by
+    task.closed_at = timezone.now()
+    task.save(
+        update_fields=["status", "closed_by", "closed_at", "updated_at"]
+    )
 
     completer_user = completed_by.users.first()
     _record_contributions(task, verifier_user=completer_user)
@@ -131,9 +135,16 @@ def reopen_task(*, task: Task) -> Task:
     recorded — but the credit that closure wrote does not, since a reopened
     task is no longer finished work for anyone to hold credit for. Closing
     it again writes the credit back.
+
+    Who closed it goes too: the completion it named no longer stands, and
+    the next close writes its own.
     """
     task.status = TaskStatus.NOT_COMPLETED
-    task.save(update_fields=["status", "updated_at"])
+    task.closed_by = None
+    task.closed_at = None
+    task.save(
+        update_fields=["status", "closed_by", "closed_at", "updated_at"]
+    )
     _withdraw_contributions(task)
     return task
 
@@ -242,10 +253,18 @@ def close_task(
     CRediT: credit is written for each assignee who marked their own part
     done, and — where the task carries reviewers — had that submission
     reviewed. See ``contributions.services.record_contributions_for_task``.
+   
+    The task records who closed it and when, so the page can name them
+    without going to the audit log. ``mark_reviewed`` passes the reviewer
+    whose sign-off finished it, so the name is whoever really did it.
     """
     closer_user = closed_by.users.first()
     task.status = TaskStatus.COMPLETED
-    task.save(update_fields=["status", "updated_at"])
+    task.closed_by = closed_by
+    task.closed_at = timezone.now()
+    task.save(
+        update_fields=["status", "closed_by", "closed_at", "updated_at"]
+    )
     _record_contributions(task, verifier_user=closer_user)
     metadata = {"name": task.name}
     if reason:
