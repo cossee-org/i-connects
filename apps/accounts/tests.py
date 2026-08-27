@@ -381,3 +381,55 @@ def test_discover_people_search_and_facets_combine(client_logged_in, researchers
     assert _names_on_page(response) == ["Shinichi Nakagawa", "Ada Abbott"]
     assert "University of Alberta" in response.context["results_summary"]
     assert "sorted by name Z–A" in response.context["results_summary"]
+
+
+@pytest.mark.django_db
+def test_profile_recent_contributions_name_the_role_not_the_task(
+    client_logged_in, researchers
+):
+    """A task name can carry detail the person hasn't published; the role can't."""
+    from django.utils import timezone
+
+    from apps.contributions.models import ContributionRecord
+    from apps.projects.models import ProjectMember
+    from apps.projects.services import create_project_with_owner
+    from apps.tasks.models import KanbanBoard, Task
+
+    nakagawa = researchers["nakagawa"]
+    project = create_project_with_owner(
+        user=nakagawa,
+        form_data={"name": "Open Meta-Analysis", "is_public": True,
+                   "contribution_tracking": "CREDIT"},
+    )
+    column = KanbanBoard.objects.create(project=project, name="Todo", container_order=0)
+    member = ProjectMember.objects.filter(project=project, users=nakagawa).first()
+    task = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=0,
+        name="Unblind the pilot cohort",
+    )
+    ContributionRecord.objects.create(
+        task=task, user=nakagawa, project=project,
+        contribution_type="DATA_CURATION", closed_at=timezone.now(),
+    )
+
+    html = client_logged_in.get(
+        reverse("public_profile", kwargs={"pk": nakagawa.pk})
+    ).content.decode()
+    assert "Data curation" in html
+    assert "Open Meta-Analysis" in html
+    assert "Unblind the pilot cohort" not in html
+
+
+@pytest.mark.django_db
+def test_profile_contribution_tiles_are_ordered_with_other_last(
+    client_logged_in, researchers
+):
+    context = client_logged_in.get(
+        reverse("public_profile", kwargs={"pk": researchers["nakagawa"].pk})
+    ).context
+    labels = [label for label, _count in context["contribution_tiles"]]
+    assert labels[0] == "Conceptualization"
+    assert labels[-1] == "Other"

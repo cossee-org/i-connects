@@ -1325,3 +1325,61 @@ def test_the_public_profile_names_the_closer(client, user, other_user):
         reverse("public_profile", kwargs={"pk": other_user.pk})
     ).content.decode()
     assert "closed by Alice" in body
+
+
+# ---------------------------------------------------------------------------
+# The order contribution types are listed in — alphabetical, "Other" last
+# ---------------------------------------------------------------------------
+
+
+def test_sort_contribution_types_is_alphabetical_by_label_with_other_last():
+    from apps.core.enums import ContributionType, sort_contribution_types
+
+    labels = dict(ContributionType.choices)
+    ordered = [labels[v] for v in sort_contribution_types(labels)]
+
+    assert ordered[-1] == "Other"
+    # Sorting on the label, not the value: "Data curation" belongs under D,
+    # not where ``DATA_CURATION`` would fall.
+    assert ordered[:3] == ["Conceptualization", "Data curation", "Formal analysis"]
+    assert ordered[:-1] == sorted(ordered[:-1], key=str.lower)
+
+
+def test_credit_role_choices_keeps_other_last_when_it_is_included():
+    from apps.core.enums import credit_role_choices
+
+    labels = [label for _value, label in credit_role_choices("OTHER")]
+    assert labels[0] == "Conceptualization"
+    assert labels[-1] == "Other"
+
+
+@pytest.mark.django_db
+def test_contributions_module_orders_its_role_tiles(client, user):
+    """"Other" reads as the end of the list, not as an O in the middle."""
+    project, col, pm = _make_project(user, name="Alpha")
+    for ctype in (
+        ContributionType.OTHER,
+        ContributionType.SOFTWARE,
+        ContributionType.DATA_CURATION,
+    ):
+        _credit(project, col, pm, pm, ctype)
+
+    client.force_login(user)
+    context = client.get(reverse("contributions:contributions")).context
+    assert [label for label, _count in context["counts_by_type"]] == [
+        "Data curation",
+        "Software",
+        "Other",
+    ]
+
+
+@pytest.mark.django_db
+def test_matrix_columns_use_the_same_order(client, user):
+    from apps.contributions.services import get_project_contributions_matrix
+
+    project, col, pm = _make_project(user, name="Alpha")
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+
+    labels = [label for _value, label in get_project_contributions_matrix(project)["types"]]
+    assert labels[0] == "Conceptualization"
+    assert labels[-1] == "Other"

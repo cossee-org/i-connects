@@ -99,14 +99,7 @@
   {% else %}
     <div class="brand-card p-6">
       <h2 class="text-lg font-semibold text-brand-navy mb-3">Contributions</h2>
-      <div class="flex flex-wrap gap-3">
-        {% for value, label in contribution_types %}
-          <div class="flex-1 min-w-[8rem] bg-brand-lighter rounded-md p-3 text-center">
-            <div class="text-2xl font-semibold text-brand-navy">{{ contribution_counts|get_item:value|default:0 }}</div>
-            <div class="text-xs text-brand-text/70 mt-1">{{ label }}</div>
-          </div>
-        {% endfor %}
-      </div>
+      {% include "_components/contribution_tiles.html" with tiles=contribution_tiles %}
       <div class="mt-4 text-sm text-brand-text/80">Total: {{ contribution_total }}</div>
     </div>
 
@@ -115,10 +108,11 @@
       <ul class="divide-y divide-brand-light">
         {% for rec in recent_contributions %}
           <li class="py-3">
+            {# The role earned, not the task it came from — a task name can #}
+            {# carry work-in-progress detail the person hasn't published. #}
             <div>
               <a href="{% url 'projects:detail' pk=rec.project_id %}" class="text-brand-navy font-medium hover:text-brand-coral">{{ rec.project.name }}</a>
-              &rarr; <span class="text-brand-text">{{ rec.task.name }}</span>
-              <span class="text-brand-text/70">({{ rec.get_contribution_type_display }})</span>
+              &rarr; <span class="text-brand-text">{{ rec.get_contribution_type_display }}</span>
             </div>
             <div class="text-xs text-brand-text/60 mt-0.5">
               {{ rec.closed_at|date:"M j, Y" }} &middot; closed by {{ rec|closed_by }}

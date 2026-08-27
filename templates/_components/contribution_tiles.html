@@ -1,0 +1,22 @@
+{% comment %}
+  Counts by contribution role, as tiles — the count read first, the role
+  named under it. Shared by the researcher profile and the Contributions
+  module so the two surfaces can't drift apart.
+
+  Pass `tiles` as a list of (label, count) pairs, already in the order
+  they should read (apps.core.enums.sort_contribution_types).
+
+  No `flex-1`: the profile lays out the whole taxonomy and the module only
+  the roles actually earned, so an even split would stretch a lone tile on
+  the last row across the page.
+
+  {% include "_components/contribution_tiles.html" with tiles=contribution_tiles %}
+{% endcomment %}
+<div class="flex flex-wrap gap-3">
+  {% for label, count in tiles %}
+    <div class="min-w-[8rem] bg-brand-lighter rounded-md p-3 text-center">
+      <div class="text-2xl font-semibold text-brand-navy">{{ count }}</div>
+      <div class="text-xs text-brand-text/70 mt-1">{{ label }}</div>
+    </div>
+  {% endfor %}
+</div>

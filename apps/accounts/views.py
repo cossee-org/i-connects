@@ -28,7 +28,7 @@ from apps.contributions.services import (
     get_user_contribution_counts_by_type,
     get_user_contributions,
 )
-from apps.core.enums import ContributionType
+from apps.core.enums import ContributionType, sort_contribution_types
 from apps.projects.services import get_user_public_projects
 
 from .emails import send_password_reset_email, send_welcome_email
@@ -303,8 +303,14 @@ class PublicProfileView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         profile_user = self.object
         counts = get_user_contribution_counts_by_type(profile_user)
-        context["contribution_counts"] = counts
-        context["contribution_types"] = ContributionType.choices
+        labels = dict(ContributionType.choices)
+        # The whole taxonomy, zeros included — a profile is read to see the
+        # shape of someone's credit, and which roles they have *not* earned
+        # is part of that shape.
+        context["contribution_tiles"] = [
+            (labels[value], counts.get(value, 0))
+            for value in sort_contribution_types(labels)
+        ]
         context["contribution_total"] = sum(counts.values())
         context["recent_contributions"] = get_user_contributions(profile_user)[:15]
         context["public_projects"] = get_user_public_projects(profile_user)

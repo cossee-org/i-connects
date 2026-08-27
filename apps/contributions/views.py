@@ -26,7 +26,11 @@ from django.utils.text import slugify
 from django.views import View
 from django.views.generic import RedirectView, TemplateView
 
-from apps.core.enums import CREDIT_ROLES, ContributionType, MemberPrivileges
+from apps.core.enums import (
+    ContributionType,
+    MemberPrivileges,
+    sort_contribution_types,
+)
 from apps.projects.models import Project, ProjectPrivilege
 
 from .forms import ContributionAddForm, ContributionEditForm
@@ -77,10 +81,7 @@ class ContributionsView(LoginRequiredMixin, TemplateView):
         labels = dict(ContributionType.choices)
         context["counts_by_type"] = [
             (labels.get(value, value), counts[value])
-            for value in list(CREDIT_ROLES) + sorted(
-                v for v in counts if v not in CREDIT_ROLES
-            )
-            if counts.get(value)
+            for value in sort_contribution_types(v for v in counts if counts[v])
         ]
         return context
 

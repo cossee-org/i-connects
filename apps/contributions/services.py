@@ -17,7 +17,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.audit.services import AuditAction, log_action
-from apps.core.enums import CREDIT_ROLES, ContributionType, TaskStatus
+from apps.core.enums import (
+    CREDIT_ROLES,
+    ContributionType,
+    TaskStatus,
+    sort_contribution_types,
+)
 from apps.projects.models import ContributionTracking, Project, ProjectMember
 from apps.tasks.models import Task, TaskLog
 
@@ -196,13 +201,9 @@ def get_user_contributions_matrix(
 
     used_types = {rec.contribution_type for rec in records}
     if all_types:
-        type_values = list(CREDIT_ROLES) + sorted(
-            v for v in used_types if v not in CREDIT_ROLES
-        )
+        type_values = sort_contribution_types(set(CREDIT_ROLES) | used_types)
     else:
-        type_values = [v for v in CREDIT_ROLES if v in used_types] + sorted(
-            v for v in used_types if v not in CREDIT_ROLES
-        )
+        type_values = sort_contribution_types(used_types)
     type_choices = [(v, labels.get(v, v)) for v in type_values]
 
     projects_by_id: dict[int, Project] = {}
@@ -326,11 +327,9 @@ def get_project_contributions_matrix(
     )
 
     used_types = {rec.contribution_type for rec in records}
-    # CRediT's own roles in the taxonomy's order, then anything off it this
-    # project has used.
-    type_values = list(CREDIT_ROLES) + sorted(
-        v for v in used_types if v not in CREDIT_ROLES
-    )
+    # CRediT's own roles, plus anything off the taxonomy this project has
+    # used, all in the one order the app lists contribution types in.
+    type_values = sort_contribution_types(set(CREDIT_ROLES) | used_types)
 
     users_by_id: dict[int, User] = {u.pk: u for u in project_member_users(project)}
     per_user: dict[int, dict[str, int]] = {
