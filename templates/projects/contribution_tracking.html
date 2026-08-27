@@ -24,16 +24,26 @@
   {% endif %}
 {% else %}
 
-  <div class="mb-6">
-    <h2 class="text-lg font-semibold text-brand-navy">Contributions by member</h2>
-    <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">
-      Each member's credit on this project, by
-      <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
-         class="text-brand-navy underline hover:text-brand-coral">CRediT</a>
-      role. A member earns credit on a task when they mark their own part done
-      and a lead completes the task &mdash; where the task has reviewers, once
-      their submission has been reviewed.
-    </p>
+  <div class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-semibold text-brand-navy">Contributions by member</h2>
+      <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">
+        Each member's credit on this project, by
+        <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
+           class="text-brand-navy underline hover:text-brand-coral">CRediT</a>
+        role. A member earns credit on a task when they mark their own part done
+        and a lead completes the task &mdash; where the task has reviewers, once
+        their submission has been reviewed.
+      </p>
+    </div>
+    {% if matrix.totals.grand_total > 0 %}
+      {% url 'contributions:project_contributions_csv' project_pk=project.pk as csv_url %}
+      {% if is_project_manager %}
+        {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" %}
+      {% else %}
+        {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" %}
+      {% endif %}
+    {% endif %}
   </div>
 
   {% if matrix.totals.grand_total == 0 %}

@@ -73,6 +73,20 @@
       </div>
     </div>
     <noscript><button type="submit" class="btn btn-sm btn-primary">Filter</button></noscript>
+
+    {% if contribution_total > 0 %}
+      {% comment %}
+        Downloads carry the filter, so the sheet matches what is on screen.
+      {% endcomment %}
+      <div class="sm:ml-auto">
+        {% url 'contributions:my_contributions_csv' as csv_url %}
+        {% if selected_project %}
+          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix&project="|add:current_project list_url=csv_url|add:"?format=list&project="|add:current_project %}
+        {% else %}
+          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" %}
+        {% endif %}
+      </div>
+    {% endif %}
   </form>
 
   {% if contribution_total == 0 %}

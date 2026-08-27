@@ -9,6 +9,7 @@ statement. A project's own ledger lives on its Contribution Tracking tab
 from __future__ import annotations
 
 import csv
+from itertools import chain
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponseForbidden, StreamingHttpResponse
@@ -19,15 +20,17 @@ from django.utils.text import slugify
 from django.views import View
 from django.views.generic import RedirectView, TemplateView
 
-from apps.core.enums import CREDIT_ROLES, ContributionType
-from apps.projects.models import Project
-from apps.tasks.mixins import ProjectContextMixin
+from apps.core.enums import CREDIT_ROLES, ContributionType, MemberPrivileges
+from apps.projects.models import Project, ProjectPrivilege
 
 from .services import (
     get_project_contributions,
+    get_project_contributions_matrix,
     get_user_contribution_counts_by_type,
     get_user_contributions,
+    get_user_contributions_matrix,
     get_user_credit_projects,
+    user_display_name,
 )
 
 
@@ -107,10 +110,16 @@ class ProjectContributionsView(LoginRequiredMixin, RedirectView):
 
 
 # ---------------------------------------------------------------------------
-# CSV export (Ultra Plan §15: feeds authorship / CRediT statements)
+# CSV downloads — the sheets an authorship statement is written from
+#
+# Two shapes, per contributions surface:
+#   list   — one row per contribution, with everything recorded about it.
+#   matrix — the grid the page itself shows: one row per member (or, for a
+#            person's own download, per project) and one column per CRediT
+#            role, counting the contributions in each cell.
 # ---------------------------------------------------------------------------
 
-CSV_COLUMNS = [
+LIST_COLUMNS = [
     "project",
     "user_name",
     "user_email",
@@ -121,24 +130,58 @@ CSV_COLUMNS = [
     "verified_by",
 ]
 
+#: ``?format=`` values. Anything else falls back to the list.
+FORMAT_MATRIX = "matrix"
 
-def _serialize_row(record) -> list[str]:
+
+def _wants_matrix(request) -> bool:
+    return (request.GET.get("format") or "").lower() == FORMAT_MATRIX
+
+
+def _list_row(record) -> list[str]:
     user = record.user
     verifier = record.verified_by
     return [
         record.project.name if record.project else "",
-        user.name or "",
+        user_display_name(user),
         user.email,
         getattr(user, "orcid", "") or "",
         record.get_contribution_type_display(),
         record.task.name if record.task else "",
         record.closed_at.isoformat() if record.closed_at else "",
-        (verifier.name or verifier.email) if verifier else "",
+        user_display_name(verifier) if verifier else "",
     ]
 
 
+def _matrix_rows(matrix: dict, *, first_column: str, label_for) -> list[list[str]]:
+    """The matrix as CSV rows: a header, a row per entry, then the totals."""
+    labels = [label for _value, label in matrix["types"]]
+    rows = [[first_column, *labels, "total"]]
+    for row in matrix["rows"]:
+        rows.append(
+            [
+                label_for(row),
+                *[str(row["counts"].get(value, 0)) for value, _ in matrix["types"]],
+                str(row["total"]),
+            ]
+        )
+    rows.append(
+        [
+            "total",
+            *[str(matrix["totals"].get(value, 0)) for value, _ in matrix["types"]],
+            str(matrix["totals"]["grand_total"]),
+        ]
+    )
+    return rows
+
+
 def _csv_response(filename: str, rows_iter) -> StreamingHttpResponse:
-    """Stream a CSV without buffering the whole sheet in memory."""
+    """Stream a CSV without buffering the whole sheet in memory.
+
+    ``rows_iter`` yields every row including the header, so the same helper
+    serves the list export (a fixed header over a queryset) and the matrix
+    (a header whose columns depend on the data).
+    """
 
     class _Echo:
         def write(self, value):
@@ -147,7 +190,6 @@ def _csv_response(filename: str, rows_iter) -> StreamingHttpResponse:
     writer = csv.writer(_Echo())
 
     def generate():
-        yield writer.writerow(CSV_COLUMNS)
         for row in rows_iter:
             yield writer.writerow(row)
 
@@ -156,40 +198,97 @@ def _csv_response(filename: str, rows_iter) -> StreamingHttpResponse:
     return response
 
 
-class ProjectContributionsCSVView(LoginRequiredMixin, ProjectContextMixin, View):
-    """Download every ContributionRecord for a project as CSV.
+def _stamp() -> str:
+    return timezone.now().strftime("%Y%m%d")
 
-    Restricted to project managers — the raw sheet contains other members'
-    emails and ORCIDs, which ordinary members shouldn't re-download in
-    bulk. The matrix page (``ProjectContributionsView``) remains open to
-    all project members.
+
+class ProjectContributionsCSVView(LoginRequiredMixin, View):
+    """Download a project's contributions, as a list or as the matrix.
+
+    The matrix is open to every project member: it is exactly the grid the
+    Contribution Tracking tab already shows them, so it reads membership
+    the same way that page does. The list is restricted to project leads —
+    it carries other members' emails and ORCIDs, which ordinary members
+    shouldn't re-download in bulk.
     """
+
+    project_url_kwarg = "project_pk"
 
     def dispatch(self, request, *args, **kwargs):
         self.project = get_object_or_404(
             Project, pk=kwargs.get(self.project_url_kwarg)
         )
-        self.is_project_manager = ProjectContextMixin._is_project_manager(
-            request.user, self.project
+        privileges = ProjectPrivilege.objects.filter(
+            user=request.user.pk, project=self.project
         )
-        if not self.is_project_manager:
+        self.is_project_manager = privileges.filter(
+            privilege=MemberPrivileges.PROJECT_MANAGER
+        ).exists()
+        if not privileges.exists():
             return HttpResponseForbidden(
-                "Only project managers may export contributions."
+                "Only project members may download contributions."
+            )
+        if not _wants_matrix(request) and not self.is_project_manager:
+            return HttpResponseForbidden(
+                "Only project leads may download the full contribution list."
             )
         return super().dispatch(request, *args, **kwargs)
 
     def get(self, request, *args, **kwargs):
-        qs = get_project_contributions(self.project).order_by("-closed_at")
-        stamp = timezone.now().strftime("%Y%m%d")
-        filename = f"contributions-{slugify(self.project.name)}-{stamp}.csv"
-        return _csv_response(filename, (_serialize_row(r) for r in qs.iterator()))
+        slug = slugify(self.project.name)
+        if _wants_matrix(request):
+            matrix = get_project_contributions_matrix(self.project, all_types=True)
+            rows = _matrix_rows(
+                matrix,
+                first_column="member",
+                label_for=lambda row: user_display_name(row["user"]),
+            )
+            return _csv_response(
+                f"contributions-{slug}-matrix-{_stamp()}.csv", iter(rows)
+            )
+
+        qs = get_project_contributions(self.project).order_by("-closed_at", "-id")
+        rows = chain([LIST_COLUMNS], (_list_row(r) for r in qs.iterator()))
+        return _csv_response(f"contributions-{slug}-list-{_stamp()}.csv", rows)
 
 
 class MyContributionsCSVView(LoginRequiredMixin, View):
-    """Download the signed-in user's own contributions across every project."""
+    """Download the signed-in user's own contributions, list or matrix.
+
+    Honours the module's ``?project=`` filter, so what you downloaded is
+    what you were looking at.
+    """
 
     def get(self, request, *args, **kwargs):
-        qs = get_user_contributions(request.user).order_by("-closed_at")
-        stamp = timezone.now().strftime("%Y%m%d")
-        filename = f"my-contributions-{stamp}.csv"
-        return _csv_response(filename, (_serialize_row(r) for r in qs.iterator()))
+        project = self._selected_project(request)
+        scope = f"-{slugify(project.name)}" if project else ""
+
+        if _wants_matrix(request):
+            matrix = get_user_contributions_matrix(
+                request.user, project=project, all_types=True
+            )
+            rows = _matrix_rows(
+                matrix,
+                first_column="project",
+                label_for=lambda row: row["project"].name,
+            )
+            return _csv_response(
+                f"my-contributions{scope}-matrix-{_stamp()}.csv", iter(rows)
+            )
+
+        qs = get_user_contributions(request.user, project=project).order_by(
+            "-closed_at", "-id"
+        )
+        rows = chain([LIST_COLUMNS], (_list_row(r) for r in qs.iterator()))
+        return _csv_response(f"my-contributions{scope}-list-{_stamp()}.csv", rows)
+
+    @staticmethod
+    def _selected_project(request):
+        """The filtered project, or None — same rule as the module page."""
+        raw = request.GET.get("project") or ""
+        if not raw.isdigit():
+            return None
+        return next(
+            (p for p in get_user_credit_projects(request.user) if p.pk == int(raw)),
+            None,
+        )

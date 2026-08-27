@@ -15,8 +15,17 @@ from apps.contributions.services import (
     get_project_contributions_matrix,
     get_user_contributions,
 )
-from apps.core.enums import ContributionType, ProjectStatus
-from apps.projects.models import ContributionTracking, ProjectMember
+from apps.core.enums import (
+    CREDIT_ROLES,
+    ContributionType,
+    MemberPrivileges,
+    ProjectStatus,
+)
+from apps.projects.models import (
+    ContributionTracking,
+    ProjectMember,
+    ProjectPrivilege,
+)
 from apps.projects.services import create_project_with_owner
 from apps.tasks.models import KanbanBoard, Task
 from apps.tasks.services import (
@@ -63,9 +72,14 @@ def _make_task(project, col, pm_member, *, assignees=None, reviewers=None,
     return task
 
 
-def _member_for(project, user):
+def _member_for(project, user, privilege=MemberPrivileges.CONTRIBUTOR):
+    """Add ``user`` to ``project`` the way a real join does: a membership
+    row plus the privilege the section pages read access off."""
     member = ProjectMember.objects.create(project=project)
     member.users.add(user)
+    ProjectPrivilege.objects.create(
+        project=project, user=user, privilege=privilege
+    )
     return member
 
 
@@ -331,12 +345,17 @@ def test_get_user_contributions_scoped_to_project(user):
 
 
 # ---------------------------------------------------------------------------
-# CSV export
+# CSV downloads — list and matrix
 # ---------------------------------------------------------------------------
 
 
+def _csv_lines(response) -> list[str]:
+    body = b"".join(response.streaming_content).decode("utf-8")
+    return [line for line in body.splitlines() if line]
+
+
 @pytest.mark.django_db
-def test_my_contributions_csv_returns_rows(client, user):
+def test_my_contributions_list_csv_returns_rows(client, user):
     project, col, pm_member = _make_project(user)
     _credit(project, col, pm_member, pm_member, ContributionType.WRITING_ORIGINAL_DRAFT)
 
@@ -345,8 +364,8 @@ def test_my_contributions_csv_returns_rows(client, user):
     assert resp.status_code == 200
     assert resp["Content-Type"].startswith("text/csv")
     assert "attachment;" in resp["Content-Disposition"]
-    body = b"".join(resp.streaming_content).decode("utf-8")
-    lines = [line for line in body.splitlines() if line]
+    assert "my-contributions-list-" in resp["Content-Disposition"]
+    lines = _csv_lines(resp)
     # header + one data row
     assert lines[0].split(",")[0] == "project"
     assert len(lines) == 2
@@ -355,21 +374,90 @@ def test_my_contributions_csv_returns_rows(client, user):
 
 
 @pytest.mark.django_db
-def test_project_contributions_csv_requires_pm(client, user, other_user):
-    """Ordinary members get the matrix page but NOT the raw CSV."""
+def test_my_contributions_matrix_csv_is_a_grid(client, user):
+    project, col, pm_member = _make_project(user, name="Alpha")
+    _credit(project, col, pm_member, pm_member, ContributionType.SOFTWARE)
+    _credit(project, col, pm_member, pm_member, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    resp = client.get("/my/contributions.csv", {"format": "matrix"})
+    assert resp.status_code == 200
+    assert "my-contributions-matrix-" in resp["Content-Disposition"]
+    lines = _csv_lines(resp)
+    header = lines[0].split(",")
+    assert header[0] == "project"
+    assert header[-1] == "total"
+    # The whole taxonomy, so a downloaded grid has a stable shape.
+    assert len(header) == len(CREDIT_ROLES) + 2
+    assert "Software" in header
+    body = lines[1].split(",")
+    assert body[0] == "Alpha"
+    assert body[header.index("Software")] == "2"
+    assert body[-1] == "2"
+    assert lines[-1].split(",")[0] == "total"
+
+
+@pytest.mark.django_db
+def test_my_contributions_csv_honours_the_project_filter(client, user):
+    project_a, col_a, pm_a = _make_project(user, name="Alpha")
+    project_b, col_b, pm_b = _make_project(user, name="Beta")
+    _credit(project_a, col_a, pm_a, pm_a, ContributionType.SOFTWARE)
+    _credit(project_b, col_b, pm_b, pm_b, ContributionType.METHODOLOGY)
+
+    client.force_login(user)
+    resp = client.get("/my/contributions.csv", {"project": project_a.pk})
+    lines = _csv_lines(resp)
+    assert len(lines) == 2
+    assert "Alpha" in lines[1]
+    assert "alpha" in resp["Content-Disposition"]
+
+
+@pytest.mark.django_db
+def test_project_matrix_csv_is_open_to_members_but_the_list_is_not(
+    client, user, other_user
+):
+    project, col, pm_member = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm_member, pm_member, ContributionType.SOFTWARE)
+    url = f"/projects/{project.pk}/contributions.csv"
+
+    # A lead takes either shape.
+    client.force_login(user)
+    assert client.get(url, {"format": "matrix"}).status_code == 200
+    assert client.get(url).status_code == 200
+
+    # An ordinary member gets the grid they can already see, not the raw
+    # sheet of everyone's emails and ORCIDs.
+    client.force_login(other_user)
+    assert client.get(url, {"format": "matrix"}).status_code == 200
+    assert client.get(url).status_code == 403
+
+
+@pytest.mark.django_db
+def test_project_contributions_csv_refuses_a_non_member(client, user, other_user):
+    project, col, pm_member = _make_project(user)
+    _credit(project, col, pm_member, pm_member, ContributionType.SOFTWARE)
+
+    client.force_login(other_user)
+    url = f"/projects/{project.pk}/contributions.csv"
+    assert client.get(url, {"format": "matrix"}).status_code == 403
+    assert client.get(url).status_code == 403
+
+
+@pytest.mark.django_db
+def test_project_matrix_csv_names_every_member(client, user, other_user):
     project, col, pm_member = _make_project(user)
     _member_for(project, other_user)
     _credit(project, col, pm_member, pm_member, ContributionType.SOFTWARE)
 
-    # PM can download.
     client.force_login(user)
-    resp = client.get(f"/projects/{project.pk}/contributions.csv")
-    assert resp.status_code == 200
-
-    # Non-PM cannot.
-    client.force_login(other_user)
-    resp = client.get(f"/projects/{project.pk}/contributions.csv")
-    assert resp.status_code == 403
+    lines = _csv_lines(
+        client.get(f"/projects/{project.pk}/contributions.csv", {"format": "matrix"})
+    )
+    assert lines[0].split(",")[0] == "member"
+    names = [line.split(",")[0] for line in lines[1:-1]]
+    assert "Alice" in names
+    assert "Bob" in names
 
 
 @pytest.mark.django_db
@@ -377,9 +465,7 @@ def test_my_contributions_csv_empty_only_header(client, user):
     client.force_login(user)
     resp = client.get("/my/contributions.csv")
     assert resp.status_code == 200
-    body = b"".join(resp.streaming_content).decode("utf-8")
-    lines = [line for line in body.splitlines() if line]
-    assert len(lines) == 1  # header only
+    assert len(_csv_lines(resp)) == 1  # header only
 
 
 # ---------------------------------------------------------------------------
@@ -530,3 +616,39 @@ def test_my_contributions_redirects_to_the_module(client, user):
     resp = client.get("/my/contributions/")
     assert resp.status_code == 302
     assert resp["Location"] == reverse("contributions:contributions")
+
+
+@pytest.mark.django_db
+def test_the_pages_offer_both_downloads(client, user, other_user):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Matrix (CSV)" in body and "List (CSV)" in body
+
+    body = client.get(reverse("contributions:contributions")).content.decode()
+    assert "Matrix (CSV)" in body and "List (CSV)" in body
+    assert "format=matrix" in body
+
+    # A member who is not a lead is offered only the grid they can see.
+    client.force_login(other_user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Matrix (CSV)" in body and "List (CSV)" not in body
+
+
+@pytest.mark.django_db
+def test_the_module_downloads_carry_the_project_filter(client, user):
+    project, col, pm = _make_project(user, name="Alpha")
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("contributions:contributions"), {"project": project.pk}
+    ).content.decode()
+    assert f"project={project.pk}" in body

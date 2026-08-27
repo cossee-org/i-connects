@@ -164,24 +164,38 @@ def get_user_credit_projects(user: User) -> list[Project]:
     )
 
 
-def get_user_contributions_matrix(user: User) -> dict:
+def get_user_contributions_matrix(
+    user: User,
+    *,
+    project: Optional[Project] = None,
+    all_types: bool = False,
+) -> dict:
     """Build a projects × CRediT-role matrix of one user's own credit.
 
     The same shape as :func:`get_project_contributions_matrix`, with
     ``rows`` keyed on ``"project"`` rather than ``"user"``. Columns are the
-    roles this user has actually been credited with.
+    roles this user has been credited with, or the whole taxonomy when
+    ``all_types`` is set.
     """
     labels = dict(ContributionType.choices)
+    qs = ContributionRecord.objects.filter(user=user)
+    if project is not None:
+        qs = qs.filter(project=project)
     records = list(
-        ContributionRecord.objects.filter(user=user)
-        .select_related("project")
-        .only("project_id", "contribution_type", "project__name")
+        qs.select_related("project").only(
+            "project_id", "contribution_type", "project__name"
+        )
     )
 
     used_types = {rec.contribution_type for rec in records}
-    type_values = [v for v in CREDIT_ROLES if v in used_types] + sorted(
-        v for v in used_types if v not in CREDIT_ROLES
-    )
+    if all_types:
+        type_values = list(CREDIT_ROLES) + sorted(
+            v for v in used_types if v not in CREDIT_ROLES
+        )
+    else:
+        type_values = [v for v in CREDIT_ROLES if v in used_types] + sorted(
+            v for v in used_types if v not in CREDIT_ROLES
+        )
     type_choices = [(v, labels.get(v, v)) for v in type_values]
 
     projects_by_id: dict[int, Project] = {}
