@@ -116,7 +116,13 @@
         {% include "tasks/partials/task_completion_button.html" with task=task is_project_manager=is_project_manager %}
         {% include "tasks/partials/task_self_mark_button.html" with task=task is_assignee=status_block.is_assignee my_done=status_block.my_done %}
       </div>
-      {% if is_project_manager %}
+      {% if is_project_manager and task.status != "COMPLETED" %}
+        {% comment %}
+          Gone once the task is completed: a completed task is a record of
+          finished work, and on a CRediT project its contributors have already
+          been credited under its type. Mark Not Complete, beside this row, is
+          the way back to editing it.
+        {% endcomment %}
         <div class="flex items-center gap-1 shrink-0">
           <button type="button"
                   class="btn btn-ghost btn-xs gap-1 text-error"
@@ -280,8 +286,8 @@
 
   </div>
 
-  {# Lead-only, like the button that opens it. #}
-  {% if is_project_manager %}
+  {# Lead-only, like the button that opens it — and gone with it once completed. #}
+  {% if is_project_manager and task.status != "COMPLETED" %}
   <dialog id="delete-task-modal" class="modal" aria-label="Delete task confirmation">
     <div class="modal-box max-w-xl bg-base-100 border border-error/40">
       <form method="dialog">

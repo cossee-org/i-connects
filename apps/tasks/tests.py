@@ -35,7 +35,7 @@ from apps.tasks.calendar import (
     task_range,
 )
 from apps.tasks.forms import TaskForm
-from apps.tasks.models import KanbanBoard, Task, TaskLog
+from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
 from apps.tasks.services import approve_completion, complete_task
 
 
@@ -4134,3 +4134,140 @@ def test_task_form_page_shows_the_task_type_field_only_for_credit(client, user):
     body = client.get(url).content.decode()
     assert "Task type" in body
     assert "https://credit.niso.org/" in body
+
+
+# ---------------------------------------------------------------------------
+# A completed task is frozen until its completion is reversed
+# ---------------------------------------------------------------------------
+
+
+def _completed_task(user):
+    project, col1, col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Frozen",
+        status=TaskStatus.COMPLETED,
+    )
+    return project, col1, col2, member, task
+
+
+@pytest.mark.django_db
+def test_a_completed_task_refuses_edits(client, user):
+    project, col1, _col2, _member, task = _completed_task(user)
+    client.force_login(user)
+    url = reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk})
+
+    # The form itself is refused, not just the save.
+    assert client.get(url).status_code == 302
+    client.post(url, _task_form_data(col1, name="Renamed"))
+    task.refresh_from_db()
+    assert task.name == "Frozen"
+
+
+@pytest.mark.django_db
+def test_a_completed_task_refuses_deletion(client, user):
+    project, _col1, _col2, _member, task = _completed_task(user)
+    client.force_login(user)
+    client.post(
+        reverse("tasks:delete", kwargs={"project_pk": project.pk, "pk": task.pk})
+    )
+    assert Task.objects.filter(pk=task.pk).exists()
+
+
+@pytest.mark.django_db
+def test_a_completed_task_refuses_assignee_changes(client, user, other_user):
+    project, _col1, _col2, _member, task = _completed_task(user)
+    newcomer = ProjectMember.objects.create(project=project)
+    newcomer.users.add(other_user)
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:assign", kwargs={"pk": task.pk}),
+        {"assigned_members": [newcomer.pk]},
+    )
+    assert list(task.assigned_members.all()) == []
+
+
+@pytest.mark.django_db
+def test_a_completed_task_refuses_a_milestone_change(client, user):
+    project, _col1, _col2, _member, task = _completed_task(user)
+    milestone = Milestone.objects.create(project=project, name="M1")
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:set_milestone", kwargs={"pk": task.pk}),
+        {"milestone": milestone.pk},
+    )
+    task.refresh_from_db()
+    assert task.milestone_id is None
+
+
+@pytest.mark.django_db
+def test_an_htmx_edit_of_a_completed_task_gets_a_conflict(client, user):
+    project, _col1, _col2, _member, task = _completed_task(user)
+    client.force_login(user)
+    resp = client.get(
+        reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        HTTP_HX_REQUEST="true",
+    )
+    assert resp.status_code == 409
+    assert b"mark it not complete" in resp.content
+
+
+@pytest.mark.django_db
+def test_reversing_the_completion_unlocks_the_task(client, user):
+    project, col1, _col2, _member, task = _completed_task(user)
+    client.force_login(user)
+
+    client.post(reverse("tasks:reopen", kwargs={"pk": task.pk}))
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+
+    url = reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk})
+    assert client.get(url).status_code == 200
+    client.post(url, _task_form_data(col1, name="Renamed"))
+    task.refresh_from_db()
+    assert task.name == "Renamed"
+
+
+@pytest.mark.django_db
+def test_a_completed_task_still_moves_between_columns(client, user):
+    """Which column it sits in is where it is, not what it is."""
+    project, _col1, col2, _member, task = _completed_task(user)
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:move", kwargs={"pk": task.pk}),
+        {"container_id": col2.pk, "order": 0},
+    )
+    task.refresh_from_db()
+    assert task.container_id == col2.pk
+
+
+@pytest.mark.django_db
+def test_the_detail_page_drops_edit_and_delete_once_completed(client, user):
+    project, _col1, _col2, _member, task = _completed_task(user)
+    client.force_login(user)
+    url = reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+
+    edit_url = reverse(
+        "tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}
+    )
+    delete_url = reverse(
+        "tasks:delete", kwargs={"project_pk": project.pk, "pk": task.pk}
+    )
+
+    body = client.get(url).content.decode()
+    assert edit_url not in body
+    assert delete_url not in body
+    assert "Mark Not Complete" in body
+
+    task.status = TaskStatus.NOT_COMPLETED
+    task.save(update_fields=["status"])
+    body = client.get(url).content.decode()
+    assert edit_url in body
+    assert delete_url in body

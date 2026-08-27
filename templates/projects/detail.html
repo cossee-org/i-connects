@@ -263,7 +263,8 @@
               </div>
             </div>
             <div class="flex items-center gap-1 shrink-0">
-              {% if is_project_manager %}
+              {# Both go once the task is completed — see task_detail.html. #}
+              {% if is_project_manager and task.status != "COMPLETED" %}
               <button type="button"
                       class="btn btn-ghost btn-xs"
                       aria-label="Edit task {{ task.name }}"
@@ -283,7 +284,7 @@
             </div>
           </li>
           {# Lead-only, like the button that opens it. #}
-          {% if is_project_manager %}
+          {% if is_project_manager and task.status != "COMPLETED" %}
           <dialog id="delete-task-modal-{{ task.pk }}" class="modal" aria-label="Delete task confirmation">
             <div class="modal-box max-w-xl bg-base-100 border border-error/40">
               <form method="dialog">
