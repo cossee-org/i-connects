@@ -102,6 +102,17 @@
       overflow-hidden and would clip anything hanging below a cell, so those
       pills keep a plain title attribute.
     {% endcomment %}
+    {% comment %}
+      A row whose whole area follows a single link: the anchor's ::after is
+      stretched over the nearest positioned ancestor, so the click target is
+      the row rather than just the text. Anything inside that has to stay
+      separately clickable — a button, a second link — is raised above that
+      overlay with .row-link-above. Plain CSS rather than Tailwind
+      utilities: the committed output.css ships no inset-0.
+    {% endcomment %}
+    .row-link::after { content: ""; position: absolute; inset: 0; }
+    .row-link-above { position: relative; z-index: 1; }
+
     .hover-tooltip { position: relative; }
     .hover-tooltip::after {
       content: attr(data-tooltip);
@@ -213,12 +224,14 @@
     {% endblock %}
 
     {% block topbar_breadcrumb %}
-    {% comment %}hidden: my_contributions, forms_builder{% endcomment %}
-    {% if request.resolver_match.url_name == 'list' and request.resolver_match.app_name == 'projects' %}
-      <a href="{% url 'projects:list' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">Project discovery</a>
-    {% elif request.resolver_match.url_name == 'discover_people' %}
-      <a href="{% url 'accounts:discover_people' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">People discovery</a>
-    {% elif request.resolver_match.url_name == 'my_join_requests' %}
+    {% comment %}
+      hidden: my_contributions, forms_builder, notifications.
+
+      Project discovery and People discovery are hidden too: each of those
+      pages already names itself in its own <h1>, so a top-bar crumb saying
+      the same thing twice is just noise.
+    {% endcomment %}
+    {% if request.resolver_match.url_name == 'my_join_requests' %}
       <a href="{% url 'projects:my_join_requests' %}" class="text-sm font-medium text-brand-navy whitespace-nowrap hover:text-brand-coral">My join requests</a>
     {% comment %}hidden: profile breadcrumb{% endcomment %}
     {% endif %}

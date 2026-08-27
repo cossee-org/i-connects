@@ -8,6 +8,7 @@
 <div class="flex items-center gap-3 mb-6">
   <h1 class="page-title font-semibold text-brand-navy">People discovery</h1>
   <span id="people-total-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_people_count }}</span>
+  {% include "_components/info_popover.html" with label="People discovery" body="Researchers on i-CONNECTS. Search by name, institution or country to find collaborators, and open a profile to see what they work on." %}
 </div>
 
 {# ── Search / filter / sort bar ───────────────────────────────────────────── #}

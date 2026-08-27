@@ -3,19 +3,34 @@
 {% block title %}Notifications &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block page_header %}
-  <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-    <div>
+  {% comment %}
+    Title, its "i", and the page's actions. The subtitle lives in the
+    popover rather than under the heading, the same way Projects and
+    Contributions do it.
+  {% endcomment %}
+  <header class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div class="flex items-center gap-3">
       <h1 class="page-title font-semibold text-brand-navy leading-tight">Notifications</h1>
-      <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">Announcements, mentions, and project updates.</p>
+      {% include "_components/info_popover.html" with label="Notifications" body="Announcements, project updates, and news about your tasks. Click one to go to what it is about; it is marked read on the way." %}
     </div>
-    {% if user.is_staff or user.is_superuser or user.role == "ADMIN" %}
-      <div class="shrink-0">
+    <div class="shrink-0 flex items-center gap-2">
+      {% if unread_count %}
+        <form method="post" action="{% url 'notifications:mark_all_read' %}">
+          {% csrf_token %}
+          {% comment %}Come back to whichever tab the reader is standing on.{% endcomment %}
+          <input type="hidden" name="next" value="{% if current_filter == 'unread' %}?filter=unread{% endif %}">
+          <button type="submit" class="btn btn-sm btn-ghost text-brand-navy">
+            Mark all as read
+          </button>
+        </form>
+      {% endif %}
+      {% if user.is_staff or user.is_superuser or user.role == "ADMIN" %}
         <a href="{% url 'notifications:announcement_create' %}"
            class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
           New announcement
         </a>
-      </div>
-    {% endif %}
+      {% endif %}
+    </div>
   </header>
 {% endblock %}
 

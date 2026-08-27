@@ -196,6 +196,8 @@ def _notify_pms_of_new_member(*, project: Project, new_user) -> None:
         title=f"New member joined {project.name}",
         body=f"{display} accepted their invitation.",
         project=project,
+        route="projects:members",
+        route_kwargs={"pk": project.pk},
     )
 
 
@@ -478,6 +480,11 @@ def _notify_pms_of_join_request(
                 f"{join_request.get_requested_privilege_display()}."
             ),
             project=project,
+            # The project's own queue rather than this one request's review
+            # page: by the time a PM clicks, another PM may already have
+            # decided it, and the list still shows the outcome.
+            route="projects:join_requests",
+            route_kwargs={"pk": project.pk},
         )
 
     send_join_request_email_to_pms(join_request=join_request, pm_user_ids=pm_ids)
@@ -496,14 +503,22 @@ def _notify_requester_of_decision(
         if approved:
             title = f"You joined {project.name}"
             body = "Your request was approved."
+            # They are a member now, so the project itself is the useful
+            # destination.
+            route, route_kwargs = "projects:detail", {"pk": project.pk}
         else:
             title = f"Your request for {project.name} was declined"
             body = join_request.decision_note or "Your request was declined."
+            # A declined requester cannot open the project, so send them to
+            # their own list of requests.
+            route, route_kwargs = "projects:my_join_requests", None
         create_notification(
             users=[join_request.user_id],
             title=title,
             body=body,
             project=project,
+            route=route,
+            route_kwargs=route_kwargs,
         )
 
     send_join_request_decision_email(join_request=join_request, approved=approved)

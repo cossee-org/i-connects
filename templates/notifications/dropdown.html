@@ -18,18 +18,21 @@
 <ul class="max-h-96 overflow-y-auto divide-y divide-brand-light">
   {% for notification in notifications %}
     <li id="notification-{{ notification.id }}"
-        class="px-3 py-2 hover:bg-brand-lighter/60 transition-colors
+        class="relative px-3 py-2 hover:bg-brand-lighter/60 transition-colors
                {% if not notification.read %}bg-brand-lighter/40{% endif %}">
       <div class="flex items-start gap-2">
         <span class="inline-block w-2 h-2 rounded-full mt-1.5 shrink-0
                      {% if not notification.read %}bg-brand-coral{% else %}bg-brand-light{% endif %}" aria-hidden="true"></span>
         <div class="flex-1 min-w-0">
-          {% if notification.route_data.link %}
-            <a href="{{ notification.route_data.link }}" class="text-sm text-brand-navy font-medium truncate block hover:text-brand-coral">{{ notification.headline }}</a>
+          {% if notification.url %}
+            <a href="{% url 'notifications:open' notification.id %}"
+               class="row-link text-sm text-brand-navy font-medium truncate block hover:text-brand-coral">{{ notification.headline }}</a>
           {% else %}
             <div class="text-sm text-brand-navy font-medium truncate">{{ notification.headline }}</div>
           {% endif %}
-          <div class="text-xs text-brand-text/50 mt-0.5">{{ notification.created_at|date:"M j, H:i" }}</div>
+          <div class="text-xs text-brand-text/50 mt-0.5">
+            {% include "_components/local_time.html" with at=notification.created_at %}
+          </div>
         </div>
       </div>
     </li>
