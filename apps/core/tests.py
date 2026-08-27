@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from django.core.exceptions import MiddlewareNotUsed
 from django.core.management import call_command
@@ -34,17 +36,26 @@ def test_setup_cron_command_creates_periodic_tasks():
     assert PeriodicTask.objects.filter(name__in=expected_names).count() == 4
 
 
-def test_every_sizing_class_a_template_uses_exists_in_the_built_css():
-    """A `w-`/`h-` utility no build has generated silently collapses the box.
+#: Utilities whose absence silently changes a layout rather than erroring:
+#: a width, a height, or a grid's column count.
+_LAYOUT_CLASS = re.compile(
+    r"(?<![\w:-])((?:(?:sm|md|lg|xl|2xl):)*"
+    r"(?:[wh]-\d+(?:\.\d+)?|grid-cols-\d+))(?![\w.-])"
+)
+
+
+def test_every_layout_class_a_template_uses_exists_in_the_built_css():
+    """A utility no build has generated silently changes the layout.
 
     Tailwind only emits the utilities it finds in the content it scans, so a
-    template that reaches for a size no other template uses depends on
-    `npm run build:css` having been run since. Where it hasn't — a cached
-    stylesheet, a checkout that skipped the step — the element gets no width
-    or height and shrinks to fit its content: a `rounded-full` avatar stops
-    being a circle. Nothing errors, so only the page shows it.
+    template that reaches for a size or a column count no other template
+    uses depends on `npm run build:css` having been run since. Where it
+    hasn't — a cached stylesheet, a checkout that skipped the step — the
+    rule is simply missing: an element gets no width or height and shrinks
+    to fit its content, so a `rounded-full` avatar stops being a circle; a
+    grid falls back to one column. Nothing errors, so only the page shows
+    it.
     """
-    import re
     from pathlib import Path
 
     import config
@@ -56,17 +67,18 @@ def test_every_sizing_class_a_template_uses_exists_in_the_built_css():
     for path in sorted((root / "templates").rglob("*.html")):
         text = path.read_text(encoding="utf-8")
         for number, line in enumerate(text.splitlines(), 1):
-            for name in re.findall(r"(?<![\w-])([wh]-\d+(?:\.\d+)?)(?![\w.-])", line):
-                # Tailwind escapes the dot in fractional names like ``w-3.5``.
-                selector = "." + name.replace(".", "\\.") + "{"
-                if selector not in css:
+            for name in _LAYOUT_CLASS.findall(line):
+                # Tailwind escapes the responsive prefix's colon, and the
+                # dot in fractional names like ``w-3.5``.
+                escaped = name.replace(":", "\\:").replace(".", "\\.")
+                if f".{escaped}{{" not in css:
                     rel = path.relative_to(root / "templates")
                     offenders.append(f"{rel}:{number}: {name}")
 
     assert not offenders, (
-        "these sizing classes are used in templates but absent from "
+        "these layout classes are used in templates but absent from "
         "static/css/output.css — run `npm run build:css` and commit the "
-        "result, or use a size the app already uses:\n" + "\n".join(offenders)
+        "result, or use a value the app already uses:\n" + "\n".join(offenders)
     )
 
 
