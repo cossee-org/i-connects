@@ -450,8 +450,24 @@ class PublicProjectListView(ListView):
         for pid in members_by_project:
             members_by_project[pid].sort(key=lambda p: (0 if p.privilege == pm else 1))
 
+        # The viewer's own standing on each project, read out of the rows
+        # already fetched above rather than a query of its own. Anonymous
+        # visitors reach this page too, and belong to nothing.
+        my_privilege_by_project: dict[int, str] = {}
+        if self.request.user.is_authenticated:
+            for mp in all_member_privs:
+                if mp.user_id == self.request.user.pk:
+                    # ProjectPrivilege orders newest first, so the first row
+                    # seen for a project is the one _get_user_privilege would
+                    # have picked.
+                    my_privilege_by_project.setdefault(mp.project_id, mp.privilege)
+
         context["project_rows"] = [
-            {"project": p, "members": members_by_project.get(p.id, [])}
+            {
+                "project": p,
+                "members": members_by_project.get(p.id, []),
+                "my_privilege": my_privilege_by_project.get(p.id),
+            }
             for p in context["projects"]
         ]
         context["total_project_count"] = Project.objects.filter(is_public=True).count()

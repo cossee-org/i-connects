@@ -1290,3 +1290,66 @@ def test_dashboard_request_rows_pill_lead_requests_only(client, user, other_user
     content = client.get(reverse("projects:dashboard")).content.decode()
     assert "Lead" in content
     assert "Member" not in content
+
+
+# ---------------------------------------------------------------------------
+# Discover projects: the projects you are already in
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_discover_marks_the_projects_you_belong_to(client, user, other_user):
+    mine = create_project_with_owner(
+        user=user,
+        form_data={"name": "Mine", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    joined = create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Joined", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    ProjectPrivilege.objects.create(
+        project=joined, user=user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    theirs = create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Theirs", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+
+    client.force_login(user)
+    rows = {
+        row["project"].name: row["my_privilege"]
+        for row in client.get(reverse("projects:list")).context["project_rows"]
+    }
+    assert rows["Mine"] == MemberPrivileges.PROJECT_MANAGER
+    assert rows["Joined"] == MemberPrivileges.CONTRIBUTOR
+    # Nothing on a project you have no standing in.
+    assert rows["Theirs"] is None
+
+
+@pytest.mark.django_db
+def test_discover_shows_the_membership_pill(client, user, other_user):
+    create_project_with_owner(
+        user=user,
+        form_data={"name": "Mine", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Theirs", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+
+    client.force_login(user)
+    body = client.get(reverse("projects:list")).content.decode()
+    # "Lead" is the label for the privilege that owning a project grants.
+    assert "Lead" in body
+
+
+@pytest.mark.django_db
+def test_discover_marks_nothing_for_an_anonymous_visitor(client, user):
+    """The page is open to visitors, who belong to nothing."""
+    create_project_with_owner(
+        user=user,
+        form_data={"name": "Mine", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    response = client.get(reverse("projects:list"))
+    assert response.status_code == 200
+    assert [row["my_privilege"] for row in response.context["project_rows"]] == [None]
