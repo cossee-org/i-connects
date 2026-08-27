@@ -334,7 +334,6 @@
       </a>
       {% comment %}hidden: Forms{% endcomment %}
       {% comment %}hidden: Notifications{% endcomment %}
-      <div class="border-t border-brand-light/60 my-1"></div>
       <a href="{% url 'projects:list' %}" class="sidebar-link {% if request.resolver_match.url_name == 'list' and request.resolver_match.app_name == 'projects' %}active{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 15.803 7.5 7.5 0 0 0 15.803 15.803Z" /></svg>
         Discover projects
