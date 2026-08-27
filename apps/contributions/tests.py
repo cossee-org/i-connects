@@ -1325,3 +1325,82 @@ def test_the_public_profile_names_the_closer(client, user, other_user):
         reverse("public_profile", kwargs={"pk": other_user.pk})
     ).content.decode()
     assert "closed by Alice" in body
+
+
+# ---------------------------------------------------------------------------
+# The order contribution types are listed in — alphabetical, "Other" last
+# ---------------------------------------------------------------------------
+
+
+def test_sort_contribution_types_is_alphabetical_by_label_with_other_last():
+    from apps.core.enums import ContributionType, sort_contribution_types
+
+    labels = dict(ContributionType.choices)
+    ordered = [labels[v] for v in sort_contribution_types(labels)]
+
+    assert ordered[-1] == "Other"
+    # Sorting on the label, not the value: "Data curation" belongs under D,
+    # not where ``DATA_CURATION`` would fall.
+    assert ordered[:3] == ["Conceptualization", "Data curation", "Formal analysis"]
+    assert ordered[:-1] == sorted(ordered[:-1], key=str.lower)
+
+
+def test_credit_role_choices_keeps_other_last_when_it_is_included():
+    from apps.core.enums import credit_role_choices
+
+    labels = [label for _value, label in credit_role_choices("OTHER")]
+    assert labels[0] == "Conceptualization"
+    assert labels[-1] == "Other"
+
+
+@pytest.mark.django_db
+def test_contributions_module_shows_the_profile_card(client, user):
+    """The same card, over the same numbers: whole taxonomy, "Other" last."""
+    project, col, pm = _make_project(user, name="Alpha")
+    for ctype in (
+        ContributionType.OTHER,
+        ContributionType.SOFTWARE,
+        ContributionType.DATA_CURATION,
+    ):
+        _credit(project, col, pm, pm, ctype)
+
+    client.force_login(user)
+    context = client.get(reverse("contributions:contributions")).context
+    tiles = dict(context["contribution_tiles"])
+    labels = [label for label, _count in context["contribution_tiles"]]
+
+    assert labels[0] == "Conceptualization"
+    assert labels[-1] == "Other"
+    # Roles never earned are shown at zero rather than left out.
+    assert tiles["Data curation"] == 1
+    assert tiles["Investigation"] == 0
+    assert context["contribution_total"] == 3
+
+
+@pytest.mark.django_db
+def test_contributions_module_card_follows_the_project_filter(client, user):
+    project_a, col_a, pm_a = _make_project(user, name="Alpha")
+    project_b, col_b, pm_b = _make_project(user, name="Beta")
+    _credit(project_a, col_a, pm_a, pm_a, ContributionType.SOFTWARE)
+    _credit(project_b, col_b, pm_b, pm_b, ContributionType.METHODOLOGY)
+
+    client.force_login(user)
+    context = client.get(
+        reverse("contributions:contributions"), {"project": project_a.pk}
+    ).context
+    tiles = dict(context["contribution_tiles"])
+    assert tiles["Software"] == 1
+    assert tiles["Methodology"] == 0
+    assert context["contribution_total"] == 1
+
+
+@pytest.mark.django_db
+def test_matrix_columns_use_the_same_order(client, user):
+    from apps.contributions.services import get_project_contributions_matrix
+
+    project, col, pm = _make_project(user, name="Alpha")
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+
+    labels = [label for _value, label in get_project_contributions_matrix(project)["types"]]
+    assert labels[0] == "Conceptualization"
+    assert labels[-1] == "Other"

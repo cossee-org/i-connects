@@ -99,20 +99,8 @@
   {% else %}
 
     {# ── Totals by role ───────────────────────────────────────────────────── #}
-    <div class="brand-card p-6 mb-6">
-      <p class="text-sm text-brand-text/70 mb-3">
-        <span class="text-brand-navy font-semibold">{{ contribution_total }}</span>
-        contribution{{ contribution_total|pluralize }}
-        {% if selected_project %}on {{ selected_project.name }}{% else %}across all your projects{% endif %}
-      </p>
-      <div class="flex flex-wrap gap-2">
-        {% for label, count in counts_by_type %}
-          <span class="inline-flex items-center gap-1.5 rounded-full bg-brand-lighter px-3 py-1 text-sm text-brand-text">
-            {{ label }}
-            <span class="font-semibold text-brand-navy">{{ count }}</span>
-          </span>
-        {% endfor %}
-      </div>
+    <div class="mb-6">
+      {% include "_components/contribution_card.html" with tiles=contribution_tiles total=contribution_total %}
     </div>
 
     {# ── Every contribution ───────────────────────────────────────────────── #}

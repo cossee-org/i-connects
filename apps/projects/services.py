@@ -507,3 +507,34 @@ def _notify_requester_of_decision(
         )
 
     send_join_request_decision_email(join_request=join_request, approved=approved)
+
+
+def get_user_public_projects(user) -> list[Project]:
+    """Public projects ``user`` belongs to, newest activity first.
+
+    Used by the researcher profile. Only public projects are listed: a
+    private project's existence should never be disclosed by someone's
+    membership in it, so the filter is on the project, not on the viewer.
+
+    Each returned project carries an ``is_lead`` attribute — whether the
+    person manages it — so the profile can label the row without a query
+    per project.
+    """
+    privileges = (
+        ProjectPrivilege.objects.filter(user=user, project__is_public=True)
+        .select_related("project")
+        # ``-created_at`` last so that where a user somehow holds two
+        # privilege rows on one project, the newest one wins — matching
+        # how the project list resolves the same ambiguity.
+        .order_by("-project__updated_at", "project_id", "-created_at")
+    )
+    projects: list[Project] = []
+    seen: set[int] = set()
+    for privilege in privileges:
+        if privilege.project_id in seen:
+            continue
+        seen.add(privilege.project_id)
+        project = privilege.project
+        project.is_lead = privilege.privilege == MemberPrivileges.PROJECT_MANAGER
+        projects.append(project)
+    return projects

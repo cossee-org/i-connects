@@ -110,6 +110,17 @@ class User(AbstractUser):
     def is_locked_out(self) -> bool:
         return self.locked_at is not None
 
+    @property
+    def display_name(self) -> str:
+        """How this person is named anywhere they are shown or listed.
+
+        Their full name, falling back to the account name they signed up
+        with, and finally to their email — an account always has one, so
+        this never comes back blank and no row ever renders nameless.
+        """
+        full = f"{(self.given_name or '').strip()} {(self.family_name or '').strip()}".strip()
+        return full or self.name or self.email
+
 
 class Session(models.Model):
     """Blitz.js session table, ported 1:1 for data compatibility.

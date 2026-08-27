@@ -29,6 +29,11 @@ test checklist.
 - **CSV downloads of contributions** — a members × roles matrix or a
   row-per-contribution list, streamed to a spreadsheet for authorship /
   CRediT statements.
+- **People discovery** — a directory of everyone on the platform,
+  searchable by name, affiliation, city or ORCID, filterable by
+  institution and country, and sortable by name, institution or join
+  date. Each entry opens a researcher profile: name, pronouns, ORCID,
+  institution, city, country, public projects, and CRediT contributions.
 - **Role-differentiated dashboard** — "My active tasks" + "Pending your
   approval" widgets for authenticated users.
 - **Forms builder** — JSON-schema-driven per-project custom forms

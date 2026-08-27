@@ -116,8 +116,29 @@ CREDIT_ROLES: tuple[str, ...] = (
 )
 
 
+def contribution_type_sort_key(value: str) -> tuple[int, str]:
+    """The order every list of contribution types is read in.
+
+    Alphabetical by label, with "Other" last: it is the catch-all rather
+    than a role, and reads as the end of a list rather than as an O
+    sitting between Methodology and Project administration. Sorting on the
+    label, not the value, is what puts "Data curation" under D where a
+    reader looks for it rather than under its ``DATA_CURATION`` spelling.
+    """
+    labels = dict(ContributionType.choices)
+    return (
+        1 if value == ContributionType.OTHER else 0,
+        labels.get(value, value).lower(),
+    )
+
+
+def sort_contribution_types(values) -> list[str]:
+    """``values`` in that order — the one ordering the whole app lists by."""
+    return sorted(values, key=contribution_type_sort_key)
+
+
 def credit_role_choices(include: str | None = None) -> list[tuple[str, str]]:
-    """``(value, label)`` pairs for the CRediT roles, alphabetical by label.
+    """``(value, label)`` pairs for the CRediT roles, in the app's order.
 
     ``include`` keeps a value that is not one of the 14 — a task saved as
     "Other", or under the legacy ``WRITING`` — in the list, so editing such
@@ -127,4 +148,4 @@ def credit_role_choices(include: str | None = None) -> list[tuple[str, str]]:
     values = list(CREDIT_ROLES)
     if include and include not in values and include in labels:
         values.append(include)
-    return sorted(((v, labels[v]) for v in values), key=lambda c: c[1])
+    return [(v, labels[v]) for v in sort_contribution_types(values)]

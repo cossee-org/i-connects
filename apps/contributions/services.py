@@ -17,7 +17,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.audit.services import AuditAction, log_action
-from apps.core.enums import CREDIT_ROLES, ContributionType, TaskStatus
+from apps.core.enums import (
+    CREDIT_ROLES,
+    ContributionType,
+    TaskStatus,
+    sort_contribution_types,
+)
 from apps.projects.models import ContributionTracking, Project, ProjectMember
 from apps.tasks.models import Task, TaskLog
 
@@ -152,6 +157,22 @@ def get_user_contribution_counts_by_type(
     return dict(counts)
 
 
+def get_contribution_tiles(
+    user: User, *, project: Optional[Project] = None
+) -> list[tuple[str, int]]:
+    """``(label, count)`` for every contribution type, in the app's order.
+
+    The whole taxonomy, zeros included: the card is read to see the shape
+    of someone's credit, and which roles they have *not* earned is part of
+    that shape. Feeds ``_components/contribution_card.html`` on both the
+    researcher profile and the Contributions module, so the two show the
+    same card rather than two views of the same numbers.
+    """
+    counts = get_user_contribution_counts_by_type(user, project=project)
+    labels = dict(ContributionType.choices)
+    return [(labels[v], counts.get(v, 0)) for v in sort_contribution_types(labels)]
+
+
 def get_user_credit_projects(user: User) -> list[Project]:
     """Projects where this user could hold credit — theirs, tracking CRediT.
 
@@ -196,13 +217,9 @@ def get_user_contributions_matrix(
 
     used_types = {rec.contribution_type for rec in records}
     if all_types:
-        type_values = list(CREDIT_ROLES) + sorted(
-            v for v in used_types if v not in CREDIT_ROLES
-        )
+        type_values = sort_contribution_types(set(CREDIT_ROLES) | used_types)
     else:
-        type_values = [v for v in CREDIT_ROLES if v in used_types] + sorted(
-            v for v in used_types if v not in CREDIT_ROLES
-        )
+        type_values = sort_contribution_types(used_types)
     type_choices = [(v, labels.get(v, v)) for v in type_values]
 
     projects_by_id: dict[int, Project] = {}
@@ -326,11 +343,9 @@ def get_project_contributions_matrix(
     )
 
     used_types = {rec.contribution_type for rec in records}
-    # CRediT's own roles in the taxonomy's order, then anything off it this
-    # project has used.
-    type_values = list(CREDIT_ROLES) + sorted(
-        v for v in used_types if v not in CREDIT_ROLES
-    )
+    # CRediT's own roles, plus anything off the taxonomy this project has
+    # used, all in the one order the app lists contribution types in.
+    type_values = sort_contribution_types(set(CREDIT_ROLES) | used_types)
 
     users_by_id: dict[int, User] = {u.pk: u for u in project_member_users(project)}
     per_user: dict[int, dict[str, int]] = {
@@ -392,15 +407,13 @@ def _sort_matrix_rows(rows: list[dict], *, sort: str, direction: str) -> None:
 
 
 def user_sort_key(user: User) -> str:
-    """Name a user sorts under: their full name, else their email."""
-    full = f"{(user.given_name or '').strip()} {(user.family_name or '').strip()}".strip()
-    return (full or user.name or user.email or "").lower()
+    """Name a user sorts under — the same string they are displayed under."""
+    return (user.display_name or "").lower()
 
 
 def user_display_name(user: User) -> str:
     """A user's full name, falling back to their account name, then email."""
-    full = f"{(user.given_name or '').strip()} {(user.family_name or '').strip()}".strip()
-    return full or user.name or user.email
+    return user.display_name
 
 
 # ---------------------------------------------------------------------------
