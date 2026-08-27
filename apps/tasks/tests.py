@@ -9,8 +9,18 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.audit.models import AuditAction, AuditLog
-from apps.core.enums import MemberPrivileges, ProjectStatus, TaskStatus
-from apps.projects.models import ProjectMember, ProjectPrivilege
+from apps.core.enums import (
+    CREDIT_ROLES,
+    ContributionType,
+    MemberPrivileges,
+    ProjectStatus,
+    TaskStatus,
+)
+from apps.projects.models import (
+    ContributionTracking,
+    ProjectMember,
+    ProjectPrivilege,
+)
 from apps.projects.services import create_project_with_owner
 from apps.tasks.calendar import (
     bucket_tasks_by_day,
@@ -4029,3 +4039,98 @@ def test_the_tooltip_class_is_styled_by_the_page_shell(client, user):
     page = client.get(reverse("projects:list")).content.decode()
     assert ".hover-tooltip { position: relative; }" in page
     assert "content: attr(data-tooltip);" in page
+
+
+# ---------------------------------------------------------------------------
+# Task type: the CRediT role, on CRediT projects only
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_task_form_omits_task_type_off_a_credit_project(user):
+    project, col1, _col2 = _make_project_with_board(user)
+    assert not project.tracks_credit
+    form = TaskForm(project=project)
+    assert "contribution_type" not in form.fields
+
+
+@pytest.mark.django_db
+def test_task_form_offers_the_credit_roles(user):
+    project, col1, _col2 = _make_project_with_board(user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+
+    form = TaskForm(project=project)
+    field = form.fields["contribution_type"]
+    assert field.label == "Task type"
+    values = [value for value, _label in field.choices]
+    assert values[0] == ""  # "No task type"
+    assert set(values[1:]) == set(CREDIT_ROLES)
+    # Ours rather than CRediT's, so not offered on a fresh task.
+    assert ContributionType.OTHER not in values
+    assert ContributionType.WRITING not in values
+
+
+@pytest.mark.django_db
+def test_task_form_keeps_a_task_off_the_taxonomy_in_its_choices(user):
+    """Editing a task saved as "Other" must not quietly rewrite its type."""
+    project, col1, _col2 = _make_project_with_board(user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    task = Task.objects.create(
+        project=project,
+        created_by=_primary_member(project, user),
+        container=col1,
+        container_task_order=0,
+        name="Legacy",
+        contribution_type=ContributionType.OTHER,
+    )
+
+    form = TaskForm(project=project, instance=task)
+    values = [value for value, _label in form.fields["contribution_type"].choices]
+    assert ContributionType.OTHER in values
+
+
+@pytest.mark.django_db
+def test_creating_a_task_saves_its_task_type(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        _task_form_data(col1, contribution_type=ContributionType.SOFTWARE),
+    )
+    task = Task.objects.get(name="Dated")
+    assert task.contribution_type == ContributionType.SOFTWARE
+
+
+@pytest.mark.django_db
+def test_an_unpicked_task_type_falls_back_to_other(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        _task_form_data(col1, contribution_type=""),
+    )
+    task = Task.objects.get(name="Dated")
+    assert task.contribution_type == ContributionType.OTHER
+
+
+@pytest.mark.django_db
+def test_task_form_page_shows_the_task_type_field_only_for_credit(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+    url = reverse("tasks:create", kwargs={"project_pk": project.pk})
+
+    assert "Task type" not in client.get(url).content.decode()
+
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    body = client.get(url).content.decode()
+    assert "Task type" in body
+    assert "https://credit.niso.org/" in body

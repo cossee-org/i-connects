@@ -8,7 +8,12 @@ from django import forms
 from django.db.models import Min
 from django.utils.html import format_html
 
-from apps.core.enums import CompletedAs, ContributionType, TaskStatus
+from apps.core.enums import (
+    CompletedAs,
+    ContributionType,
+    TaskStatus,
+    credit_role_choices,
+)
 from apps.projects.models import ProjectMember
 from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
 
@@ -183,18 +188,7 @@ class TaskForm(forms.ModelForm):
         # Show only the container's name in the dropdown (e.g. "In Progress"),
         # not the model's default "{name} (project {id})" representation.
         self.fields["container"].label_from_instance = lambda obj: obj.name
-        # Sort contribution types by name, keeping "Other" last (and any
-        # leading blank choice at the top).
-        ct_field = self.fields["contribution_type"]
-        choices = list(ct_field.choices)
-        blanks = [c for c in choices if c[0] in ("", None)]
-        other = [c for c in choices if c[0] == ContributionType.OTHER]
-        rest = sorted(
-            (c for c in choices if c[0] not in ("", None) and c[0] != ContributionType.OTHER),
-            key=lambda c: c[1],
-        )
-        ct_field.choices = blanks + rest + other
-        ct_field.required = False
+        self._init_task_type(project)
         if project is not None:
             self.fields["container"].queryset = KanbanBoard.objects.filter(project=project)
             members = (
@@ -206,6 +200,31 @@ class TaskForm(forms.ModelForm):
             for field_name in ("assigned_members", "reviewers"):
                 self.fields[field_name].queryset = members
                 self.fields[field_name].label_from_instance = member_label
+
+    def _init_task_type(self, project):
+        """Offer the CRediT roles as the task's type — on CRediT projects only.
+
+        The type is what a contribution is recorded under when the task
+        closes, so it is meaningless anywhere else: on a project tracking
+        contributions any other way the field is dropped from the form
+        entirely and the task keeps whatever it already has.
+        """
+        if project is None or not project.tracks_credit:
+            self.fields.pop("contribution_type", None)
+            return
+        field = self.fields["contribution_type"]
+        field.label = "Task type"
+        field.help_text = (
+            "The CRediT role this task's contributors are credited with "
+            "when it is completed."
+        )
+        current = self.instance.contribution_type if self.instance.pk else None
+        field.choices = [("", "No task type")] + credit_role_choices(current)
+        field.required = False
+
+    def clean_contribution_type(self):
+        """An unpicked task type falls back to the model's own default."""
+        return self.cleaned_data.get("contribution_type") or ContributionType.OTHER
 
     def clean(self):
         """A task cannot be due before it starts.

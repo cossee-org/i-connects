@@ -100,6 +100,18 @@
       {% endif %}
     </div>
 
+    {% if form.contribution_type %}
+      {# Only CRediT projects carry a task type — see TaskForm._init_task_type. #}
+      <div>
+        {% include "_components/form_field.html" with field=form.contribution_type %}
+        <p class="text-xs text-brand-text/60 -mt-2 mb-3">
+          What each role covers:
+          <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
+             class="text-brand-coral hover:underline">credit.niso.org</a>
+        </p>
+      </div>
+    {% endif %}
+
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
 

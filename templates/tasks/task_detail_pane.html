@@ -100,6 +100,7 @@
             <span class="text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</span>
           </span>
         {% endif %}
+        {% include "tasks/partials/task_type_meta.html" with task=task %}
         {# Created by, in the same plain icon-label-value shape as the dates. #}
         <span class="inline-flex items-center gap-1.5">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
