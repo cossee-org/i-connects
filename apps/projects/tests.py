@@ -9,6 +9,7 @@ from django.urls import reverse
 from apps.audit.models import AuditAction, AuditLog
 from apps.core.enums import JoinRequestStatus, MemberPrivileges, ProjectStatus, TaskStatus
 from apps.projects.models import (
+    ContributionTracking,
     Invitation,
     JoinRequest,
     Project,
@@ -147,6 +148,39 @@ def test_create_project_makes_creator_a_pm(client_logged_in, user):
     assert AuditLog.objects.filter(
         action=AuditAction.PROJECT_CREATED, actor=user, project=project
     ).exists()
+
+
+@pytest.mark.django_db
+def test_create_project_can_select_credit_tracking(client_logged_in, user):
+    response = client_logged_in.post(
+        reverse("projects:create"),
+        {
+            "name": "CRediT Project",
+            "description": "A project",
+            "status": ProjectStatus.PLANNING,
+            "is_public": "on",
+            "contribution_tracking": ContributionTracking.CREDIT,
+        },
+    )
+    assert response.status_code in (301, 302)
+    project = Project.objects.get(name="CRediT Project")
+    assert project.contribution_tracking == ContributionTracking.CREDIT
+
+
+@pytest.mark.django_db
+def test_create_project_without_tracking_defaults_to_none(client_logged_in, user):
+    response = client_logged_in.post(
+        reverse("projects:create"),
+        {
+            "name": "Untracked Project",
+            "description": "A project",
+            "status": ProjectStatus.PLANNING,
+            "is_public": "on",
+        },
+    )
+    assert response.status_code in (301, 302)
+    project = Project.objects.get(name="Untracked Project")
+    assert project.contribution_tracking == ContributionTracking.NONE
 
 
 @pytest.mark.django_db
