@@ -433,3 +433,19 @@ def test_profile_contribution_tiles_are_ordered_with_other_last(
     labels = [label for label, _count in context["contribution_tiles"]]
     assert labels[0] == "Conceptualization"
     assert labels[-1] == "Other"
+
+
+@pytest.mark.django_db
+def test_profile_names_the_person_once(client_logged_in, researchers):
+    """The identity card carries the name and the eyebrow; no page header."""
+    nakagawa = researchers["nakagawa"]
+    html = client_logged_in.get(
+        reverse("public_profile", kwargs={"pk": nakagawa.pk})
+    ).content.decode()
+
+    # Once on the page itself — the <title> keeps its own copy.
+    body = html.split("</head>", 1)[1]
+    assert body.count("Shinichi Nakagawa") == 1
+    # The label sits inside the card, above the name it labels.
+    assert "Researcher profile" in body
+    assert body.index("Researcher profile") < body.index("Shinichi Nakagawa")

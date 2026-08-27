@@ -5,15 +5,17 @@
 
 {% block brand_tabs %}{% endblock %}
 
-{% block page_header %}
-  {% include "_components/page_header.html" with eyebrow="Researcher profile" title=profile_user.display_name subtitle=profile_user.institution|default:"" %}
-{% endblock %}
+{# The identity card below names the person and their institution, so a #}
+{# page header would only say it a second time. Its "Researcher profile" #}
+{# eyebrow moves onto that card. #}
+{% block page_header %}{% endblock %}
 
 {% block content %}
 <div class="max-w-3xl mx-auto space-y-6">
 
   {# ---- Identity card ------------------------------------------------- #}
   <div class="brand-card p-6">
+    <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold mb-3">Researcher profile</div>
     <div class="flex items-start gap-4">
       <div class="w-20 h-20 rounded-full bg-brand-navy text-white flex items-center justify-center text-2xl font-semibold shrink-0" aria-hidden="true">
         {{ profile_user.display_name|slice:":1"|upper }}
@@ -97,11 +99,7 @@
   {% if contribution_total == 0 %}
     {% include "_components/empty_state.html" with title="No contributions yet" body="This researcher doesn't have any recorded contributions yet." %}
   {% else %}
-    <div class="brand-card p-6">
-      <h2 class="text-lg font-semibold text-brand-navy mb-3">Contributions</h2>
-      {% include "_components/contribution_tiles.html" with tiles=contribution_tiles %}
-      <div class="mt-4 text-sm text-brand-text/80">Total: {{ contribution_total }}</div>
-    </div>
+    {% include "_components/contribution_card.html" with tiles=contribution_tiles total=contribution_total %}
 
     <div class="brand-card p-6">
       <h2 class="text-lg font-semibold text-brand-navy mb-3">Recent contributions</h2>

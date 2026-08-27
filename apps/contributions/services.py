@@ -157,6 +157,22 @@ def get_user_contribution_counts_by_type(
     return dict(counts)
 
 
+def get_contribution_tiles(
+    user: User, *, project: Optional[Project] = None
+) -> list[tuple[str, int]]:
+    """``(label, count)`` for every contribution type, in the app's order.
+
+    The whole taxonomy, zeros included: the card is read to see the shape
+    of someone's credit, and which roles they have *not* earned is part of
+    that shape. Feeds ``_components/contribution_card.html`` on both the
+    researcher profile and the Contributions module, so the two show the
+    same card rather than two views of the same numbers.
+    """
+    counts = get_user_contribution_counts_by_type(user, project=project)
+    labels = dict(ContributionType.choices)
+    return [(labels[v], counts.get(v, 0)) for v in sort_contribution_types(labels)]
+
+
 def get_user_credit_projects(user: User) -> list[Project]:
     """Projects where this user could hold credit — theirs, tracking CRediT.
 

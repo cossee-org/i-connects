@@ -1354,8 +1354,8 @@ def test_credit_role_choices_keeps_other_last_when_it_is_included():
 
 
 @pytest.mark.django_db
-def test_contributions_module_orders_its_role_tiles(client, user):
-    """"Other" reads as the end of the list, not as an O in the middle."""
+def test_contributions_module_shows_the_profile_card(client, user):
+    """The same card, over the same numbers: whole taxonomy, "Other" last."""
     project, col, pm = _make_project(user, name="Alpha")
     for ctype in (
         ContributionType.OTHER,
@@ -1366,11 +1366,32 @@ def test_contributions_module_orders_its_role_tiles(client, user):
 
     client.force_login(user)
     context = client.get(reverse("contributions:contributions")).context
-    assert [label for label, _count in context["counts_by_type"]] == [
-        "Data curation",
-        "Software",
-        "Other",
-    ]
+    tiles = dict(context["contribution_tiles"])
+    labels = [label for label, _count in context["contribution_tiles"]]
+
+    assert labels[0] == "Conceptualization"
+    assert labels[-1] == "Other"
+    # Roles never earned are shown at zero rather than left out.
+    assert tiles["Data curation"] == 1
+    assert tiles["Investigation"] == 0
+    assert context["contribution_total"] == 3
+
+
+@pytest.mark.django_db
+def test_contributions_module_card_follows_the_project_filter(client, user):
+    project_a, col_a, pm_a = _make_project(user, name="Alpha")
+    project_b, col_b, pm_b = _make_project(user, name="Beta")
+    _credit(project_a, col_a, pm_a, pm_a, ContributionType.SOFTWARE)
+    _credit(project_b, col_b, pm_b, pm_b, ContributionType.METHODOLOGY)
+
+    client.force_login(user)
+    context = client.get(
+        reverse("contributions:contributions"), {"project": project_a.pk}
+    ).context
+    tiles = dict(context["contribution_tiles"])
+    assert tiles["Software"] == 1
+    assert tiles["Methodology"] == 0
+    assert context["contribution_total"] == 1
 
 
 @pytest.mark.django_db

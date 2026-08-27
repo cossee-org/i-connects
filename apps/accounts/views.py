@@ -25,10 +25,9 @@ from django_countries import countries
 
 from apps.audit.services import AuditAction, log_action
 from apps.contributions.services import (
-    get_user_contribution_counts_by_type,
+    get_contribution_tiles,
     get_user_contributions,
 )
-from apps.core.enums import ContributionType, sort_contribution_types
 from apps.projects.services import get_user_public_projects
 
 from .emails import send_password_reset_email, send_welcome_email
@@ -302,16 +301,9 @@ class PublicProfileView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs) -> dict:
         context = super().get_context_data(**kwargs)
         profile_user = self.object
-        counts = get_user_contribution_counts_by_type(profile_user)
-        labels = dict(ContributionType.choices)
-        # The whole taxonomy, zeros included — a profile is read to see the
-        # shape of someone's credit, and which roles they have *not* earned
-        # is part of that shape.
-        context["contribution_tiles"] = [
-            (labels[value], counts.get(value, 0))
-            for value in sort_contribution_types(labels)
-        ]
-        context["contribution_total"] = sum(counts.values())
+        tiles = get_contribution_tiles(profile_user)
+        context["contribution_tiles"] = tiles
+        context["contribution_total"] = sum(count for _label, count in tiles)
         context["recent_contributions"] = get_user_contributions(profile_user)[:15]
         context["public_projects"] = get_user_public_projects(profile_user)
         context["is_self"] = (
