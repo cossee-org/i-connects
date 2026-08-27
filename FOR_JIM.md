@@ -72,10 +72,10 @@ Two pages show it:
 - **Contribution Tracking** on the project (`/projects/<id>/contribution-tracking/`)
   — two views the section switches between, the same way the Tasks board
   switches Kanban / List / Calendar: **Contributions by member** (a grid of
-  every member against all 14 CRediT roles, with a filter to narrow it to
-  the roles and members that have contributions) and **Every contribution**
-  (one row per record, naming its task and who closed it). Visible to every
-  project member.
+  every member against all 14 CRediT roles, sortable by any column and with
+  a filter to narrow it to the roles and members that have contributions)
+  and **Every contribution** (one row per record, naming its task and who
+  closed it). Visible to every project member.
 - **Contributions** in the sidebar (`/contributions/`) — your own credit
   across every project, filterable by project.
 
@@ -239,7 +239,8 @@ link is set. Pattern-based (regex); no API calls, no rate-limit risk.
 3. **Contribution ledger + downloads**
    - Open the project's **Contribution Tracking** tab — Contributions by
      member shows 1 in the column matching the task's type; tick "Only roles
-     and members with contributions" to narrow the grid.
+     and members with contributions" to narrow the grid, and click any
+     column header to sort by it (click again to flip the direction).
    - Switch to Every contribution and click "Edit" on that row to correct its
      role, or "Add contribution" to credit someone the ledger missed.
    - Reopen the task from its detail view and reload — the earned credit is

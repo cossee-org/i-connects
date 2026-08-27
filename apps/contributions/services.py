@@ -245,17 +245,50 @@ def project_member_users(project: Project) -> list[User]:
     )
 
 
+#: How the matrix is ordered when nothing is asked for: the busiest members
+#: first. ``MATRIX_SORT_MEMBER`` and ``MATRIX_SORT_TOTAL`` are the two
+#: columns that are not a CRediT role; any role value sorts by that column.
+MATRIX_SORT_MEMBER = "member"
+MATRIX_SORT_TOTAL = "total"
+MATRIX_SORT_DEFAULT = MATRIX_SORT_TOTAL
+MATRIX_DIRECTION_DEFAULT = "desc"
+
+
+def resolve_matrix_sort(sort: str | None, direction: str | None) -> tuple[str, str]:
+    """Normalise a requested ordering, falling back to the default.
+
+    Anything unrecognised — a role that is not in the taxonomy, a direction
+    that is not asc or desc — lands on the default rather than erroring: a
+    sort is a way of looking at the grid, and a stale link asking for a
+    column that is no longer there should still show the grid.
+    """
+    if sort not in {MATRIX_SORT_MEMBER, MATRIX_SORT_TOTAL} and sort not in dict(
+        ContributionType.choices
+    ):
+        sort = MATRIX_SORT_DEFAULT
+    if direction not in {"asc", "desc"}:
+        # Names read forwards, counts read biggest-first.
+        direction = "asc" if sort == MATRIX_SORT_MEMBER else MATRIX_DIRECTION_DEFAULT
+    return sort, direction
+
+
 def get_project_contributions_matrix(
-    project: Project, *, only_used: bool = False
+    project: Project,
+    *,
+    only_used: bool = False,
+    sort: str | None = None,
+    direction: str | None = None,
 ) -> dict:
     """Build a members × CRediT-role matrix for a project.
 
     Returns a dict with:
         - ``types``:  list of ``(value, label)`` for the columns.
         - ``rows``:   list of ``{"user": User, "counts": {type: int},
-                      "total": int}``, sorted by total desc then by name.
+                      "total": int}`` in the requested order.
         - ``totals``: ``{type: int}`` column totals, plus ``"grand_total"``.
                       Underscore-free keys so templates can reach them.
+        - ``sort`` / ``direction``: the ordering actually applied, so the
+          table can mark the column it sorted by.
 
     By default the grid is the whole picture: every CRediT role across the
     top whether or not this project has used it, and every current member
@@ -268,11 +301,16 @@ def get_project_contributions_matrix(
     column, members with a non-zero row. The page offers it as a filter for
     when the full grid is mostly empty.
 
+    ``sort`` names a column — ``"member"``, ``"total"``, or a contribution
+    type — and ``direction`` is ``"asc"`` or ``"desc"``. Members' names
+    break every tie, so the order is stable however the counts fall.
+
     Either way, a role off the taxonomy that the project *has* used (a task
     left as "Other", say) keeps its column, and anyone who earned credit
     before leaving the project keeps their row.
     """
     labels = dict(ContributionType.choices)
+    sort, direction = resolve_matrix_sort(sort, direction)
 
     records = list(
         ContributionRecord.objects.filter(project=project)
@@ -321,7 +359,7 @@ def get_project_contributions_matrix(
     ]
     if only_used:
         rows = [row for row in rows if row["total"]]
-    rows.sort(key=lambda r: (-r["total"], user_sort_key(r["user"])))
+    _sort_matrix_rows(rows, sort=sort, direction=direction)
 
     totals = {v: column_totals[v] for v in type_values}
     totals["grand_total"] = grand_total
@@ -329,7 +367,28 @@ def get_project_contributions_matrix(
         "types": [(v, labels.get(v, v)) for v in type_values],
         "rows": rows,
         "totals": totals,
+        "sort": sort,
+        "direction": direction,
     }
+
+
+def _sort_matrix_rows(rows: list[dict], *, sort: str, direction: str) -> None:
+    """Order the matrix rows in place, names breaking every tie.
+
+    Sorted by name first and then by the requested column, which is stable
+    in Python — so members who sit level on that column stay in name order
+    rather than in whatever order the records happened to arrive.
+    """
+    rows.sort(key=lambda row: user_sort_key(row["user"]))
+    if sort == MATRIX_SORT_MEMBER:
+        if direction == "desc":
+            rows.reverse()
+        return
+    if sort == MATRIX_SORT_TOTAL:
+        key = lambda row: row["total"]  # noqa: E731
+    else:
+        key = lambda row: row["counts"].get(sort, 0)  # noqa: E731
+    rows.sort(key=key, reverse=direction == "desc")
 
 
 def user_sort_key(user: User) -> str:

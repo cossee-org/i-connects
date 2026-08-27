@@ -873,10 +873,15 @@ class ContributionTrackingMixin(ProjectMemberRequiredMixin, ProjectContextMixin)
         if self.project.tracks_credit:
             # ``?used=1`` trims the grid to roles and members with something
             # in them; the default is the whole taxonomy and every member.
+            # ``?sort=`` names a column and ``?dir=`` its direction — both
+            # fall back to the default rather than erroring on a stale link.
             only_used = self.request.GET.get("used") == "1"
             context["only_used"] = only_used
             context["matrix"] = get_project_contributions_matrix(
-                self.project, only_used=only_used
+                self.project,
+                only_used=only_used,
+                sort=self.request.GET.get("sort"),
+                direction=self.request.GET.get("dir"),
             )
             context["records"] = get_project_contributions(self.project).order_by(
                 "-closed_at", "-id"

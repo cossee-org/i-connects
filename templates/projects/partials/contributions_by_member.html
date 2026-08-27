@@ -23,7 +23,7 @@
       <input type="checkbox" id="matrix-only-used" class="checkbox checkbox-sm"
              {% if only_used %}checked{% endif %}
              hx-get="{% url 'projects:contributions_by_member' pk=project.pk %}"
-             hx-vals='js:{used: event.target.checked ? "1" : "0"}'
+             hx-vals='js:{used: event.target.checked ? "1" : "0", sort: "{{ matrix.sort }}", dir: "{{ matrix.direction }}"}'
              hx-target="#contributions-by-member-container"
              hx-swap="innerHTML">
       <span class="label-text text-sm text-brand-text/70">Only roles and members with contributions</span>
@@ -41,13 +41,17 @@
   <div class="brand-card overflow-x-auto">
     <table class="table">
       <caption class="sr-only">Contributions by member and CRediT role</caption>
+      {% comment %}
+        Every column sorts, so a lead can ask who has the most of a role as
+        easily as who has the most overall. See {% matrix_sort_header %}.
+      {% endcomment %}
       <thead class="bg-brand-lighter text-brand-navy">
         <tr>
-          <th scope="col">Member</th>
+          {% matrix_sort_header matrix "member" "Member" project.pk only_used align="left" %}
           {% for value, label in matrix.types %}
-            <th scope="col" class="text-right font-medium">{{ label }}</th>
+            {% matrix_sort_header matrix value label project.pk only_used %}
           {% endfor %}
-          <th scope="col" class="text-right">Total</th>
+          {% matrix_sort_header matrix "total" "Total" project.pk only_used %}
         </tr>
       </thead>
       <tbody>

@@ -1099,3 +1099,129 @@ def test_the_matrix_download_carries_the_whole_taxonomy(client, user):
     )
     header = lines[0].split(",")
     assert len(header) == len(CREDIT_ROLES) + 2
+
+
+# ---------------------------------------------------------------------------
+# Sorting the matrix
+# ---------------------------------------------------------------------------
+
+
+def _matrix_names(response):
+    return [user_display_name(row["user"]) for row in response.context["matrix"]["rows"]]
+
+
+@pytest.fixture
+def sortable_project(user, other_user, pm_user):
+    """Alice 2 software, Bob 1 software + 1 methodology, PM nothing."""
+    project, col, pm = _make_project(user)
+    bob = _member_for(project, other_user)
+    _member_for(project, pm_user)  # named PM by the fixture; uncredited
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    _credit(project, col, pm, bob, ContributionType.SOFTWARE)
+    _credit(project, col, pm, bob, ContributionType.METHODOLOGY)
+    return project
+
+
+@pytest.mark.django_db
+def test_the_matrix_sorts_by_total_desc_by_default(client, user, sortable_project):
+    client.force_login(user)
+    resp = client.get(_by_member_url(sortable_project))
+    assert resp.context["matrix"]["sort"] == "total"
+    assert resp.context["matrix"]["direction"] == "desc"
+    # Alice 2, Bob 2, PM 0 — the tie holding its name order.
+    assert _matrix_names(resp) == ["Alice", "Bob", "PM"]
+
+
+@pytest.mark.django_db
+def test_the_matrix_sorts_by_member_name(client, user, sortable_project):
+    client.force_login(user)
+    url = _by_member_url(sortable_project)
+
+    assert _matrix_names(client.get(url, {"sort": "member"})) == [
+        "Alice",
+        "Bob",
+        "PM",
+    ]
+    assert _matrix_names(client.get(url, {"sort": "member", "dir": "desc"})) == [
+        "PM",
+        "Bob",
+        "Alice",
+    ]
+
+
+@pytest.mark.django_db
+def test_the_matrix_sorts_by_one_role(client, user, sortable_project):
+    """Who has the most of a role, not just the most overall."""
+    client.force_login(user)
+    url = _by_member_url(sortable_project)
+
+    # Alice has two Software, Bob one, PM none.
+    assert _matrix_names(client.get(url, {"sort": ContributionType.SOFTWARE})) == [
+        "Alice",
+        "Bob",
+        "PM",
+    ]
+    # Only Bob has Methodology, so he leads it however the totals fall.
+    assert _matrix_names(client.get(url, {"sort": ContributionType.METHODOLOGY})) == [
+        "Bob",
+        "Alice",
+        "PM",
+    ]
+
+
+@pytest.mark.django_db
+def test_ties_hold_their_name_order_whatever_the_sort(client, user, sortable_project):
+    """Alice and Bob both total 2; their name order breaks the tie."""
+    client.force_login(user)
+    rows = client.get(
+        _by_member_url(sortable_project), {"sort": "total", "dir": "asc"}
+    ).context["matrix"]["rows"]
+    names = [user_display_name(row["user"]) for row in rows]
+    assert names == ["PM", "Alice", "Bob"]
+
+
+@pytest.mark.django_db
+def test_an_unknown_sort_falls_back_to_the_default(client, user, sortable_project):
+    """A stale link should still show the grid."""
+    client.force_login(user)
+    for params in (
+        {"sort": "NOT_A_ROLE"},
+        {"sort": "total", "dir": "sideways"},
+        {"sort": ""},
+    ):
+        matrix = client.get(_by_member_url(sortable_project), params).context["matrix"]
+        assert matrix["sort"] in {"total", params.get("sort")}
+        assert matrix["direction"] in {"asc", "desc"}
+
+
+@pytest.mark.django_db
+def test_the_sort_and_the_filter_keep_each_other(client, user, sortable_project):
+    """Neither control throws the other away."""
+    client.force_login(user)
+    resp = client.get(
+        _by_member_url(sortable_project),
+        {"sort": "member", "dir": "desc", "used": "1"},
+    )
+    matrix = resp.context["matrix"]
+    assert resp.context["only_used"] is True
+    assert matrix["sort"] == "member"
+    assert matrix["direction"] == "desc"
+    # PM has nothing, so the filter drops them; the sort still reverses.
+    assert [user_display_name(row["user"]) for row in matrix["rows"]] == [
+        "Bob",
+        "Alice",
+    ]
+
+
+@pytest.mark.django_db
+def test_the_headers_carry_the_sort_controls(client, user, sortable_project):
+    client.force_login(user)
+    body = client.get(_by_member_url(sortable_project)).content.decode()
+    # The sorted column is marked for a screen reader and flips on the next
+    # click; an unsorted one starts at its own natural end.
+    assert 'aria-sort="descending"' in body
+    assert 'aria-sort="none"' in body
+    assert '"sort": "total", "dir": "asc"' in body
+    assert '"sort": "member", "dir": "asc"' in body
+    assert f'"sort": "{ContributionType.SOFTWARE}", "dir": "desc"' in body
