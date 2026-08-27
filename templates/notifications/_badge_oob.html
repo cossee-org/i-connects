@@ -1,0 +1,10 @@
+{% comment %}
+  Out-of-band refresh for both unread badges in the page chrome: the one on
+  the top bar's bell and the one on the sidebar's Notifications link. Any
+  response that changes the unread count includes this so the two never
+  drift apart.
+
+  Callers pass ``unread_count``.
+{% endcomment %}
+<span id="notification-badge" hx-swap-oob="innerHTML">{% include "notifications/_count.html" %}</span>
+<span id="sidebar-notification-badge" hx-swap-oob="innerHTML">{% include "notifications/_count.html" %}</span>

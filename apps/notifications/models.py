@@ -50,3 +50,13 @@ class Notification(models.Model):
 
     def __str__(self) -> str:
         return self.message[:60]
+
+    @property
+    def headline(self) -> str:
+        """The first line of ``message``.
+
+        ``services.create_notification`` stores the title and body joined by
+        a blank line, so compact renderings (the top-bar dropdown) can show
+        the title alone rather than truncating the two run together.
+        """
+        return self.message.split("\n", 1)[0]

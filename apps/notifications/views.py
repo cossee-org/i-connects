@@ -6,7 +6,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
@@ -37,13 +36,25 @@ def _is_admin(user) -> bool:
 @login_required
 @require_GET
 def notification_list(request):
+    # ``?filter=unread`` backs the "Unread" tab the template renders next to
+    # "All"; anything else (including no value) falls through to everything.
+    current_filter = request.GET.get("filter") or "all"
     qs = Notification.objects.for_user(request.user)
+    if current_filter == "unread":
+        qs = qs.filter(read=False)
     paginator = Paginator(qs, 25)
     page = paginator.get_page(request.GET.get("page"))
     return render(
         request,
         "notifications/list.html",
-        {"page_obj": page, "notifications": page.object_list},
+        {
+            "page_obj": page,
+            "notifications": page.object_list,
+            "current_filter": current_filter,
+            "unread_count": Notification.objects.unread_for_user(
+                request.user
+            ).count(),
+        },
     )
 
 
@@ -53,9 +64,10 @@ def notification_list(request):
 @login_required
 @require_GET
 def notification_badge(request):
+    # Always renders, including at zero: the partial is a pair of
+    # out-of-band swaps, so an empty response would leave a stale count
+    # sitting in the chrome after the last notification is read elsewhere.
     count = Notification.objects.unread_for_user(request.user).count()
-    if count == 0:
-        return HttpResponse("")
     return render(request, "notifications/badge.html", {"unread_count": count})
 
 
@@ -67,7 +79,12 @@ def notification_dropdown(request):
     return render(
         request,
         "notifications/dropdown.html",
-        {"notifications": qs, "unread_count": unread_count},
+        # Opening the panel is also a chance to re-sync the two badges.
+        {
+            "notifications": qs,
+            "unread_count": unread_count,
+            "swap_oob_badge": True,
+        },
     )
 
 

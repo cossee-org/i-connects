@@ -3,8 +3,8 @@
   id="notification-{{ notification.id }}" so the "mark as read" button
   can target it for an in-place swap.
 
-  If ``swap_oob_badge`` is true, we also include an out-of-band badge
-  update so the navbar count stays in sync.
+  If ``swap_oob_badge`` is true, we also include out-of-band badge
+  updates so the top-bar and sidebar counts stay in sync.
 {% endcomment %}
 <div id="notification-{{ notification.id }}"
      class="flex items-start gap-3 p-4 hover:bg-brand-lighter/60 transition-colors
@@ -49,11 +49,4 @@
   </div>
 </div>
 
-{% if swap_oob_badge %}
-  {# Out-of-band update for the navbar badge. #}
-  <span id="notification-badge" hx-swap-oob="innerHTML">
-    {% if unread_count and unread_count > 0 %}
-      <span class="badge badge-sm bg-brand-coral border-brand-coral text-white">{{ unread_count }}</span>
-    {% endif %}
-  </span>
-{% endif %}
+{% if swap_oob_badge %}{% include "notifications/_badge_oob.html" %}{% endif %}
