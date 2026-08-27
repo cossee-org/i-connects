@@ -36,8 +36,11 @@ test checklist.
   institution, city, country, public projects, and CRediT contributions.
 - **Role-differentiated dashboard** — "My active tasks" + "Pending your
   approval" widgets for authenticated users.
-- **Forms builder** — JSON-schema-driven per-project custom forms
-  (jsoneditor).
+- **Surveys** — JSON-schema-driven per-project custom surveys
+  (jsoneditor). Placeholder in the UI for now; the builder screens are
+  behind the "Coming soon" module page. Still `forms_builder` internally.
+- **Communications** — placeholder module: a personal page in the sidebar
+  and a section on each project, both empty for now.
 - **Wiki** — per-project documentation pages under the Project view:
   markdown with `[[wiki links]]`, a contents list per page, full
   revision history with per-edit diffs and restore, lead-only page
@@ -145,7 +148,8 @@ iconnects-django/
     notifications/  In-app notification centre
     notes/          Markdown notes per project
     wiki/           Project wiki pages + revision history
-    forms_builder/  Dynamic JSON-schema forms
+    forms_builder/  Dynamic JSON-schema surveys ("Surveys" in the UI)
+    communications/ Placeholder module (sidebar page + project section)
     contributions/  ContributionRecord ledger + matrix / list downloads
     audit/          Immutable AuditLog with viewer
   templates/

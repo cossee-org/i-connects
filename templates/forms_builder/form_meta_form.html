@@ -6,9 +6,9 @@
 
 {% block page_header %}
   {% if mode == "create" %}
-    {% include "_components/page_header.html" with title="Create form" subtitle="Define a reusable form you can attach to projects or tasks." %}
+    {% include "_components/page_header.html" with title="Create survey" subtitle="Define a reusable survey you can attach to projects or tasks." %}
   {% else %}
-    {% include "_components/page_header.html" with title="Edit form" subtitle="Update the form metadata." %}
+    {% include "_components/page_header.html" with title="Edit survey" subtitle="Update the survey metadata." %}
   {% endif %}
 {% endblock %}
 
@@ -23,7 +23,7 @@
           <span class="label-text text-brand-navy font-medium">Display name <span class="text-brand-coral">*</span></span>
         </label>
         <input type="text" name="display_name" id="id_display_name" required
-               placeholder="e.g. Screening form"
+               placeholder="e.g. Screening survey"
                class="input input-bordered w-full" />
       </div>
     {% else %}

@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Forms &mdash; {{ project.name }}{% endblock %}
+{% block title %}Surveys &mdash; {{ project.name }}{% endblock %}
 
 {% block page_header %}
-  {% include "_components/page_header.html" with title="Attached form" subtitle="The form version attached to this project." eyebrow=project.name %}
+  {% include "_components/page_header.html" with title="Attached survey" subtitle="The survey version attached to this project." eyebrow=project.name %}
 {% endblock %}
 
 {% block content %}
@@ -17,7 +17,7 @@
             v{{ current_version.version }}
           </span>
         </div>
-        <div class="text-xs text-brand-text/60 mt-1">Form #{{ current_version.form_id }}</div>
+        <div class="text-xs text-brand-text/60 mt-1">Survey #{{ current_version.form_id }}</div>
       </div>
       <a class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
          href="{% url 'forms_builder:project_fill' project_pk=project.pk %}">
@@ -25,14 +25,14 @@
       </a>
     </div>
   {% else %}
-    <p class="text-brand-text/70 mb-5">No form is attached to this project yet.</p>
+    <p class="text-brand-text/70 mb-5">No survey is attached to this project yet.</p>
   {% endif %}
 
   <form method="post" class="space-y-2">
     {% csrf_token %}
     <div class="form-control w-full mb-4">
       <label class="label pb-1" for="{{ attach_form.form_version.id_for_label }}">
-        <span class="label-text text-brand-navy font-medium">Choose a form version</span>
+        <span class="label-text text-brand-navy font-medium">Choose a survey version</span>
       </label>
       {{ attach_form.form_version }}
       {% if attach_form.form_version.errors %}

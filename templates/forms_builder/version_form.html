@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block page_header %}
-  {% include "_components/page_header.html" with title="New version" subtitle="Define the schema for a new version of this form." eyebrow="Form" %}
+  {% include "_components/page_header.html" with title="New version" subtitle="Define the schema for a new version of this survey." eyebrow="Survey" %}
 {% endblock %}
 
 {% block content %}
@@ -101,7 +101,7 @@
   }
 
   mountEditor("json-schema-editor", "id_json_schema",
-              { title: "New form", type: "object", properties: {} });
+              { title: "New survey", type: "object", properties: {} });
   mountEditor("ui-schema-editor", "id_ui_schema", {});
 })();
 </script>

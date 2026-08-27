@@ -252,6 +252,31 @@ page is renamed, so links into the wiki keep working; the `[[link]]` form
 resolves on the current title, so a renamed page is still reachable by its
 new name from inside the wiki.
 
+### 20. Surveys renamed, Communications added
+Navigation changes, no behaviour behind them yet:
+
+- **Forms is now Surveys**, everywhere it shows: the project tab, the module
+  page, and the flash messages / labels on the builder screens beneath it.
+  The rename is user-facing only — the app is still `forms_builder`, and the
+  routes (`/forms/`, `/projects/<id>/forms/`) and the `Form` / `FormVersion`
+  models are untouched, so nothing that links to them broke.
+- **Surveys is back in the sidebar**, in the slot it held before it was
+  hidden, now under its new name. Its page is the "Coming soon" module page
+  it already was.
+- **Communications is a new module**, empty on purpose: a personal page in
+  the sidebar directly after Surveys, and a section on every project, after
+  the project's Surveys tab. Both render "Coming soon"; the project section
+  is members-only like every other project tab.
+
+Surveys also picked up its own icon. It had been sharing the clipboard with
+Tasks — the same SVG path in both navs — which was hard to read as two
+different things once they sat next to each other.
+
+Worth knowing: the per-project **mailing list** (item 16) is the obvious
+thing to fold into Communications when it grows content. It is still at
+`/projects/<id>/mailing-list/` and unlinked from the tab strip, so it is
+reachable only by URL today.
+
 ---
 
 ## Golden-path test checklist
@@ -307,6 +332,13 @@ new name from inside the wiki.
    - As a lead, tick **Lock this page** and save. Sign in as a contributor on
      the same project: the page still reads, but Edit is gone and hitting the
      edit URL directly gives a 403.
+8. **Surveys + Communications**
+   - The sidebar reads … Requests, **Surveys**, **Communications**, Project
+     discovery. Both open a "Coming soon" page; nothing says "Forms" any more.
+   - A project's tab strip reads … Wiki, **Surveys**, **Communications**,
+     Settings. Both are empty for now.
+   - A non-member hitting `/projects/<id>/communications/` gets a 403.
+
 
 ---
 
