@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load contribution_tags %}
 
 {% block title %}Contributions &mdash; i&bull;CONNECTS{% endblock %}
 
@@ -123,6 +124,7 @@
             <th scope="col">Task</th>
             <th scope="col">Role</th>
             <th scope="col">Completed</th>
+            <th scope="col">Closed by</th>
           </tr>
         </thead>
         <tbody>
@@ -136,8 +138,15 @@
                 <a href="{% url 'tasks:detail' project_pk=record.project_id pk=record.task_id %}"
                    class="text-brand-navy hover:text-brand-coral">{{ record.task.name }}</a>
               </td>
-              <td>{{ record.get_contribution_type_display }}</td>
+              <td>
+                {{ record.get_contribution_type_display }}
+                {% if record.added_by_hand %}
+                  <span class="ml-1 inline-flex items-center rounded-full border border-gray-300 px-2 py-0.5 text-xs text-brand-text/60"
+                        title="Entered by a project lead rather than earned on a task closing">Added by hand</span>
+                {% endif %}
+              </td>
               <td class="whitespace-nowrap">{{ record.closed_at|date:"M j, Y" }}</td>
+              <td class="{% if not record.verified_by %}text-brand-text/50 italic{% endif %}">{{ record|closed_by|capfirst }}</td>
             </tr>
           {% endfor %}
         </tbody>

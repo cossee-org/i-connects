@@ -46,7 +46,7 @@
               {% endif %}
             </td>
             <td class="whitespace-nowrap">{{ record.closed_at|date:"M j, Y" }}</td>
-            <td>{% if record.verified_by %}{{ record.verified_by|display_name }}{% else %}<span class="text-brand-text/40">&mdash;</span>{% endif %}</td>
+            <td class="{% if not record.verified_by %}text-brand-text/50 italic{% endif %}">{{ record|closed_by|capfirst }}</td>
             {% if is_project_manager %}
               <td class="text-right">
                 <button type="button" class="btn btn-ghost btn-xs gap-1"

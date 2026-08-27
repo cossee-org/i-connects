@@ -79,7 +79,7 @@
               <span class="text-brand-text/70">({{ rec.get_contribution_type_display }})</span>
             </div>
             <div class="text-xs text-brand-text/60 mt-0.5">
-              {{ rec.closed_at|date:"M j, Y" }}{% if rec.verified_by %} &middot; verified{% endif %}
+              {{ rec.closed_at|date:"M j, Y" }} &middot; closed by {{ rec|closed_by }}
             </div>
           </li>
         {% endfor %}

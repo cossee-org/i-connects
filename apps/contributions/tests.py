@@ -1225,3 +1225,103 @@ def test_the_headers_carry_the_sort_controls(client, user, sortable_project):
     assert '"sort": "total", "dir": "asc"' in body
     assert '"sort": "member", "dir": "asc"' in body
     assert f'"sort": "{ContributionType.SOFTWARE}", "dir": "desc"' in body
+
+
+# ---------------------------------------------------------------------------
+# Who closed the task the credit was earned on
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_the_project_list_names_who_closed_the_task(client, user, other_user):
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice])
+    mark_own_done(task=task, member=alice)
+    close_task(task=task, closed_by=lead)
+
+    client.force_login(user)
+    body = client.get(_every_url(project)).content.decode()
+    assert "Closed by" in body
+    # The lead who closed it, not the member who earned the credit.
+    assert ContributionRecord.objects.get().verified_by_id == user.pk
+    assert "Alice" in body
+
+
+@pytest.mark.django_db
+def test_the_contributions_module_names_who_closed_the_task(client, user, other_user):
+    """Your own credit says who credited you."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice])
+    mark_own_done(task=task, member=alice)
+    close_task(task=task, closed_by=lead)
+
+    client.force_login(other_user)
+    body = client.get(reverse("contributions:contributions")).content.decode()
+    assert "Closed by" in body
+    assert "Alice" in body  # the lead, on Bob's own page
+
+
+@pytest.mark.django_db
+def test_a_reviewers_final_signoff_is_recorded_as_the_closer(client, user, other_user):
+    """The last review closes the task, so the reviewer is who closed it."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice], reviewers=[lead])
+    log = mark_own_done(task=task, member=alice)
+    mark_reviewed(task_log=log, reviewer=lead)
+
+    assert ContributionRecord.objects.get().verified_by_id == user.pk
+
+
+@pytest.mark.django_db
+def test_a_hand_entered_record_names_who_entered_it(client, user, other_user):
+    project, col, lead = _make_project(user)
+    _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[lead])
+    add_contribution(
+        task=task,
+        user=other_user,
+        contribution_type=ContributionType.RESOURCES,
+        actor=user,
+    )
+
+    client.force_login(user)
+    body = client.get(_every_url(project)).content.decode()
+    # Named, and badged so it does not read as credit the task earned.
+    assert "Alice" in body
+    assert "Added by hand" in body
+
+
+@pytest.mark.django_db
+def test_a_closer_whose_account_is_gone_is_still_reported(client, user, other_user):
+    """SET_NULL outlives the account; say so rather than leaving it blank."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice])
+    mark_own_done(task=task, member=alice)
+    close_task(task=task, closed_by=lead)
+
+    record = ContributionRecord.objects.get()
+    record.verified_by = None
+    record.save(update_fields=["verified_by"])
+
+    client.force_login(other_user)
+    body = client.get(reverse("contributions:contributions")).content.decode()
+    assert "A former member" in body
+
+
+@pytest.mark.django_db
+def test_the_public_profile_names_the_closer(client, user, other_user):
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice])
+    mark_own_done(task=task, member=alice)
+    close_task(task=task, closed_by=lead)
+
+    client.force_login(other_user)
+    body = client.get(
+        reverse("public_profile", kwargs={"pk": other_user.pk})
+    ).content.decode()
+    assert "closed by Alice" in body

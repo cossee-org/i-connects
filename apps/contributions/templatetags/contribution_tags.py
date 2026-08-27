@@ -34,6 +34,28 @@ def display_name(user) -> str:
     return user_display_name(user)
 
 
+@register.filter
+def closed_by(record) -> str:
+    """Name the person behind a contribution record.
+
+    Normally the lead who closed the task the credit was earned on — or,
+    where a reviewer's sign-off was the last one outstanding and closed it,
+    that reviewer. On a record a lead entered by hand it is whoever entered
+    it; the row badges itself as hand-entered, so the two do not blur.
+
+    ``verified_by`` is SET_NULL, so the record outlives the account: say "a
+    former member" rather than leaving the column blank, the same way the
+    review cell reports a verdict whose reviewer has gone. Lower case, so it
+    reads inside a sentence — a column standing on its own pairs this with
+    ``capfirst``.
+    """
+    if record is None:
+        return ""
+    if record.verified_by is None:
+        return "a former member"
+    return display_name(record.verified_by)
+
+
 @register.inclusion_tag("projects/partials/matrix_sort_header.html")
 def matrix_sort_header(matrix, key, label, project_pk, only_used, align="right"):
     """One sortable column header of the contributions matrix.
