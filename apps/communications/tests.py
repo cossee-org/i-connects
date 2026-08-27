@@ -1,4 +1,4 @@
-"""Tests for the communications module and the Surveys rename.
+"""Tests for the communications module and the Survey rename.
 
 The module itself is empty, so what there is to guard is its shape: both
 surfaces answer, the project one is members-only, and the navigation names
@@ -47,7 +47,7 @@ def _project_url(project):
 # The sidebar
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-def test_the_sidebar_carries_surveys_then_communications(client, user):
+def test_the_sidebar_carries_survey_then_communication(client, user):
     client.force_login(user)
 
     content = client.get(reverse("projects:dashboard")).content.decode()
@@ -57,8 +57,10 @@ def test_the_sidebar_carries_surveys_then_communications(client, user):
 
     assert reverse("forms_builder:form_list") in sidebar
     assert reverse("communications:list") in sidebar
-    # Communications sits after Surveys, and the old label is gone.
-    assert sidebar.index("Surveys") < sidebar.index("Communications")
+    # Communication sits after Survey, and no label is plural or stale.
+    assert sidebar.index("Survey") < sidebar.index("Communication")
+    assert "Surveys" not in sidebar
+    assert "Communications" not in sidebar
     assert "Forms" not in sidebar
 
 
@@ -82,7 +84,7 @@ def test_the_sidebar_marks_each_module_active_on_its_own_page(client, user):
 # The module page
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-def test_the_communications_page_needs_a_signed_in_user(client):
+def test_the_communication_page_needs_a_signed_in_user(client):
     response = client.get(reverse("communications:list"))
 
     assert response.status_code == 302
@@ -90,26 +92,28 @@ def test_the_communications_page_needs_a_signed_in_user(client):
 
 
 @pytest.mark.django_db
-def test_the_communications_page_is_an_empty_state_for_now(client, user):
+def test_the_communication_page_is_an_empty_state_for_now(client, user):
     client.force_login(user)
 
     response = client.get(reverse("communications:list"))
     content = response.content.decode()
 
     assert response.status_code == 200
-    assert "Communications" in content
+    assert ">Communication</h1>" in content
+    assert ">Communications</h1>" not in content
     assert "Coming soon" in content
 
 
 @pytest.mark.django_db
-def test_the_surveys_page_answers_under_its_new_name(client, user):
+def test_the_survey_page_answers_under_its_new_name(client, user):
     client.force_login(user)
 
     response = client.get(reverse("forms_builder:form_list"))
     content = response.content.decode()
 
     assert response.status_code == 200
-    assert "Surveys" in content
+    assert ">Survey</h1>" in content
+    assert ">Surveys</h1>" not in content
     assert ">Forms</h1>" not in content
 
 
@@ -117,7 +121,7 @@ def test_the_surveys_page_answers_under_its_new_name(client, user):
 # The project section
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-def test_a_member_sees_the_project_communications_section(client, project, pm_user):
+def test_a_member_sees_the_project_communication_section(client, project, pm_user):
     client.force_login(pm_user)
 
     response = client.get(_project_url(project))
@@ -158,8 +162,10 @@ def test_the_project_tab_strip_names_both_modules(client, project, pm_user):
     assert _project_url(project) in content
     strip = content[content.index('aria-label="Project sections"'):]
     strip = strip[: strip.index("</nav>")]
-    assert "Surveys" in strip
-    assert "Communications" in strip
+    assert "Survey" in strip
+    assert "Communication" in strip
+    assert "Surveys" not in strip
+    assert "Communications" not in strip
     assert "Forms" not in strip
-    # Communications comes after Surveys, and Settings stays last.
-    assert strip.index("Surveys") < strip.index("Communications") < strip.index("Settings")
+    # Communication comes after Survey, and Settings stays last.
+    assert strip.index("Survey") < strip.index("Communication") < strip.index("Settings")
