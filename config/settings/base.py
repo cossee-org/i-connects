@@ -89,6 +89,9 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # ---------------------------------------------------------------------------
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Turns "column ... does not exist" into "run migrate". Removes itself
+    # from the chain when DEBUG is off — see apps.core.middleware.
+    "apps.core.middleware.UnappliedMigrationsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",

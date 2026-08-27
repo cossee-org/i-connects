@@ -63,6 +63,22 @@ Create a superuser:
 docker compose exec web python manage.py createsuperuser
 ```
 
+### After pulling new code
+
+The `web` service mounts the repo and serves it with `runserver`, so a
+`git pull` swaps the code under the running server — but migrations only run
+when the container starts. Pull anything that touches a model and the schema
+is left behind, which used to surface as `column ... does not exist`. Apply
+them without a restart:
+
+```bash
+docker compose exec web python manage.py migrate
+```
+
+If you forget, the site says so: while anything is outstanding every page is
+replaced by a note naming the migrations and this command. That page is
+`DEBUG`-only, and clears itself as soon as `migrate` finishes.
+
 ## Run locally without Docker
 
 Prerequisites: Python 3.12, Node 20+, Postgres 16, Redis 7.
