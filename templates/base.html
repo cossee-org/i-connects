@@ -269,6 +269,18 @@
            hx-get="{% url 'notifications:badge' %}"
            hx-trigger="every 60s"
            hx-swap="none">
+        {% comment %}
+          The count sits beside the bell rather than on top of it. These
+          top-bar buttons are 28px square, and a pill big enough to read
+          covered most of the glyph when it was pinned to the corner — so
+          the button simply grows to the right when there is something to
+          show, and is identical to its neighbours when there is not.
+
+          The button is named for assistive tech by its sr-only text rather
+          than aria-label, because aria-label would override the count and
+          hide it; the wrapper is a polite live region so the number is
+          announced when the poll changes it (A11Y_GUIDE.md §5).
+        {% endcomment %}
         <button @click="notifOpen = !notifOpen"
                 hx-get="{% url 'notifications:dropdown' %}"
                 hx-target="#notification-dropdown-panel"
@@ -277,20 +289,20 @@
                 {% comment %}The tooltip drops downward, right over the panel this button opens.{% endcomment %}
                 :class="{ 'hover-tooltip': !notifOpen }"
                 :aria-expanded="notifOpen"
-                data-tooltip="Notifications" aria-label="Notifications">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0">
+                data-tooltip="Notifications">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round"
                   d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
           </svg>
+          <span class="sr-only">Notifications</span>
+          {% comment %}
+            inline-flex, not a plain span: as a bare flex item the wrapper
+            would establish the button's own 24px line box and stretch the
+            button past the 28px of its neighbours, even though the pill
+            inside is 15px.
+          {% endcomment %}
+          <span id="notification-badge" class="inline-flex items-center" aria-live="polite">{% include "notifications/_count.html" with unread_count=unread_notifications_count pill_class="ml-1" %}</span>
         </button>
-        {% comment %}
-          Offsets are inline rather than Tailwind's negative-inset utilities:
-          the built stylesheet ships none of those, and an ungenerated class
-          would silently drop the badge back into the button's corner
-          (apps/core/tests.py guards the sized ones).
-        {% endcomment %}
-        <span id="notification-badge" class="pointer-events-none"
-              style="position:absolute;top:-0.3rem;right:-0.3rem;">{% include "notifications/_count.html" with unread_count=unread_notifications_count %}</span>
 
         <div x-cloak x-show="notifOpen"
              x-transition:enter="transition ease-out duration-150"

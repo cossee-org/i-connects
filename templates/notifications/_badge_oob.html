@@ -4,7 +4,10 @@
   response that changes the unread count includes this so the two never
   drift apart.
 
+  The top bar's pill sits inline beside the bell, so it carries its own
+  left margin — see notifications/_count.html.
+
   Callers pass ``unread_count``.
 {% endcomment %}
-<span id="notification-badge" hx-swap-oob="innerHTML">{% include "notifications/_count.html" %}</span>
+<span id="notification-badge" hx-swap-oob="innerHTML">{% include "notifications/_count.html" with pill_class="ml-1" %}</span>
 <span id="sidebar-notification-badge" hx-swap-oob="innerHTML">{% include "notifications/_count.html" %}</span>

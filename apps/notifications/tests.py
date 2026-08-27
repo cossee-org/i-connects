@@ -102,11 +102,33 @@ def test_chrome_shows_notifications_link_and_count(client, user):
     body = client.get(reverse("projects:dashboard")).content.decode()
 
     assert reverse("notifications:list") in body
-    assert 'aria-label="Notifications"' in body
+    assert 'data-tooltip="Notifications"' in body
     assert 'id="notification-badge"' in body
     assert 'id="sidebar-notification-badge"' in body
     # Unread count painted server-side on first load.
-    assert body.count(">1</span>") >= 2
+    assert body.count(">1<") >= 2
+
+
+@pytest.mark.django_db
+def test_topbar_count_sits_beside_the_bell_not_over_it(client, user):
+    """The pill is inside the button, after the glyph — never on top of it.
+
+    It is also the button's only visible text, so the button is named by
+    sr-only text instead of an aria-label that would hide the count.
+    """
+    create_notification(users=[user], title="Ping", body="")
+    client.force_login(user)
+    body = client.get(reverse("projects:dashboard")).content.decode()
+
+    button = body.split('data-tooltip="Notifications"', 1)[1].split("</button>", 1)[0]
+    assert "<svg" in button
+    assert 'id="notification-badge"' in button
+    assert button.index("<svg") < button.index('id="notification-badge"')
+    assert 'class="sr-only">Notifications<' in button
+    # Nothing pins the badge over the glyph any more.
+    assert "position:absolute" not in button
+    # The count is announced when the poll changes it (A11Y_GUIDE.md §5).
+    assert 'aria-live="polite"' in button
 
 
 @pytest.mark.django_db
