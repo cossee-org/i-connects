@@ -1,39 +1,52 @@
 """Tests for the contributions ledger.
 
-Covers the append-only invariants (save/delete guards), the task-approval
-wiring in ``tasks.services.approve_completion``, and the matrix helper used
-by the per-project contributions page.
+Covers the closure wiring in ``tasks.services.close_task`` — who earns
+credit and who does not — the withdrawal on reopening, and the matrix and
+CSV helpers behind the contributions pages.
 """
 
 from __future__ import annotations
 
 import pytest
-from django.db import IntegrityError
 
 from apps.contributions.models import ContributionRecord
 from apps.contributions.services import (
     get_project_contributions_matrix,
     get_user_contributions,
-    record_contributions_for_approval,
 )
 from apps.core.enums import ContributionType, ProjectStatus
-from apps.projects.models import ProjectMember
+from apps.projects.models import ContributionTracking, ProjectMember
 from apps.projects.services import create_project_with_owner
 from apps.tasks.models import KanbanBoard, Task
-from apps.tasks.services import approve_completion, complete_task
+from apps.tasks.services import (
+    approve_completion,
+    clear_review,
+    close_task,
+    complete_task,
+    mark_own_done,
+    mark_reviewed,
+    reopen_own,
+    reopen_task,
+)
 
 
-def _make_project(owner, *, name="P"):
+def _make_project(owner, *, name="P", tracking=ContributionTracking.CREDIT):
     project = create_project_with_owner(
         user=owner,
-        form_data={"name": name, "status": ProjectStatus.ACTIVE, "is_public": True},
+        form_data={
+            "name": name,
+            "status": ProjectStatus.ACTIVE,
+            "is_public": True,
+            "contribution_tracking": tracking,
+        },
     )
     col = KanbanBoard.objects.create(project=project, name="Todo", container_order=0)
     member = ProjectMember.objects.filter(project=project, users=owner).first()
     return project, col, member
 
 
-def _make_task(project, col, pm_member, *, assignees=None, ctype=ContributionType.OTHER):
+def _make_task(project, col, pm_member, *, assignees=None, reviewers=None,
+               ctype=ContributionType.OTHER):
     task = Task.objects.create(
         project=project,
         created_by=pm_member,
@@ -42,120 +55,232 @@ def _make_task(project, col, pm_member, *, assignees=None, ctype=ContributionTyp
         name="T",
         contribution_type=ctype,
     )
-    if assignees:
-        for m in assignees:
-            task.assigned_members.add(m)
+    for member in assignees or []:
+        task.assigned_members.add(member)
+    for member in reviewers or []:
+        task.reviewers.add(member)
     return task
 
 
-# ---------------------------------------------------------------------------
-# Immutability guards
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-def test_save_on_existing_record_raises(user):
-    project, col, pm_member = _make_project(user)
-    task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-
-    rec = ContributionRecord.objects.get(task_log=log, user=user)
-    rec.contribution_type = ContributionType.WRITING
-    with pytest.raises(IntegrityError):
-        rec.save()
-
-
-@pytest.mark.django_db
-def test_delete_raises(user):
-    project, col, pm_member = _make_project(user)
-    task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-
-    rec = ContributionRecord.objects.get(task_log=log, user=user)
-    with pytest.raises(IntegrityError):
-        rec.delete()
+def _member_for(project, user):
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(user)
+    return member
 
 
 # ---------------------------------------------------------------------------
-# Approval wiring
+# Closing a task is the ledger event
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
-def test_approval_creates_contribution_per_user(user):
+def test_closing_credits_an_assignee_who_marked_their_part_done(user):
     project, col, pm_member = _make_project(user)
     task = _make_task(
         project, col, pm_member,
         assignees=[pm_member],
         ctype=ContributionType.DATA_CURATION,
     )
-    log = complete_task(task=task, completed_by=pm_member)
+    mark_own_done(task=task, member=pm_member)
 
     assert ContributionRecord.objects.count() == 0
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-    rec = ContributionRecord.objects.get(task_log=log, user=user)
-    assert rec.project_id == project.id
-    assert rec.task_id == task.id
-    assert rec.contribution_type == ContributionType.DATA_CURATION
-    assert rec.verified_by_id == user.id
-    assert rec.closed_at is not None
+    close_task(task=task, closed_by=pm_member)
+
+    record = ContributionRecord.objects.get(user=user)
+    assert record.task_id == task.id
+    assert record.project_id == project.id
+    assert record.contribution_type == ContributionType.DATA_CURATION
+    assert record.verified_by_id == user.id
+    assert record.closed_at is not None
 
 
 @pytest.mark.django_db
-def test_approval_is_idempotent(user):
+def test_closing_skips_an_assignee_who_never_marked_done(user, other_user):
     project, col, pm_member = _make_project(user)
-    task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
+    slacker = _member_for(project, other_user)
+    task = _make_task(project, col, pm_member, assignees=[pm_member, slacker])
+    mark_own_done(task=task, member=pm_member)
 
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-    assert ContributionRecord.objects.filter(task_log=log, user=user).count() == 1
+    close_task(task=task, closed_by=pm_member)
+
+    assert set(ContributionRecord.objects.values_list("user_id", flat=True)) == {
+        user.id
+    }
 
 
 @pytest.mark.django_db
-def test_rejection_creates_no_contribution(user):
+def test_a_reviewed_task_credits_only_reviewed_submissions(user, other_user, pm_user):
+    """With reviewers on the task, a done mark alone is not enough."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    bob = _member_for(project, pm_user)
+    task = _make_task(
+        project, col, lead, assignees=[alice, bob], reviewers=[lead]
+    )
+    alice_log = mark_own_done(task=task, member=alice)
+    mark_own_done(task=task, member=bob)
+    mark_reviewed(task_log=alice_log, reviewer=lead)
+
+    close_task(task=task, closed_by=lead)
+
+    assert set(ContributionRecord.objects.values_list("user_id", flat=True)) == {
+        other_user.id
+    }
+
+
+@pytest.mark.django_db
+def test_a_task_without_reviewers_needs_no_review(user):
     project, col, pm_member = _make_project(user)
     task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=False, verifier_user=user)
+    log = mark_own_done(task=task, member=pm_member)
+    assert not log.is_reviewed
+
+    close_task(task=task, closed_by=pm_member)
+    assert ContributionRecord.objects.filter(user=user).exists()
+
+
+@pytest.mark.django_db
+def test_closing_credits_every_user_behind_a_team_assignee(user, other_user):
+    project, col, pm_member = _make_project(user)
+    team = ProjectMember.objects.create(project=project, name="Team A")
+    team.users.add(user, other_user)
+    task = _make_task(project, col, pm_member, assignees=[team])
+    mark_own_done(task=task, member=team)
+
+    close_task(task=task, closed_by=pm_member)
+
+    assert set(ContributionRecord.objects.values_list("user_id", flat=True)) == {
+        user.id,
+        other_user.id,
+    }
+
+
+@pytest.mark.django_db
+def test_closing_twice_writes_one_record(user):
+    project, col, pm_member = _make_project(user)
+    task = _make_task(project, col, pm_member, assignees=[pm_member])
+    mark_own_done(task=task, member=pm_member)
+
+    close_task(task=task, closed_by=pm_member)
+    close_task(task=task, closed_by=pm_member)
+    close_task(task=task, closed_by=pm_member)
+
+    assert ContributionRecord.objects.filter(user=user).count() == 1
+
+
+@pytest.mark.django_db
+def test_a_project_not_tracking_credit_keeps_no_ledger(user):
+    project, col, pm_member = _make_project(user, tracking=ContributionTracking.NONE)
+    task = _make_task(project, col, pm_member, assignees=[pm_member])
+    mark_own_done(task=task, member=pm_member)
+
+    close_task(task=task, closed_by=pm_member)
     assert ContributionRecord.objects.count() == 0
 
 
 @pytest.mark.django_db
-def test_null_approval_creates_no_contribution(user):
+def test_the_last_review_closes_the_task_and_credits_it(user, other_user):
+    """mark_reviewed closes a fully-reviewed task — the credit follows."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice], reviewers=[lead])
+    log = mark_own_done(task=task, member=alice)
+
+    mark_reviewed(task_log=log, reviewer=lead)
+
+    assert ContributionRecord.objects.filter(user=other_user).exists()
+
+
+# ---------------------------------------------------------------------------
+# Reopening withdraws it again
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_reopening_withdraws_the_credit(user):
     project, col, pm_member = _make_project(user)
     task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=None, verifier_user=user)
+    mark_own_done(task=task, member=pm_member)
+    close_task(task=task, closed_by=pm_member)
+    assert ContributionRecord.objects.count() == 1
+
+    reopen_task(task=task)
+    assert ContributionRecord.objects.count() == 0
+
+    # Closing again writes it back.
+    close_task(task=task, closed_by=pm_member)
+    assert ContributionRecord.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_undoing_a_done_mark_withdraws_the_credit(user, other_user):
+    """reopen_own reopens a task whose completion rested on its reviews."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice], reviewers=[lead])
+    log = mark_own_done(task=task, member=alice)
+    mark_reviewed(task_log=log, reviewer=lead)
+    assert ContributionRecord.objects.count() == 1
+
+    reopen_own(task=task, member=alice)
     assert ContributionRecord.objects.count() == 0
 
 
 @pytest.mark.django_db
-def test_approval_after_rejection_still_creates_record(user):
-    """Toggling rejection then approval should still produce exactly one record."""
-    project, col, pm_member = _make_project(user)
-    task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=False, verifier_user=user)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-    assert ContributionRecord.objects.filter(task_log=log, user=user).count() == 1
+def test_withdrawing_a_review_withdraws_the_credit(user, other_user):
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice], reviewers=[lead])
+    log = mark_own_done(task=task, member=alice)
+    mark_reviewed(task_log=log, reviewer=lead)
+    assert ContributionRecord.objects.count() == 1
+
+    clear_review(task_log=log, cleared_by=lead)
+    assert ContributionRecord.objects.count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Approving a submission is not a ledger event
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
-def test_task_with_team_member_creates_record_per_user(user, other_user):
+def test_approving_a_submission_writes_no_contribution(user):
     project, col, pm_member = _make_project(user)
-    # Team-shaped ProjectMember holding both users.
-    team_member = ProjectMember.objects.create(project=project, name="Team A")
-    team_member.users.add(user, other_user)
-    task = _make_task(project, col, pm_member, assignees=[team_member])
+    task = _make_task(project, col, pm_member, assignees=[pm_member])
     log = complete_task(task=task, completed_by=pm_member)
+    ContributionRecord.objects.all().delete()
+
     approve_completion(task_log=log, approved=True, verifier_user=user)
-    records = ContributionRecord.objects.filter(task_log=log)
-    assert records.count() == 2
-    assert set(records.values_list("user_id", flat=True)) == {user.id, other_user.id}
+    assert ContributionRecord.objects.count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Deleting the work deletes the credit recorded against it
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_deleting_a_task_takes_its_contributions_with_it(user):
+    project, col, pm_member = _make_project(user)
+    task = _make_task(project, col, pm_member, assignees=[pm_member])
+    mark_own_done(task=task, member=pm_member)
+    close_task(task=task, closed_by=pm_member)
+    assert ContributionRecord.objects.count() == 1
+
+    task.delete()
+    assert ContributionRecord.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_deleting_a_project_takes_its_contributions_with_it(user):
+    project, col, pm_member = _make_project(user)
+    task = _make_task(project, col, pm_member, assignees=[pm_member])
+    mark_own_done(task=task, member=pm_member)
+    close_task(task=task, closed_by=pm_member)
+
+    project.delete()
+    assert ContributionRecord.objects.count() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -163,34 +288,30 @@ def test_task_with_team_member_creates_record_per_user(user, other_user):
 # ---------------------------------------------------------------------------
 
 
+def _credit(project, col, pm_member, member, ctype):
+    """Close a one-assignee task so ``member`` earns one ``ctype`` record."""
+    task = _make_task(project, col, pm_member, assignees=[member], ctype=ctype)
+    mark_own_done(task=task, member=member)
+    close_task(task=task, closed_by=pm_member)
+    return task
+
+
 @pytest.mark.django_db
 def test_project_contributions_matrix(user, other_user):
     project, col, pm_member = _make_project(user)
-    # Give other_user their own membership so both users are project members.
-    other_member = ProjectMember.objects.create(project=project)
-    other_member.users.add(other_user)
+    other_member = _member_for(project, other_user)
 
-    # user gets two WRITING contributions; other_user gets one DATA_CURATION.
-    for ctype in (ContributionType.WRITING, ContributionType.WRITING):
-        task = _make_task(project, col, pm_member, assignees=[pm_member], ctype=ctype)
-        log = complete_task(task=task, completed_by=pm_member)
-        approve_completion(task_log=log, approved=True, verifier_user=user)
-
-    task2 = _make_task(
-        project, col, pm_member,
-        assignees=[other_member],
-        ctype=ContributionType.DATA_CURATION,
-    )
-    log2 = complete_task(task=task2, completed_by=pm_member)
-    approve_completion(task_log=log2, approved=True, verifier_user=user)
+    for _ in range(2):
+        _credit(project, col, pm_member, pm_member, ContributionType.WRITING_ORIGINAL_DRAFT)
+    _credit(project, col, pm_member, other_member, ContributionType.DATA_CURATION)
 
     matrix = get_project_contributions_matrix(project)
     assert matrix["totals"]["grand_total"] == 3
-    assert matrix["totals"][ContributionType.WRITING] == 2
+    assert matrix["totals"][ContributionType.WRITING_ORIGINAL_DRAFT] == 2
     assert matrix["totals"][ContributionType.DATA_CURATION] == 1
 
     rows_by_user = {row["user"].id: row for row in matrix["rows"]}
-    assert rows_by_user[user.id]["counts"][ContributionType.WRITING] == 2
+    assert rows_by_user[user.id]["counts"][ContributionType.WRITING_ORIGINAL_DRAFT] == 2
     assert rows_by_user[user.id]["total"] == 2
     assert rows_by_user[other_user.id]["counts"][ContributionType.DATA_CURATION] == 1
     # Highest-total user is sorted first.
@@ -202,9 +323,7 @@ def test_get_user_contributions_scoped_to_project(user):
     project_a, col_a, pm_a = _make_project(user, name="A")
     project_b, col_b, pm_b = _make_project(user, name="B")
     for project, col, pm in ((project_a, col_a, pm_a), (project_b, col_b, pm_b)):
-        task = _make_task(project, col, pm, assignees=[pm])
-        log = complete_task(task=task, completed_by=pm)
-        approve_completion(task_log=log, approved=True, verifier_user=user)
+        _credit(project, col, pm, pm, ContributionType.SOFTWARE)
 
     assert get_user_contributions(user).count() == 2
     assert get_user_contributions(user, project=project_a).count() == 1
@@ -218,13 +337,7 @@ def test_get_user_contributions_scoped_to_project(user):
 @pytest.mark.django_db
 def test_my_contributions_csv_returns_rows(client, user):
     project, col, pm_member = _make_project(user)
-    task = _make_task(
-        project, col, pm_member,
-        assignees=[pm_member],
-        ctype=ContributionType.WRITING,
-    )
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
+    _credit(project, col, pm_member, pm_member, ContributionType.WRITING_ORIGINAL_DRAFT)
 
     client.force_login(user)
     resp = client.get("/my/contributions.csv")
@@ -244,13 +357,8 @@ def test_my_contributions_csv_returns_rows(client, user):
 def test_project_contributions_csv_requires_pm(client, user, other_user):
     """Ordinary members get the matrix page but NOT the raw CSV."""
     project, col, pm_member = _make_project(user)
-    # Add other_user as a non-PM member.
-    from apps.projects.models import ProjectMember
-    member = ProjectMember.objects.create(project=project)
-    member.users.add(other_user)
-    task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
+    _member_for(project, other_user)
+    _credit(project, col, pm_member, pm_member, ContributionType.SOFTWARE)
 
     # PM can download.
     client.force_login(user)

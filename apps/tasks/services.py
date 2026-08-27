@@ -104,6 +104,7 @@ def complete_task(
     task.save(update_fields=["status", "updated_at"])
 
     completer_user = completed_by.users.first()
+    _record_contributions(task, verifier_user=completer_user)
     log_action(
         AuditAction.TASK_COMPLETED,
         actor=completer_user,
@@ -125,12 +126,15 @@ def complete_task(
 def reopen_task(*, task: Task) -> Task:
     """Reopen a closed task (Lead action), flipping ``Task.status`` back.
 
-    The mirror of :func:`close_task`, and status-only for the same reason:
-    the assignees' own marks survive, so a Lead toggling a task closed and
-    open again does not wipe what they recorded.
+    The mirror of :func:`close_task`. The assignees' own marks survive, so a
+    Lead toggling a task closed and open again does not wipe what they
+    recorded — but the credit that closure wrote does not, since a reopened
+    task is no longer finished work for anyone to hold credit for. Closing
+    it again writes the credit back.
     """
     task.status = TaskStatus.NOT_COMPLETED
     task.save(update_fields=["status", "updated_at"])
+    _withdraw_contributions(task)
     return task
 
 
@@ -234,23 +238,41 @@ def close_task(
     have no self-mark action at all, that means a closed task simply carries
     no individual marks.
 
-    This does not write contributions — the separate PM approval flow remains
-    the ledger event.
+    Closing is the ledger event on a project tracking contributions as
+    CRediT: credit is written for each assignee who marked their own part
+    done, and — where the task carries reviewers — had that submission
+    reviewed. See ``contributions.services.record_contributions_for_task``.
     """
+    closer_user = closed_by.users.first()
     task.status = TaskStatus.COMPLETED
     task.save(update_fields=["status", "updated_at"])
+    _record_contributions(task, verifier_user=closer_user)
     metadata = {"name": task.name}
     if reason:
         metadata["reason"] = reason
     log_action(
         AuditAction.TASK_COMPLETED,
-        actor=closed_by.users.first(),
+        actor=closer_user,
         entity=task,
         project=task.project,
         metadata=metadata,
     )
     _notify_task_completed(task=task, completed_by=closed_by)
     return task
+
+
+def _record_contributions(task: Task, *, verifier_user=None) -> None:
+    """Write the closed task's credit, late-imported to dodge a cycle."""
+    from apps.contributions.services import record_contributions_for_task
+
+    record_contributions_for_task(task, verifier_user=verifier_user)
+
+
+def _withdraw_contributions(task: Task) -> None:
+    """Take back a reopened task's credit, late-imported to dodge a cycle."""
+    from apps.contributions.services import withdraw_contributions_for_task
+
+    withdraw_contributions_for_task(task)
 
 
 def all_submissions_reviewed(task: Task) -> bool:
@@ -379,19 +401,16 @@ def approve_completion(
 ) -> TaskLog:
     """Set approval state on a TaskLog.
 
-    When ``approved is True`` this is the *closure* event for the task per
-    Ultra Plan §8, and a ``ContributionRecord`` is written for each user
-    behind ``task_log.assigned_to``. The ledger call is idempotent, so
-    toggling approval back and forth will not produce duplicates.
+    A lead's verdict on one assignee's submission, recorded and announced.
+    It does not touch the contributions ledger: closing the task is the
+    ledger event (see :func:`close_task`), and crediting a submission here
+    as well would hand out credit that skipped the reviewers the task
+    carries.
     """
     task_log.approved = approved
     task_log.save(update_fields=["approved"])
 
     if approved is True:
-        # Late import to avoid circular imports with apps.contributions.
-        from apps.contributions.services import record_contributions_for_approval
-
-        record_contributions_for_approval(task_log, verifier_user=verifier_user)
         log_action(
             AuditAction.TASK_APPROVED,
             actor=verifier_user,

@@ -1,67 +1,112 @@
 """Service helpers for the contributions ledger.
 
-The public surface per Ultra Plan §6 "Contribution ledger ... with a clean API
-(recordContribution, getUserContributions, getProjectContributions) so it can
-later be extracted or replaced".
+Closing a task is the ledger event: :func:`record_contributions_for_task`
+writes the credit, :func:`withdraw_contributions_for_task` takes it back when
+the task reopens. The read side (``get_user_contributions``,
+``get_project_contributions``, and the matrix builders) is kept separate so
+the ledger could later be extracted or replaced.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Iterable, Optional
+from typing import Optional
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
-from apps.core.enums import ContributionType
-from apps.projects.models import Project
-from apps.tasks.models import TaskLog
+from apps.core.enums import ContributionType, TaskStatus
+from apps.projects.models import Project, ProjectMember
+from apps.tasks.models import Task, TaskLog
 
 from .models import ContributionRecord
 
 User = get_user_model()
 
 
+def eligible_contributions(task: Task) -> list[tuple[ProjectMember, TaskLog]]:
+    """``(assignee, task_log)`` for everyone who has earned credit on ``task``.
+
+    An assignee qualifies once their own current TaskLog says COMPLETED —
+    the mark is theirs to make, so nobody else's click stands in for it. A
+    task that carries reviewers asks one thing more: that submission has to
+    have been reviewed, since there the reviewers' sign-off is what says the
+    work landed.
+
+    Read off the task's *live* assignee and reviewer sets, so a member taken
+    off the task stops qualifying and one added brings an unmarked row with
+    them.
+    """
+    current: dict[int, TaskLog] = {}
+    for log in task.task_logs.all():  # newest-first; first seen is current
+        current.setdefault(log.assigned_to_id, log)
+
+    needs_review = task.reviewers.exists()
+    eligible: list[tuple[ProjectMember, TaskLog]] = []
+    for member in task.assigned_members.all():
+        log = current.get(member.pk)
+        if log is None or log.status != TaskStatus.COMPLETED:
+            continue
+        if needs_review and not log.is_reviewed:
+            continue
+        eligible.append((member, log))
+    return eligible
+
+
 @transaction.atomic
-def record_contributions_for_approval(
-    task_log: TaskLog,
+def record_contributions_for_task(
+    task: Task,
     *,
     verifier_user: Optional[User] = None,
 ) -> list[ContributionRecord]:
-    """Create one ContributionRecord per user behind ``task_log.assigned_to``.
+    """Write the credit a closed task earned, one row per contributing user.
 
-    Called from ``tasks.services.approve_completion`` when ``approved is True``.
-    Idempotent: the ``(task_log, user)`` unique constraint plus ``get_or_create``
-    guarantees that re-approving the same log writes no new rows.
+    Called from ``tasks.services.close_task``. Only projects tracking
+    contributions as CRediT keep a ledger, so this is a no-op elsewhere.
 
-    ``verifier_user`` is stored on the record as ``verified_by``. It may be
-    ``None`` if closure came from a non-user code path (admin action, data
-    migration) — the FK is nullable for that reason.
+    Idempotent: the ``(task_log, user)`` unique constraint plus
+    ``get_or_create`` means re-closing a task writes no second row.
+
+    ``verifier_user`` is the lead who closed the task, stored as
+    ``verified_by``. It may be ``None`` when closure came from a code path
+    with no user behind it (a data migration, an admin action) — the FK is
+    nullable for that reason.
     """
-
-    task = task_log.task
-    users = list(task_log.assigned_to.users.all())
-    if not users:
+    if not task.project.tracks_credit:
         return []
 
     closed_at = timezone.now()
     created: list[ContributionRecord] = []
-    for user in users:
-        obj, was_created = ContributionRecord.objects.get_or_create(
-            task_log=task_log,
-            user=user,
-            defaults=dict(
-                task=task,
-                project=task.project,
-                contribution_type=task.contribution_type,
-                verified_by=verifier_user,
-                closed_at=closed_at,
-            ),
-        )
-        if was_created:
-            created.append(obj)
+    for member, task_log in eligible_contributions(task):
+        for user in member.users.all():
+            obj, was_created = ContributionRecord.objects.get_or_create(
+                task_log=task_log,
+                user=user,
+                defaults=dict(
+                    task=task,
+                    project=task.project,
+                    contribution_type=task.contribution_type,
+                    verified_by=verifier_user,
+                    closed_at=closed_at,
+                ),
+            )
+            if was_created:
+                created.append(obj)
     return created
+
+
+@transaction.atomic
+def withdraw_contributions_for_task(task: Task) -> int:
+    """Take back the credit a task's closure wrote, and say how many rows went.
+
+    The mirror of :func:`record_contributions_for_task`, called when a task
+    reopens. Credit is a claim that a piece of work is finished; a reopened
+    task is not, so the claim goes with it rather than standing over work
+    that has been pulled back.
+    """
+    deleted, _by_model = ContributionRecord.objects.filter(task=task).delete()
+    return deleted
 
 
 def get_user_contributions(
