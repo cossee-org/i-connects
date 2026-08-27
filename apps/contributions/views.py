@@ -19,7 +19,7 @@ from django.utils.text import slugify
 from django.views import View
 from django.views.generic import RedirectView, TemplateView
 
-from apps.core.enums import ContributionType
+from apps.core.enums import CREDIT_ROLES, ContributionType
 from apps.projects.models import Project
 from apps.tasks.mixins import ProjectContextMixin
 
@@ -27,29 +27,66 @@ from .services import (
     get_project_contributions,
     get_user_contribution_counts_by_type,
     get_user_contributions,
+    get_user_credit_projects,
 )
 
 
 class ContributionsView(LoginRequiredMixin, TemplateView):
-    """Top-level contributions page (placeholder)."""
+    """The Contributions module: a person's own credit, across every project.
+
+    ``?project=<pk>`` narrows it to one. An unreadable or unknown pk falls
+    back to all projects rather than 404ing — a stale bookmark should still
+    show you your contributions.
+    """
 
     template_name = "contributions/contributions.html"
 
-
-class MyContributionsView(LoginRequiredMixin, TemplateView):
-    """Dedicated page for a user's own contributions across all projects."""
-
-    template_name = "contributions/my_contributions.html"
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["contribution_counts"] = get_user_contribution_counts_by_type(
-            self.request.user
+        user = self.request.user
+
+        projects = get_user_credit_projects(user)
+        selected = self._selected_project(projects)
+
+        counts = get_user_contribution_counts_by_type(user, project=selected)
+        records = get_user_contributions(user, project=selected).order_by(
+            "-closed_at", "-id"
         )
-        context["contribution_types"] = ContributionType.choices
-        context["recent_contributions"] = get_user_contributions(self.request.user).order_by("-closed_at")[:10]
-        context["contribution_total"] = sum(context["contribution_counts"].values())
+
+        context["filter_projects"] = projects
+        context["selected_project"] = selected
+        context["current_project"] = str(selected.pk) if selected else ""
+        context["records"] = records
+        context["contribution_total"] = sum(counts.values())
+        # Only the roles actually earned, in the taxonomy's own order —
+        # fourteen zeroed tiles say nothing the total does not.
+        labels = dict(ContributionType.choices)
+        context["counts_by_type"] = [
+            (labels.get(value, value), counts[value])
+            for value in list(CREDIT_ROLES) + sorted(
+                v for v in counts if v not in CREDIT_ROLES
+            )
+            if counts.get(value)
+        ]
         return context
+
+    def _selected_project(self, projects):
+        raw = self.request.GET.get("project") or ""
+        if not raw.isdigit():
+            return None
+        pk = int(raw)
+        return next((p for p in projects if p.pk == pk), None)
+
+
+class MyContributionsView(LoginRequiredMixin, RedirectView):
+    """Old address for a person's own contributions.
+
+    The Contributions module in the sidebar is the one page now, so this
+    redirects rather than keeping a second copy in step with it.
+    """
+
+    permanent = False
+    pattern_name = "contributions:contributions"
 
 
 class ProjectContributionsView(LoginRequiredMixin, RedirectView):

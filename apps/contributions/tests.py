@@ -439,3 +439,94 @@ def test_the_old_project_contributions_url_redirects_to_the_tab(client, user):
     assert resp["Location"] == reverse(
         "projects:contribution_tracking", kwargs={"pk": project.pk}
     )
+
+
+# ---------------------------------------------------------------------------
+# The Contributions module
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_contributions_module_lists_every_project(client, user):
+    project_a, col_a, pm_a = _make_project(user, name="Alpha")
+    project_b, col_b, pm_b = _make_project(user, name="Beta")
+    _credit(project_a, col_a, pm_a, pm_a, ContributionType.SOFTWARE)
+    _credit(project_b, col_b, pm_b, pm_b, ContributionType.METHODOLOGY)
+
+    client.force_login(user)
+    body = client.get(reverse("contributions:contributions")).content.decode()
+    assert "Alpha" in body
+    assert "Beta" in body
+    assert "Software" in body
+    assert "Methodology" in body
+
+
+@pytest.mark.django_db
+def test_contributions_module_filters_by_project(client, user):
+    project_a, col_a, pm_a = _make_project(user, name="Alpha")
+    project_b, col_b, pm_b = _make_project(user, name="Beta")
+    _credit(project_a, col_a, pm_a, pm_a, ContributionType.SOFTWARE)
+    _credit(project_b, col_b, pm_b, pm_b, ContributionType.METHODOLOGY)
+
+    client.force_login(user)
+    resp = client.get(
+        reverse("contributions:contributions"), {"project": project_a.pk}
+    )
+    records = list(resp.context["records"])
+    assert [r.project_id for r in records] == [project_a.pk]
+    assert resp.context["selected_project"] == project_a
+    # Both projects stay in the filter's option list.
+    assert {p.pk for p in resp.context["filter_projects"]} == {
+        project_a.pk,
+        project_b.pk,
+    }
+
+
+@pytest.mark.django_db
+def test_the_filter_offers_a_project_with_no_credit_yet(client, user):
+    """So "have I been credited here at all?" has an answer."""
+    project, _col, _pm = _make_project(user, name="Quiet")
+    client.force_login(user)
+    resp = client.get(reverse("contributions:contributions"))
+    assert [p.pk for p in resp.context["filter_projects"]] == [project.pk]
+
+
+@pytest.mark.django_db
+def test_the_filter_leaves_out_a_project_not_tracking_credit(client, user):
+    _make_project(user, name="Untracked", tracking=ContributionTracking.NONE)
+    client.force_login(user)
+    resp = client.get(reverse("contributions:contributions"))
+    assert resp.context["filter_projects"] == []
+
+
+@pytest.mark.django_db
+def test_the_filter_leaves_out_someone_elses_project(client, user, other_user):
+    project, col, pm = _make_project(other_user, name="Theirs")
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    resp = client.get(
+        reverse("contributions:contributions"), {"project": project.pk}
+    )
+    assert resp.context["filter_projects"] == []
+    # An unreachable pk falls back to all projects rather than 404ing.
+    assert resp.context["selected_project"] is None
+    assert list(resp.context["records"]) == []
+
+
+@pytest.mark.django_db
+def test_a_junk_project_filter_falls_back_to_all(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    client.force_login(user)
+    resp = client.get(reverse("contributions:contributions"), {"project": "nope"})
+    assert resp.context["selected_project"] is None
+    assert resp.context["contribution_total"] == 1
+
+
+@pytest.mark.django_db
+def test_my_contributions_redirects_to_the_module(client, user):
+    client.force_login(user)
+    resp = client.get("/my/contributions/")
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse("contributions:contributions")

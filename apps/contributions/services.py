@@ -17,7 +17,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.enums import CREDIT_ROLES, ContributionType, TaskStatus
-from apps.projects.models import Project, ProjectMember
+from apps.projects.models import ContributionTracking, Project, ProjectMember
 from apps.tasks.models import Task, TaskLog
 
 from .models import ContributionRecord
@@ -131,16 +131,85 @@ def get_project_contributions(project: Project):
     )
 
 
-def get_user_contribution_counts_by_type(user: User) -> dict[str, int]:
-    """Total contributions by type for the given user (across all projects)."""
+def get_user_contribution_counts_by_type(
+    user: User, *, project: Optional[Project] = None
+) -> dict[str, int]:
+    """A user's contribution counts by type, optionally scoped to one project."""
+    qs = ContributionRecord.objects.filter(user=user)
+    if project is not None:
+        qs = qs.filter(project=project)
     counts: dict[str, int] = defaultdict(int)
-    for ctype in (
-        ContributionRecord.objects.filter(user=user)
-        .values_list("contribution_type", flat=True)
-    ):
+    for ctype in qs.values_list("contribution_type", flat=True):
         counts[ctype] += 1
     # Return a plain dict keyed by the enum value.
     return dict(counts)
+
+
+def get_user_credit_projects(user: User) -> list[Project]:
+    """Projects where this user could hold credit — theirs, tracking CRediT.
+
+    The filter's option list. Offering every project they belong to would
+    list ones that can never show a row; offering only the ones they have
+    already earned in would hide the answer to "have I been credited on
+    this project at all?".
+    """
+    return list(
+        Project.objects.filter(
+            project_members__users=user,
+            project_members__deleted=False,
+            contribution_tracking=ContributionTracking.CREDIT,
+        )
+        .distinct()
+        .order_by("name")
+    )
+
+
+def get_user_contributions_matrix(user: User) -> dict:
+    """Build a projects × CRediT-role matrix of one user's own credit.
+
+    The same shape as :func:`get_project_contributions_matrix`, with
+    ``rows`` keyed on ``"project"`` rather than ``"user"``. Columns are the
+    roles this user has actually been credited with.
+    """
+    labels = dict(ContributionType.choices)
+    records = list(
+        ContributionRecord.objects.filter(user=user)
+        .select_related("project")
+        .only("project_id", "contribution_type", "project__name")
+    )
+
+    used_types = {rec.contribution_type for rec in records}
+    type_values = [v for v in CREDIT_ROLES if v in used_types] + sorted(
+        v for v in used_types if v not in CREDIT_ROLES
+    )
+    type_choices = [(v, labels.get(v, v)) for v in type_values]
+
+    projects_by_id: dict[int, Project] = {}
+    per_project: dict[int, dict[str, int]] = {}
+    column_totals: dict[str, int] = {v: 0 for v in type_values}
+    grand_total = 0
+
+    for rec in records:
+        projects_by_id.setdefault(rec.project_id, rec.project)
+        counts = per_project.setdefault(
+            rec.project_id, {v: 0 for v in type_values}
+        )
+        counts[rec.contribution_type] += 1
+        column_totals[rec.contribution_type] += 1
+        grand_total += 1
+
+    rows = [
+        {
+            "project": projects_by_id[pid],
+            "counts": counts,
+            "total": sum(counts.values()),
+        }
+        for pid, counts in per_project.items()
+    ]
+    rows.sort(key=lambda r: (-r["total"], r["project"].name.lower()))
+
+    column_totals["grand_total"] = grand_total
+    return {"types": type_choices, "rows": rows, "totals": column_totals}
 
 
 def project_member_users(project: Project) -> list[User]:
