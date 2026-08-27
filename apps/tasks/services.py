@@ -285,8 +285,11 @@ def all_submissions_reviewed(task: Task) -> bool:
 
     False for a task nobody is assigned to. There are no submissions there to
     have reviewed, so "all of them are" would close a task on which no work
-    was ever recorded.
+    was ever recorded. False, too, for a task that asks for no review: there
+    is no verdict there for a completion to rest on.
     """
+    if not task.needs_review:
+        return False
     current = {}
     for log in task.task_logs.all():  # newest-first; first seen is current
         current.setdefault(log.assigned_to_id, log)

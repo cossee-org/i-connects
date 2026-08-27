@@ -148,6 +148,7 @@ class TaskForm(forms.ModelForm):
             "description",
             "container",
             "assigned_members",
+            "requires_review",
             "reviewers",
             "start_date",
             "deadline",
@@ -169,6 +170,9 @@ class TaskForm(forms.ModelForm):
             "container": forms.Select(attrs={"class": _daisy_select}),
             "assigned_members": MemberMultiSelect(),
             "reviewers": MemberMultiSelect(),
+            "requires_review": forms.CheckboxInput(
+                attrs={"class": "checkbox checkbox-sm", "x-model": "requiresReview"}
+            ),
             "contribution_type": forms.Select(attrs={"class": _daisy_select}),
             "is_priority": forms.CheckboxInput(attrs={"class": "checkbox checkbox-sm"}),
         }
@@ -179,6 +183,11 @@ class TaskForm(forms.ModelForm):
         self.fields["name"].label = "Task name"
         self.fields["assigned_members"].label = "Assignees"
         self.fields["reviewers"].label = "Reviewers"
+        self.fields["requires_review"].label = "Require review"
+        self.fields["requires_review"].help_text = (
+            "Each assignee's submission has to be signed off by a reviewer "
+            "before the task counts as done."
+        )
         self.fields["deadline"].label = "Due date"
         self.fields["is_priority"].label = "Mark as high priority"
         self.fields["container"].label = "Kanban column"
@@ -227,10 +236,15 @@ class TaskForm(forms.ModelForm):
         return self.cleaned_data.get("contribution_type") or ContributionType.OTHER
 
     def clean(self):
-        """A task cannot be due before it starts.
+        """A task cannot be due before it starts, and review needs a reviewer.
 
-        Same rule and wording as ``MilestoneForm`` below; equal dates are
-        fine, and either date on its own is unconstrained.
+        The date rule matches ``MilestoneForm`` below; equal dates are fine,
+        and either date on its own is unconstrained.
+
+        Requiring review with nobody named to give it would leave a task
+        nobody could finish, so the two are kept together: ticking the box
+        asks for at least one reviewer, and leaving it unticked clears any
+        who were named before.
         """
         cleaned = super().clean()
         start = cleaned.get("start_date")
@@ -239,6 +253,15 @@ class TaskForm(forms.ModelForm):
             self.add_error(
                 "start_date", "Start date must be before or equal to the due date."
             )
+
+        if cleaned.get("requires_review"):
+            if not cleaned.get("reviewers"):
+                self.add_error(
+                    "reviewers",
+                    "Pick at least one reviewer, or untick Require review.",
+                )
+        else:
+            cleaned["reviewers"] = self.fields["reviewers"].queryset.none()
         return cleaned
 
 

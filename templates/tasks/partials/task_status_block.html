@@ -5,7 +5,7 @@
   done_by_self, reviewed, reviewed_by, reviewed_at, awaiting_review,
   can_mark_done, can_review, can_unreview),
   done_count, reviewed_count, assignee_count, is_assignee, my_done,
-  marks_locked, reviewers.
+  marks_locked, needs_review, show_review, reviewers.
 {% endcomment %}
 <div id="task-status-block"
      {% if pane_mode %}
@@ -24,7 +24,7 @@
       <h3 class="text-lg font-semibold text-brand-navy">Completion</h3>
       {% endif %}
       <span class="text-xs text-brand-text/60">
-        {{ done_count }} / {{ assignee_count }} done{% if reviewed_count %} &middot; {{ reviewed_count }} reviewed{% endif %}
+        {{ done_count }} / {{ assignee_count }} done{% if show_review and reviewed_count %} &middot; {{ reviewed_count }} reviewed{% endif %}
       </span>
     </div>
 
@@ -64,8 +64,13 @@
     {% endcomment %}
     {% if marks_locked %}
       <p class="mt-2 text-xs text-brand-text/60">
-        Completed &mdash; marks and reviews are locked. Mark the task not
-        complete to change them.
+        {% if needs_review %}
+          Completed &mdash; marks and reviews are locked. Mark the task not
+          complete to change them.
+        {% else %}
+          Completed &mdash; marks are locked. Mark the task not complete to
+          change them.
+        {% endif %}
       </p>
     {% endif %}
 
@@ -76,7 +81,9 @@
             <tr class="text-xs uppercase tracking-wider text-brand-text/70">
               <th scope="col" class="text-left font-semibold pb-1.5">Assignee</th>
               <th scope="col" class="text-left font-semibold pb-1.5 px-2 whitespace-nowrap">Marked Done</th>
-              <th scope="col" class="text-left font-semibold pb-1.5 whitespace-nowrap">Reviewed</th>
+              {% if show_review %}
+                <th scope="col" class="text-left font-semibold pb-1.5 whitespace-nowrap">Reviewed</th>
+              {% endif %}
             </tr>
           </thead>
           {% comment %}
@@ -93,7 +100,9 @@
               <tr{% if forloop.counter > 3 %} x-show="rowsExpanded" x-cloak{% endif %}>
                 <th scope="row" class="text-left font-normal text-brand-navy py-1.5 pr-2">{{ s.member.display_name }}</th>
                 <td class="py-1.5 px-2">{% include "tasks/partials/task_done_cell.html" with s=s task=task %}</td>
-                <td class="py-1.5">{% include "tasks/partials/task_review_cell.html" with s=s task=task %}</td>
+                {% if show_review %}
+                  <td class="py-1.5">{% include "tasks/partials/task_review_cell.html" with s=s task=task %}</td>
+                {% endif %}
               </tr>
             {% endfor %}
           </tbody>
@@ -111,21 +120,20 @@
     {% endif %}
 
     {% comment %}
-      Who the Reviewed column is waiting on. It belongs to this card rather
-      than a section of its own: reviewers exist here to produce that column,
-      and sitting inside the swap target means adding or removing one shows up
+      Who the Reviewed column is waiting on — and gone with that column on a
+      task that asks for no review. It belongs to this card rather than a
+      section of its own: reviewers exist here to produce that column, and
+      sitting inside the swap target means adding or removing one shows up
       with the next refresh. h4 under the card's h3, not a second h3.
     {% endcomment %}
-    <div class="mt-3 pt-3 border-t border-brand-light/60">
-      <h4 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-1">Reviewers</h4>
-      {% if reviewers %}
+    {% if reviewers %}
+      <div class="mt-3 pt-3 border-t border-brand-light/60">
+        <h4 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-1">Reviewers</h4>
         <p class="text-sm text-brand-navy">
           {% for reviewer in reviewers %}{{ reviewer.display_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
         </p>
-      {% else %}
-        <p class="text-sm text-brand-text/50 italic">No reviewers assigned.</p>
-      {% endif %}
-    </div>
+      </div>
+    {% endif %}
   {% else %}
     {% if assignee_states %}
       <ul class="mt-3 flex flex-col gap-1">

@@ -13,7 +13,8 @@ test checklist.
 ## Features
 
 - **Projects, tasks, kanban boards** — create, invite, assign, complete,
-  peer-verify, and approve.
+  peer-verify, and approve. Review is opt-in per task ("Require review"),
+  and a completed task is frozen until its completion is reversed.
 - **CRediT contribution tracking** — a project opts in when it is
   created, its tasks carry one of CRediT's 14 roles, and closing a task
   credits the assignees who marked their part done (and had it reviewed,

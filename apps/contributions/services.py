@@ -31,8 +31,8 @@ def eligible_contributions(task: Task) -> list[tuple[ProjectMember, TaskLog]]:
 
     An assignee qualifies once their own current TaskLog says COMPLETED —
     the mark is theirs to make, so nobody else's click stands in for it. A
-    task that carries reviewers asks one thing more: that submission has to
-    have been reviewed, since there the reviewers' sign-off is what says the
+    task that requires review asks one thing more: that submission has to
+    have been signed off, since there the reviewers' verdict is what says the
     work landed.
 
     Read off the task's *live* assignee and reviewer sets, so a member taken
@@ -43,7 +43,7 @@ def eligible_contributions(task: Task) -> list[tuple[ProjectMember, TaskLog]]:
     for log in task.task_logs.all():  # newest-first; first seen is current
         current.setdefault(log.assigned_to_id, log)
 
-    needs_review = task.reviewers.exists()
+    needs_review = task.needs_review
     eligible: list[tuple[ProjectMember, TaskLog]] = []
     for member in task.assigned_members.all():
         log = current.get(member.pk)

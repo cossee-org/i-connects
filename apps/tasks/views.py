@@ -1128,7 +1128,13 @@ def _task_status_context(task, *, project_member, is_project_manager):
     # A Lead can review as well as the task's named reviewers, and a Lead can
     # also set or clear anyone's done mark — the two per-member actions they
     # borrow from assignees and reviewers.
-    viewer_reviews = bool(is_project_manager or task.is_reviewer(project_member))
+    # A task that asks for no review has no Reviewed column at all, so nobody
+    # reviews on it — not even a Lead, who would otherwise still see the
+    # buttons the endpoint would still honour.
+    needs_review = task.needs_review
+    viewer_reviews = bool(
+        needs_review and (is_project_manager or task.is_reviewer(project_member))
+    )
     locked = _marks_locked(task)
     assignee_states = []
     for member in assignees:
@@ -1149,6 +1155,11 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # Lead's alone.
                 "can_unreview": (
                     not locked
+                    # A task that asks for no review offers no review action,
+                    # withdrawal included. A verdict already given stays on
+                    # show — see show_review below — it just has no buttons
+                    # beside it any more.
+                    and needs_review
                     and (
                         is_project_manager
                         or (
@@ -1205,6 +1216,15 @@ def _task_status_context(task, *, project_member, is_project_manager):
         # A completed task's marks are frozen; only the Lead's own Mark Not
         # Complete stays live.
         "marks_locked": locked,
+        # Whether review is expected of this task at all — see
+        # ``Task.needs_review``. Gates who may review.
+        "needs_review": needs_review,
+        # Whether to draw the Reviewed column. Wider than needs_review by one
+        # case: a verdict already given still shows after the last reviewer
+        # comes off the task, because taking someone off the list does not
+        # unsay what they signed. There are no buttons in it then — nobody
+        # reviews on a task with no reviewers — just the standing record.
+        "show_review": needs_review or any(s["reviewed"] for s in assignee_states),
         # Named in the pane under the matrix, so it is clear who the Reviewed
         # column is waiting on. Read live, like everything else here: a
         # reviewer added or removed shows up on the next render.
@@ -1463,9 +1483,11 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     membership.
 
     Both directions close once the task is marked completed, like the
-    assignees' own marks. Withdrawing is the narrower of the two: a reviewer
-    may take back their own verdict and no one else's, while a Lead can clear
-    any review on the task.
+    assignees' own marks, and neither opens at all on a task that asks for no
+    review — the Reviewed column is not drawn there, so the endpoint behind it
+    should not answer either. Withdrawing is the narrower of the two: a
+    reviewer may take back their own verdict and no one else's, while a Lead
+    can clear any review on the task.
 
     POST ``reviewed=0`` withdraws the review; anything else records one.
     """
@@ -1474,6 +1496,11 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         log = get_object_or_404(
             TaskLog.objects.filter(task=self.task), pk=kwargs["log_pk"]
         )
+        if not self.task.needs_review:
+            return HttpResponseForbidden(
+                "This task doesn't require review. Turn on Require review and "
+                "name a reviewer first."
+            )
         if not (self.is_project_manager or self.task.is_reviewer(self.project_member)):
             return HttpResponseForbidden(
                 "Only a reviewer on this task can review submissions."

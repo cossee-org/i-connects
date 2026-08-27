@@ -140,6 +140,16 @@ class Task(models.Model):
 
     assign_by_role = models.BooleanField(default=False)
 
+    requires_review = models.BooleanField(
+        default=False,
+        help_text=(
+            "When set, each assignee's submission has to be signed off by one "
+            "of the task's reviewers before the task counts as done. The form "
+            "keeps this in step with ``reviewers``, which is what the review "
+            "rules actually read — see ``needs_review``."
+        ),
+    )
+
     auto_assign_new = models.CharField(
         max_length=16,
         choices=AutoAssignNew.choices,
@@ -230,6 +240,22 @@ class Task(models.Model):
         )
 
     # -- Review helpers -----------------------------------------------------
+    @property
+    def needs_review(self) -> bool:
+        """True when submissions on this task have to be signed off.
+
+        Read off the reviewer set, because that is the fact of the matter:
+        naming a reviewer is what puts a task under review, and taking the
+        last one off lifts it again. A task can therefore never end up
+        requiring a sign-off with nobody able to give it — which would be a
+        task nobody could finish.
+
+        ``requires_review`` is how the form says the same thing: ticking it
+        reveals the reviewers field and asks for at least one, unticking it
+        clears them. The flag is the intent; the reviewers are the rule.
+        """
+        return self.reviewers.exists()
+
     def is_reviewer(self, member) -> bool:
         """True when ``member`` is currently a reviewer on this task.
 

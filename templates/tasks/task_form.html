@@ -128,8 +128,28 @@
     <div class="md:col-span-2">
       {% include "_components/form_field.html" with field=form.assigned_members %}
     </div>
-    <div class="md:col-span-2">
-      {% include "_components/form_field.html" with field=form.reviewers %}
+
+    {% comment %}
+      Reviewers only exist to answer Require review, so the field stays out of
+      the way until the box is ticked. The form asks for at least one reviewer
+      whenever it is, and clears them again when it is not — so what the box
+      says and who is named never drift apart.
+    {% endcomment %}
+    <div class="md:col-span-2"
+         x-data="{ requiresReview: {{ form.requires_review.value|yesno:'true,false,false' }} }">
+      <div class="mb-3">
+        <label class="label cursor-pointer justify-start gap-2 py-0" for="{{ form.requires_review.id_for_label }}">
+          {{ form.requires_review }}
+          <span class="label-text text-sm text-brand-navy font-medium">{{ form.requires_review.label }}</span>
+        </label>
+        <p class="text-xs text-brand-text/60 mt-1">{{ form.requires_review.help_text }}</p>
+        {% if form.requires_review.errors %}
+          <span class="label-text-alt text-error">{{ form.requires_review.errors|join:" " }}</span>
+        {% endif %}
+      </div>
+      <div x-cloak x-show="requiresReview" x-transition>
+        {% include "_components/form_field.html" with field=form.reviewers %}
+      </div>
     </div>
   </div>
 

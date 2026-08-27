@@ -2031,6 +2031,7 @@ def test_pane_completion_matrix_reports_marks_and_reviews(client, user, other_us
     from apps.tasks.services import mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(contrib)
     # The lead marked their part done and a reviewer signed that submission
     # off; the contributor has done neither.
     mark_own_done(task=task, member=lead)
@@ -2055,7 +2056,8 @@ def test_pane_matrix_treats_an_unreviewed_mark_as_not_reviewed(client, user, oth
     """A done mark alone is one check, not two: review is a separate verdict."""
     from apps.tasks.services import mark_own_done
 
-    project, task, lead, _contrib = _two_assignee_task(user, other_user)
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(contrib)
     mark_own_done(task=task, member=lead)
 
     client.force_login(user)
@@ -2854,7 +2856,9 @@ def test_only_a_reviewer_or_lead_can_review(client, user, other_user):
     """A plain assignee gets neither the buttons nor the endpoint."""
     from apps.tasks.services import mark_own_done
 
-    project, task, lead, contrib = _reviewed_task(user, other_user)
+    project, task, lead, contrib = _reviewed_task(
+        user, other_user, reviewer_is_lead=True
+    )
     mark_own_done(task=task, member=lead)
     ProjectPrivilege.objects.filter(project=project, user=other_user).update(
         privilege=MemberPrivileges.CONTRIBUTOR
@@ -3113,12 +3117,16 @@ def test_pane_names_the_reviewers(client, user, other_user, pm_user):
 
 
 @pytest.mark.django_db
-def test_pane_says_when_a_task_has_no_reviewers(client, user, other_user):
+def test_a_task_with_no_reviewers_has_no_review_column_at_all(client, user, other_user):
+    """Nobody to review means nothing to review: the column and the list go."""
     project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Reviewers</h4>" in pane
-    assert "No reviewers assigned." in pane
+    assert "Reviewers</h4>" not in pane
+    assert ">Reviewed<" not in pane
+    assert "Awaiting review" not in pane
+    # The assignees and their own marks are all still there.
+    assert "Marked Done" in pane
 
 
 @pytest.mark.django_db
@@ -3132,9 +3140,9 @@ def test_pane_reviewer_list_follows_the_task(client, user, other_user):
 
     task.reviewers.remove(contrib)
     pane = client.get(_pane_url(project, task)).content.decode()
-    reviewers = pane[pane.index("Reviewers</h4>") : pane.index("</div>", pane.index("Reviewers</h4>"))]
-    assert contrib.display_name not in reviewers
-    assert "No reviewers assigned." in pane
+    # The last reviewer off takes the Reviewed column and its list with them.
+    assert "Reviewers</h4>" not in pane
+    assert ">Reviewed<" not in pane
 
 
 @pytest.mark.django_db
@@ -3756,9 +3764,13 @@ def test_a_reviewer_who_is_not_assigned_gets_every_row(client, user, other_user)
 
 
 def _done_cell(row):
-    """The Marked Done cell of a matrix row, without the name column beside it."""
+    """The Marked Done cell of a matrix row, without the name column beside it.
+
+    It is the row's first ``<td>`` — the assignee's name sits in a ``<th>``,
+    and a Reviewed cell, where the task has one, comes after.
+    """
     first = row.index("<td")
-    return row[first : row.index("<td", first + 1)]
+    return row[first : row.index("</td>", first)]
 
 
 @pytest.mark.django_db
@@ -4271,3 +4283,124 @@ def test_the_detail_page_drops_edit_and_delete_once_completed(client, user):
     body = client.get(url).content.decode()
     assert edit_url in body
     assert delete_url in body
+
+
+# ---------------------------------------------------------------------------
+# Require review: the tickbox that puts a task under review
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_require_review_asks_for_a_reviewer(user, other_user):
+    project, col1, _col2 = _make_project_with_board(user)
+    form = TaskForm(
+        data=_task_form_data(col1, requires_review="on"), project=project
+    )
+    assert not form.is_valid()
+    assert "reviewers" in form.errors
+    assert "at least one reviewer" in str(form.errors["reviewers"])
+
+
+@pytest.mark.django_db
+def test_require_review_with_a_reviewer_validates(user, other_user):
+    project, col1, _col2 = _make_project_with_board(user)
+    reviewer = _add_contributor(project, other_user)
+    form = TaskForm(
+        data=_task_form_data(
+            col1, requires_review="on", reviewers=[str(reviewer.pk)]
+        ),
+        project=project,
+    )
+    assert form.is_valid(), form.errors
+
+
+@pytest.mark.django_db
+def test_unticking_require_review_clears_the_reviewers(client, user, other_user):
+    """What the box says and who is named never drift apart."""
+    project, col1, _col2 = _make_project_with_board(user)
+    reviewer = _add_contributor(project, other_user)
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        _task_form_data(col1, requires_review="on", reviewers=[str(reviewer.pk)]),
+    )
+    task = Task.objects.get(name="Dated")
+    assert task.requires_review is True
+    assert list(task.reviewers.all()) == [reviewer]
+    assert task.needs_review is True
+
+    # Re-save with the box unticked: the reviewer goes with it.
+    client.post(
+        reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        _task_form_data(col1, reviewers=[str(reviewer.pk)]),
+    )
+    task.refresh_from_db()
+    assert task.requires_review is False
+    assert list(task.reviewers.all()) == []
+    assert task.needs_review is False
+
+
+@pytest.mark.django_db
+def test_the_task_form_carries_the_require_review_tickbox(client, user):
+    project, _col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+    body = client.get(
+        reverse("tasks:create", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    assert "Require review" in body
+    assert 'name="requires_review"' in body
+    # The reviewers field is in the markup but folded away until it is ticked.
+    assert 'x-show="requiresReview"' in body
+
+
+@pytest.mark.django_db
+def test_reviewing_is_refused_on_a_task_that_asks_for_none(client, user, other_user):
+    """No reviewers means no Reviewed column — and no endpoint behind it."""
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _two_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    log = _current_log(task, contrib)
+
+    client.force_login(user)  # a Lead, who could review if the task asked
+    resp = client.post(
+        _review_url(task, log), {"reviewed": "1"}, HTTP_HX_REQUEST="true"
+    )
+    assert resp.status_code == 403
+    log.refresh_from_db()
+    assert not log.is_reviewed
+
+
+@pytest.mark.django_db
+def test_a_task_with_no_reviewers_closes_without_one(client, user, other_user):
+    """The done marks alone finish it, and the credit follows them."""
+    from apps.tasks.services import close_task, mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    mark_own_done(task=task, member=lead)
+    mark_own_done(task=task, member=contrib)
+
+    close_task(task=task, closed_by=lead)
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+
+@pytest.mark.django_db
+def test_a_standing_verdict_survives_the_last_reviewer_leaving(client, user, other_user):
+    """Taking someone off the list does not unsay what they signed."""
+    from apps.tasks.services import mark_reviewed
+
+    project, task, lead, contrib = _reviewed_task(
+        user, other_user, reviewer_is_lead=True
+    )
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+    task.reviewers.remove(lead)
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    # The column and the verdict stay; the reviewer list and the buttons go.
+    assert ">Reviewed<" in pane
+    assert f"by {lead.display_name}" in pane
+    assert "Reviewers</h4>" not in pane
+    assert "Mark not reviewed" not in pane

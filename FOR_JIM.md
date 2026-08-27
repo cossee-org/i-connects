@@ -54,7 +54,13 @@ Closing a task is the ledger event. When a project lead completes it, a
 `ContributionRecord` is written for each assignee who marked their own part
 done; where the task carries reviewers, only for submissions a reviewer
 signed off. Reopening the task withdraws that credit again, and closing it
-writes it back.
+writes it back. A completed task is frozen while it stands completed —
+editing it, deleting it, changing its assignees or its milestone are all
+refused until a lead marks it not complete.
+
+Review is opt-in per task: tick **Require review** on the task form and the
+Reviewers field appears (it asks for at least one). A task with no reviewers
+has no Reviewed column and no review actions at all.
 
 The ledger is correctable. A lead can change the role a contribution was
 recorded under, withdraw one, or enter one by hand for work the automatic
@@ -221,8 +227,11 @@ link is set. Pattern-based (regex); no API calls, no rate-limit risk.
 2. **Project + tasks**
    - Create a project — set "Choose contribution tracking" to CRediT.
    - Add a kanban column, then create a task; note the "Task type" select,
-     offering CRediT's 14 roles (it appears only on a CRediT project).
+     offering CRediT's 14 roles (it appears only on a CRediT project), and
+     the "Require review" tickbox that reveals the Reviewers field.
    - Assign yourself, mark your own part done, then close the task as lead.
+   - With the task completed, Edit and Delete are gone; Mark Not Complete
+     brings them back.
 3. **Contribution ledger + downloads**
    - Open the project's **Contribution Tracking** tab — the matrix shows 1 in
      the column matching the task's type, and the list names the task below.
