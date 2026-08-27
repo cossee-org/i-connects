@@ -484,6 +484,8 @@ def _notify_task_completed(*, task: Task, completed_by: ProjectMember) -> None:
         title=f"Task completed: {task.name}",
         body=f"In project {task.project.name}.",
         project=task.project,
+        route="tasks:detail",
+        route_kwargs={"project_pk": task.project_id, "pk": task.pk},
     )
 
 
@@ -506,6 +508,8 @@ def _notify_submission_reviewed(*, task_log: TaskLog, reviewer: ProjectMember) -
         title=f"Submission reviewed: {task.name}",
         body=f"{reviewer.display_name} marked your part reviewed.",
         project=task.project,
+        route="tasks:detail",
+        route_kwargs={"project_pk": task.project_id, "pk": task.pk},
     )
 
 
@@ -530,4 +534,6 @@ def _notify_task_approval(*, task_log: TaskLog, approved: bool | None) -> None:
         title=f"Task completion {verb}: {task.name}",
         body=f"In project {task.project.name}.",
         project=task.project,
+        route="tasks:detail",
+        route_kwargs={"project_pk": task.project_id, "pk": task.pk},
     )

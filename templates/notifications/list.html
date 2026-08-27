@@ -3,36 +3,50 @@
 {% block title %}Notifications &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block page_header %}
-  <header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-    <div>
+  {% comment %}
+    Title, its "i", and the page's actions. The subtitle lives in the
+    popover rather than under the heading, the same way Projects and
+    Contributions do it.
+  {% endcomment %}
+  <header class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div class="flex items-center gap-3">
       <h1 class="page-title font-semibold text-brand-navy leading-tight">Notifications</h1>
-      <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">Announcements, mentions, and project updates.</p>
+      {% include "_components/info_popover.html" with label="Notifications" body="Announcements, project updates, and news about your tasks. Click one to go to what it is about; it is marked read on the way." %}
     </div>
-    {% if user.is_staff or user.is_superuser or user.role == "ADMIN" %}
-      <div class="shrink-0">
+    <div class="shrink-0 flex items-center gap-2">
+      {% if unread_count %}
+        <form method="post" action="{% url 'notifications:mark_all_read' %}">
+          {% csrf_token %}
+          {% comment %}Come back to whichever tab the reader is standing on.{% endcomment %}
+          <input type="hidden" name="next" value="{% if current_filter == 'unread' %}?filter=unread{% endif %}">
+          <button type="submit" class="btn btn-sm btn-ghost text-brand-navy">
+            Mark all as read
+          </button>
+        </form>
+      {% endif %}
+      {% if user.is_staff or user.is_superuser or user.role == "ADMIN" %}
         <a href="{% url 'notifications:announcement_create' %}"
            class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
           New announcement
         </a>
-      </div>
-    {% endif %}
+      {% endif %}
+    </div>
   </header>
 {% endblock %}
 
 {% block content %}
 <section class="max-w-3xl mx-auto">
-  {% with current_filter=request.GET.filter %}
-    <div class="flex gap-6 border-b border-brand-light mb-4">
-      <a href="{% url 'notifications:list' %}"
-         class="brand-tab {% if not current_filter or current_filter == 'all' %}brand-tab-active{% endif %}">
-        All
-      </a>
-      <a href="?filter=unread"
-         class="brand-tab {% if current_filter == 'unread' %}brand-tab-active{% endif %}">
-        Unread
-      </a>
-    </div>
-  {% endwith %}
+  <div class="flex gap-6 border-b border-brand-light mb-4">
+    <a href="{% url 'notifications:list' %}"
+       class="brand-tab {% if current_filter == 'all' %}brand-tab-active{% endif %}">
+      All
+    </a>
+    <a href="?filter=unread"
+       class="brand-tab {% if current_filter == 'unread' %}brand-tab-active{% endif %}">
+      Unread
+      {% if unread_count %}<span class="ml-1.5">{% include "notifications/_count.html" %}</span>{% endif %}
+    </a>
+  </div>
 
   {% if notifications %}
     <div class="brand-card divide-y divide-brand-light overflow-hidden">
@@ -41,19 +55,23 @@
       {% endfor %}
     </div>
   {% else %}
-    {% include "_components/empty_state.html" with title="No notifications" body="You're all caught up. New announcements and mentions will appear here." %}
+    {% if current_filter == 'unread' %}
+      {% include "_components/empty_state.html" with title="Nothing unread" body="You're all caught up." %}
+    {% else %}
+      {% include "_components/empty_state.html" with title="No notifications" body="New announcements and project updates will appear here." %}
+    {% endif %}
   {% endif %}
 
   {% if page_obj and page_obj.has_other_pages %}
     <div class="flex justify-center mt-6 gap-2">
       {% if page_obj.has_previous %}
-        <a class="btn btn-sm btn-ghost" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+        <a class="btn btn-sm btn-ghost" href="?page={{ page_obj.previous_page_number }}{% if current_filter == 'unread' %}&amp;filter=unread{% endif %}">Previous</a>
       {% endif %}
       <span class="btn btn-sm btn-ghost no-animation">
         Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
       </span>
       {% if page_obj.has_next %}
-        <a class="btn btn-sm btn-ghost" href="?page={{ page_obj.next_page_number }}">Next</a>
+        <a class="btn btn-sm btn-ghost" href="?page={{ page_obj.next_page_number }}{% if current_filter == 'unread' %}&amp;filter=unread{% endif %}">Next</a>
       {% endif %}
     </div>
   {% endif %}

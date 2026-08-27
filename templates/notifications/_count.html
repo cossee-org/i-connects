@@ -1,0 +1,10 @@
+{% comment %}
+  The unread-count pill itself. Renders nothing at zero so every caller can
+  drop it into a wrapper unconditionally — which is also why callers space
+  it with ``pill_class`` rather than a flex ``gap`` on the parent: the
+  wrapper stays in the DOM for htmx to swap into, so a gap would hold space
+  open even with no count to show.
+
+  Callers pass ``unread_count`` and optionally ``pill_class``.
+{% endcomment %}
+{% if unread_count and unread_count > 0 %}<span class="{{ pill_class }} text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] inline-block text-center pointer-events-none">{% if unread_count > 99 %}99+{% else %}{{ unread_count }}{% endif %}<span class="sr-only"> unread</span></span>{% endif %}

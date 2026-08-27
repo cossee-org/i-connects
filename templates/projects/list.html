@@ -9,6 +9,7 @@
 <div class="flex items-center gap-3 mb-6">
   <h1 class="page-title font-semibold text-brand-navy">Project discovery</h1>
   <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_project_count }}</span>
+  {% include "_components/info_popover.html" with label="Project discovery" body="Every project open to discovery across i-CONNECTS, including ones you're not part of. Search and filter to find work to join, then ask to join from the project's page." %}
 </div>
 
 {# ── Filter / sort bar ─────────────────────────────────────────────────────── #}

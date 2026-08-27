@@ -1,18 +1,5 @@
 {% comment %}
-  HTMX partial: the unread-count badge for the navbar.
-
-  Swapped into the element with id="notification-badge".
-  When ``swap_oob_badge`` is truthy, this partial is re-rendered inside an
-  out-of-band swap so the badge updates after mark-read interactions.
+  HTMX partial polled by the top bar. It only ever emits out-of-band swaps,
+  so the poll is fetched with hx-swap="none" and still refreshes both badges.
 {% endcomment %}
-{% if swap_oob_badge %}
-  <span id="notification-badge" hx-swap-oob="innerHTML">
-    {% if unread_count and unread_count > 0 %}
-      <span class="badge badge-sm bg-brand-coral border-brand-coral text-white">{{ unread_count }}</span>
-    {% endif %}
-  </span>
-{% else %}
-  {% if unread_count and unread_count > 0 %}
-    <span class="badge badge-sm bg-brand-coral border-brand-coral text-white">{{ unread_count }}</span>
-  {% endif %}
-{% endif %}
+{% include "notifications/_badge_oob.html" %}
