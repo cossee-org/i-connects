@@ -18,3 +18,17 @@ def get_item(d, key):
     if d is None:
         return 0
     return d.get(key, 0)
+
+
+@register.filter
+def display_name(user) -> str:
+    """A user's full name, falling back to their account name, then email.
+
+    The same rule the rest of the app reads a person by, as a filter so the
+    contribution tables can name someone without the view assembling it.
+    """
+    from apps.contributions.services import user_display_name
+
+    if user is None:
+        return ""
+    return user_display_name(user)

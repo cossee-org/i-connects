@@ -8,6 +8,7 @@ CSV helpers behind the contributions pages.
 from __future__ import annotations
 
 import pytest
+from django.urls import reverse
 
 from apps.contributions.models import ContributionRecord
 from apps.contributions.services import (
@@ -379,3 +380,62 @@ def test_my_contributions_csv_empty_only_header(client, user):
     body = b"".join(resp.streaming_content).decode("utf-8")
     lines = [line for line in body.splitlines() if line]
     assert len(lines) == 1  # header only
+
+
+# ---------------------------------------------------------------------------
+# The project's Contribution Tracking tab
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_tracking_tab_shows_the_matrix(client, user, other_user):
+    project, col, pm = _make_project(user)
+    other = _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    _credit(project, col, pm, other, ContributionType.DATA_CURATION)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Contributions by member" in body
+    assert "Software" in body
+    assert "Data curation" in body
+    assert "Alice" in body
+    assert "Bob" in body
+
+
+@pytest.mark.django_db
+def test_tracking_tab_lists_a_member_with_no_credit_yet(client, user, other_user):
+    """A gap in the credit should be as visible as the credit itself."""
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Bob" in body
+
+
+@pytest.mark.django_db
+def test_tracking_tab_explains_an_untracked_project(client, user):
+    project, _col, _pm = _make_project(user, tracking=ContributionTracking.NONE)
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "tracking contributions" in body
+    assert "Contributions by member" not in body
+
+
+@pytest.mark.django_db
+def test_the_old_project_contributions_url_redirects_to_the_tab(client, user):
+    project, _col, _pm = _make_project(user)
+    client.force_login(user)
+    resp = client.get(f"/projects/{project.pk}/contributions/")
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse(
+        "projects:contribution_tracking", kwargs={"pk": project.pk}
+    )

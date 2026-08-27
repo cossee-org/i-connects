@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load contribution_tags %}
 
 {% block title %}Contribution Tracking &mdash; {{ project.name }}{% endblock %}
 
@@ -9,5 +10,109 @@
 {% endblock %}
 
 {% block content %}
-{% include "_components/empty_state.html" with title="Coming soon" body="Contribution Tracking is on the way. Check back later." %}
+{% if not project.tracks_credit %}
+  {% comment %}
+    Nothing to show, and nothing that could appear later: contributions are
+    only recorded on a project tracking them as CRediT. Say which it is, and
+    point a lead at the switch.
+  {% endcomment %}
+  {% if is_project_manager %}
+    {% url 'projects:update' pk=project.pk as settings_url %}
+    {% include "_components/empty_state.html" with title="This project isn't tracking contributions" body="Turn on CRediT in the project settings and each task's contributors are credited as it is completed." cta_href=settings_url cta_label="Open project settings" %}
+  {% else %}
+    {% include "_components/empty_state.html" with title="This project isn't tracking contributions" body="A project lead can turn on CRediT tracking in the project settings." %}
+  {% endif %}
+{% else %}
+
+  <div class="mb-6">
+    <h2 class="text-lg font-semibold text-brand-navy">Contributions by member</h2>
+    <p class="text-sm text-brand-text/70 mt-1 max-w-2xl">
+      Each member's credit on this project, by
+      <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
+         class="text-brand-navy underline hover:text-brand-coral">CRediT</a>
+      role. A member earns credit on a task when they mark their own part done
+      and a lead completes the task &mdash; where the task has reviewers, once
+      their submission has been reviewed.
+    </p>
+  </div>
+
+  {% if matrix.totals.grand_total == 0 %}
+    {% include "_components/empty_state.html" with title="No contributions yet" body="Credit appears here as tasks are completed." %}
+  {% else %}
+    <div class="brand-card overflow-x-auto mb-8">
+      <table class="table">
+        <caption class="sr-only">Contributions by member and CRediT role</caption>
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th scope="col">Member</th>
+            {% for value, label in matrix.types %}
+              <th scope="col" class="text-right font-medium">{{ label }}</th>
+            {% endfor %}
+            <th scope="col" class="text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in matrix.rows %}
+            <tr>
+              <th scope="row" class="font-normal text-left">
+                <div class="flex items-center gap-2">
+                  <span class="w-7 h-7 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0" aria-hidden="true">
+                    {{ row.user|display_name|slice:":1"|upper }}
+                  </span>
+                  <a href="{% url 'public_profile' pk=row.user.pk %}"
+                     class="truncate text-brand-navy hover:text-brand-coral">{{ row.user|display_name }}</a>
+                </div>
+              </th>
+              {% for value, label in matrix.types %}
+                <td class="text-right{% if not row.counts|get_item:value %} text-brand-text/30{% endif %}">{{ row.counts|get_item:value|default:0 }}</td>
+              {% endfor %}
+              <td class="text-right font-semibold text-brand-navy">{{ row.total }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="font-semibold bg-brand-lighter/60 text-brand-navy">
+            <td>Total</td>
+            {% for value, label in matrix.types %}
+              <td class="text-right">{{ matrix.totals|get_item:value|default:0 }}</td>
+            {% endfor %}
+            <td class="text-right">{{ matrix.totals.grand_total }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <h2 class="text-lg font-semibold text-brand-navy mb-3">Every contribution</h2>
+    <div class="brand-card overflow-x-auto">
+      <table class="table">
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th scope="col">Member</th>
+            <th scope="col">Task</th>
+            <th scope="col">Role</th>
+            <th scope="col">Completed</th>
+            <th scope="col">Closed by</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in records %}
+            <tr>
+              <th scope="row" class="font-normal text-left">
+                <a href="{% url 'public_profile' pk=record.user_id %}"
+                   class="text-brand-navy hover:text-brand-coral">{{ record.user|display_name }}</a>
+              </th>
+              <td>
+                <a href="{% url 'tasks:detail' project_pk=project.pk pk=record.task_id %}"
+                   class="text-brand-navy hover:text-brand-coral">{{ record.task.name }}</a>
+              </td>
+              <td>{{ record.get_contribution_type_display }}</td>
+              <td class="whitespace-nowrap">{{ record.closed_at|date:"M j, Y" }}</td>
+              <td>{% if record.verified_by %}{{ record.verified_by|display_name }}{% else %}<span class="text-brand-text/40">&mdash;</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+{% endif %}
 {% endblock %}

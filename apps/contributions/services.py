@@ -16,7 +16,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
-from apps.core.enums import ContributionType, TaskStatus
+from apps.core.enums import CREDIT_ROLES, ContributionType, TaskStatus
 from apps.projects.models import Project, ProjectMember
 from apps.tasks.models import Task, TaskLog
 
@@ -143,50 +143,105 @@ def get_user_contribution_counts_by_type(user: User) -> dict[str, int]:
     return dict(counts)
 
 
-def get_project_contributions_matrix(project: Project) -> dict:
-    """Build a members × contribution-type matrix for a project.
+def project_member_users(project: Project) -> list[User]:
+    """Every user holding a live membership on ``project``, name-sorted."""
+    return list(
+        User.objects.filter(
+            project_memberships__project=project,
+            project_memberships__deleted=False,
+        )
+        .distinct()
+        .order_by("given_name", "family_name", "name", "email")
+    )
+
+
+def get_project_contributions_matrix(
+    project: Project, *, all_types: bool = False
+) -> dict:
+    """Build a members × CRediT-role matrix for a project.
 
     Returns a dict with:
-        - ``types``: list of (value, label) for every ContributionType
-        - ``rows``:  list of ``{"user": User, "counts": {type: int}, "total": int}``
-                     one entry per user who has at least one contribution in
-                     the project, sorted by total desc then by name.
-        - ``totals``: dict ``{type: int}`` of column totals, plus
-                     ``"grand_total"`` for the full count. Underscore-free
-                     keys so Django templates can reach them.
+        - ``types``:  list of ``(value, label)`` for the columns.
+        - ``rows``:   list of ``{"user": User, "counts": {type: int},
+                      "total": int}``, sorted by total desc then by name.
+        - ``totals``: ``{type: int}`` column totals, plus ``"grand_total"``.
+                      Underscore-free keys so templates can reach them.
 
-    Read-only; computed from the append-only table.
+    Every current member gets a row whether or not they have earned
+    anything, so a gap in the credit is as visible as the credit itself,
+    and anyone who has earned credit but since left the project keeps
+    theirs.
+
+    Columns are the roles this project has actually used, which keeps the
+    table readable — the full taxonomy is 14 roles wide, and most projects
+    touch a handful. Pass ``all_types`` for the whole taxonomy, as the
+    matrix download does.
     """
-    type_choices = list(ContributionType.choices)  # [(value, label), ...]
-    type_values = [v for v, _ in type_choices]
+    labels = dict(ContributionType.choices)
 
     qs = (
         ContributionRecord.objects.filter(project=project)
         .select_related("user")
-        .only("user_id", "contribution_type", "user__name", "user__email")
+        .only(
+            "user_id",
+            "contribution_type",
+            "user__name",
+            "user__email",
+            "user__given_name",
+            "user__family_name",
+        )
     )
+    records = list(qs)
 
-    users_by_id: dict[int, User] = {}
-    per_user: dict[int, dict[str, int]] = defaultdict(lambda: {v: 0 for v in type_values})
+    used_types = {rec.contribution_type for rec in records}
+    if all_types:
+        type_values = [v for v in CREDIT_ROLES] + [
+            v for v in used_types if v not in CREDIT_ROLES
+        ]
+    else:
+        # CRediT's own roles first, in the taxonomy's order, then anything
+        # off it this project has used (a task left as "Other", say).
+        type_values = [v for v in CREDIT_ROLES if v in used_types] + sorted(
+            v for v in used_types if v not in CREDIT_ROLES
+        )
+    type_choices = [(v, labels.get(v, v)) for v in type_values]
+
+    users_by_id: dict[int, User] = {u.pk: u for u in project_member_users(project)}
+    per_user: dict[int, dict[str, int]] = {
+        uid: {v: 0 for v in type_values} for uid in users_by_id
+    }
     column_totals: dict[str, int] = {v: 0 for v in type_values}
     grand_total = 0
 
-    for rec in qs:
-        users_by_id[rec.user_id] = rec.user
-        per_user[rec.user_id][rec.contribution_type] += 1
-        column_totals[rec.contribution_type] += 1
+    for rec in records:
+        users_by_id.setdefault(rec.user_id, rec.user)
+        counts = per_user.setdefault(rec.user_id, {v: 0 for v in type_values})
+        if rec.contribution_type in counts:
+            counts[rec.contribution_type] += 1
+            column_totals[rec.contribution_type] += 1
         grand_total += 1
 
-    rows = []
-    for uid, counts in per_user.items():
-        rows.append(
-            {
-                "user": users_by_id[uid],
-                "counts": counts,
-                "total": sum(counts.values()),
-            }
-        )
-    rows.sort(key=lambda r: (-r["total"], (r["user"].name or r["user"].email or "").lower()))
+    rows = [
+        {
+            "user": users_by_id[uid],
+            "counts": counts,
+            "total": sum(counts.values()),
+        }
+        for uid, counts in per_user.items()
+    ]
+    rows.sort(key=lambda r: (-r["total"], user_sort_key(r["user"])))
 
     column_totals["grand_total"] = grand_total
     return {"types": type_choices, "rows": rows, "totals": column_totals}
+
+
+def user_sort_key(user: User) -> str:
+    """Name a user sorts under: their full name, else their email."""
+    full = f"{(user.given_name or '').strip()} {(user.family_name or '').strip()}".strip()
+    return (full or user.name or user.email or "").lower()
+
+
+def user_display_name(user: User) -> str:
+    """A user's full name, falling back to their account name, then email."""
+    full = f"{(user.given_name or '').strip()} {(user.family_name or '').strip()}".strip()
+    return full or user.name or user.email

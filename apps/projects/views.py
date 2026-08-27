@@ -22,6 +22,10 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET
 
 from apps.audit.services import AuditAction, log_action
+from apps.contributions.services import (
+    get_project_contributions,
+    get_project_contributions_matrix,
+)
 from apps.core.enums import MemberPrivileges
 
 
@@ -857,7 +861,25 @@ class ProjectMemberListView(
 class ContributionTrackingView(
     ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
 ):
+    """The project's credit ledger: who did what, by CRediT role.
+
+    Open to every project member — a contribution matrix that only its
+    leads could read would be no use to the people in it.
+    """
+
     template_name = "projects/contribution_tracking.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["is_project_manager"] = (
+            context.get("user_privilege") == MemberPrivileges.PROJECT_MANAGER
+        )
+        if self.project.tracks_credit:
+            context["matrix"] = get_project_contributions_matrix(self.project)
+            context["records"] = get_project_contributions(self.project).order_by(
+                "-closed_at", "-id"
+            )
+        return context
 
 
 class WikiView(
