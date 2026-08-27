@@ -1,24 +1,22 @@
-"""ContributionRecord: an append-only ledger of task-close events.
+"""ContributionRecord: the ledger of credit earned on closed tasks.
 
-Per Ultra Plan §8:
+A record is written when a project lead closes a task on a project that
+tracks contributions as CRediT, one per user behind each assignee who
+marked their own part done (and had it reviewed, where the task carries
+reviewers). Reopening the task withdraws them again.
 
-    Contribution records are immutable event logs, not editable ratings. A
-    contribution is created when a task is closed. It cannot be edited or
-    deleted by anyone (including admin).
-
-The model therefore:
-- has no ``updated_at`` field;
-- overrides ``save()`` to refuse updates to an existing row;
-- overrides ``delete()`` to refuse deletions outright;
-- uses ``on_delete=PROTECT`` on every FK so the row cannot be orphaned by
-  deleting its task / user / project (soft-delete is the correct path for
-  those — §7).
+The rows follow task state rather than standing apart from it, so every FK
+cascades: deleting a task, a project or a user takes the credit recorded
+against it. Leads can also correct a record by hand — credit is a claim
+about who did what, and a wrong claim has to be fixable. A row a lead
+entered themselves is marked ``added_by_hand``, and is left alone by the
+automatic writer and its withdrawal.
 """
 
 from __future__ import annotations
 
 from django.conf import settings
-from django.db import IntegrityError, models
+from django.db import models
 
 from apps.core.enums import ContributionType
 
@@ -26,22 +24,29 @@ from apps.core.enums import ContributionType
 class ContributionRecord(models.Model):
     task = models.ForeignKey(
         "tasks.Task",
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="contributions",
     )
     task_log = models.ForeignKey(
         "tasks.TaskLog",
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="contributions",
+        help_text=(
+            "The submission this credit was earned on. Null on a record a "
+            "lead entered by hand, which stands on their say-so rather than "
+            "on a mark someone made."
+        ),
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="contributions",
     )
     project = models.ForeignKey(
         "projects.Project",
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name="contributions",
     )
     contribution_type = models.CharField(
@@ -57,7 +62,15 @@ class ContributionRecord(models.Model):
         related_name="contributions_verified",
     )
     closed_at = models.DateTimeField()
+    added_by_hand = models.BooleanField(
+        default=False,
+        help_text=(
+            "True when a lead entered this record themselves rather than it "
+            "being written by a task closing."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-closed_at", "-id"]
@@ -68,23 +81,15 @@ class ContributionRecord(models.Model):
             models.Index(fields=["contribution_type"]),
         ]
         constraints = [
+            # One credit per person per task: the role comes from the task,
+            # so a second row would only ever double-count the same work.
+            # Keyed on the task rather than the submission because a
+            # hand-entered record has no submission behind it.
             models.UniqueConstraint(
-                fields=["task_log", "user"],
-                name="contribution_unique_per_tasklog_user",
+                fields=["task", "user"],
+                name="contribution_unique_per_task_user",
             ),
         ]
 
     def __str__(self) -> str:
         return f"Contribution #{self.pk} ({self.user_id} / {self.contribution_type})"
-
-    def save(self, *args, **kwargs):
-        if self.pk is not None:
-            raise IntegrityError(
-                "ContributionRecord is append-only; existing rows cannot be updated."
-            )
-        super().save(*args, **kwargs)
-
-    def delete(self, *args, **kwargs):
-        raise IntegrityError(
-            "ContributionRecord is append-only; rows cannot be deleted."
-        )

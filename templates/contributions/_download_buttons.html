@@ -1,0 +1,28 @@
+{% comment %}
+  The pair of CSV downloads offered on a contributions surface.
+
+  Requires `matrix_url` and, when the caller may take it, `list_url` —
+  both already carrying any query string the page is filtered by.
+{% endcomment %}
+<div class="flex flex-wrap gap-2">
+  <a href="{{ matrix_url }}" class="btn btn-outline btn-primary btn-sm"
+     aria-label="Download the contribution matrix as CSV">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+         stroke-width="1.8" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+    </svg>
+    Matrix (CSV)
+  </a>
+  {% if list_url %}
+    <a href="{{ list_url }}" class="btn btn-outline btn-primary btn-sm"
+       aria-label="Download the contribution list as CSV">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.8" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+      </svg>
+      List (CSV)
+    </a>
+  {% endif %}
+</div>

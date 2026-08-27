@@ -13,18 +13,22 @@ test checklist.
 ## Features
 
 - **Projects, tasks, kanban boards** — create, invite, assign, complete,
-  peer-verify, and approve.
-- **ContributionRecord ledger** — immutable, append-only log of who
-  completed what, with CRediT-aligned types. Append-only guards at the
-  model layer (save refuses updates, delete raises).
+  peer-verify, and approve. Review is opt-in per task ("Require review"),
+  and a completed task is frozen until its completion is reversed.
+- **CRediT contribution tracking** — a project opts in when it is
+  created, its tasks carry one of CRediT's 14 roles, and closing a task
+  credits the assignees who marked their part done (and had it reviewed,
+  where the task has reviewers). Correctable by a project lead, and
+  downloadable as a matrix or a list.
 - **Audit log** — append-only record of auth, project, member, role, and
   task lifecycle events. Per-user and per-project activity views plus
   Django admin read-only surface.
 - **Account lockout** — 10 failed sign-ins in 15 minutes locks the
   account; one-time email link unlocks. Auth signals ensure every
   failure is recorded, including ORCID flows.
-- **CSV export of contributions** — streams to a spreadsheet for
-  authorship / CRediT statements.
+- **CSV downloads of contributions** — a members × roles matrix or a
+  row-per-contribution list, streamed to a spreadsheet for authorship /
+  CRediT statements.
 - **Role-differentiated dashboard** — "My active tasks" + "Pending your
   approval" widgets for authenticated users.
 - **Forms builder** — JSON-schema-driven per-project custom forms
@@ -58,6 +62,22 @@ Create a superuser:
 ```bash
 docker compose exec web python manage.py createsuperuser
 ```
+
+### After pulling new code
+
+The `web` service mounts the repo and serves it with `runserver`, so a
+`git pull` swaps the code under the running server — but migrations only run
+when the container starts. Pull anything that touches a model and the schema
+is left behind, which used to surface as `column ... does not exist`. Apply
+them without a restart:
+
+```bash
+docker compose exec web python manage.py migrate
+```
+
+If you forget, the site says so: while anything is outstanding every page is
+replaced by a note naming the migrations and this command. That page is
+`DEBUG`-only, and clears itself as soon as `migrate` finishes.
 
 ## Run locally without Docker
 
@@ -116,7 +136,7 @@ iconnects-django/
     notifications/  In-app notification centre
     notes/          Markdown notes per project
     forms_builder/  Dynamic JSON-schema forms
-    contributions/  Immutable ContributionRecord ledger + CSV export
+    contributions/  ContributionRecord ledger + matrix / list downloads
     audit/          Immutable AuditLog with viewer
   templates/
     base.html

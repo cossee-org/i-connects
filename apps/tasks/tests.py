@@ -9,8 +9,18 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.audit.models import AuditAction, AuditLog
-from apps.core.enums import MemberPrivileges, ProjectStatus, TaskStatus
-from apps.projects.models import ProjectMember, ProjectPrivilege
+from apps.core.enums import (
+    CREDIT_ROLES,
+    ContributionType,
+    MemberPrivileges,
+    ProjectStatus,
+    TaskStatus,
+)
+from apps.projects.models import (
+    ContributionTracking,
+    ProjectMember,
+    ProjectPrivilege,
+)
 from apps.projects.services import create_project_with_owner
 from apps.tasks.calendar import (
     bucket_tasks_by_day,
@@ -25,8 +35,13 @@ from apps.tasks.calendar import (
     task_range,
 )
 from apps.tasks.forms import TaskForm
-from apps.tasks.models import KanbanBoard, Task, TaskLog
-from apps.tasks.services import approve_completion, complete_task
+from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
+from apps.tasks.services import (
+    approve_completion,
+    close_task,
+    complete_task,
+    reopen_task,
+)
 
 
 def _make_project_with_board(owner, *, name="P"):
@@ -2021,6 +2036,7 @@ def test_pane_completion_matrix_reports_marks_and_reviews(client, user, other_us
     from apps.tasks.services import mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(contrib)
     # The lead marked their part done and a reviewer signed that submission
     # off; the contributor has done neither.
     mark_own_done(task=task, member=lead)
@@ -2045,7 +2061,8 @@ def test_pane_matrix_treats_an_unreviewed_mark_as_not_reviewed(client, user, oth
     """A done mark alone is one check, not two: review is a separate verdict."""
     from apps.tasks.services import mark_own_done
 
-    project, task, lead, _contrib = _two_assignee_task(user, other_user)
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(contrib)
     mark_own_done(task=task, member=lead)
 
     client.force_login(user)
@@ -2844,7 +2861,9 @@ def test_only_a_reviewer_or_lead_can_review(client, user, other_user):
     """A plain assignee gets neither the buttons nor the endpoint."""
     from apps.tasks.services import mark_own_done
 
-    project, task, lead, contrib = _reviewed_task(user, other_user)
+    project, task, lead, contrib = _reviewed_task(
+        user, other_user, reviewer_is_lead=True
+    )
     mark_own_done(task=task, member=lead)
     ProjectPrivilege.objects.filter(project=project, user=other_user).update(
         privilege=MemberPrivileges.CONTRIBUTOR
@@ -3103,12 +3122,16 @@ def test_pane_names_the_reviewers(client, user, other_user, pm_user):
 
 
 @pytest.mark.django_db
-def test_pane_says_when_a_task_has_no_reviewers(client, user, other_user):
+def test_a_task_with_no_reviewers_has_no_review_column_at_all(client, user, other_user):
+    """Nobody to review means nothing to review: the column and the list go."""
     project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Reviewers</h4>" in pane
-    assert "No reviewers assigned." in pane
+    assert "Reviewers</h4>" not in pane
+    assert ">Reviewed<" not in pane
+    assert "Awaiting review" not in pane
+    # The assignees and their own marks are all still there.
+    assert "Marked Done" in pane
 
 
 @pytest.mark.django_db
@@ -3122,9 +3145,9 @@ def test_pane_reviewer_list_follows_the_task(client, user, other_user):
 
     task.reviewers.remove(contrib)
     pane = client.get(_pane_url(project, task)).content.decode()
-    reviewers = pane[pane.index("Reviewers</h4>") : pane.index("</div>", pane.index("Reviewers</h4>"))]
-    assert contrib.display_name not in reviewers
-    assert "No reviewers assigned." in pane
+    # The last reviewer off takes the Reviewed column and its list with them.
+    assert "Reviewers</h4>" not in pane
+    assert ">Reviewed<" not in pane
 
 
 @pytest.mark.django_db
@@ -3746,9 +3769,13 @@ def test_a_reviewer_who_is_not_assigned_gets_every_row(client, user, other_user)
 
 
 def _done_cell(row):
-    """The Marked Done cell of a matrix row, without the name column beside it."""
+    """The Marked Done cell of a matrix row, without the name column beside it.
+
+    It is the row's first ``<td>`` — the assignee's name sits in a ``<th>``,
+    and a Reviewed cell, where the task has one, comes after.
+    """
     first = row.index("<td")
-    return row[first : row.index("<td", first + 1)]
+    return row[first : row.index("</td>", first)]
 
 
 @pytest.mark.django_db
@@ -4029,3 +4056,497 @@ def test_the_tooltip_class_is_styled_by_the_page_shell(client, user):
     page = client.get(reverse("projects:list")).content.decode()
     assert ".hover-tooltip { position: relative; }" in page
     assert "content: attr(data-tooltip);" in page
+
+
+# ---------------------------------------------------------------------------
+# Task type: the CRediT role, on CRediT projects only
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_task_form_omits_task_type_off_a_credit_project(user):
+    project, col1, _col2 = _make_project_with_board(user)
+    assert not project.tracks_credit
+    form = TaskForm(project=project)
+    assert "contribution_type" not in form.fields
+
+
+@pytest.mark.django_db
+def test_task_form_offers_the_credit_roles(user):
+    project, col1, _col2 = _make_project_with_board(user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+
+    form = TaskForm(project=project)
+    field = form.fields["contribution_type"]
+    assert field.label == "Task type"
+    values = [value for value, _label in field.choices]
+    assert values[0] == ""  # "No task type"
+    assert set(values[1:]) == set(CREDIT_ROLES)
+    # Ours rather than CRediT's, so not offered on a fresh task.
+    assert ContributionType.OTHER not in values
+    assert ContributionType.WRITING not in values
+
+
+@pytest.mark.django_db
+def test_task_form_keeps_a_task_off_the_taxonomy_in_its_choices(user):
+    """Editing a task saved as "Other" must not quietly rewrite its type."""
+    project, col1, _col2 = _make_project_with_board(user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    task = Task.objects.create(
+        project=project,
+        created_by=_primary_member(project, user),
+        container=col1,
+        container_task_order=0,
+        name="Legacy",
+        contribution_type=ContributionType.OTHER,
+    )
+
+    form = TaskForm(project=project, instance=task)
+    values = [value for value, _label in form.fields["contribution_type"].choices]
+    assert ContributionType.OTHER in values
+
+
+@pytest.mark.django_db
+def test_creating_a_task_saves_its_task_type(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        _task_form_data(col1, contribution_type=ContributionType.SOFTWARE),
+    )
+    task = Task.objects.get(name="Dated")
+    assert task.contribution_type == ContributionType.SOFTWARE
+
+
+@pytest.mark.django_db
+def test_an_unpicked_task_type_falls_back_to_other(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        _task_form_data(col1, contribution_type=""),
+    )
+    task = Task.objects.get(name="Dated")
+    assert task.contribution_type == ContributionType.OTHER
+
+
+@pytest.mark.django_db
+def test_task_form_page_shows_the_task_type_field_only_for_credit(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+    url = reverse("tasks:create", kwargs={"project_pk": project.pk})
+
+    assert "Task type" not in client.get(url).content.decode()
+
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    body = client.get(url).content.decode()
+    assert "Task type" in body
+    assert "https://credit.niso.org/" in body
+
+
+# ---------------------------------------------------------------------------
+# A completed task is frozen until its completion is reversed
+# ---------------------------------------------------------------------------
+
+
+def _completed_task(user):
+    project, col1, col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project,
+        created_by=member,
+        container=col1,
+        container_task_order=0,
+        name="Frozen",
+        status=TaskStatus.COMPLETED,
+    )
+    return project, col1, col2, member, task
+
+
+@pytest.mark.django_db
+def test_a_completed_task_refuses_edits(client, user):
+    project, col1, _col2, _member, task = _completed_task(user)
+    client.force_login(user)
+    url = reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk})
+
+    # The form itself is refused, not just the save.
+    assert client.get(url).status_code == 302
+    client.post(url, _task_form_data(col1, name="Renamed"))
+    task.refresh_from_db()
+    assert task.name == "Frozen"
+
+
+@pytest.mark.django_db
+def test_a_completed_task_refuses_deletion(client, user):
+    project, _col1, _col2, _member, task = _completed_task(user)
+    client.force_login(user)
+    client.post(
+        reverse("tasks:delete", kwargs={"project_pk": project.pk, "pk": task.pk})
+    )
+    assert Task.objects.filter(pk=task.pk).exists()
+
+
+@pytest.mark.django_db
+def test_a_completed_task_refuses_assignee_changes(client, user, other_user):
+    project, _col1, _col2, _member, task = _completed_task(user)
+    newcomer = ProjectMember.objects.create(project=project)
+    newcomer.users.add(other_user)
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:assign", kwargs={"pk": task.pk}),
+        {"assigned_members": [newcomer.pk]},
+    )
+    assert list(task.assigned_members.all()) == []
+
+
+@pytest.mark.django_db
+def test_a_completed_task_refuses_a_milestone_change(client, user):
+    project, _col1, _col2, _member, task = _completed_task(user)
+    milestone = Milestone.objects.create(project=project, name="M1")
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:set_milestone", kwargs={"pk": task.pk}),
+        {"milestone": milestone.pk},
+    )
+    task.refresh_from_db()
+    assert task.milestone_id is None
+
+
+@pytest.mark.django_db
+def test_an_htmx_edit_of_a_completed_task_gets_a_conflict(client, user):
+    project, _col1, _col2, _member, task = _completed_task(user)
+    client.force_login(user)
+    resp = client.get(
+        reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        HTTP_HX_REQUEST="true",
+    )
+    assert resp.status_code == 409
+    assert b"mark it not complete" in resp.content
+
+
+@pytest.mark.django_db
+def test_reversing_the_completion_unlocks_the_task(client, user):
+    project, col1, _col2, _member, task = _completed_task(user)
+    client.force_login(user)
+
+    client.post(reverse("tasks:reopen", kwargs={"pk": task.pk}))
+    task.refresh_from_db()
+    assert task.status == TaskStatus.NOT_COMPLETED
+
+    url = reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk})
+    assert client.get(url).status_code == 200
+    client.post(url, _task_form_data(col1, name="Renamed"))
+    task.refresh_from_db()
+    assert task.name == "Renamed"
+
+
+@pytest.mark.django_db
+def test_a_completed_task_still_moves_between_columns(client, user):
+    """Which column it sits in is where it is, not what it is."""
+    project, _col1, col2, _member, task = _completed_task(user)
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:move", kwargs={"pk": task.pk}),
+        {"container_id": col2.pk, "order": 0},
+    )
+    task.refresh_from_db()
+    assert task.container_id == col2.pk
+
+
+@pytest.mark.django_db
+def test_the_detail_page_drops_edit_and_delete_once_completed(client, user):
+    project, _col1, _col2, _member, task = _completed_task(user)
+    client.force_login(user)
+    url = reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+
+    edit_url = reverse(
+        "tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}
+    )
+    # What opens the delete dialog, rather than the dialog itself: the
+    # dialog is inert markup that renders either way, so the button is what
+    # says whether deleting is on offer.
+    delete_opener = f"task-delete-modal-{task.pk}').showModal()"
+
+    body = client.get(url).content.decode()
+    assert edit_url not in body
+    assert delete_opener not in body
+    assert "Mark Not Complete" in body
+
+    task.status = TaskStatus.NOT_COMPLETED
+    task.save(update_fields=["status"])
+    body = client.get(url).content.decode()
+    assert edit_url in body
+    assert delete_opener in body
+
+
+# ---------------------------------------------------------------------------
+# Require review: the tickbox that puts a task under review
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_require_review_asks_for_a_reviewer(user, other_user):
+    project, col1, _col2 = _make_project_with_board(user)
+    form = TaskForm(
+        data=_task_form_data(col1, requires_review="on"), project=project
+    )
+    assert not form.is_valid()
+    assert "reviewers" in form.errors
+    assert "at least one reviewer" in str(form.errors["reviewers"])
+
+
+@pytest.mark.django_db
+def test_require_review_with_a_reviewer_validates(user, other_user):
+    project, col1, _col2 = _make_project_with_board(user)
+    reviewer = _add_contributor(project, other_user)
+    form = TaskForm(
+        data=_task_form_data(
+            col1, requires_review="on", reviewers=[str(reviewer.pk)]
+        ),
+        project=project,
+    )
+    assert form.is_valid(), form.errors
+
+
+@pytest.mark.django_db
+def test_unticking_require_review_clears_the_reviewers(client, user, other_user):
+    """What the box says and who is named never drift apart."""
+    project, col1, _col2 = _make_project_with_board(user)
+    reviewer = _add_contributor(project, other_user)
+    client.force_login(user)
+
+    client.post(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        _task_form_data(col1, requires_review="on", reviewers=[str(reviewer.pk)]),
+    )
+    task = Task.objects.get(name="Dated")
+    assert task.requires_review is True
+    assert list(task.reviewers.all()) == [reviewer]
+    assert task.needs_review is True
+
+    # Re-save with the box unticked: the reviewer goes with it.
+    client.post(
+        reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        _task_form_data(col1, reviewers=[str(reviewer.pk)]),
+    )
+    task.refresh_from_db()
+    assert task.requires_review is False
+    assert list(task.reviewers.all()) == []
+    assert task.needs_review is False
+
+
+@pytest.mark.django_db
+def test_the_task_form_carries_the_require_review_tickbox(client, user):
+    project, _col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+    body = client.get(
+        reverse("tasks:create", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    assert "Require review" in body
+    assert 'name="requires_review"' in body
+    # The reviewers field is in the markup but folded away until it is ticked.
+    assert 'x-show="requiresReview"' in body
+
+
+@pytest.mark.django_db
+def test_reviewing_is_refused_on_a_task_that_asks_for_none(client, user, other_user):
+    """No reviewers means no Reviewed column — and no endpoint behind it."""
+    from apps.tasks.services import mark_own_done
+
+    project, task, _lead, contrib = _two_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    log = _current_log(task, contrib)
+
+    client.force_login(user)  # a Lead, who could review if the task asked
+    resp = client.post(
+        _review_url(task, log), {"reviewed": "1"}, HTTP_HX_REQUEST="true"
+    )
+    assert resp.status_code == 403
+    log.refresh_from_db()
+    assert not log.is_reviewed
+
+
+@pytest.mark.django_db
+def test_a_task_with_no_reviewers_closes_without_one(client, user, other_user):
+    """The done marks alone finish it, and the credit follows them."""
+    from apps.tasks.services import close_task, mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    mark_own_done(task=task, member=lead)
+    mark_own_done(task=task, member=contrib)
+
+    close_task(task=task, closed_by=lead)
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+
+@pytest.mark.django_db
+def test_a_standing_verdict_survives_the_last_reviewer_leaving(client, user, other_user):
+    """Taking someone off the list does not unsay what they signed."""
+    from apps.tasks.services import mark_reviewed
+
+    project, task, lead, contrib = _reviewed_task(
+        user, other_user, reviewer_is_lead=True
+    )
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+    task.reviewers.remove(lead)
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    # The column and the verdict stay; the reviewer list and the buttons go.
+    assert ">Reviewed<" in pane
+    assert f"by {lead.display_name}" in pane
+    assert "Reviewers</h4>" not in pane
+    assert "Mark not reviewed" not in pane
+
+
+@pytest.mark.django_db
+def test_closing_from_the_pane_takes_the_lead_actions_with_it(client, user):
+    """The toggle is an HTMX swap, so the buttons have to move with it.
+
+    Otherwise a Lead who just closed a task keeps looking at two buttons
+    whose endpoints refuse, until something reloads the page.
+    """
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Toggled",
+    )
+    client.force_login(user)
+    edit_url = reverse(
+        "tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}
+    )
+
+    closed = client.post(
+        reverse("tasks:close", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert 'id="task-lead-actions"' in closed  # the swap reached them...
+    assert edit_url not in closed  # ...and emptied them
+
+    reopened = client.post(
+        reverse("tasks:reopen", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert edit_url in reopened
+
+
+@pytest.mark.django_db
+def test_the_task_page_names_who_closed_it(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Named",
+    )
+    client.force_login(user)
+    url = reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+
+    # Nothing to name while it is open.
+    assert "Closed by" not in client.get(url).content.decode()
+
+    close_task(task=task, closed_by=member)
+    task.refresh_from_db()
+    assert task.closed_by_id == member.pk
+    assert task.closed_at is not None
+
+    body = client.get(url).content.decode()
+    assert "Closed by" in body
+    assert member.display_name in body
+
+
+@pytest.mark.django_db
+def test_closing_from_the_pane_names_the_closer_without_a_reload(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Named",
+    )
+    client.force_login(user)
+
+    closed = client.post(
+        reverse("tasks:close", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert "Closed by" in closed
+    assert member.display_name in closed
+
+
+@pytest.mark.django_db
+def test_reopening_clears_who_closed_it(client, user):
+    """The completion it named no longer stands."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Named",
+    )
+    close_task(task=task, closed_by=member)
+    reopen_task(task=task)
+    task.refresh_from_db()
+
+    assert task.closed_by_id is None
+    assert task.closed_at is None
+
+    client.force_login(user)
+    body = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    assert "Closed by" not in body
+
+
+@pytest.mark.django_db
+def test_a_reviewers_last_signoff_is_named_as_the_closer(client, user, other_user):
+    """The review rule closes the task, so the reviewer is who closed it."""
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    task.assigned_members.remove(lead)
+    mark_own_done(task=task, member=contrib)
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+    assert task.closed_by_id == lead.pk
+
+
+@pytest.mark.django_db
+def test_a_closer_whose_membership_is_gone_is_still_reported(client, user, other_user):
+    """SET_NULL outlives the row; the page says so rather than going short."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    closer = _add_contributor(project, other_user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Named",
+    )
+    close_task(task=task, closed_by=closer)
+    closer.delete()
+    task.refresh_from_db()
+    assert task.closed_by_id is None
+    assert task.status == TaskStatus.COMPLETED
+
+    client.force_login(user)
+    body = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    assert "Closed by" in body
+    assert "a former member" in body

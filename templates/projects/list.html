@@ -164,6 +164,17 @@
 
         <div class="shrink-0 flex items-center gap-2 pt-0.5">
           {% include "_components/status_badge.html" with status=row.project.get_status_display %}
+          {% comment %}
+            Projects you are already in, marked as such — and in what
+            capacity, since Lead says more than Member does. Same pill in
+            the same place as My projects, so the two lists read alike.
+          {% endcomment %}
+          {% if row.my_privilege %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+              {% if row.my_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+              {{ row.my_privilege|privilege_label }}
+            </span>
+          {% endif %}
           {% if row.project.is_public %}
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
           {% else %}

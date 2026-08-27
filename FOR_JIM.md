@@ -44,18 +44,40 @@ Every page now wears the i-CONNECTS skin — navy `#323895`, coral `#f03d30`,
 lavender surfaces, Inter font, logo in the top bar. Also a new public
 landing page at `/` with a hero, feature cards, and "how it works" steps.
 
-### 2. ContributionRecord ledger (the core differentiator)
-Tasks now carry a CRediT-aligned contribution type. When a project manager
-*approves* a completed task, an **immutable** `ContributionRecord` row is
-written for each user behind the assigned member. The ledger refuses
-updates and deletes at the DB level — not even admins can edit it.
+### 2. CRediT contribution tracking (the core differentiator)
+A project picks how contributions are attributed when it is created —
+"None" or the [CRediT taxonomy](https://credit.niso.org/) — and on a CRediT
+project every task carries a **task type**, one of CRediT's 14 contributor
+roles.
 
-Two new pages show it off:
-- `/projects/<id>/contributions/` — members × CRediT-type matrix + recent
-  activity, visible to every project member (PM sees all; members see
-  their own project view).
-- `/accounts/profile/` — "My contributions" section with per-type
-  counts and a list of recent contributions across all projects.
+Closing a task is the ledger event. When a project lead completes it, a
+`ContributionRecord` is written for each assignee who marked their own part
+done; where the task carries reviewers, only for submissions a reviewer
+signed off. Reopening the task withdraws that credit again, and closing it
+writes it back. A completed task is frozen while it stands completed —
+editing it, deleting it, changing its assignees or its milestone are all
+refused until a lead marks it not complete.
+
+Review is opt-in per task: tick **Require review** on the task form and the
+Reviewers field appears (it asks for at least one). A task with no reviewers
+has no Reviewed column and no review actions at all.
+
+The ledger is correctable. A lead can change the role a contribution was
+recorded under, withdraw one, or enter one by hand for work the automatic
+writer passed over — a person who did the task without ever being an
+assignee. Hand-entered rows are marked as such, and survive the task being
+reopened. Every correction is audit-logged.
+
+Two pages show it:
+- **Contribution Tracking** on the project (`/projects/<id>/contribution-tracking/`)
+  — two views the section switches between, the same way the Tasks board
+  switches Kanban / List / Calendar: **Contributions by member** (a grid of
+  every member against all 14 CRediT roles, sortable by any column and with
+  a filter to narrow it to the roles and members that have contributions)
+  and **Every contribution** (one row per record, naming its task and who
+  closed it). Visible to every project member.
+- **Contributions** in the sidebar (`/contributions/`) — your own credit
+  across every project, filterable by project.
 
 ### 3. Audit log
 Every governance-relevant action is recorded in an append-only
@@ -86,13 +108,19 @@ images, `aria-label` on icon-only buttons, `scope="col"` on data tables,
 One known gap: the SortableJS kanban has no keyboard alternative — a
 known issue flagged for v2.
 
-### 6. CSV export of contributions
-"Export CSV" buttons on the project contributions page (PM-only) and on
-the "My contributions" section of the profile. Columns: project,
-user_name, user_email, user_orcid, contribution_type, task, closed_at
-(ISO-8601), verified_by. Streams server-side so exports scale to
-thousands of rows. Designed to be paste-ready into an authorship /
-CRediT statement spreadsheet.
+### 6. CSV downloads of contributions
+Both contributions pages hand over a CSV in either of two shapes:
+- **List** — one row per contribution: project, user_name, user_email,
+  user_orcid, contribution_type, task, closed_at (ISO-8601), verified_by.
+- **Matrix** — the grid the page shows: members (or, on your own download,
+  projects) down the side, all 14 CRediT roles across the top, counts in
+  the cells and totals on both edges.
+
+The module's downloads carry its project filter. The matrix is open to
+every project member — it is what their page already shows them — while
+the list stays with the leads, since it carries everyone's email and ORCID.
+Both stream server-side, so exports scale to thousands of rows, and are
+designed to be paste-ready into an authorship / CRediT statement.
 
 ### 7. Role-differentiated dashboard widgets
 The "My Projects" landing page (`/projects/mine/`) now surfaces two
@@ -201,15 +229,26 @@ link is set. Pattern-based (regex); no API calls, no rate-limit risk.
    - After login, the "My Projects" page now shows **My active tasks** and
      **Pending your approval** widgets when you have anything in flight.
 2. **Project + tasks**
-   - Create a project; add a kanban column.
-   - Create a task — note the new "Contribution type" select (Investigation / Data curation / Validation / Writing / Project administration / Other).
-   - Mark the task done (the assignee or you).
-   - Approve the completion from the task detail view.
-3. **Contribution ledger + CSV export**
-   - Open `/projects/<id>/contributions/` — the matrix shows 1 in the column matching the task's contribution type.
-   - As the PM, click "Export CSV" on the same page — downloads a spreadsheet of every contribution on this project.
-   - Open `/accounts/profile/` — the "My contributions" section shows the pill + recent entry.
-   - Click "Export CSV" next to "My contributions" — downloads your own contribution sheet across all projects.
+   - Create a project — set "Choose contribution tracking" to CRediT.
+   - Add a kanban column, then create a task; note the "Task type" select,
+     offering CRediT's 14 roles (it appears only on a CRediT project), and
+     the "Require review" tickbox that reveals the Reviewers field.
+   - Assign yourself, mark your own part done, then close the task as lead.
+   - With the task completed, Edit and Delete are gone and the header names
+     who closed it and when; Mark Not Complete brings the buttons back and
+     takes the attribution away.
+3. **Contribution ledger + downloads**
+   - Open the project's **Contribution Tracking** tab — Contributions by
+     member shows 1 in the column matching the task's type; tick "Only roles
+     and members with contributions" to narrow the grid, and click any
+     column header to sort by it (click again to flip the direction).
+   - Switch to Every contribution and click "Edit" on that row to correct its
+     role, or "Add contribution" to credit someone the ledger missed.
+   - Reopen the task from its detail view and reload — the earned credit is
+     gone; close it again and it is back.
+   - Download "Matrix (CSV)" and "List (CSV)" from the same page.
+   - Open **Contributions** in the sidebar — the same credit from your side,
+     filterable by project, with both downloads carrying the filter.
 4. **Audit log**
    - Open `/my/activity/` — see your login, signup, project-created, task-created, task-completed, task-approved.
    - As the PM, open `/projects/<id>/activity/` — project-scoped view.

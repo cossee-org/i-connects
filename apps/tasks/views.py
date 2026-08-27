@@ -556,6 +556,57 @@ class BoardCalendarPartialView(LoginRequiredMixin, ProjectContextMixin, Template
 # ---------------------------------------------------------------------------
 
 
+_COMPLETED_MESSAGE = (
+    "This task is marked completed. A Lead has to mark it not complete before "
+    "it can be changed."
+)
+
+
+def _completion_locked(task) -> bool:
+    """True while the task stands completed, freezing what the task *is*.
+
+    Editing it, deleting it, changing its assignees and moving it to another
+    milestone all stop there. A completed task is a record of work that has
+    been judged finished — and, on a project tracking contributions, work its
+    contributors have already been credited for under the task's type. Letting
+    that be rewritten in place would rewrite the record behind the credit.
+
+    A lock rather than a wall: completion is reversible, and Mark Not Complete
+    is the action a completed task still offers its Lead. Reversing it also
+    withdraws the credit, so the two move together.
+
+    Board position is deliberately left out. Which column a task sits in is
+    where it is, not what it is, and dragging a finished task into Done is the
+    board doing its job.
+    """
+    return task.status == TaskStatus.COMPLETED
+
+
+class CompletedTaskLockMixin:
+    """Refuse a change to a task that stands completed.
+
+    Compose it *after* whichever mixin resolves the task, so the task is in
+    hand by the time this runs: ``TaskMemberAccessMixin`` sets ``self.task``
+    before calling on, and a generic editing view is asked for its own object.
+    """
+
+    def dispatch(self, request, *args, **kwargs):  # type: ignore[override]
+        task = getattr(self, "task", None)
+        if task is None and hasattr(self, "get_object"):
+            task = self.get_object()
+        if task is not None and _completion_locked(task):
+            return self._completion_locked_response(request, task)
+        return super().dispatch(request, *args, **kwargs)
+
+    def _completion_locked_response(self, request, task):
+        if request.headers.get("HX-Request"):
+            return HttpResponse(_COMPLETED_MESSAGE, status=409)
+        messages.error(request, _COMPLETED_MESSAGE)
+        return redirect(
+            "tasks:detail", project_pk=task.project_id, pk=task.pk
+        )
+
+
 class TaskCreateView(
     LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, CreateView
 ):
@@ -785,8 +836,15 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
 
 
 class TaskUpdateView(
-    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, UpdateView
+    LoginRequiredMixin,
+    ProjectManagerRequiredMixin,
+    ProjectContextMixin,
+    CompletedTaskLockMixin,
+    UpdateView,
 ):
+    """Edit a task. Refused while the task stands completed — see
+    :class:`CompletedTaskLockMixin`."""
+
     template_name = "tasks/task_form.html"
     form_class = TaskForm
     model = Task
@@ -894,8 +952,15 @@ class TaskImportView(
 
 
 class TaskDeleteView(
-    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, DeleteView
+    LoginRequiredMixin,
+    ProjectManagerRequiredMixin,
+    ProjectContextMixin,
+    CompletedTaskLockMixin,
+    DeleteView,
 ):
+    """Delete a task. Refused while the task stands completed — see
+    :class:`CompletedTaskLockMixin`."""
+
     template_name = "tasks/task_confirm_delete.html"
     model = Task
 
@@ -919,9 +984,10 @@ class TaskDeleteView(
 
     def form_valid(self, form):
         task = self.get_object()
-        # Closed tasks generate append-only ContributionRecord rows whose FKs
-        # PROTECT the task and its logs. A hard delete would raise
-        # ProtectedError (a 500); refuse up front with a clear message.
+        # A reopened task can still carry credit a Lead entered by hand, which
+        # the task's own cascade would take with it. Deleting the work is not
+        # the same as withdrawing the credit for it, so say so rather than
+        # doing both at once.
         if _task_has_contributions(task):
             return self._blocked_response(
                 "This task has recorded contributions and can't be deleted."
@@ -1022,7 +1088,6 @@ _LOCKED_MESSAGE = (
     "its marks and reviews can change."
 )
 
-
 def _marks_locked(task) -> bool:
     """True when a Lead's judgement closed the task, freezing every per-member
     action.
@@ -1063,7 +1128,13 @@ def _task_status_context(task, *, project_member, is_project_manager):
     # A Lead can review as well as the task's named reviewers, and a Lead can
     # also set or clear anyone's done mark — the two per-member actions they
     # borrow from assignees and reviewers.
-    viewer_reviews = bool(is_project_manager or task.is_reviewer(project_member))
+    # A task that asks for no review has no Reviewed column at all, so nobody
+    # reviews on it — not even a Lead, who would otherwise still see the
+    # buttons the endpoint would still honour.
+    needs_review = task.needs_review
+    viewer_reviews = bool(
+        needs_review and (is_project_manager or task.is_reviewer(project_member))
+    )
     locked = _marks_locked(task)
     assignee_states = []
     for member in assignees:
@@ -1084,6 +1155,11 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # Lead's alone.
                 "can_unreview": (
                     not locked
+                    # A task that asks for no review offers no review action,
+                    # withdrawal included. A verdict already given stays on
+                    # show — see show_review below — it just has no buttons
+                    # beside it any more.
+                    and needs_review
                     and (
                         is_project_manager
                         or (
@@ -1140,6 +1216,15 @@ def _task_status_context(task, *, project_member, is_project_manager):
         # A completed task's marks are frozen; only the Lead's own Mark Not
         # Complete stays live.
         "marks_locked": locked,
+        # Whether review is expected of this task at all — see
+        # ``Task.needs_review``. Gates who may review.
+        "needs_review": needs_review,
+        # Whether to draw the Reviewed column. Wider than needs_review by one
+        # case: a verdict already given still shows after the last reviewer
+        # comes off the task, because taking someone off the list does not
+        # unsay what they signed. There are no buttons in it then — nobody
+        # reviews on a task with no reviewers — just the standing record.
+        "show_review": needs_review or any(s["reviewed"] for s in assignee_states),
         # Named in the pane under the matrix, so it is clear who the Reviewed
         # column is waiting on. Read live, like everything else here: a
         # reviewer added or removed shows up on the next render.
@@ -1286,8 +1371,14 @@ def _seed_assignee_logs(task, actor=None) -> bool:
 
 
 class TaskAssignView(
-    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+    LoginRequiredMixin,
+    ProjectManagerRequiredMixin,
+    TaskMemberAccessMixin,
+    CompletedTaskLockMixin,
+    View,
 ):
+    """Change a task's assignees. Refused while the task stands completed."""
+
     def post(self, request, *args, **kwargs):
         form = TaskAssignForm(request.POST, project=self.project)
         if not form.is_valid():
@@ -1392,9 +1483,11 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     membership.
 
     Both directions close once the task is marked completed, like the
-    assignees' own marks. Withdrawing is the narrower of the two: a reviewer
-    may take back their own verdict and no one else's, while a Lead can clear
-    any review on the task.
+    assignees' own marks, and neither opens at all on a task that asks for no
+    review — the Reviewed column is not drawn there, so the endpoint behind it
+    should not answer either. Withdrawing is the narrower of the two: a
+    reviewer may take back their own verdict and no one else's, while a Lead
+    can clear any review on the task.
 
     POST ``reviewed=0`` withdraws the review; anything else records one.
     """
@@ -1403,6 +1496,11 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         log = get_object_or_404(
             TaskLog.objects.filter(task=self.task), pk=kwargs["log_pk"]
         )
+        if not self.task.needs_review:
+            return HttpResponseForbidden(
+                "This task doesn't require review. Turn on Require review and "
+                "name a reviewer first."
+            )
         if not (self.is_project_manager or self.task.is_reviewer(self.project_member)):
             return HttpResponseForbidden(
                 "Only a reviewer on this task can review submissions."
@@ -1709,9 +1807,15 @@ class MilestoneCalendarView(LoginRequiredMixin, ProjectContextMixin, View):
 
 
 class TaskMilestoneAssignView(
-    LoginRequiredMixin, ProjectManagerRequiredMixin, TaskMemberAccessMixin, View
+    LoginRequiredMixin,
+    ProjectManagerRequiredMixin,
+    TaskMemberAccessMixin,
+    CompletedTaskLockMixin,
+    View,
 ):
-    """HTMX endpoint: set / clear ``Task.milestone``."""
+    """HTMX endpoint: set / clear ``Task.milestone``.
+
+    Refused while the task stands completed."""
 
     def post(self, request, *args, **kwargs):
         form = TaskMilestoneForm(request.POST, project=self.project)
@@ -1743,11 +1847,11 @@ def _respond_task_card(request, task: Task) -> HttpResponse:
 
 
 def _task_has_contributions(task) -> bool:
-    """True when the task has append-only ContributionRecord rows.
+    """True when the task has ContributionRecord rows standing against it.
 
-    Such records PROTECT the task (and its logs), so a hard delete would
-    raise ProtectedError. Imported lazily to avoid a hard dependency on the
-    contributions app at module load.
+    Deleting the task cascades them away, so the delete view refuses rather
+    than destroying credit as a side effect. Imported lazily to avoid a hard
+    dependency on the contributions app at module load.
     """
     from apps.contributions.models import ContributionRecord
 

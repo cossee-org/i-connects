@@ -1,39 +1,66 @@
 """Tests for the contributions ledger.
 
-Covers the append-only invariants (save/delete guards), the task-approval
-wiring in ``tasks.services.approve_completion``, and the matrix helper used
-by the per-project contributions page.
+Covers the closure wiring in ``tasks.services.close_task`` — who earns
+credit and who does not — the withdrawal on reopening, and the matrix and
+CSV helpers behind the contributions pages.
 """
 
 from __future__ import annotations
 
 import pytest
-from django.db import IntegrityError
+from django.urls import reverse
 
+from apps.audit.models import AuditAction, AuditLog
+from apps.contributions.forms import ContributionAddForm
 from apps.contributions.models import ContributionRecord
 from apps.contributions.services import (
+    add_contribution,
+    user_display_name,
     get_project_contributions_matrix,
     get_user_contributions,
-    record_contributions_for_approval,
 )
-from apps.core.enums import ContributionType, ProjectStatus
-from apps.projects.models import ProjectMember
+from apps.core.enums import (
+    CREDIT_ROLES,
+    ContributionType,
+    MemberPrivileges,
+    ProjectStatus,
+)
+from apps.projects.models import (
+    ContributionTracking,
+    ProjectMember,
+    ProjectPrivilege,
+)
 from apps.projects.services import create_project_with_owner
 from apps.tasks.models import KanbanBoard, Task
-from apps.tasks.services import approve_completion, complete_task
+from apps.tasks.services import (
+    approve_completion,
+    clear_review,
+    close_task,
+    complete_task,
+    mark_own_done,
+    mark_reviewed,
+    reopen_own,
+    reopen_task,
+)
 
 
-def _make_project(owner, *, name="P"):
+def _make_project(owner, *, name="P", tracking=ContributionTracking.CREDIT):
     project = create_project_with_owner(
         user=owner,
-        form_data={"name": name, "status": ProjectStatus.ACTIVE, "is_public": True},
+        form_data={
+            "name": name,
+            "status": ProjectStatus.ACTIVE,
+            "is_public": True,
+            "contribution_tracking": tracking,
+        },
     )
     col = KanbanBoard.objects.create(project=project, name="Todo", container_order=0)
     member = ProjectMember.objects.filter(project=project, users=owner).first()
     return project, col, member
 
 
-def _make_task(project, col, pm_member, *, assignees=None, ctype=ContributionType.OTHER):
+def _make_task(project, col, pm_member, *, assignees=None, reviewers=None,
+               ctype=ContributionType.OTHER):
     task = Task.objects.create(
         project=project,
         created_by=pm_member,
@@ -42,120 +69,237 @@ def _make_task(project, col, pm_member, *, assignees=None, ctype=ContributionTyp
         name="T",
         contribution_type=ctype,
     )
-    if assignees:
-        for m in assignees:
-            task.assigned_members.add(m)
+    for member in assignees or []:
+        task.assigned_members.add(member)
+    for member in reviewers or []:
+        task.reviewers.add(member)
     return task
 
 
-# ---------------------------------------------------------------------------
-# Immutability guards
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-def test_save_on_existing_record_raises(user):
-    project, col, pm_member = _make_project(user)
-    task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-
-    rec = ContributionRecord.objects.get(task_log=log, user=user)
-    rec.contribution_type = ContributionType.WRITING
-    with pytest.raises(IntegrityError):
-        rec.save()
-
-
-@pytest.mark.django_db
-def test_delete_raises(user):
-    project, col, pm_member = _make_project(user)
-    task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-
-    rec = ContributionRecord.objects.get(task_log=log, user=user)
-    with pytest.raises(IntegrityError):
-        rec.delete()
+def _member_for(project, user, privilege=MemberPrivileges.CONTRIBUTOR):
+    """Add ``user`` to ``project`` the way a real join does: a membership
+    row plus the privilege the section pages read access off."""
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(user)
+    ProjectPrivilege.objects.create(
+        project=project, user=user, privilege=privilege
+    )
+    return member
 
 
 # ---------------------------------------------------------------------------
-# Approval wiring
+# Closing a task is the ledger event
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
-def test_approval_creates_contribution_per_user(user):
+def test_closing_credits_an_assignee_who_marked_their_part_done(user):
     project, col, pm_member = _make_project(user)
     task = _make_task(
         project, col, pm_member,
         assignees=[pm_member],
         ctype=ContributionType.DATA_CURATION,
     )
-    log = complete_task(task=task, completed_by=pm_member)
+    mark_own_done(task=task, member=pm_member)
 
     assert ContributionRecord.objects.count() == 0
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-    rec = ContributionRecord.objects.get(task_log=log, user=user)
-    assert rec.project_id == project.id
-    assert rec.task_id == task.id
-    assert rec.contribution_type == ContributionType.DATA_CURATION
-    assert rec.verified_by_id == user.id
-    assert rec.closed_at is not None
+    close_task(task=task, closed_by=pm_member)
+
+    record = ContributionRecord.objects.get(user=user)
+    assert record.task_id == task.id
+    assert record.project_id == project.id
+    assert record.contribution_type == ContributionType.DATA_CURATION
+    assert record.verified_by_id == user.id
+    assert record.closed_at is not None
 
 
 @pytest.mark.django_db
-def test_approval_is_idempotent(user):
+def test_closing_skips_an_assignee_who_never_marked_done(user, other_user):
     project, col, pm_member = _make_project(user)
-    task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
+    slacker = _member_for(project, other_user)
+    task = _make_task(project, col, pm_member, assignees=[pm_member, slacker])
+    mark_own_done(task=task, member=pm_member)
 
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-    assert ContributionRecord.objects.filter(task_log=log, user=user).count() == 1
+    close_task(task=task, closed_by=pm_member)
+
+    assert set(ContributionRecord.objects.values_list("user_id", flat=True)) == {
+        user.id
+    }
 
 
 @pytest.mark.django_db
-def test_rejection_creates_no_contribution(user):
+def test_a_reviewed_task_credits_only_reviewed_submissions(user, other_user, pm_user):
+    """With reviewers on the task, a done mark alone is not enough."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    bob = _member_for(project, pm_user)
+    task = _make_task(
+        project, col, lead, assignees=[alice, bob], reviewers=[lead]
+    )
+    alice_log = mark_own_done(task=task, member=alice)
+    mark_own_done(task=task, member=bob)
+    mark_reviewed(task_log=alice_log, reviewer=lead)
+
+    close_task(task=task, closed_by=lead)
+
+    assert set(ContributionRecord.objects.values_list("user_id", flat=True)) == {
+        other_user.id
+    }
+
+
+@pytest.mark.django_db
+def test_a_task_without_reviewers_needs_no_review(user):
     project, col, pm_member = _make_project(user)
     task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=False, verifier_user=user)
+    log = mark_own_done(task=task, member=pm_member)
+    assert not log.is_reviewed
+
+    close_task(task=task, closed_by=pm_member)
+    assert ContributionRecord.objects.filter(user=user).exists()
+
+
+@pytest.mark.django_db
+def test_closing_credits_every_user_behind_a_team_assignee(user, other_user):
+    project, col, pm_member = _make_project(user)
+    team = ProjectMember.objects.create(project=project, name="Team A")
+    team.users.add(user, other_user)
+    task = _make_task(project, col, pm_member, assignees=[team])
+    mark_own_done(task=task, member=team)
+
+    close_task(task=task, closed_by=pm_member)
+
+    assert set(ContributionRecord.objects.values_list("user_id", flat=True)) == {
+        user.id,
+        other_user.id,
+    }
+
+
+@pytest.mark.django_db
+def test_closing_twice_writes_one_record(user):
+    project, col, pm_member = _make_project(user)
+    task = _make_task(project, col, pm_member, assignees=[pm_member])
+    mark_own_done(task=task, member=pm_member)
+
+    close_task(task=task, closed_by=pm_member)
+    close_task(task=task, closed_by=pm_member)
+    close_task(task=task, closed_by=pm_member)
+
+    assert ContributionRecord.objects.filter(user=user).count() == 1
+
+
+@pytest.mark.django_db
+def test_a_project_not_tracking_credit_keeps_no_ledger(user):
+    project, col, pm_member = _make_project(user, tracking=ContributionTracking.NONE)
+    task = _make_task(project, col, pm_member, assignees=[pm_member])
+    mark_own_done(task=task, member=pm_member)
+
+    close_task(task=task, closed_by=pm_member)
     assert ContributionRecord.objects.count() == 0
 
 
 @pytest.mark.django_db
-def test_null_approval_creates_no_contribution(user):
+def test_the_last_review_closes_the_task_and_credits_it(user, other_user):
+    """mark_reviewed closes a fully-reviewed task — the credit follows."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice], reviewers=[lead])
+    log = mark_own_done(task=task, member=alice)
+
+    mark_reviewed(task_log=log, reviewer=lead)
+
+    assert ContributionRecord.objects.filter(user=other_user).exists()
+
+
+# ---------------------------------------------------------------------------
+# Reopening withdraws it again
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_reopening_withdraws_the_credit(user):
     project, col, pm_member = _make_project(user)
     task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=None, verifier_user=user)
+    mark_own_done(task=task, member=pm_member)
+    close_task(task=task, closed_by=pm_member)
+    assert ContributionRecord.objects.count() == 1
+
+    reopen_task(task=task)
+    assert ContributionRecord.objects.count() == 0
+
+    # Closing again writes it back.
+    close_task(task=task, closed_by=pm_member)
+    assert ContributionRecord.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_undoing_a_done_mark_withdraws_the_credit(user, other_user):
+    """reopen_own reopens a task whose completion rested on its reviews."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice], reviewers=[lead])
+    log = mark_own_done(task=task, member=alice)
+    mark_reviewed(task_log=log, reviewer=lead)
+    assert ContributionRecord.objects.count() == 1
+
+    reopen_own(task=task, member=alice)
     assert ContributionRecord.objects.count() == 0
 
 
 @pytest.mark.django_db
-def test_approval_after_rejection_still_creates_record(user):
-    """Toggling rejection then approval should still produce exactly one record."""
-    project, col, pm_member = _make_project(user)
-    task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=False, verifier_user=user)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
-    assert ContributionRecord.objects.filter(task_log=log, user=user).count() == 1
+def test_withdrawing_a_review_withdraws_the_credit(user, other_user):
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice], reviewers=[lead])
+    log = mark_own_done(task=task, member=alice)
+    mark_reviewed(task_log=log, reviewer=lead)
+    assert ContributionRecord.objects.count() == 1
+
+    clear_review(task_log=log, cleared_by=lead)
+    assert ContributionRecord.objects.count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Approving a submission is not a ledger event
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
-def test_task_with_team_member_creates_record_per_user(user, other_user):
+def test_approving_a_submission_writes_no_contribution(user):
     project, col, pm_member = _make_project(user)
-    # Team-shaped ProjectMember holding both users.
-    team_member = ProjectMember.objects.create(project=project, name="Team A")
-    team_member.users.add(user, other_user)
-    task = _make_task(project, col, pm_member, assignees=[team_member])
+    task = _make_task(project, col, pm_member, assignees=[pm_member])
     log = complete_task(task=task, completed_by=pm_member)
+    ContributionRecord.objects.all().delete()
+
     approve_completion(task_log=log, approved=True, verifier_user=user)
-    records = ContributionRecord.objects.filter(task_log=log)
-    assert records.count() == 2
-    assert set(records.values_list("user_id", flat=True)) == {user.id, other_user.id}
+    assert ContributionRecord.objects.count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Deleting the work deletes the credit recorded against it
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_deleting_a_task_takes_its_contributions_with_it(user):
+    project, col, pm_member = _make_project(user)
+    task = _make_task(project, col, pm_member, assignees=[pm_member])
+    mark_own_done(task=task, member=pm_member)
+    close_task(task=task, closed_by=pm_member)
+    assert ContributionRecord.objects.count() == 1
+
+    task.delete()
+    assert ContributionRecord.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_deleting_a_project_takes_its_contributions_with_it(user):
+    project, col, pm_member = _make_project(user)
+    task = _make_task(project, col, pm_member, assignees=[pm_member])
+    mark_own_done(task=task, member=pm_member)
+    close_task(task=task, closed_by=pm_member)
+
+    project.delete()
+    assert ContributionRecord.objects.count() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -163,34 +307,30 @@ def test_task_with_team_member_creates_record_per_user(user, other_user):
 # ---------------------------------------------------------------------------
 
 
+def _credit(project, col, pm_member, member, ctype):
+    """Close a one-assignee task so ``member`` earns one ``ctype`` record."""
+    task = _make_task(project, col, pm_member, assignees=[member], ctype=ctype)
+    mark_own_done(task=task, member=member)
+    close_task(task=task, closed_by=pm_member)
+    return task
+
+
 @pytest.mark.django_db
 def test_project_contributions_matrix(user, other_user):
     project, col, pm_member = _make_project(user)
-    # Give other_user their own membership so both users are project members.
-    other_member = ProjectMember.objects.create(project=project)
-    other_member.users.add(other_user)
+    other_member = _member_for(project, other_user)
 
-    # user gets two WRITING contributions; other_user gets one DATA_CURATION.
-    for ctype in (ContributionType.WRITING, ContributionType.WRITING):
-        task = _make_task(project, col, pm_member, assignees=[pm_member], ctype=ctype)
-        log = complete_task(task=task, completed_by=pm_member)
-        approve_completion(task_log=log, approved=True, verifier_user=user)
-
-    task2 = _make_task(
-        project, col, pm_member,
-        assignees=[other_member],
-        ctype=ContributionType.DATA_CURATION,
-    )
-    log2 = complete_task(task=task2, completed_by=pm_member)
-    approve_completion(task_log=log2, approved=True, verifier_user=user)
+    for _ in range(2):
+        _credit(project, col, pm_member, pm_member, ContributionType.WRITING_ORIGINAL_DRAFT)
+    _credit(project, col, pm_member, other_member, ContributionType.DATA_CURATION)
 
     matrix = get_project_contributions_matrix(project)
     assert matrix["totals"]["grand_total"] == 3
-    assert matrix["totals"][ContributionType.WRITING] == 2
+    assert matrix["totals"][ContributionType.WRITING_ORIGINAL_DRAFT] == 2
     assert matrix["totals"][ContributionType.DATA_CURATION] == 1
 
     rows_by_user = {row["user"].id: row for row in matrix["rows"]}
-    assert rows_by_user[user.id]["counts"][ContributionType.WRITING] == 2
+    assert rows_by_user[user.id]["counts"][ContributionType.WRITING_ORIGINAL_DRAFT] == 2
     assert rows_by_user[user.id]["total"] == 2
     assert rows_by_user[other_user.id]["counts"][ContributionType.DATA_CURATION] == 1
     # Highest-total user is sorted first.
@@ -202,37 +342,34 @@ def test_get_user_contributions_scoped_to_project(user):
     project_a, col_a, pm_a = _make_project(user, name="A")
     project_b, col_b, pm_b = _make_project(user, name="B")
     for project, col, pm in ((project_a, col_a, pm_a), (project_b, col_b, pm_b)):
-        task = _make_task(project, col, pm, assignees=[pm])
-        log = complete_task(task=task, completed_by=pm)
-        approve_completion(task_log=log, approved=True, verifier_user=user)
+        _credit(project, col, pm, pm, ContributionType.SOFTWARE)
 
     assert get_user_contributions(user).count() == 2
     assert get_user_contributions(user, project=project_a).count() == 1
 
 
 # ---------------------------------------------------------------------------
-# CSV export
+# CSV downloads — list and matrix
 # ---------------------------------------------------------------------------
 
 
+def _csv_lines(response) -> list[str]:
+    body = b"".join(response.streaming_content).decode("utf-8")
+    return [line for line in body.splitlines() if line]
+
+
 @pytest.mark.django_db
-def test_my_contributions_csv_returns_rows(client, user):
+def test_my_contributions_list_csv_returns_rows(client, user):
     project, col, pm_member = _make_project(user)
-    task = _make_task(
-        project, col, pm_member,
-        assignees=[pm_member],
-        ctype=ContributionType.WRITING,
-    )
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
+    _credit(project, col, pm_member, pm_member, ContributionType.WRITING_ORIGINAL_DRAFT)
 
     client.force_login(user)
     resp = client.get("/my/contributions.csv")
     assert resp.status_code == 200
     assert resp["Content-Type"].startswith("text/csv")
     assert "attachment;" in resp["Content-Disposition"]
-    body = b"".join(resp.streaming_content).decode("utf-8")
-    lines = [line for line in body.splitlines() if line]
+    assert "my-contributions-list-" in resp["Content-Disposition"]
+    lines = _csv_lines(resp)
     # header + one data row
     assert lines[0].split(",")[0] == "project"
     assert len(lines) == 2
@@ -241,26 +378,90 @@ def test_my_contributions_csv_returns_rows(client, user):
 
 
 @pytest.mark.django_db
-def test_project_contributions_csv_requires_pm(client, user, other_user):
-    """Ordinary members get the matrix page but NOT the raw CSV."""
-    project, col, pm_member = _make_project(user)
-    # Add other_user as a non-PM member.
-    from apps.projects.models import ProjectMember
-    member = ProjectMember.objects.create(project=project)
-    member.users.add(other_user)
-    task = _make_task(project, col, pm_member, assignees=[pm_member])
-    log = complete_task(task=task, completed_by=pm_member)
-    approve_completion(task_log=log, approved=True, verifier_user=user)
+def test_my_contributions_matrix_csv_is_a_grid(client, user):
+    project, col, pm_member = _make_project(user, name="Alpha")
+    _credit(project, col, pm_member, pm_member, ContributionType.SOFTWARE)
+    _credit(project, col, pm_member, pm_member, ContributionType.SOFTWARE)
 
-    # PM can download.
     client.force_login(user)
-    resp = client.get(f"/projects/{project.pk}/contributions.csv")
+    resp = client.get("/my/contributions.csv", {"format": "matrix"})
     assert resp.status_code == 200
+    assert "my-contributions-matrix-" in resp["Content-Disposition"]
+    lines = _csv_lines(resp)
+    header = lines[0].split(",")
+    assert header[0] == "project"
+    assert header[-1] == "total"
+    # The whole taxonomy, so a downloaded grid has a stable shape.
+    assert len(header) == len(CREDIT_ROLES) + 2
+    assert "Software" in header
+    body = lines[1].split(",")
+    assert body[0] == "Alpha"
+    assert body[header.index("Software")] == "2"
+    assert body[-1] == "2"
+    assert lines[-1].split(",")[0] == "total"
 
-    # Non-PM cannot.
+
+@pytest.mark.django_db
+def test_my_contributions_csv_honours_the_project_filter(client, user):
+    project_a, col_a, pm_a = _make_project(user, name="Alpha")
+    project_b, col_b, pm_b = _make_project(user, name="Beta")
+    _credit(project_a, col_a, pm_a, pm_a, ContributionType.SOFTWARE)
+    _credit(project_b, col_b, pm_b, pm_b, ContributionType.METHODOLOGY)
+
+    client.force_login(user)
+    resp = client.get("/my/contributions.csv", {"project": project_a.pk})
+    lines = _csv_lines(resp)
+    assert len(lines) == 2
+    assert "Alpha" in lines[1]
+    assert "alpha" in resp["Content-Disposition"]
+
+
+@pytest.mark.django_db
+def test_project_matrix_csv_is_open_to_members_but_the_list_is_not(
+    client, user, other_user
+):
+    project, col, pm_member = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm_member, pm_member, ContributionType.SOFTWARE)
+    url = f"/projects/{project.pk}/contributions.csv"
+
+    # A lead takes either shape.
+    client.force_login(user)
+    assert client.get(url, {"format": "matrix"}).status_code == 200
+    assert client.get(url).status_code == 200
+
+    # An ordinary member gets the grid they can already see, not the raw
+    # sheet of everyone's emails and ORCIDs.
     client.force_login(other_user)
-    resp = client.get(f"/projects/{project.pk}/contributions.csv")
-    assert resp.status_code == 403
+    assert client.get(url, {"format": "matrix"}).status_code == 200
+    assert client.get(url).status_code == 403
+
+
+@pytest.mark.django_db
+def test_project_contributions_csv_refuses_a_non_member(client, user, other_user):
+    project, col, pm_member = _make_project(user)
+    _credit(project, col, pm_member, pm_member, ContributionType.SOFTWARE)
+
+    client.force_login(other_user)
+    url = f"/projects/{project.pk}/contributions.csv"
+    assert client.get(url, {"format": "matrix"}).status_code == 403
+    assert client.get(url).status_code == 403
+
+
+@pytest.mark.django_db
+def test_project_matrix_csv_names_every_member(client, user, other_user):
+    project, col, pm_member = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm_member, pm_member, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    lines = _csv_lines(
+        client.get(f"/projects/{project.pk}/contributions.csv", {"format": "matrix"})
+    )
+    assert lines[0].split(",")[0] == "member"
+    names = [line.split(",")[0] for line in lines[1:-1]]
+    assert "Alice" in names
+    assert "Bob" in names
 
 
 @pytest.mark.django_db
@@ -268,6 +469,859 @@ def test_my_contributions_csv_empty_only_header(client, user):
     client.force_login(user)
     resp = client.get("/my/contributions.csv")
     assert resp.status_code == 200
-    body = b"".join(resp.streaming_content).decode("utf-8")
-    lines = [line for line in body.splitlines() if line]
-    assert len(lines) == 1  # header only
+    assert len(_csv_lines(resp)) == 1  # header only
+
+
+# ---------------------------------------------------------------------------
+# The project's Contribution Tracking tab
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_tracking_tab_shows_the_matrix(client, user, other_user):
+    project, col, pm = _make_project(user)
+    other = _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    _credit(project, col, pm, other, ContributionType.DATA_CURATION)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Contributions by member" in body
+    assert "Software" in body
+    assert "Data curation" in body
+    assert "Alice" in body
+    assert "Bob" in body
+
+
+@pytest.mark.django_db
+def test_tracking_tab_lists_a_member_with_no_credit_yet(client, user, other_user):
+    """A gap in the credit should be as visible as the credit itself."""
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Bob" in body
+
+
+@pytest.mark.django_db
+def test_tracking_tab_explains_an_untracked_project(client, user):
+    project, _col, _pm = _make_project(user, tracking=ContributionTracking.NONE)
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "tracking contributions" in body
+    assert "Contributions by member" not in body
+
+
+@pytest.mark.django_db
+def test_the_old_project_contributions_url_redirects_to_the_tab(client, user):
+    project, _col, _pm = _make_project(user)
+    client.force_login(user)
+    resp = client.get(f"/projects/{project.pk}/contributions/")
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse(
+        "projects:contribution_tracking", kwargs={"pk": project.pk}
+    )
+
+
+# ---------------------------------------------------------------------------
+# The Contributions module
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_contributions_module_lists_every_project(client, user):
+    project_a, col_a, pm_a = _make_project(user, name="Alpha")
+    project_b, col_b, pm_b = _make_project(user, name="Beta")
+    _credit(project_a, col_a, pm_a, pm_a, ContributionType.SOFTWARE)
+    _credit(project_b, col_b, pm_b, pm_b, ContributionType.METHODOLOGY)
+
+    client.force_login(user)
+    body = client.get(reverse("contributions:contributions")).content.decode()
+    assert "Alpha" in body
+    assert "Beta" in body
+    assert "Software" in body
+    assert "Methodology" in body
+
+
+@pytest.mark.django_db
+def test_contributions_module_filters_by_project(client, user):
+    project_a, col_a, pm_a = _make_project(user, name="Alpha")
+    project_b, col_b, pm_b = _make_project(user, name="Beta")
+    _credit(project_a, col_a, pm_a, pm_a, ContributionType.SOFTWARE)
+    _credit(project_b, col_b, pm_b, pm_b, ContributionType.METHODOLOGY)
+
+    client.force_login(user)
+    resp = client.get(
+        reverse("contributions:contributions"), {"project": project_a.pk}
+    )
+    records = list(resp.context["records"])
+    assert [r.project_id for r in records] == [project_a.pk]
+    assert resp.context["selected_project"] == project_a
+    # Both projects stay in the filter's option list.
+    assert {p.pk for p in resp.context["filter_projects"]} == {
+        project_a.pk,
+        project_b.pk,
+    }
+
+
+@pytest.mark.django_db
+def test_the_filter_offers_a_project_with_no_credit_yet(client, user):
+    """So "have I been credited here at all?" has an answer."""
+    project, _col, _pm = _make_project(user, name="Quiet")
+    client.force_login(user)
+    resp = client.get(reverse("contributions:contributions"))
+    assert [p.pk for p in resp.context["filter_projects"]] == [project.pk]
+
+
+@pytest.mark.django_db
+def test_the_filter_leaves_out_a_project_not_tracking_credit(client, user):
+    _make_project(user, name="Untracked", tracking=ContributionTracking.NONE)
+    client.force_login(user)
+    resp = client.get(reverse("contributions:contributions"))
+    assert resp.context["filter_projects"] == []
+
+
+@pytest.mark.django_db
+def test_the_filter_leaves_out_someone_elses_project(client, user, other_user):
+    project, col, pm = _make_project(other_user, name="Theirs")
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    resp = client.get(
+        reverse("contributions:contributions"), {"project": project.pk}
+    )
+    assert resp.context["filter_projects"] == []
+    # An unreachable pk falls back to all projects rather than 404ing.
+    assert resp.context["selected_project"] is None
+    assert list(resp.context["records"]) == []
+
+
+@pytest.mark.django_db
+def test_a_junk_project_filter_falls_back_to_all(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    client.force_login(user)
+    resp = client.get(reverse("contributions:contributions"), {"project": "nope"})
+    assert resp.context["selected_project"] is None
+    assert resp.context["contribution_total"] == 1
+
+
+@pytest.mark.django_db
+def test_my_contributions_redirects_to_the_module(client, user):
+    client.force_login(user)
+    resp = client.get("/my/contributions/")
+    assert resp.status_code == 302
+    assert resp["Location"] == reverse("contributions:contributions")
+
+
+@pytest.mark.django_db
+def test_the_pages_offer_both_downloads(client, user, other_user):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Matrix (CSV)" in body and "List (CSV)" in body
+
+    body = client.get(reverse("contributions:contributions")).content.decode()
+    assert "Matrix (CSV)" in body and "List (CSV)" in body
+    assert "format=matrix" in body
+
+    # A member who is not a lead is offered only the grid they can see.
+    client.force_login(other_user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Matrix (CSV)" in body and "List (CSV)" not in body
+
+
+@pytest.mark.django_db
+def test_the_module_downloads_carry_the_project_filter(client, user):
+    project, col, pm = _make_project(user, name="Alpha")
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("contributions:contributions"), {"project": project.pk}
+    ).content.decode()
+    assert f"project={project.pk}" in body
+
+
+# ---------------------------------------------------------------------------
+# Corrections
+# ---------------------------------------------------------------------------
+
+
+def _edit_url(project, record):
+    return reverse(
+        "contributions:contribution_edit",
+        kwargs={"project_pk": project.pk, "pk": record.pk},
+    )
+
+
+def _remove_url(project, record):
+    return reverse(
+        "contributions:contribution_remove",
+        kwargs={"project_pk": project.pk, "pk": record.pk},
+    )
+
+
+def _add_url(project):
+    return reverse(
+        "contributions:contribution_add", kwargs={"project_pk": project.pk}
+    )
+
+
+@pytest.mark.django_db
+def test_a_lead_corrects_a_contributions_role(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(user)
+    resp = client.post(
+        _edit_url(project, record),
+        {"contribution_type": ContributionType.SOFTWARE},
+    )
+    assert resp.status_code == 302
+    record.refresh_from_db()
+    assert record.contribution_type == ContributionType.SOFTWARE
+    assert AuditLog.objects.filter(
+        action=AuditAction.CONTRIBUTION_UPDATED, actor=user, project=project
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_a_lead_withdraws_a_contribution(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(user)
+    resp = client.post(_remove_url(project, record))
+    assert resp.status_code == 302
+    assert ContributionRecord.objects.count() == 0
+    assert AuditLog.objects.filter(
+        action=AuditAction.CONTRIBUTION_REMOVED, actor=user, project=project
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_a_lead_adds_a_contribution_by_hand(client, user, other_user):
+    """Someone who did the work without ever being an assignee."""
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    task = _make_task(project, col, pm, assignees=[pm])
+
+    client.force_login(user)
+    resp = client.post(
+        _add_url(project),
+        {
+            "task": task.pk,
+            "user": other_user.pk,
+            "contribution_type": ContributionType.VISUALIZATION,
+        },
+    )
+    assert resp.status_code == 302
+    record = ContributionRecord.objects.get(user=other_user)
+    assert record.task_id == task.pk
+    assert record.project_id == project.pk
+    assert record.contribution_type == ContributionType.VISUALIZATION
+    assert record.added_by_hand is True
+    assert record.task_log is None
+    assert record.verified_by_id == user.pk
+    assert AuditLog.objects.filter(
+        action=AuditAction.CONTRIBUTION_ADDED, actor=user, project=project
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_adding_credit_someone_already_holds_corrects_it(client, user):
+    """One credit per person per task — a second add is a correction."""
+    project, col, pm = _make_project(user)
+    task = _credit(project, col, pm, pm, ContributionType.OTHER)
+
+    client.force_login(user)
+    client.post(
+        _add_url(project),
+        {
+            "task": task.pk,
+            "user": user.pk,
+            "contribution_type": ContributionType.SUPERVISION,
+        },
+    )
+    record = ContributionRecord.objects.get()
+    assert record.contribution_type == ContributionType.SUPERVISION
+
+
+@pytest.mark.django_db
+def test_a_hand_entered_record_survives_the_task_reopening(client, user, other_user):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    task = _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    client.post(
+        _add_url(project),
+        {
+            "task": task.pk,
+            "user": other_user.pk,
+            "contribution_type": ContributionType.VISUALIZATION,
+        },
+    )
+    assert ContributionRecord.objects.count() == 2
+
+    reopen_task(task=task)
+
+    # The earned one goes with the task's state; the entered one stands.
+    assert [r.user_id for r in ContributionRecord.objects.all()] == [other_user.id]
+
+
+@pytest.mark.django_db
+def test_a_correction_is_not_overwritten_when_the_task_closes_again(client, user):
+    project, col, pm = _make_project(user)
+    task = _credit(project, col, pm, pm, ContributionType.OTHER)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(user)
+    client.post(
+        _edit_url(project, record),
+        {"contribution_type": ContributionType.SOFTWARE},
+    )
+    close_task(task=task, closed_by=pm)
+
+    record.refresh_from_db()
+    assert record.contribution_type == ContributionType.SOFTWARE
+
+
+@pytest.mark.django_db
+def test_corrections_are_refused_to_anyone_but_a_lead(client, user, other_user):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(other_user)
+    assert client.get(_add_url(project)).status_code == 403
+    assert client.get(_edit_url(project, record)).status_code == 403
+    assert client.post(
+        _edit_url(project, record),
+        {"contribution_type": ContributionType.OTHER},
+    ).status_code == 403
+    assert client.post(_remove_url(project, record)).status_code == 403
+    assert ContributionRecord.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_a_correction_cannot_reach_another_project(client, user):
+    mine, col, pm = _make_project(user, name="Mine")
+    theirs, col_b, pm_b = _make_project(user, name="Theirs")
+    _credit(theirs, col_b, pm_b, pm_b, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(user)
+    # A lead on both, but the record does not belong to the project in the URL.
+    assert client.get(_edit_url(mine, record)).status_code == 404
+    assert client.post(_remove_url(mine, record)).status_code == 404
+
+
+@pytest.mark.django_db
+def test_the_add_form_offers_only_this_projects_tasks_and_members(
+    client, user, other_user
+):
+    project, col, pm = _make_project(user, name="Mine")
+    mine_task = _make_task(project, col, pm)
+    elsewhere, col_b, pm_b = _make_project(other_user, name="Elsewhere")
+    other_task = _make_task(elsewhere, col_b, pm_b)
+
+    form = ContributionAddForm(project=project)
+    assert list(form.fields["task"].queryset) == [mine_task]
+    assert other_task not in form.fields["task"].queryset
+    assert [u.pk for u in form.fields["user"].queryset] == [user.pk]
+
+
+@pytest.mark.django_db
+def test_the_tracking_tab_offers_the_controls_to_a_lead_only(
+    client, user, other_user
+):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    url = reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+
+    client.force_login(user)
+    body = client.get(url).content.decode()
+    assert "Add contribution" in body
+    assert "contribution-modal" in body
+
+    client.force_login(other_user)
+    body = client.get(url).content.decode()
+    assert "Add contribution" not in body
+    assert "contribution-modal" not in body
+
+
+@pytest.mark.django_db
+def test_a_hand_entered_record_is_marked_as_such_on_the_page(
+    client, user, other_user
+):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    task = _make_task(project, col, pm, assignees=[pm])
+    add_contribution(
+        task=task,
+        user=other_user,
+        contribution_type=ContributionType.RESOURCES,
+        actor=user,
+    )
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Added by hand" in body
+
+
+@pytest.mark.django_db
+def test_modal_partials_render(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+    record = ContributionRecord.objects.get()
+    client.force_login(user)
+
+    body = client.get(
+        reverse("contributions:contribution_add", kwargs={"project_pk": project.pk}),
+        HTTP_HX_REQUEST="true",
+    ).content.decode()
+    assert "Add a contribution" in body
+    assert "credit.niso.org" in body
+
+    body = client.get(
+        reverse(
+            "contributions:contribution_edit",
+            kwargs={"project_pk": project.pk, "pk": record.pk},
+        ),
+        HTTP_HX_REQUEST="true",
+    ).content.decode()
+    assert "Edit contribution" in body
+    assert "Withdraw" in body
+    # The role currently recorded is preselected.
+    assert 'value="OTHER" selected' in body
+
+
+@pytest.mark.django_db
+def test_an_htmx_post_redirects_the_page(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+    record = ContributionRecord.objects.get()
+    client.force_login(user)
+
+    resp = client.post(
+        reverse(
+            "contributions:contribution_edit",
+            kwargs={"project_pk": project.pk, "pk": record.pk},
+        ),
+        {"contribution_type": ContributionType.SOFTWARE},
+        HTTP_HX_REQUEST="true",
+    )
+    assert resp.status_code == 204
+    assert resp["HX-Redirect"] == reverse(
+        "projects:contribution_tracking", kwargs={"pk": project.pk}
+    )
+
+
+@pytest.mark.django_db
+def test_an_invalid_add_comes_back_into_the_modal(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+    client.force_login(user)
+
+    resp = client.post(
+        reverse("contributions:contribution_add", kwargs={"project_pk": project.pk}),
+        {"task": "", "user": "", "contribution_type": ""},
+        HTTP_HX_REQUEST="true",
+    )
+    assert resp.status_code == 400
+    assert "Please correct the following" in resp.content.decode()
+
+
+# ---------------------------------------------------------------------------
+# The section's two views
+# ---------------------------------------------------------------------------
+
+
+def _by_member_url(project):
+    return reverse("projects:contributions_by_member", kwargs={"pk": project.pk})
+
+
+def _every_url(project):
+    return reverse("projects:every_contribution", kwargs={"pk": project.pk})
+
+
+@pytest.mark.django_db
+def test_the_section_ships_both_views_and_a_switcher(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    # The switcher, in the same shape the Tasks board uses.
+    assert "$store.credit.setView('by-member')" in body
+    assert "$store.credit.setView('every')" in body
+    # Both views are in the first render, so switching is instant.
+    assert 'id="contributions-by-member-container"' in body
+    assert 'id="every-contribution-container"' in body
+
+
+@pytest.mark.django_db
+def test_the_by_member_view_renders_on_its_own(client, user, other_user):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(_by_member_url(project)).content.decode()
+    assert "Contributions by member" in body
+    assert "Software" in body
+    assert "Alice" in body
+    # It is the partial, not the whole page.
+    assert "<!DOCTYPE html>" not in body
+
+
+@pytest.mark.django_db
+def test_the_every_contribution_view_renders_on_its_own(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(_every_url(project)).content.decode()
+    assert "Every contribution" in body
+    assert "<!DOCTYPE html>" not in body
+
+
+@pytest.mark.django_db
+def test_both_views_are_closed_to_non_members(client, user, other_user):
+    project, _col, _pm = _make_project(user)
+    client.force_login(other_user)
+    assert client.get(_by_member_url(project)).status_code == 403
+    assert client.get(_every_url(project)).status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# The matrix: the whole grid by default, narrowable on request
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_the_matrix_carries_every_role_and_every_member(client, user, other_user):
+    """A zero says which roles are uncovered and who is uncredited."""
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    resp = client.get(_by_member_url(project))
+    matrix = resp.context["matrix"]
+
+    assert [value for value, _label in matrix["types"]] == list(CREDIT_ROLES)
+    # Bob has earned nothing and is still listed.
+    by_name = {user_display_name(row["user"]): row for row in matrix["rows"]}
+    assert set(by_name) == {"Alice", "Bob"}
+    assert by_name["Bob"]["total"] == 0
+    assert by_name["Alice"]["counts"][ContributionType.SOFTWARE] == 1
+    assert by_name["Alice"]["counts"][ContributionType.METHODOLOGY] == 0
+
+
+@pytest.mark.django_db
+def test_the_filter_narrows_the_matrix_to_what_has_been_earned(
+    client, user, other_user
+):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    matrix = client.get(_by_member_url(project), {"used": "1"}).context["matrix"]
+
+    assert [value for value, _label in matrix["types"]] == [ContributionType.SOFTWARE]
+    assert [user_display_name(row["user"]) for row in matrix["rows"]] == ["Alice"]
+    assert matrix["totals"]["grand_total"] == 1
+
+
+@pytest.mark.django_db
+def test_the_filter_is_off_unless_asked_for(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    for params in ({}, {"used": "0"}):
+        resp = client.get(_by_member_url(project), params)
+        assert resp.context["only_used"] is False
+        assert len(resp.context["matrix"]["types"]) == len(CREDIT_ROLES)
+
+
+@pytest.mark.django_db
+def test_a_role_off_the_taxonomy_keeps_its_column_when_used(client, user):
+    """A task left as "Other" is not a CRediT role, but it was still earned."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+
+    client.force_login(user)
+    matrix = client.get(_by_member_url(project)).context["matrix"]
+    values = [value for value, _label in matrix["types"]]
+    assert values == list(CREDIT_ROLES) + [ContributionType.OTHER]
+
+
+@pytest.mark.django_db
+def test_the_matrix_download_carries_the_whole_taxonomy(client, user):
+    """The filter is the page's; a downloaded grid keeps a stable shape."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    lines = _csv_lines(
+        client.get(
+            f"/projects/{project.pk}/contributions.csv",
+            {"format": "matrix", "used": "1"},
+        )
+    )
+    header = lines[0].split(",")
+    assert len(header) == len(CREDIT_ROLES) + 2
+
+
+# ---------------------------------------------------------------------------
+# Sorting the matrix
+# ---------------------------------------------------------------------------
+
+
+def _matrix_names(response):
+    return [user_display_name(row["user"]) for row in response.context["matrix"]["rows"]]
+
+
+@pytest.fixture
+def sortable_project(user, other_user, pm_user):
+    """Alice 2 software, Bob 1 software + 1 methodology, PM nothing."""
+    project, col, pm = _make_project(user)
+    bob = _member_for(project, other_user)
+    _member_for(project, pm_user)  # named PM by the fixture; uncredited
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    _credit(project, col, pm, bob, ContributionType.SOFTWARE)
+    _credit(project, col, pm, bob, ContributionType.METHODOLOGY)
+    return project
+
+
+@pytest.mark.django_db
+def test_the_matrix_sorts_by_total_desc_by_default(client, user, sortable_project):
+    client.force_login(user)
+    resp = client.get(_by_member_url(sortable_project))
+    assert resp.context["matrix"]["sort"] == "total"
+    assert resp.context["matrix"]["direction"] == "desc"
+    # Alice 2, Bob 2, PM 0 — the tie holding its name order.
+    assert _matrix_names(resp) == ["Alice", "Bob", "PM"]
+
+
+@pytest.mark.django_db
+def test_the_matrix_sorts_by_member_name(client, user, sortable_project):
+    client.force_login(user)
+    url = _by_member_url(sortable_project)
+
+    assert _matrix_names(client.get(url, {"sort": "member"})) == [
+        "Alice",
+        "Bob",
+        "PM",
+    ]
+    assert _matrix_names(client.get(url, {"sort": "member", "dir": "desc"})) == [
+        "PM",
+        "Bob",
+        "Alice",
+    ]
+
+
+@pytest.mark.django_db
+def test_the_matrix_sorts_by_one_role(client, user, sortable_project):
+    """Who has the most of a role, not just the most overall."""
+    client.force_login(user)
+    url = _by_member_url(sortable_project)
+
+    # Alice has two Software, Bob one, PM none.
+    assert _matrix_names(client.get(url, {"sort": ContributionType.SOFTWARE})) == [
+        "Alice",
+        "Bob",
+        "PM",
+    ]
+    # Only Bob has Methodology, so he leads it however the totals fall.
+    assert _matrix_names(client.get(url, {"sort": ContributionType.METHODOLOGY})) == [
+        "Bob",
+        "Alice",
+        "PM",
+    ]
+
+
+@pytest.mark.django_db
+def test_ties_hold_their_name_order_whatever_the_sort(client, user, sortable_project):
+    """Alice and Bob both total 2; their name order breaks the tie."""
+    client.force_login(user)
+    rows = client.get(
+        _by_member_url(sortable_project), {"sort": "total", "dir": "asc"}
+    ).context["matrix"]["rows"]
+    names = [user_display_name(row["user"]) for row in rows]
+    assert names == ["PM", "Alice", "Bob"]
+
+
+@pytest.mark.django_db
+def test_an_unknown_sort_falls_back_to_the_default(client, user, sortable_project):
+    """A stale link should still show the grid."""
+    client.force_login(user)
+    for params in (
+        {"sort": "NOT_A_ROLE"},
+        {"sort": "total", "dir": "sideways"},
+        {"sort": ""},
+    ):
+        matrix = client.get(_by_member_url(sortable_project), params).context["matrix"]
+        assert matrix["sort"] in {"total", params.get("sort")}
+        assert matrix["direction"] in {"asc", "desc"}
+
+
+@pytest.mark.django_db
+def test_the_sort_and_the_filter_keep_each_other(client, user, sortable_project):
+    """Neither control throws the other away."""
+    client.force_login(user)
+    resp = client.get(
+        _by_member_url(sortable_project),
+        {"sort": "member", "dir": "desc", "used": "1"},
+    )
+    matrix = resp.context["matrix"]
+    assert resp.context["only_used"] is True
+    assert matrix["sort"] == "member"
+    assert matrix["direction"] == "desc"
+    # PM has nothing, so the filter drops them; the sort still reverses.
+    assert [user_display_name(row["user"]) for row in matrix["rows"]] == [
+        "Bob",
+        "Alice",
+    ]
+
+
+@pytest.mark.django_db
+def test_the_headers_carry_the_sort_controls(client, user, sortable_project):
+    client.force_login(user)
+    body = client.get(_by_member_url(sortable_project)).content.decode()
+    # The sorted column is marked for a screen reader and flips on the next
+    # click; an unsorted one starts at its own natural end.
+    assert 'aria-sort="descending"' in body
+    assert 'aria-sort="none"' in body
+    assert '"sort": "total", "dir": "asc"' in body
+    assert '"sort": "member", "dir": "asc"' in body
+    assert f'"sort": "{ContributionType.SOFTWARE}", "dir": "desc"' in body
+
+
+# ---------------------------------------------------------------------------
+# Who closed the task the credit was earned on
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_the_project_list_names_who_closed_the_task(client, user, other_user):
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice])
+    mark_own_done(task=task, member=alice)
+    close_task(task=task, closed_by=lead)
+
+    client.force_login(user)
+    body = client.get(_every_url(project)).content.decode()
+    assert "Closed by" in body
+    # The lead who closed it, not the member who earned the credit.
+    assert ContributionRecord.objects.get().verified_by_id == user.pk
+    assert "Alice" in body
+
+
+@pytest.mark.django_db
+def test_the_contributions_module_names_who_closed_the_task(client, user, other_user):
+    """Your own credit says who credited you."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice])
+    mark_own_done(task=task, member=alice)
+    close_task(task=task, closed_by=lead)
+
+    client.force_login(other_user)
+    body = client.get(reverse("contributions:contributions")).content.decode()
+    assert "Closed by" in body
+    assert "Alice" in body  # the lead, on Bob's own page
+
+
+@pytest.mark.django_db
+def test_a_reviewers_final_signoff_is_recorded_as_the_closer(client, user, other_user):
+    """The last review closes the task, so the reviewer is who closed it."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice], reviewers=[lead])
+    log = mark_own_done(task=task, member=alice)
+    mark_reviewed(task_log=log, reviewer=lead)
+
+    assert ContributionRecord.objects.get().verified_by_id == user.pk
+
+
+@pytest.mark.django_db
+def test_a_hand_entered_record_names_who_entered_it(client, user, other_user):
+    project, col, lead = _make_project(user)
+    _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[lead])
+    add_contribution(
+        task=task,
+        user=other_user,
+        contribution_type=ContributionType.RESOURCES,
+        actor=user,
+    )
+
+    client.force_login(user)
+    body = client.get(_every_url(project)).content.decode()
+    # Named, and badged so it does not read as credit the task earned.
+    assert "Alice" in body
+    assert "Added by hand" in body
+
+
+@pytest.mark.django_db
+def test_a_closer_whose_account_is_gone_is_still_reported(client, user, other_user):
+    """SET_NULL outlives the account; say so rather than leaving it blank."""
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice])
+    mark_own_done(task=task, member=alice)
+    close_task(task=task, closed_by=lead)
+
+    record = ContributionRecord.objects.get()
+    record.verified_by = None
+    record.save(update_fields=["verified_by"])
+
+    client.force_login(other_user)
+    body = client.get(reverse("contributions:contributions")).content.decode()
+    assert "A former member" in body
+
+
+@pytest.mark.django_db
+def test_the_public_profile_names_the_closer(client, user, other_user):
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    task = _make_task(project, col, lead, assignees=[alice])
+    mark_own_done(task=task, member=alice)
+    close_task(task=task, closed_by=lead)
+
+    client.force_login(other_user)
+    body = client.get(
+        reverse("public_profile", kwargs={"pk": other_user.pk})
+    ).content.decode()
+    assert "closed by Alice" in body

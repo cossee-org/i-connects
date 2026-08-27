@@ -1,0 +1,60 @@
+{% comment %}
+  Correct one contribution's role, loaded into #contribution-modal-body.
+  Withdrawing it is the other way out, so both live on the one form row.
+{% endcomment %}
+{% load contribution_tags %}
+<h2 class="text-lg font-semibold text-brand-navy mb-1">Edit contribution</h2>
+<p class="text-sm text-brand-text/70 mb-4">
+  {{ record.user|display_name }} on <span class="font-medium">{{ record.task.name }}</span>.
+</p>
+
+<form method="post"
+      action="{% url 'contributions:contribution_edit' project_pk=project.pk pk=record.pk %}"
+      hx-post="{% url 'contributions:contribution_edit' project_pk=project.pk pk=record.pk %}"
+      hx-target="this"
+      hx-swap="outerHTML">
+  {% csrf_token %}
+
+  {% if form.errors %}
+    <div class="alert alert-error mb-4" role="alert">
+      <div>
+        <p class="font-semibold">Please correct the following:</p>
+        <ul class="list-disc pl-5 text-sm">
+          {% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}
+          {% for field in form %}
+            {% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  {% endif %}
+
+  {% include "_components/form_field.html" with field=form.contribution_type %}
+  <p class="text-xs text-brand-text/60 -mt-2 mb-3">
+    What each role covers:
+    <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
+       class="text-brand-coral hover:underline">credit.niso.org</a>
+  </p>
+
+  <div class="flex gap-2 justify-end mt-6">
+    <button type="button" class="btn btn-sm btn-ghost"
+            onclick="document.getElementById('contribution-modal').close()">Cancel</button>
+    <button type="submit" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+      Save
+    </button>
+  </div>
+</form>
+
+<div class="mt-6 pt-4 border-t border-brand-light/60 flex items-center justify-between gap-3">
+  <p class="text-xs text-brand-text/60">
+    Withdrawing removes this credit entirely. It comes back if the task is
+    closed again with the mark still standing.
+  </p>
+  <form method="post"
+        action="{% url 'contributions:contribution_remove' project_pk=project.pk pk=record.pk %}"
+        hx-post="{% url 'contributions:contribution_remove' project_pk=project.pk pk=record.pk %}"
+        hx-confirm="Withdraw this contribution?">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm btn-outline btn-error shrink-0">Withdraw</button>
+  </form>
+</div>

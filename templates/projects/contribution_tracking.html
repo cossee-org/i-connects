@@ -2,6 +2,36 @@
 
 {% block title %}Contribution Tracking &mdash; {{ project.name }}{% endblock %}
 
+{% block extra_head %}
+<style>[x-cloak] { display: none !important; }</style>
+<script>
+  document.addEventListener('alpine:init', function () {
+    Alpine.store('credit', {
+      viewMode: localStorage.getItem('creditViewMode') || 'by-member',
+      setView: function (next) {
+        if (next === this.viewMode) return;
+        this.viewMode = next;
+        localStorage.setItem('creditViewMode', next);
+        {% comment %}
+          Re-fetch whichever view is being switched to. Both ship in the
+          first render so the switch is instant; this keeps the one you land
+          on current after a correction elsewhere.
+        {% endcomment %}
+        if (next === 'every') {
+          htmx.ajax('GET', '{% url "projects:every_contribution" pk=project.pk %}', {
+            target: '#every-contribution-container', swap: 'innerHTML'
+          });
+        } else {
+          htmx.ajax('GET', '{% url "projects:contributions_by_member" pk=project.pk %}', {
+            target: '#contributions-by-member-container', swap: 'innerHTML'
+          });
+        }
+      }
+    });
+  });
+</script>
+{% endblock %}
+
 {% block page_header %}
   <header class="mb-6">
     {% include "_components/project_header.html" %}
@@ -9,5 +39,96 @@
 {% endblock %}
 
 {% block content %}
-{% include "_components/empty_state.html" with title="Coming soon" body="Contribution Tracking is on the way. Check back later." %}
+{% if not project.tracks_credit %}
+  {% comment %}
+    Nothing to show, and nothing that could appear later: contributions are
+    only recorded on a project tracking them as CRediT. Say which it is, and
+    point a lead at the switch.
+  {% endcomment %}
+  {% if is_project_manager %}
+    {% url 'projects:update' pk=project.pk as settings_url %}
+    {% include "_components/empty_state.html" with title="This project isn't tracking contributions" body="Turn on CRediT in the project settings and each task's contributors are credited as it is completed." cta_href=settings_url cta_label="Open project settings" %}
+  {% else %}
+    {% include "_components/empty_state.html" with title="This project isn't tracking contributions" body="A project lead can turn on CRediT tracking in the project settings." %}
+  {% endif %}
+{% else %}
+
+  <p class="text-sm text-brand-text/70 mb-4 max-w-2xl">
+    Credit on this project, by
+    <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
+       class="text-brand-navy underline hover:text-brand-coral">CRediT</a>
+    role. A member earns credit on a task when they mark their own part done
+    and a lead completes the task &mdash; where the task requires review, once
+    their submission has been reviewed.
+  </p>
+
+  {% comment %}
+    View switcher on the left, downloads on the right — the same shape the
+    Tasks board uses for Kanban / List / Calendar. The two downloads line up
+    with the two views: the matrix is Contributions by member, the list is
+    Every contribution.
+  {% endcomment %}
+  <div x-data class="flex flex-wrap items-center gap-2 justify-between mb-4">
+    <div class="join">
+      <button type="button" class="btn btn-ghost btn-sm join-item"
+              :class="{ 'btn-active': $store.credit.viewMode === 'by-member' }"
+              @click="$store.credit.setView('by-member')">
+        {# table-cells #}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m0 0h-7.5m-9 0h7.5m0 0c.621 0 1.125.504 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 1.5v-1.5m0 0c0-.621.504-1.125 1.125-1.125m0 0h7.5" />
+        </svg>
+        Contributions by member
+      </button>
+      <button type="button" class="btn btn-ghost btn-sm join-item"
+              :class="{ 'btn-active': $store.credit.viewMode === 'every' }"
+              @click="$store.credit.setView('every')">
+        {# list-bullet #}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+        </svg>
+        Every contribution
+      </button>
+    </div>
+
+    {% if matrix.totals.grand_total > 0 %}
+      {% url 'contributions:project_contributions_csv' project_pk=project.pk as csv_url %}
+      {% if is_project_manager %}
+        {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" %}
+      {% else %}
+        {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" %}
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <div x-data>
+    {# ── Contributions by member ── #}
+    <div x-show="$store.credit.viewMode === 'by-member'" x-cloak>
+      <div id="contributions-by-member-container">
+        {% include "projects/partials/contributions_by_member.html" %}
+      </div>
+    </div>
+
+    {# ── Every contribution ── #}
+    <div x-show="$store.credit.viewMode === 'every'" x-cloak>
+      <div id="every-contribution-container">
+        {% include "projects/partials/every_contribution.html" %}
+      </div>
+    </div>
+  </div>
+
+  {% if is_project_manager %}
+    {# ── Correction modal — filled by HTMX from the Add / Edit controls ── #}
+    <dialog id="contribution-modal" class="modal" aria-label="Contribution">
+      <div class="modal-box max-w-lg bg-base-100 border border-brand-light/60">
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
+        </form>
+        <div id="contribution-modal-body"><!-- filled by HTMX --></div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+  {% endif %}
+{% endif %}
 {% endblock %}

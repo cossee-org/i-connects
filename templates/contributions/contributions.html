@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load contribution_tags %}
 
 {% block title %}Contributions &mdash; i&bull;CONNECTS{% endblock %}
 
@@ -20,10 +21,137 @@
            x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
            x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
            class="absolute left-0 mt-2 w-max max-w-80 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-30">
-        <p class="text-sm text-brand-text/70">A record of contributions made across your projects.</p>
+        <p class="text-sm text-brand-text/70">
+          Your credit across every project that tracks contributions with
+          <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
+             class="text-brand-navy underline hover:text-brand-coral">CRediT</a>.
+          You earn it on a task when you mark your part done and a lead
+          completes the task &mdash; where the task has reviewers, once your
+          submission has been reviewed.
+        </p>
       </div>
     </div>
   </div>
 </div>
-  {% include "_components/empty_state.html" with title="Coming soon" body="Contributions are on the way. Check back later." %}
+
+{% if not filter_projects %}
+  {% include "_components/empty_state.html" with title="No contributions yet" body="None of your projects track contributions with CRediT yet. Once one does, the credit you earn on its tasks shows up here." %}
+{% else %}
+
+  {# ── Project filter ─────────────────────────────────────────────────────── #}
+  <form method="get" id="contribution-filter-form" class="flex flex-wrap gap-3 items-center mb-6">
+    <input type="hidden" name="project" id="project-input" value="{{ current_project }}">
+    <div x-data="{
+      open: false,
+      options: [
+        {value: '', label: 'All projects'}{% for p in filter_projects %},
+        {value: '{{ p.pk }}', label: '{{ p.name|escapejs }}'}{% endfor %}
+      ],
+      current: '{{ current_project }}',
+      get selected() { return this.options.find(o => o.value === this.current) || this.options[0] },
+      pick(val) {
+        document.getElementById('project-input').value = val;
+        document.getElementById('contribution-filter-form').submit();
+      }
+    }" class="relative" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              class="inline-flex items-center justify-between gap-2 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm min-w-[12rem]">
+        <span class="truncate" x-text="selected.label"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute left-0 mt-1 min-w-full max-w-sm bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        <template x-for="opt in options" :key="opt.value">
+          <button type="button" @click="pick(opt.value)"
+                  class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors truncate"
+                  :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                  x-text="opt.label"></button>
+        </template>
+      </div>
+    </div>
+    <noscript><button type="submit" class="btn btn-sm btn-primary">Filter</button></noscript>
+
+    {% if contribution_total > 0 %}
+      {% comment %}
+        Downloads carry the filter, so the sheet matches what is on screen.
+      {% endcomment %}
+      <div class="sm:ml-auto">
+        {% url 'contributions:my_contributions_csv' as csv_url %}
+        {% if selected_project %}
+          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix&project="|add:current_project list_url=csv_url|add:"?format=list&project="|add:current_project %}
+        {% else %}
+          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" %}
+        {% endif %}
+      </div>
+    {% endif %}
+  </form>
+
+  {% if contribution_total == 0 %}
+    {% if selected_project %}
+      {% include "_components/empty_state.html" with title="No contributions on this project yet" body="Credit appears here when a lead completes a task you have marked done." %}
+    {% else %}
+      {% include "_components/empty_state.html" with title="No contributions yet" body="Credit appears here when a lead completes a task you have marked done." %}
+    {% endif %}
+  {% else %}
+
+    {# ── Totals by role ───────────────────────────────────────────────────── #}
+    <div class="brand-card p-6 mb-6">
+      <p class="text-sm text-brand-text/70 mb-3">
+        <span class="text-brand-navy font-semibold">{{ contribution_total }}</span>
+        contribution{{ contribution_total|pluralize }}
+        {% if selected_project %}on {{ selected_project.name }}{% else %}across all your projects{% endif %}
+      </p>
+      <div class="flex flex-wrap gap-2">
+        {% for label, count in counts_by_type %}
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-brand-lighter px-3 py-1 text-sm text-brand-text">
+            {{ label }}
+            <span class="font-semibold text-brand-navy">{{ count }}</span>
+          </span>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# ── Every contribution ───────────────────────────────────────────────── #}
+    <div class="brand-card overflow-x-auto">
+      <table class="table">
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th scope="col">Project</th>
+            <th scope="col">Task</th>
+            <th scope="col">Role</th>
+            <th scope="col">Completed</th>
+            <th scope="col">Closed by</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in records %}
+            <tr>
+              <th scope="row" class="font-normal text-left">
+                <a href="{% url 'projects:contribution_tracking' pk=record.project_id %}"
+                   class="text-brand-navy hover:text-brand-coral">{{ record.project.name }}</a>
+              </th>
+              <td>
+                <a href="{% url 'tasks:detail' project_pk=record.project_id pk=record.task_id %}"
+                   class="text-brand-navy hover:text-brand-coral">{{ record.task.name }}</a>
+              </td>
+              <td>
+                {{ record.get_contribution_type_display }}
+                {% if record.added_by_hand %}
+                  <span class="ml-1 inline-flex items-center rounded-full border border-gray-300 px-2 py-0.5 text-xs text-brand-text/60"
+                        title="Entered by a project lead rather than earned on a task closing">Added by hand</span>
+                {% endif %}
+              </td>
+              <td class="whitespace-nowrap">{{ record.closed_at|date:"M j, Y" }}</td>
+              <td class="{% if not record.verified_by %}text-brand-text/50 italic{% endif %}">{{ record|closed_by|capfirst }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+{% endif %}
 {% endblock %}

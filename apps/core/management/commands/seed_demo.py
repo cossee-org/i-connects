@@ -3,9 +3,9 @@
     python manage.py seed_demo
 
 Creates three users (a PM, a contributor, a verifier), one project with a
-kanban board, a handful of tasks spanning every contribution type, and
-runs them through the complete→approve lifecycle so the contributions
-page has real data to show. Safe to re-run: the command is idempotent
+kanban board, a handful of tasks spanning several CRediT roles, and
+runs them through the mark-done → close lifecycle so the contributions
+pages have real data to show. Safe to re-run: the command is idempotent
 and uses ``get_or_create`` throughout.
 
 Intended for evaluation and demos, NOT production. All accounts use the
@@ -23,10 +23,14 @@ from apps.core.enums import (
     ProjectStatus,
     TaskStatus,
 )
-from apps.projects.models import ProjectMember, ProjectPrivilege
+from apps.projects.models import (
+    ContributionTracking,
+    ProjectMember,
+    ProjectPrivilege,
+)
 from apps.projects.services import create_project_with_owner
 from apps.tasks.models import KanbanBoard, Task
-from apps.tasks.services import approve_completion, complete_task
+from apps.tasks.services import close_task, mark_own_done
 
 User = get_user_model()
 
@@ -41,17 +45,20 @@ DEMO_USERS = [
     ("cara@iconnects.test", "Cara Nguyen (contributor)", MemberPrivileges.CONTRIBUTOR),
 ]
 
+#: ``closed`` says how far down the lifecycle to take each task:
+#: ``True`` marked done and closed (so it carries credit), ``False``
+#: marked done but left open, ``None`` untouched.
 DEMO_TASKS = [
-    # (name, assignee_email, contribution_type, approved?)
+    # (name, assignee_email, contribution_type, closed?)
     ("Screen abstracts batch 1", "bob@iconnects.test", ContributionType.DATA_CURATION, True),
     ("Screen abstracts batch 2", "cara@iconnects.test", ContributionType.DATA_CURATION, True),
     ("Extract effect sizes", "bob@iconnects.test", ContributionType.DATA_CURATION, True),
     ("Validate 20% random sample", "cara@iconnects.test", ContributionType.VALIDATION, True),
-    ("Draft methods section", "alice@iconnects.test", ContributionType.WRITING, True),
+    ("Draft methods section", "alice@iconnects.test", ContributionType.WRITING_ORIGINAL_DRAFT, True),
     ("Code preregistration", "alice@iconnects.test", ContributionType.PROJECT_ADMINISTRATION, True),
-    # One open task and one pending-approval for realism on the dashboard widgets.
-    ("Review R analysis script", "bob@iconnects.test", ContributionType.VALIDATION, None),   # not yet done
-    ("Write discussion draft", "cara@iconnects.test", ContributionType.WRITING, False),       # done, awaiting approval (we will complete but not approve)
+    # One open task and one done-but-open, for realism on the dashboard widgets.
+    ("Review R analysis script", "bob@iconnects.test", ContributionType.VALIDATION, None),
+    ("Write discussion draft", "cara@iconnects.test", ContributionType.WRITING_REVIEW_EDITING, False),
 ]
 
 
@@ -98,6 +105,7 @@ class Command(BaseCommand):
                     ),
                     "status": ProjectStatus.ACTIVE,
                     "is_public": True,
+                    "contribution_tracking": ContributionTracking.CREDIT,
                 },
             )
             self.stdout.write(f"  + created project '{DEMO_PROJECT_NAME}'")
@@ -107,8 +115,13 @@ class Command(BaseCommand):
             if email == alice.email:
                 continue
             user = users_by_email[email]
-            member, _ = ProjectMember.objects.get_or_create(project=project)
-            member.users.add(user)
+            # One membership each — get_or_create(project=...) alone would
+            # match the owner's row and pile every demo user into it, so the
+            # whole board ended up assigned to (and credited to) all three.
+            member = ProjectMember.objects.filter(project=project, users=user).first()
+            if member is None:
+                member = ProjectMember.objects.create(project=project)
+                member.users.add(user)
             ProjectPrivilege.objects.get_or_create(
                 user=user, project=project, defaults={"privilege": priv}
             )
@@ -121,7 +134,7 @@ class Command(BaseCommand):
         # Tasks.
         alice_member = ProjectMember.objects.filter(project=project, users=alice).first()
         next_order = Task.objects.filter(container=column).count()
-        for name, assignee_email, ctype, approved in DEMO_TASKS:
+        for name, assignee_email, ctype, closed in DEMO_TASKS:
             if Task.objects.filter(project=project, name=name).exists():
                 continue
             assignee_user = users_by_email[assignee_email]
@@ -140,15 +153,16 @@ class Command(BaseCommand):
             next_order += 1
             task.assigned_members.add(assignee_member)
 
-            if approved is None:
+            if closed is None:
                 # Leave open — will show up under "My active tasks" for the assignee.
                 continue
 
-            log = complete_task(task=task, completed_by=assignee_member)
-            if approved:
-                approve_completion(task_log=log, approved=True, verifier_user=alice)
-            # approved=False means we stop after completion — shows up in
-            # Alice's "Pending your approval" widget.
+            mark_own_done(task=task, member=assignee_member)
+            if closed:
+                # Closing is the ledger event: this is what writes the credit.
+                close_task(task=task, closed_by=alice_member)
+            # closed=False means we stop after the assignee's own mark —
+            # done, but still waiting on the lead to close it.
 
             self.stdout.write(f"  + task '{name}' ({assignee_email}, {ctype})")
 

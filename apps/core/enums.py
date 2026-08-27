@@ -92,3 +92,39 @@ class ContributionType(models.TextChoices):
     VISUALIZATION = "VISUALIZATION", "Visualization"
     WRITING_ORIGINAL_DRAFT = "WRITING_ORIGINAL_DRAFT", "Writing – original draft"
     WRITING_REVIEW_EDITING = "WRITING_REVIEW_EDITING", "Writing – review & editing"
+
+
+#: The 14 roles the CRediT taxonomy actually defines.
+#: ``ContributionType`` also carries ``OTHER`` and the legacy
+#: ``WRITING``, which are ours rather than CRediT's — offer these where a
+#: project is tracking contributions as CRediT.
+CREDIT_ROLES: tuple[str, ...] = (
+    ContributionType.CONCEPTUALIZATION,
+    ContributionType.DATA_CURATION,
+    ContributionType.FORMAL_ANALYSIS,
+    ContributionType.FUNDING_ACQUISITION,
+    ContributionType.INVESTIGATION,
+    ContributionType.METHODOLOGY,
+    ContributionType.PROJECT_ADMINISTRATION,
+    ContributionType.RESOURCES,
+    ContributionType.SOFTWARE,
+    ContributionType.SUPERVISION,
+    ContributionType.VALIDATION,
+    ContributionType.VISUALIZATION,
+    ContributionType.WRITING_ORIGINAL_DRAFT,
+    ContributionType.WRITING_REVIEW_EDITING,
+)
+
+
+def credit_role_choices(include: str | None = None) -> list[tuple[str, str]]:
+    """``(value, label)`` pairs for the CRediT roles, alphabetical by label.
+
+    ``include`` keeps a value that is not one of the 14 — a task saved as
+    "Other", or under the legacy ``WRITING`` — in the list, so editing such
+    a task does not quietly rewrite what it was recorded as.
+    """
+    labels = dict(ContributionType.choices)
+    values = list(CREDIT_ROLES)
+    if include and include not in values and include in labels:
+        values.append(include)
+    return sorted(((v, labels[v]) for v in values), key=lambda c: c[1])
