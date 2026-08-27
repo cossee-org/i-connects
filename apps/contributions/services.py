@@ -16,6 +16,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
+from apps.audit.services import AuditAction, log_action
 from apps.core.enums import CREDIT_ROLES, ContributionType, TaskStatus
 from apps.projects.models import ContributionTracking, Project, ProjectMember
 from apps.tasks.models import Task, TaskLog
@@ -81,10 +82,10 @@ def record_contributions_for_task(
     for member, task_log in eligible_contributions(task):
         for user in member.users.all():
             obj, was_created = ContributionRecord.objects.get_or_create(
-                task_log=task_log,
+                task=task,
                 user=user,
                 defaults=dict(
-                    task=task,
+                    task_log=task_log,
                     project=task.project,
                     contribution_type=task.contribution_type,
                     verified_by=verifier_user,
@@ -104,8 +105,14 @@ def withdraw_contributions_for_task(task: Task) -> int:
     reopens. Credit is a claim that a piece of work is finished; a reopened
     task is not, so the claim goes with it rather than standing over work
     that has been pulled back.
+
+    A record a lead entered by hand stays. It was never derived from the
+    task's state, so the task's state changing says nothing about it —
+    removing it is the lead's own call.
     """
-    deleted, _by_model = ContributionRecord.objects.filter(task=task).delete()
+    deleted, _by_model = ContributionRecord.objects.filter(
+        task=task, added_by_hand=False
+    ).delete()
     return deleted
 
 
@@ -328,3 +335,98 @@ def user_display_name(user: User) -> str:
     """A user's full name, falling back to their account name, then email."""
     full = f"{(user.given_name or '').strip()} {(user.family_name or '').strip()}".strip()
     return full or user.name or user.email
+
+
+# ---------------------------------------------------------------------------
+# Corrections — a lead's hand on the ledger
+#
+# Credit is a claim about who did what, so a wrong claim has to be fixable:
+# a role recorded from the wrong task type, someone credited who should not
+# have been, someone missed who should have been. Each correction writes an
+# audit row naming who made it.
+# ---------------------------------------------------------------------------
+
+
+@transaction.atomic
+def update_contribution(
+    record: ContributionRecord,
+    *,
+    contribution_type: str,
+    actor=None,
+) -> ContributionRecord:
+    """Correct the role a contribution is recorded under."""
+    previous = record.contribution_type
+    if previous == contribution_type:
+        return record
+    record.contribution_type = contribution_type
+    record.save(update_fields=["contribution_type", "updated_at"])
+    _log_contribution_action(
+        AuditAction.CONTRIBUTION_UPDATED,
+        record,
+        actor=actor,
+        extra={"from": previous, "to": contribution_type},
+    )
+    return record
+
+
+@transaction.atomic
+def remove_contribution(record: ContributionRecord, *, actor=None) -> None:
+    """Withdraw a contribution a lead judges shouldn't stand."""
+    _log_contribution_action(AuditAction.CONTRIBUTION_REMOVED, record, actor=actor)
+    record.delete()
+
+
+@transaction.atomic
+def add_contribution(
+    *,
+    task: Task,
+    user: User,
+    contribution_type: str,
+    actor=None,
+) -> ContributionRecord:
+    """Credit ``user`` on ``task`` by hand.
+
+    For work the automatic writer missed — someone who did the work without
+    being an assignee, or whose mark never went in. The record carries no
+    submission, because there is none behind it: it stands on the lead's
+    say-so, which is what ``added_by_hand`` records.
+
+    Idempotent against the one-credit-per-person-per-task rule: crediting
+    someone who already holds credit on the task corrects the role of the
+    row they have rather than raising.
+    """
+    record = ContributionRecord.objects.filter(task=task, user=user).first()
+    if record is not None:
+        return update_contribution(
+            record, contribution_type=contribution_type, actor=actor
+        )
+
+    record = ContributionRecord.objects.create(
+        task=task,
+        task_log=None,
+        user=user,
+        project=task.project,
+        contribution_type=contribution_type,
+        verified_by=actor if getattr(actor, "pk", None) else None,
+        closed_at=timezone.now(),
+        added_by_hand=True,
+    )
+    _log_contribution_action(AuditAction.CONTRIBUTION_ADDED, record, actor=actor)
+    return record
+
+
+def _log_contribution_action(action, record, *, actor=None, extra=None) -> None:
+    metadata = {
+        "task_name": record.task.name,
+        "user_id": record.user_id,
+        "contribution_type": record.contribution_type,
+    }
+    if extra:
+        metadata.update(extra)
+    log_action(
+        action,
+        actor=actor if getattr(actor, "pk", None) else None,
+        entity=record.task,
+        project=record.project,
+        metadata=metadata,
+    )

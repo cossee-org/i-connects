@@ -1,0 +1,12 @@
+{# Opens the correction modal on the hand-entry form. Needs `project`. #}
+<button type="button" class="btn btn-sm btn-outline btn-primary gap-1"
+        hx-get="{% url 'contributions:contribution_add' project_pk=project.pk %}"
+        hx-target="#contribution-modal-body"
+        hx-swap="innerHTML"
+        onclick="document.getElementById('contribution-modal').showModal()">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+       stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+  </svg>
+  Add contribution
+</button>

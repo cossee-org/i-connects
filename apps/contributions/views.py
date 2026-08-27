@@ -11,9 +11,15 @@ from __future__ import annotations
 import csv
 from itertools import chain
 
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponseForbidden, StreamingHttpResponse
-from django.shortcuts import get_object_or_404
+from django.http import (
+    HttpResponse,
+    HttpResponseForbidden,
+    HttpResponseRedirect,
+    StreamingHttpResponse,
+)
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
@@ -23,13 +29,18 @@ from django.views.generic import RedirectView, TemplateView
 from apps.core.enums import CREDIT_ROLES, ContributionType, MemberPrivileges
 from apps.projects.models import Project, ProjectPrivilege
 
+from .forms import ContributionAddForm, ContributionEditForm
+from .models import ContributionRecord
 from .services import (
+    add_contribution,
     get_project_contributions,
     get_project_contributions_matrix,
     get_user_contribution_counts_by_type,
     get_user_contributions,
     get_user_contributions_matrix,
     get_user_credit_projects,
+    remove_contribution,
+    update_contribution,
     user_display_name,
 )
 
@@ -107,6 +118,120 @@ class ProjectContributionsView(LoginRequiredMixin, RedirectView):
             "projects:contribution_tracking",
             kwargs={"pk": kwargs["project_pk"]},
         )
+
+
+# ---------------------------------------------------------------------------
+# Corrections — lead-only edits to the ledger
+# ---------------------------------------------------------------------------
+
+
+class ProjectLeadRequiredMixin(LoginRequiredMixin):
+    """Resolve ``self.project`` from ``project_pk`` and require a lead on it."""
+
+    def dispatch(self, request, *args, **kwargs):
+        self.project = get_object_or_404(Project, pk=kwargs.get("project_pk"))
+        if not request.user.is_authenticated:
+            return super().dispatch(request, *args, **kwargs)
+        is_lead = ProjectPrivilege.objects.filter(
+            user=request.user,
+            project=self.project,
+            privilege=MemberPrivileges.PROJECT_MANAGER,
+        ).exists()
+        if not is_lead:
+            return HttpResponseForbidden(
+                "Only project leads may correct contributions."
+            )
+        return super().dispatch(request, *args, **kwargs)
+
+    def _tracking_url(self) -> str:
+        return reverse(
+            "projects:contribution_tracking", kwargs={"pk": self.project.pk}
+        )
+
+
+class ContributionAddView(ProjectLeadRequiredMixin, View):
+    """Credit someone on a task the automatic writer passed over."""
+
+    def get(self, request, *args, **kwargs):
+        return self._render(ContributionAddForm(project=self.project))
+
+    def post(self, request, *args, **kwargs):
+        form = ContributionAddForm(request.POST, project=self.project)
+        if not form.is_valid():
+            return self._render(form, status=400)
+        add_contribution(
+            task=form.cleaned_data["task"],
+            user=form.cleaned_data["user"],
+            contribution_type=form.cleaned_data["contribution_type"],
+            actor=request.user,
+        )
+        messages.success(request, "Contribution added.")
+        return _refresh(request, self._tracking_url())
+
+    def _render(self, form, *, status=200):
+        return render(
+            self.request,
+            "contributions/partials/add_form.html",
+            {"form": form, "project": self.project},
+            status=status,
+        )
+
+
+class ContributionEditView(ProjectLeadRequiredMixin, View):
+    """Correct the role one contribution is recorded under."""
+
+    def get_record(self):
+        return get_object_or_404(
+            ContributionRecord.objects.select_related("task", "user"),
+            pk=self.kwargs["pk"],
+            project=self.project,
+        )
+
+    def get(self, request, *args, **kwargs):
+        record = self.get_record()
+        return self._render(record, ContributionEditForm(record=record))
+
+    def post(self, request, *args, **kwargs):
+        record = self.get_record()
+        form = ContributionEditForm(request.POST, record=record)
+        if not form.is_valid():
+            return self._render(record, form, status=400)
+        update_contribution(
+            record,
+            contribution_type=form.cleaned_data["contribution_type"],
+            actor=request.user,
+        )
+        messages.success(request, "Contribution updated.")
+        return _refresh(request, self._tracking_url())
+
+    def _render(self, record, form, *, status=200):
+        return render(
+            self.request,
+            "contributions/partials/edit_form.html",
+            {"form": form, "record": record, "project": self.project},
+            status=status,
+        )
+
+
+class ContributionRemoveView(ProjectLeadRequiredMixin, View):
+    """Withdraw a contribution a lead judges shouldn't stand."""
+
+    def post(self, request, *args, **kwargs):
+        record = get_object_or_404(
+            ContributionRecord, pk=kwargs["pk"], project=self.project
+        )
+        remove_contribution(record, actor=request.user)
+        messages.success(request, "Contribution withdrawn.")
+        return _refresh(request, self._tracking_url())
+
+
+def _refresh(request, url: str):
+    """Send the caller back to the tracking tab, HTMX or not."""
+    if request.headers.get("HX-Request"):
+        response = HttpResponse(status=204)
+        response["HX-Redirect"] = url
+        return response
+    return HttpResponseRedirect(url)
 
 
 # ---------------------------------------------------------------------------

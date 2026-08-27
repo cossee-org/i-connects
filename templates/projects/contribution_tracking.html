@@ -48,6 +48,9 @@
 
   {% if matrix.totals.grand_total == 0 %}
     {% include "_components/empty_state.html" with title="No contributions yet" body="Credit appears here as tasks are completed." %}
+    {% if is_project_manager %}
+      <div class="flex justify-center mt-4">{% include "contributions/partials/add_button.html" %}</div>
+    {% endif %}
   {% else %}
     <div class="brand-card overflow-x-auto mb-8">
       <table class="table">
@@ -92,7 +95,10 @@
       </table>
     </div>
 
-    <h2 class="text-lg font-semibold text-brand-navy mb-3">Every contribution</h2>
+    <div class="flex items-center justify-between gap-3 mb-3">
+      <h2 class="text-lg font-semibold text-brand-navy">Every contribution</h2>
+      {% if is_project_manager %}{% include "contributions/partials/add_button.html" %}{% endif %}
+    </div>
     <div class="brand-card overflow-x-auto">
       <table class="table">
         <thead class="bg-brand-lighter text-brand-navy">
@@ -102,6 +108,7 @@
             <th scope="col">Role</th>
             <th scope="col">Completed</th>
             <th scope="col">Closed by</th>
+            {% if is_project_manager %}<th scope="col" class="text-right">Actions</th>{% endif %}
           </tr>
         </thead>
         <tbody>
@@ -115,14 +122,50 @@
                 <a href="{% url 'tasks:detail' project_pk=project.pk pk=record.task_id %}"
                    class="text-brand-navy hover:text-brand-coral">{{ record.task.name }}</a>
               </td>
-              <td>{{ record.get_contribution_type_display }}</td>
+              <td>
+                {{ record.get_contribution_type_display }}
+                {% if record.added_by_hand %}
+                  <span class="ml-1 inline-flex items-center rounded-full border border-gray-300 px-2 py-0.5 text-xs text-brand-text/60"
+                        title="Entered by a project lead rather than earned on a task closing">Added by hand</span>
+                {% endif %}
+              </td>
               <td class="whitespace-nowrap">{{ record.closed_at|date:"M j, Y" }}</td>
               <td>{% if record.verified_by %}{{ record.verified_by|display_name }}{% else %}<span class="text-brand-text/40">&mdash;</span>{% endif %}</td>
+              {% if is_project_manager %}
+                <td class="text-right">
+                  <button type="button" class="btn btn-ghost btn-xs gap-1"
+                          hx-get="{% url 'contributions:contribution_edit' project_pk=project.pk pk=record.pk %}"
+                          hx-target="#contribution-modal-body"
+                          hx-swap="innerHTML"
+                          onclick="document.getElementById('contribution-modal').showModal()"
+                          aria-label="Edit {{ record.user|display_name }}'s contribution on {{ record.task.name }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                         stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round"
+                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                    </svg>
+                    Edit
+                  </button>
+                </td>
+              {% endif %}
             </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+  {% endif %}
+
+  {% if is_project_manager %}
+    {# ── Correction modal — filled by HTMX from the Add / Edit controls ── #}
+    <dialog id="contribution-modal" class="modal" aria-label="Contribution">
+      <div class="modal-box max-w-lg bg-base-100 border border-brand-light/60">
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>
+        </form>
+        <div id="contribution-modal-body"><!-- filled by HTMX --></div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
   {% endif %}
 {% endif %}
 {% endblock %}

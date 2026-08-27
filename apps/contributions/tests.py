@@ -10,8 +10,11 @@ from __future__ import annotations
 import pytest
 from django.urls import reverse
 
+from apps.audit.models import AuditAction, AuditLog
+from apps.contributions.forms import ContributionAddForm
 from apps.contributions.models import ContributionRecord
 from apps.contributions.services import (
+    add_contribution,
     get_project_contributions_matrix,
     get_user_contributions,
 )
@@ -652,3 +655,300 @@ def test_the_module_downloads_carry_the_project_filter(client, user):
         reverse("contributions:contributions"), {"project": project.pk}
     ).content.decode()
     assert f"project={project.pk}" in body
+
+
+# ---------------------------------------------------------------------------
+# Corrections
+# ---------------------------------------------------------------------------
+
+
+def _edit_url(project, record):
+    return reverse(
+        "contributions:contribution_edit",
+        kwargs={"project_pk": project.pk, "pk": record.pk},
+    )
+
+
+def _remove_url(project, record):
+    return reverse(
+        "contributions:contribution_remove",
+        kwargs={"project_pk": project.pk, "pk": record.pk},
+    )
+
+
+def _add_url(project):
+    return reverse(
+        "contributions:contribution_add", kwargs={"project_pk": project.pk}
+    )
+
+
+@pytest.mark.django_db
+def test_a_lead_corrects_a_contributions_role(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(user)
+    resp = client.post(
+        _edit_url(project, record),
+        {"contribution_type": ContributionType.SOFTWARE},
+    )
+    assert resp.status_code == 302
+    record.refresh_from_db()
+    assert record.contribution_type == ContributionType.SOFTWARE
+    assert AuditLog.objects.filter(
+        action=AuditAction.CONTRIBUTION_UPDATED, actor=user, project=project
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_a_lead_withdraws_a_contribution(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(user)
+    resp = client.post(_remove_url(project, record))
+    assert resp.status_code == 302
+    assert ContributionRecord.objects.count() == 0
+    assert AuditLog.objects.filter(
+        action=AuditAction.CONTRIBUTION_REMOVED, actor=user, project=project
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_a_lead_adds_a_contribution_by_hand(client, user, other_user):
+    """Someone who did the work without ever being an assignee."""
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    task = _make_task(project, col, pm, assignees=[pm])
+
+    client.force_login(user)
+    resp = client.post(
+        _add_url(project),
+        {
+            "task": task.pk,
+            "user": other_user.pk,
+            "contribution_type": ContributionType.VISUALIZATION,
+        },
+    )
+    assert resp.status_code == 302
+    record = ContributionRecord.objects.get(user=other_user)
+    assert record.task_id == task.pk
+    assert record.project_id == project.pk
+    assert record.contribution_type == ContributionType.VISUALIZATION
+    assert record.added_by_hand is True
+    assert record.task_log is None
+    assert record.verified_by_id == user.pk
+    assert AuditLog.objects.filter(
+        action=AuditAction.CONTRIBUTION_ADDED, actor=user, project=project
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_adding_credit_someone_already_holds_corrects_it(client, user):
+    """One credit per person per task — a second add is a correction."""
+    project, col, pm = _make_project(user)
+    task = _credit(project, col, pm, pm, ContributionType.OTHER)
+
+    client.force_login(user)
+    client.post(
+        _add_url(project),
+        {
+            "task": task.pk,
+            "user": user.pk,
+            "contribution_type": ContributionType.SUPERVISION,
+        },
+    )
+    record = ContributionRecord.objects.get()
+    assert record.contribution_type == ContributionType.SUPERVISION
+
+
+@pytest.mark.django_db
+def test_a_hand_entered_record_survives_the_task_reopening(client, user, other_user):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    task = _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    client.post(
+        _add_url(project),
+        {
+            "task": task.pk,
+            "user": other_user.pk,
+            "contribution_type": ContributionType.VISUALIZATION,
+        },
+    )
+    assert ContributionRecord.objects.count() == 2
+
+    reopen_task(task=task)
+
+    # The earned one goes with the task's state; the entered one stands.
+    assert [r.user_id for r in ContributionRecord.objects.all()] == [other_user.id]
+
+
+@pytest.mark.django_db
+def test_a_correction_is_not_overwritten_when_the_task_closes_again(client, user):
+    project, col, pm = _make_project(user)
+    task = _credit(project, col, pm, pm, ContributionType.OTHER)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(user)
+    client.post(
+        _edit_url(project, record),
+        {"contribution_type": ContributionType.SOFTWARE},
+    )
+    close_task(task=task, closed_by=pm)
+
+    record.refresh_from_db()
+    assert record.contribution_type == ContributionType.SOFTWARE
+
+
+@pytest.mark.django_db
+def test_corrections_are_refused_to_anyone_but_a_lead(client, user, other_user):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(other_user)
+    assert client.get(_add_url(project)).status_code == 403
+    assert client.get(_edit_url(project, record)).status_code == 403
+    assert client.post(
+        _edit_url(project, record),
+        {"contribution_type": ContributionType.OTHER},
+    ).status_code == 403
+    assert client.post(_remove_url(project, record)).status_code == 403
+    assert ContributionRecord.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_a_correction_cannot_reach_another_project(client, user):
+    mine, col, pm = _make_project(user, name="Mine")
+    theirs, col_b, pm_b = _make_project(user, name="Theirs")
+    _credit(theirs, col_b, pm_b, pm_b, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(user)
+    # A lead on both, but the record does not belong to the project in the URL.
+    assert client.get(_edit_url(mine, record)).status_code == 404
+    assert client.post(_remove_url(mine, record)).status_code == 404
+
+
+@pytest.mark.django_db
+def test_the_add_form_offers_only_this_projects_tasks_and_members(
+    client, user, other_user
+):
+    project, col, pm = _make_project(user, name="Mine")
+    mine_task = _make_task(project, col, pm)
+    elsewhere, col_b, pm_b = _make_project(other_user, name="Elsewhere")
+    other_task = _make_task(elsewhere, col_b, pm_b)
+
+    form = ContributionAddForm(project=project)
+    assert list(form.fields["task"].queryset) == [mine_task]
+    assert other_task not in form.fields["task"].queryset
+    assert [u.pk for u in form.fields["user"].queryset] == [user.pk]
+
+
+@pytest.mark.django_db
+def test_the_tracking_tab_offers_the_controls_to_a_lead_only(
+    client, user, other_user
+):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    url = reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+
+    client.force_login(user)
+    body = client.get(url).content.decode()
+    assert "Add contribution" in body
+    assert "contribution-modal" in body
+
+    client.force_login(other_user)
+    body = client.get(url).content.decode()
+    assert "Add contribution" not in body
+    assert "contribution-modal" not in body
+
+
+@pytest.mark.django_db
+def test_a_hand_entered_record_is_marked_as_such_on_the_page(
+    client, user, other_user
+):
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    task = _make_task(project, col, pm, assignees=[pm])
+    add_contribution(
+        task=task,
+        user=other_user,
+        contribution_type=ContributionType.RESOURCES,
+        actor=user,
+    )
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Added by hand" in body
+
+
+@pytest.mark.django_db
+def test_modal_partials_render(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+    record = ContributionRecord.objects.get()
+    client.force_login(user)
+
+    body = client.get(
+        reverse("contributions:contribution_add", kwargs={"project_pk": project.pk}),
+        HTTP_HX_REQUEST="true",
+    ).content.decode()
+    assert "Add a contribution" in body
+    assert "credit.niso.org" in body
+
+    body = client.get(
+        reverse(
+            "contributions:contribution_edit",
+            kwargs={"project_pk": project.pk, "pk": record.pk},
+        ),
+        HTTP_HX_REQUEST="true",
+    ).content.decode()
+    assert "Edit contribution" in body
+    assert "Withdraw" in body
+    # The role currently recorded is preselected.
+    assert 'value="OTHER" selected' in body
+
+
+@pytest.mark.django_db
+def test_an_htmx_post_redirects_the_page(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+    record = ContributionRecord.objects.get()
+    client.force_login(user)
+
+    resp = client.post(
+        reverse(
+            "contributions:contribution_edit",
+            kwargs={"project_pk": project.pk, "pk": record.pk},
+        ),
+        {"contribution_type": ContributionType.SOFTWARE},
+        HTTP_HX_REQUEST="true",
+    )
+    assert resp.status_code == 204
+    assert resp["HX-Redirect"] == reverse(
+        "projects:contribution_tracking", kwargs={"pk": project.pk}
+    )
+
+
+@pytest.mark.django_db
+def test_an_invalid_add_comes_back_into_the_modal(client, user):
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.OTHER)
+    client.force_login(user)
+
+    resp = client.post(
+        reverse("contributions:contribution_add", kwargs={"project_pk": project.pk}),
+        {"task": "", "user": "", "contribution_type": ""},
+        HTTP_HX_REQUEST="true",
+    )
+    assert resp.status_code == 400
+    assert "Please correct the following" in resp.content.decode()
