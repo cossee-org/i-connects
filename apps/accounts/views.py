@@ -11,6 +11,8 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import CharField, Count, Q, Value
+from django.db.models.functions import Coalesce, Concat, Lower, NullIf, Trim
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
@@ -18,7 +20,8 @@ from django.utils.decorators import method_decorator
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.http import require_POST
-from django.views.generic import DetailView, FormView, TemplateView, UpdateView
+from django.views.generic import DetailView, FormView, ListView, UpdateView
+from django_countries import countries
 
 from apps.audit.services import AuditAction, log_action
 from apps.contributions.services import (
@@ -26,6 +29,7 @@ from apps.contributions.services import (
     get_user_contributions,
 )
 from apps.core.enums import ContributionType
+from apps.projects.services import get_user_public_projects
 
 from .emails import send_password_reset_email, send_welcome_email
 from .lockout import unlock_with_token
@@ -303,6 +307,7 @@ class PublicProfileView(LoginRequiredMixin, DetailView):
         context["contribution_types"] = ContributionType.choices
         context["contribution_total"] = sum(counts.values())
         context["recent_contributions"] = get_user_contributions(profile_user)[:15]
+        context["public_projects"] = get_user_public_projects(profile_user)
         context["is_self"] = (
             self.request.user.is_authenticated
             and self.request.user.pk == profile_user.pk
@@ -311,7 +316,196 @@ class PublicProfileView(LoginRequiredMixin, DetailView):
 
 
 # ---------------------------------------------------------------------------
-# Discover people (placeholder – future researcher directory)
+# Discover people — the researcher directory
+#
+# Everyone on the platform, in one searchable list. Login-gated, matching
+# the profile it links to: the directory exists so researchers here can
+# find each other, not so names and affiliations can be scraped anonymously.
 # ---------------------------------------------------------------------------
-class DiscoverPeopleView(LoginRequiredMixin, TemplateView):
+
+# A person's name as it is both shown and sorted: their full name, falling
+# back to the account name they signed up with, and finally to their email —
+# the same precedence ``contributions.services.user_display_name`` uses, so a
+# name never sorts under one string while reading as another. ``given_name``
+# and ``family_name`` are blank-not-null, so an empty pair concatenates to a
+# blank string rather than to NULL, and ``NullIf`` is what moves it along to
+# the next fallback.
+_FULL_NAME = Trim(Concat("given_name", Value(" "), "family_name"))
+_SORT_NAME = Lower(
+    Coalesce(
+        NullIf(_FULL_NAME, Value("")),
+        NullIf("name", Value("")),
+        "email",
+        # ``email`` is an EmailField and the rest are CharFields, which
+        # Coalesce won't reconcile on its own.
+        output_field=CharField(),
+    )
+)
+# Institution is nullable *and* blankable, so both spellings of "not set"
+# have to collapse to NULL for ``nulls_last`` to put them all at the end.
+_SORT_INSTITUTION = Lower(
+    NullIf(Trim(Coalesce("institution", Value(""))), Value(""))
+)
+
+
+def _build_people_summary(count, q, institution, country_name, sort_label):
+    """Human-readable summary of the active filters, or None if there are none."""
+    desc = "people"
+    if institution:
+        desc += f" at {institution}"
+    if country_name:
+        desc += f" in {country_name}"
+    if q:
+        desc += f' matching “{q}”'
+    if not (q or institution or country_name or sort_label):
+        return None
+    summary = f"{count} result{'s' if count != 1 else ''} for {desc}"
+    if sort_label:
+        summary += f", sorted by {sort_label}"
+    return summary
+
+
+class DiscoverPeopleView(LoginRequiredMixin, ListView):
+    """Directory of everyone on the platform — searchable, filterable, sortable.
+
+    Deactivated accounts are left out: they can't be collaborated with, and
+    listing them would make the directory a record of who used to be here.
+    """
+
+    model = User
     template_name = "accounts/discover_people.html"
+    context_object_name = "people"
+    paginate_by = 24
+
+    # Name first: a directory is read alphabetically far more often than it
+    # is read by signup date. Each entry is (ordering terms, summary label);
+    # the institution sorts fall back to the name so that everyone at one
+    # institution reads alphabetically rather than in signup order.
+    _SORTS = {
+        "name_asc": ((_SORT_NAME.asc(),), None),
+        "name_desc": ((_SORT_NAME.desc(),), "name Z–A"),
+        # Everyone without an institution sorts last either way, so switching
+        # direction reorders the named institutions without dragging the
+        # blanks to the top.
+        "institution_asc": (
+            (_SORT_INSTITUTION.asc(nulls_last=True), _SORT_NAME.asc()),
+            "institution A–Z",
+        ),
+        "institution_desc": (
+            (_SORT_INSTITUTION.desc(nulls_last=True), _SORT_NAME.asc()),
+            "institution Z–A",
+        ),
+        "newest": (("-created_at",), "newest members first"),
+        "oldest": (("created_at",), "oldest members first"),
+    }
+    _DEFAULT_SORT = "name_asc"
+
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["accounts/partials/people_results.html"]
+        return [self.template_name]
+
+    def _current_sort(self) -> str:
+        sort = self.request.GET.get("sort", "")
+        return sort if sort in self._SORTS else self._DEFAULT_SORT
+
+    def _base_queryset(self):
+        return User.objects.filter(is_active=True)
+
+    def _apply_filters(self, qs):
+        """Search + institution/country facets.
+
+        Every field touched here lives on ``User``, so none of it fans the
+        rows out — which is what keeps the public-project count below honest
+        and lets the ordering stay a plain ``order_by``.
+        """
+        institution = self.request.GET.get("institution", "").strip()
+        if institution:
+            qs = qs.filter(institution__iexact=institution)
+
+        country = self.request.GET.get("country", "").strip()
+        if country:
+            qs = qs.filter(country=country)
+
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            # Country is stored as its two-letter code, so a search for
+            # "Canada" only matches once the name is resolved back to codes.
+            country_codes = [
+                code for code, name in countries if q.lower() in str(name).lower()
+            ]
+            matches = (
+                Q(given_name__icontains=q)
+                | Q(family_name__icontains=q)
+                | Q(name__icontains=q)
+                | Q(institution__icontains=q)
+                | Q(department__icontains=q)
+                | Q(position__icontains=q)
+                | Q(city__icontains=q)
+                | Q(orcid__icontains=q)
+            )
+            if country_codes:
+                matches |= Q(country__in=country_codes)
+            qs = qs.filter(matches)
+        return qs
+
+    def get_queryset(self):
+        qs = self._apply_filters(self._base_queryset()).annotate(
+            public_project_count=Count(
+                "project_privileges",
+                filter=Q(project_privileges__project__is_public=True),
+                distinct=True,
+            ),
+        )
+        order, _label = self._SORTS[self._current_sort()]
+        # ``id`` breaks ties so pagination can't show the same person twice.
+        return qs.order_by(*order, "id")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        current_sort = self._current_sort()
+        current_q = self.request.GET.get("q", "").strip()
+        current_institution = self.request.GET.get("institution", "").strip()
+        current_country = self.request.GET.get("country", "").strip()
+
+        context["is_htmx_request"] = bool(self.request.headers.get("HX-Request"))
+        context["current_sort"] = current_sort
+        context["current_q"] = current_q
+        context["current_institution"] = current_institution
+        context["current_country"] = current_country
+
+        # Facet options come from the data, so neither dropdown ever offers a
+        # value that would return an empty page.
+        people = User.objects.filter(is_active=True)
+        context["institutions"] = list(
+            people.exclude(institution__isnull=True)
+            .exclude(institution="")
+            .order_by("institution")
+            .values_list("institution", flat=True)
+            .distinct()
+        )
+        country_names = {
+            code: str(countries.name(code))
+            for code in people.exclude(country="")
+            .values_list("country", flat=True)
+            .distinct()
+        }
+        context["countries"] = sorted(
+            ((code, name) for code, name in country_names.items() if name),
+            key=lambda pair: pair[1],
+        )
+
+        params = self.request.GET.copy()
+        params.pop("page", None)
+        context["filter_params"] = params.urlencode()
+
+        context["total_people_count"] = context["paginator"].count
+        context["results_summary"] = _build_people_summary(
+            context["paginator"].count,
+            current_q,
+            current_institution,
+            country_names.get(current_country, ""),
+            self._SORTS[current_sort][1],
+        )
+        return context

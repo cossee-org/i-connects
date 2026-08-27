@@ -1,0 +1,93 @@
+{% comment %}
+Out-of-band swap: keep the header count in sync with the live search
+results even though the badge sits outside #people-results. Only emitted
+for the standalone HTMX response — when this partial is {% include %}d
+into the full page the real badge already exists above, so emitting it
+there would duplicate visible content.
+{% endcomment %}
+{% if is_htmx_request %}
+<span id="people-total-badge" hx-swap-oob="true" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_people_count }}</span>
+{% endif %}
+
+{% if results_summary %}
+  <div class="flex items-center gap-3 mb-4">
+    <p class="text-sm text-brand-text">{{ results_summary }}</p>
+    <a href="{% url 'accounts:discover_people' %}" class="ml-auto inline-flex items-center gap-1 text-sm text-gray-400 hover:!text-blue-500 hover:underline shrink-0">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"/></svg>
+      Clear filter
+    </a>
+  </div>
+{% endif %}
+
+{% if people %}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for person in people %}
+      {% with display_name=person.display_name %}
+      <a href="{% url 'public_profile' pk=person.pk %}"
+         class="brand-card p-4 hover:shadow-md transition flex items-start gap-3">
+        <div class="w-11 h-11 rounded-full bg-brand-navy text-white flex items-center justify-center text-base font-semibold shrink-0" aria-hidden="true">
+          {{ display_name|slice:":1"|upper }}
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-baseline gap-1.5 flex-wrap">
+            <h2 class="text-sm font-semibold text-brand-navy leading-snug break-words">{{ display_name }}</h2>
+            {% if person.pronouns %}
+              <span class="text-xs text-brand-text/60">({{ person.pronouns }})</span>
+            {% endif %}
+          </div>
+
+          {% if person.position %}
+            <p class="text-xs text-brand-text/70 mt-0.5 break-words">{{ person.position }}</p>
+          {% endif %}
+          {% if person.institution %}
+            <p class="text-xs text-brand-text/70 mt-0.5 break-words">{{ person.institution }}</p>
+          {% endif %}
+          {% if person.city or person.country %}
+            <p class="text-xs text-brand-text/60 mt-0.5 break-words">
+              {{ person.city|default:"" }}{% if person.city and person.country %}, {% endif %}{{ person.country.name|default:"" }}
+            </p>
+          {% endif %}
+
+          <div class="flex items-center gap-3 mt-2 flex-wrap">
+            {% if person.orcid %}
+              <span class="inline-flex items-center gap-1 text-xs text-brand-text/70" title="ORCID {{ person.orcid }}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+                  <circle cx="128" cy="128" r="128" fill="#A6CE39"/>
+                  <path fill="#FFFFFF" d="M86.3 186.2H70.9V79.1h15.4v107.1zM108.9 79.1h41.6c39.6 0 57 28.3 57 53.6 0 27.5-21.5 53.6-56.8 53.6h-41.8V79.1zm15.4 93.3h24.5c34.9 0 42.9-26.5 42.9-39.7 0-21.5-13.7-39.7-43.7-39.7h-23.7v79.4zM88.7 56.8c0 5.5-4.5 10.1-10.1 10.1s-10.1-4.6-10.1-10.1c0-5.6 4.5-10.1 10.1-10.1s10.1 4.6 10.1 10.1z"/>
+                </svg>
+                ORCID
+              </span>
+            {% endif %}
+            {% if person.public_project_count %}
+              <span class="inline-flex items-center gap-1 text-xs text-brand-text/60">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+                </svg>
+                {{ person.public_project_count }} public project{{ person.public_project_count|pluralize }}
+              </span>
+            {% endif %}
+          </div>
+        </div>
+      </a>
+      {% endwith %}
+    {% endfor %}
+  </div>
+
+  {% if is_paginated %}
+    <div class="join mt-8 flex justify-center">
+      {% if page_obj.has_previous %}
+        <a class="join-item btn btn-sm"
+           href="?{{ filter_params }}&page={{ page_obj.previous_page_number }}">&laquo;</a>
+      {% endif %}
+      <span class="join-item btn btn-sm btn-active">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      </span>
+      {% if page_obj.has_next %}
+        <a class="join-item btn btn-sm"
+           href="?{{ filter_params }}&page={{ page_obj.next_page_number }}">&raquo;</a>
+      {% endif %}
+    </div>
+  {% endif %}
+{% else %}
+  {% include "_components/empty_state.html" with title="No people found" body="Try a different search, or clear the filters above." %}
+{% endif %}

@@ -392,15 +392,13 @@ def _sort_matrix_rows(rows: list[dict], *, sort: str, direction: str) -> None:
 
 
 def user_sort_key(user: User) -> str:
-    """Name a user sorts under: their full name, else their email."""
-    full = f"{(user.given_name or '').strip()} {(user.family_name or '').strip()}".strip()
-    return (full or user.name or user.email or "").lower()
+    """Name a user sorts under — the same string they are displayed under."""
+    return (user.display_name or "").lower()
 
 
 def user_display_name(user: User) -> str:
     """A user's full name, falling back to their account name, then email."""
-    full = f"{(user.given_name or '').strip()} {(user.family_name or '').strip()}".strip()
-    return full or user.name or user.email
+    return user.display_name
 
 
 # ---------------------------------------------------------------------------

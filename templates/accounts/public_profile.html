@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% load contribution_tags %}
 
-{% block title %}{{ profile_user.name|default:profile_user.email }} &mdash; i&bull;CONNECTS{% endblock %}
+{% block title %}{{ profile_user.display_name }} &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block brand_tabs %}{% endblock %}
 
 {% block page_header %}
-  {% include "_components/page_header.html" with eyebrow="Researcher profile" title=profile_user.name|default:profile_user.email subtitle=profile_user.institution|default:"" %}
+  {% include "_components/page_header.html" with eyebrow="Researcher profile" title=profile_user.display_name subtitle=profile_user.institution|default:"" %}
 {% endblock %}
 
 {% block content %}
@@ -16,19 +16,32 @@
   <div class="brand-card p-6">
     <div class="flex items-start gap-4">
       <div class="w-20 h-20 rounded-full bg-brand-navy text-white flex items-center justify-center text-2xl font-semibold shrink-0" aria-hidden="true">
-        {{ profile_user.name|default:profile_user.email|slice:":1"|upper }}
+        {{ profile_user.display_name|slice:":1"|upper }}
       </div>
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 flex-wrap">
-          <h2 class="text-xl font-semibold text-brand-navy truncate">
-            {{ profile_user.name|default:profile_user.email }}
+          <h2 class="text-xl font-semibold text-brand-navy break-words">
+            {{ profile_user.display_name }}
           </h2>
+          {% if profile_user.pronouns %}
+            <span class="text-sm text-brand-text/60">({{ profile_user.pronouns }})</span>
+          {% endif %}
           {% if is_self %}
             <span class="inline-flex items-center rounded-full bg-brand-lighter text-brand-navy text-xs font-semibold px-2 py-0.5">You</span>
           {% endif %}
         </div>
+        {% if profile_user.position %}
+          <div class="text-sm text-brand-text/80 mt-1">{{ profile_user.position }}</div>
+        {% endif %}
         {% if profile_user.institution %}
-          <div class="text-sm text-brand-text/80 mt-1">{{ profile_user.institution }}</div>
+          <div class="text-sm text-brand-text/80 mt-1">
+            {{ profile_user.institution }}{% if profile_user.department %} &middot; {{ profile_user.department }}{% endif %}
+          </div>
+        {% endif %}
+        {% if profile_user.city or profile_user.country %}
+          <div class="text-sm text-brand-text/70 mt-1">
+            {{ profile_user.city|default:"" }}{% if profile_user.city and profile_user.country %}, {% endif %}{{ profile_user.country.name|default:"" }}
+          </div>
         {% endif %}
         {% if profile_user.orcid %}
           <div class="mt-2">
@@ -49,6 +62,35 @@
         {% endif %}
       </div>
     </div>
+  </div>
+
+  {# ---- Public projects ----------------------------------------------- #}
+  <div class="brand-card p-6">
+    <h2 class="text-lg font-semibold text-brand-navy mb-3">Public projects</h2>
+    {% if public_projects %}
+      <ul class="divide-y divide-brand-light">
+        {% for project in public_projects %}
+          <li class="py-3 flex items-start gap-3">
+            <div class="min-w-0 flex-1">
+              <a href="{% url 'projects:detail' pk=project.pk %}" class="text-brand-navy font-medium hover:text-brand-coral break-words">{{ project.name }}</a>
+              {% if project.public_summary or project.description %}
+                <p class="text-xs text-brand-text/70 mt-0.5 line-clamp-2">{{ project.public_summary|default:project.description }}</p>
+              {% endif %}
+            </div>
+            <div class="shrink-0 flex items-center gap-2">
+              {% if project.is_lead %}
+                <span class="inline-flex items-center rounded-full bg-brand-lighter text-brand-navy text-xs font-semibold px-2 py-0.5">Lead</span>
+              {% endif %}
+              {% include "_components/status_badge.html" with status=project.status %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-brand-text/70">
+        {% if is_self %}None of your projects are public yet.{% else %}This researcher isn't on any public projects yet.{% endif %}
+      </p>
+    {% endif %}
   </div>
 
   {# ---- Contribution summary + recent -------------------------------- #}
