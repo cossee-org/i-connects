@@ -218,6 +218,65 @@ or pull-request URL, the task detail sidebar shows a clickable
 "pull request" label. Kanban cards also get a small GitHub icon when a
 link is set. Pattern-based (regex); no API calls, no rate-limit risk.
 
+### 19. Project wiki
+The **Wiki** tab on a project is now a working wiki rather than a
+"coming soon" placeholder (`/projects/<id>/wiki/`). Every member can read
+it and write a page; markdown is supported, with an EasyMDE editor on the
+form.
+
+- **Wiki links.** Write another page's title in double brackets —
+  `[[Data dictionary]]`, or `[[Data dictionary|what the columns mean]]` to
+  show different words. A link to a page that doesn't exist yet renders in
+  coral and opens the new-page form with the title filled in, so a wiki can
+  grow an outline before it grows its pages. The page footer lists the gaps
+  it still links to.
+- **Revision history.** Every save keeps the previous text
+  (`/projects/<id>/wiki/<page>/history/`). Each revision names its editor,
+  their note on what changed, and how many lines moved; opening one shows a
+  colour-coded diff of that edit and the page as it stood. **Restore** brings
+  an old revision's text back as a *new* revision, so nothing is erased.
+- **Edit conflicts.** The edit form remembers which revision it was opened
+  from. If someone else saves first, the second save is refused with an
+  explanation rather than silently overwriting their work.
+- **Locking.** A lead can lock a page (a protocol, an approval number);
+  contributors can still read it, but only leads can edit or restore it.
+  Deleting a page is limited to a lead or the page's author.
+- **Search and navigation.** The index searches titles and page text as you
+  type, sorts A–Z or by recently updated, and each page with headings gets an
+  "On this page" contents list.
+- Page creation, edits, restores and deletions are audit-logged
+  (`wiki.page_*`), so they show up in `/projects/<id>/activity/`.
+
+A page's address is set from its first title and does not change when the
+page is renamed, so links into the wiki keep working; the `[[link]]` form
+resolves on the current title, so a renamed page is still reachable by its
+new name from inside the wiki.
+
+### 20. Survey renamed, Communication added
+Navigation changes, no behaviour behind them yet:
+
+- **Forms is now Survey**, everywhere it shows: the project tab, the module
+  page, and the flash messages / labels on the builder screens beneath it.
+  The rename is user-facing only — the app is still `forms_builder`, and the
+  routes (`/forms/`, `/projects/<id>/forms/`) and the `Form` / `FormVersion`
+  models are untouched, so nothing that links to them broke.
+- **Survey is back in the sidebar**, in the slot it held before it was
+  hidden, now under its new name. Its page is the "Coming soon" module page
+  it already was.
+- **Communication is a new module**, empty on purpose: a personal page in
+  the sidebar directly after Survey, and a section on every project, after
+  the project's Survey tab. Both render "Coming soon"; the project section
+  is members-only like every other project tab.
+
+Survey also picked up its own icon. It had been sharing the clipboard with
+Tasks — the same SVG path in both navs — which was hard to read as two
+different things once they sat next to each other.
+
+Worth knowing: the per-project **mailing list** (item 16) is the obvious
+thing to fold into Communication when it grows content. It is still at
+`/projects/<id>/mailing-list/` and unlinked from the tab strip, so it is
+reachable only by URL today.
+
 ---
 
 ## Golden-path test checklist
@@ -262,6 +321,24 @@ link is set. Pattern-based (regex); no API calls, no rate-limit risk.
    - Tab through the landing page — the skip-link should appear on first Tab.
    - Tab around the top navbar — coral focus ring visible on every control.
    - Zoom to 200% — layout holds without horizontal scroll.
+7. **Project wiki**
+   - Open a project's **Wiki** tab and write a page. Include a
+     `[[Second page]]` link to a title that doesn't exist yet — it renders in
+     coral; click it and the new-page form is prefilled.
+   - Edit the first page and save. Open **History**: two revisions, with your
+     note and a `+n −n lines` count. Open revision 1 to see the diff, then
+     **Restore this revision** — the live page comes back with the old text
+     and the history gains a third entry rather than losing the second.
+   - As a lead, tick **Lock this page** and save. Sign in as a contributor on
+     the same project: the page still reads, but Edit is gone and hitting the
+     edit URL directly gives a 403.
+8. **Survey + Communication**
+   - The sidebar reads … Requests, **Survey**, **Communication**, Project
+     discovery. Both open a "Coming soon" page; nothing says "Forms" any more.
+   - A project's tab strip reads … Wiki, **Survey**, **Communication**,
+     Settings. Both are empty for now.
+   - A non-member hitting `/projects/<id>/communications/` gets a 403.
+
 
 ---
 

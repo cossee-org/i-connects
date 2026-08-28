@@ -3,7 +3,7 @@
 {% block title %}Versions &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block page_header %}
-  {% include "_components/page_header.html" with title="Versions" subtitle="Every published revision of this form." eyebrow="Form" %}
+  {% include "_components/page_header.html" with title="Versions" subtitle="Every published revision of this survey." eyebrow="Survey" %}
 {% endblock %}
 
 {% block content %}
@@ -71,6 +71,6 @@
   </div>
 {% else %}
   {% url 'forms_builder:version_create' pk=form_obj.pk as create_url %}
-  {% include "_components/empty_state.html" with title="No versions yet" body="Create the first version to define this form's schema." cta_href=create_url cta_label="New version" %}
+  {% include "_components/empty_state.html" with title="No versions yet" body="Create the first version to define this survey's schema." cta_href=create_url cta_label="New version" %}
 {% endif %}
 {% endblock %}

@@ -74,6 +74,8 @@ LOCAL_APPS = [
     "apps.comments",
     "apps.notifications",
     "apps.notes",
+    "apps.wiki",
+    "apps.communications",
     "apps.forms_builder",
     "apps.contributions",
     "apps.audit",

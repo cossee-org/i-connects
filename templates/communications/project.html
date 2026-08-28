@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Communication &mdash; {{ project.name }}{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6">
+    {% include "_components/project_header.html" %}
+  </header>
+{% endblock %}
+
+{% block content %}
+{% include "_components/empty_state.html" with title="Coming soon" body="Communication is on the way. Check back later." %}
+{% endblock %}
