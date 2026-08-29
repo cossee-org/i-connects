@@ -1110,14 +1110,16 @@ def test_dashboard_type_filter_shows_one_group_at_a_time(client, user, other_use
     assert other_user.name not in content
     # Not the "no requests" line either -- they were filtered out, not absent.
     assert "No requests waiting" not in content
-    assert tasks_only.context["active_task_and_request_total"] == 1
+    assert tasks_only.context["active_tasks_match_count"] == 1
+    assert tasks_only.context["incoming_request_match_count"] == 0
 
     requests_only = client.get(url, {"type": "requests"})
     content = requests_only.content.decode()
     assert other_user.name in content
     assert "A task of mine" not in content
     assert "No tasks right now" not in content
-    assert requests_only.context["active_task_and_request_total"] == 1
+    assert requests_only.context["incoming_request_match_count"] == 1
+    assert requests_only.context["active_tasks_match_count"] == 0
 
 
 @pytest.mark.django_db
@@ -1229,8 +1231,8 @@ def test_dashboard_overdue_type_keeps_only_tasks_past_their_deadline(client, use
     assert "Late task" in content
     assert "Future task" not in content
     assert "Undated task" not in content
-    # The badge counts the narrowed set; the Tasks stat tile still counts all.
-    assert response.context["active_task_and_request_total"] == 1
+    # The list is narrowed to one row; the Tasks stat tile still counts all.
+    assert response.context["active_tasks_match_count"] == 1
     assert response.context["active_tasks_total"] == 3
 
 
@@ -1251,7 +1253,7 @@ def test_dashboard_review_type_keeps_only_tasks_the_user_reviews(client, user):
     assert response.status_code == 200
     assert "Mine to review" in content
     assert "Mine to do" not in content
-    assert response.context["active_task_and_request_total"] == 1
+    assert response.context["active_tasks_match_count"] == 1
 
 
 @pytest.mark.django_db
@@ -1281,13 +1283,13 @@ def test_dashboard_splits_requests_into_join_requests_and_invitations(client, us
     content = joins.content.decode()
     assert other_user.name in content
     assert "Invited Here" not in content
-    assert joins.context["active_task_and_request_total"] == 1
+    assert joins.context["incoming_request_match_count"] == 1
 
     invites = client.get(url, {"type": "invitations"})
     content = invites.content.decode()
     assert "Invited Here" in content
     assert f"{other_user.name} requested to join" not in content
-    assert invites.context["active_task_and_request_total"] == 1
+    assert invites.context["incoming_request_match_count"] == 1
 
 
 @pytest.mark.django_db
