@@ -843,6 +843,13 @@ def _task(project, member, name, **kwargs):
     )
 
 
+def _active_task_rows(content):
+    """The dashboard's active-task list, sliced out of the rendered page so
+    an assertion about a row cannot be satisfied by the surrounding chrome."""
+    start = content.index('<ul aria-label="Active tasks"')
+    return content[start : content.index("</ul>", start)]
+
+
 @pytest.mark.django_db
 def test_dashboard_active_task_list_orders_by_deadline_and_caps(client, user):
     """The list is ordered by deadline (undated last either way) and shows
@@ -920,6 +927,39 @@ def test_dashboard_active_task_list_flags_review_work_and_skips_finished_tasks(c
     assert "Closed task" not in content
     assert response.context["active_tasks_total"] == 1
 
+
+@pytest.mark.django_db
+def test_dashboard_active_task_rows_label_the_deadline_and_drop_assignees(client, user):
+    """A deadline still to come reads "Due <date>"; an overdue one keeps
+    the red "Overdue" wording it already had. Neither row names who the
+    task is assigned to -- on this list that is almost always the reader."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Dated", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    now = timezone.now()
+
+    upcoming = _task(project, member, "Upcoming task", deadline=now + timedelta(days=3))
+    upcoming.assigned_members.add(member)
+    late = _task(project, member, "Late task", deadline=now - timedelta(days=3))
+    late.assigned_members.add(member)
+
+    client.force_login(user)
+    content = client.get(reverse("projects:dashboard")).content.decode()
+    rows = _active_task_rows(content)
+
+    assert f"Due {(now + timedelta(days=3)).strftime('%b %-d')}" in rows
+    assert f"Overdue &middot; {(now - timedelta(days=3)).strftime('%b %-d')}" in rows
+    # The overdue row keeps its red treatment.
+    assert "text-error font-medium" in rows
+    # Neither row names who the task is assigned to. Scoped to the list:
+    # the navbar prints the reader's own name too.
+    assert user.name not in rows
 
 @pytest.mark.django_db
 def test_dashboard_active_task_list_shows_an_empty_state(client, user):
