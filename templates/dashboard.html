@@ -97,7 +97,10 @@
   {% endcomment %}
   <section aria-labelledby="dashboard-open-work-heading" class="flex flex-col gap-3">
     <div class="flex items-center gap-3 flex-wrap">
-      <h2 id="dashboard-open-work-heading" class="text-lg font-semibold text-brand-navy">Active tasks and requests</h2>
+      {# Small-uppercase grey, the app's label treatment for a heading over a #}
+      {# list (the Kanban column heads, the task pane's section heads). Still an #}
+      {# <h2>: this labels a real section, only its type has changed. #}
+      <h2 id="dashboard-open-work-heading" class="text-sm font-semibold uppercase tracking-wide text-brand-text/70">Active tasks and requests</h2>
 
       {% comment %}
       Type / Sort controls. Same Alpine dropdown the Tasks and Requests
