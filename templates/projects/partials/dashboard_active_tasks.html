@@ -21,7 +21,7 @@ heading of its own.
     {% for task in active_tasks %}
       <li>
         <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
-           class="brand-card px-3 py-2 hover:shadow-md transition flex items-start gap-3{% if task.is_priority %} border-l-2 border-l-error{% endif %}">
+           class="brand-card px-3 py-2 hover:shadow-md transition flex items-start gap-3">
           <div class="flex-1 min-w-0 flex flex-col gap-0.5">
             <p class="text-sm leading-snug truncate">
               <span class="font-semibold text-brand-navy">{{ task.name }}</span>
@@ -55,15 +55,19 @@ heading of its own.
             <div class="flex items-center gap-2 shrink-0 mt-0.5">
               {% if task.is_priority %}
                 {% comment %}
+                The flag carries "high priority" on its own, so the row no
+                longer doubles it with a red left border -- one mark per
+                meaning, and the rows stay a single shape whatever their
+                priority.
+
                 Icon alone: the wording moves to the tooltip and to an
-                aria-label. Plain title=, not the styled hover-tooltip --
-                this list is a scroll box, so its computed overflow-x is
-                auto and a tooltip hanging past the flag is clipped
-                (measured: it pushed scrollWidth 15px past clientWidth).
-                base.html's tooltip CSS calls out overflow containers for
-                exactly this.
+                aria-label. tooltip_left, because this list is a scroll
+                box -- its computed overflow-x is auto, and a bubble
+                centred under a flag this close to the right edge pushed
+                scrollWidth 15px past clientWidth. Hung off the flag's
+                left it opens across the row's own width instead.
                 {% endcomment %}
-                {% include "_components/priority_flag.html" with icon_only=True %}
+                {% include "_components/priority_flag.html" with icon_only=True tooltip=True tooltip_left=True %}
               {% endif %}
               {% if task.is_reviewing %}
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-coral/10 text-brand-coral">To review</span>

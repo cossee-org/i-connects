@@ -962,6 +962,29 @@ def test_dashboard_active_task_rows_label_the_deadline_and_drop_assignees(client
     assert user.name not in rows
 
 @pytest.mark.django_db
+def test_dashboard_priority_task_row_marks_priority_with_the_flag_alone(client, user):
+    """A high-priority task is marked once -- the red flag, carrying its
+    wording in a hover tooltip and an aria-label -- rather than by a flag
+    and a red border down the row."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Urgent", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    task = _task(project, member, "Urgent task", is_priority=True)
+    task.assigned_members.add(member)
+
+    client.force_login(user)
+    rows = _active_task_rows(client.get(reverse("projects:dashboard")).content.decode())
+
+    assert 'aria-label="High priority"' in rows
+    assert 'data-tooltip="High priority"' in rows
+    # Left-hung, so the scroll box the list sits in cannot clip it.
+    assert "hover-tooltip hover-tooltip-left" in rows
+    assert "border-l-error" not in rows
+
+
+@pytest.mark.django_db
 def test_dashboard_active_task_list_shows_an_empty_state(client, user):
     create_project_with_owner(
         user=user,

@@ -3,7 +3,10 @@
 {# moves to role="img" + aria-label, so the meaning survives without the visible text rather than resting on the red. #}
 {# icon_only also sizes the glyph to w-4 to match the check circle it sits beside. #}
 {# Pass text_size to match the surface it sits on — the side pane runs at text-sm, the browsing rows at text-xs. #}
-<span class="inline-flex items-center {% if not icon_only %}gap-1 {{ text_size|default:"text-xs" }} font-medium {% endif %}shrink-0 text-error{% if tooltip %} hover-tooltip{% endif %}"
+{# Pass tooltip=True for the styled bubble, plus tooltip_left=True where the surface scrolls and a bubble hanging #}
+{# below the flag would be clipped or would widen the scroll box (the dashboard's list); without tooltip the same #}
+{# wording stays a plain title attribute, which no overflow can reach. #}
+<span class="inline-flex items-center {% if not icon_only %}gap-1 {{ text_size|default:"text-xs" }} font-medium {% endif %}shrink-0 text-error{% if tooltip %} hover-tooltip{% if tooltip_left %} hover-tooltip-left{% endif %}{% endif %}"
       {% if icon_only %}role="img" aria-label="High priority"{% endif %}
       {% if tooltip %}data-tooltip="High priority"{% else %}title="High priority"{% endif %}>
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
