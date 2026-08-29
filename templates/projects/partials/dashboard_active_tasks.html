@@ -1,5 +1,3 @@
-{% load task_tags %}
-
 {% comment %}
 The active-task rows of the dashboard's "Active tasks and requests"
 list — tasks assigned to the current user and tasks they review, merged,
@@ -31,12 +29,6 @@ heading of its own.
 
             <div class="flex items-center gap-2 text-xs text-brand-text/60 min-w-0">
               <span class="truncate">{{ task.project.name }}</span>
-              {% with assignees=task.assigned_members.all|member_name_summary %}
-                {% if assignees.short %}
-                  <span aria-hidden="true">&middot;</span>
-                  <span class="truncate" title="{{ assignees.full }}">{{ assignees.short }}</span>
-                {% endif %}
-              {% endwith %}
               {% if task.deadline %}
                 <span aria-hidden="true">&middot;</span>
                 <span class="inline-flex items-center gap-1 shrink-0
