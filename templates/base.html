@@ -149,6 +149,30 @@
     }
     .hover-tooltip:hover::after,
     .hover-tooltip:hover::before { opacity: 1; }
+
+    {% comment %}
+      Inside an overflow container the bubble below the element is the
+      thing that gets clipped or, worse, pushes the box's scrollWidth out
+      and hands it a horizontal scrollbar -- an icon near the right edge
+      of a scrolling list is the usual case. This variant hangs the same
+      bubble off the element's left instead, vertically centred on it, so
+      it stays inside the row it belongs to and needs no room the
+      container does not already have.
+    {% endcomment %}
+    .hover-tooltip-left::after {
+      top: 50%;
+      left: auto;
+      right: calc(100% + 6px);
+      transform: translateY(-50%);
+    }
+    .hover-tooltip-left::before {
+      top: 50%;
+      left: auto;
+      right: calc(100% + 1px);
+      transform: translateY(-50%);
+      border-bottom-color: transparent;
+      border-left-color: #1e293b;
+    }
   </style>
 
   {% comment %}

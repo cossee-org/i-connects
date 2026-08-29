@@ -843,6 +843,13 @@ def _task(project, member, name, **kwargs):
     )
 
 
+def _active_task_rows(content):
+    """The dashboard's active-task list, sliced out of the rendered page so
+    an assertion about a row cannot be satisfied by the surrounding chrome."""
+    start = content.index('<ul aria-label="Active tasks"')
+    return content[start : content.index("</ul>", start)]
+
+
 @pytest.mark.django_db
 def test_dashboard_active_task_list_orders_by_deadline_and_caps(client, user):
     """The list is ordered by deadline (undated last either way) and shows
@@ -919,6 +926,62 @@ def test_dashboard_active_task_list_flags_review_work_and_skips_finished_tasks(c
     assert "Task I finished" not in content
     assert "Closed task" not in content
     assert response.context["active_tasks_total"] == 1
+
+
+@pytest.mark.django_db
+def test_dashboard_active_task_rows_label_the_deadline_and_drop_assignees(client, user):
+    """A deadline still to come reads "Due <date>"; an overdue one keeps
+    the red "Overdue" wording it already had. Neither row names who the
+    task is assigned to -- on this list that is almost always the reader."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Dated", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    now = timezone.now()
+
+    upcoming = _task(project, member, "Upcoming task", deadline=now + timedelta(days=3))
+    upcoming.assigned_members.add(member)
+    late = _task(project, member, "Late task", deadline=now - timedelta(days=3))
+    late.assigned_members.add(member)
+
+    client.force_login(user)
+    content = client.get(reverse("projects:dashboard")).content.decode()
+    rows = _active_task_rows(content)
+
+    assert f"Due {(now + timedelta(days=3)).strftime('%b %-d')}" in rows
+    assert f"Overdue &middot; {(now - timedelta(days=3)).strftime('%b %-d')}" in rows
+    # The overdue row keeps its red treatment.
+    assert "text-error font-medium" in rows
+    # Neither row names who the task is assigned to. Scoped to the list:
+    # the navbar prints the reader's own name too.
+    assert user.name not in rows
+
+@pytest.mark.django_db
+def test_dashboard_priority_task_row_marks_priority_with_the_flag_alone(client, user):
+    """A high-priority task is marked once -- the red flag, carrying its
+    wording in a hover tooltip and an aria-label -- rather than by a flag
+    and a red border down the row."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Urgent", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    task = _task(project, member, "Urgent task", is_priority=True)
+    task.assigned_members.add(member)
+
+    client.force_login(user)
+    rows = _active_task_rows(client.get(reverse("projects:dashboard")).content.decode())
+
+    assert 'aria-label="High priority"' in rows
+    assert 'data-tooltip="High priority"' in rows
+    # Left-hung, so the scroll box the list sits in cannot clip it.
+    assert "hover-tooltip hover-tooltip-left" in rows
+    assert "border-l-error" not in rows
 
 
 @pytest.mark.django_db
@@ -1047,14 +1110,16 @@ def test_dashboard_type_filter_shows_one_group_at_a_time(client, user, other_use
     assert other_user.name not in content
     # Not the "no requests" line either -- they were filtered out, not absent.
     assert "No requests waiting" not in content
-    assert tasks_only.context["active_task_and_request_total"] == 1
+    assert tasks_only.context["active_tasks_match_count"] == 1
+    assert tasks_only.context["incoming_request_match_count"] == 0
 
     requests_only = client.get(url, {"type": "requests"})
     content = requests_only.content.decode()
     assert other_user.name in content
     assert "A task of mine" not in content
     assert "No tasks right now" not in content
-    assert requests_only.context["active_task_and_request_total"] == 1
+    assert requests_only.context["incoming_request_match_count"] == 1
+    assert requests_only.context["active_tasks_match_count"] == 0
 
 
 @pytest.mark.django_db
@@ -1166,8 +1231,8 @@ def test_dashboard_overdue_type_keeps_only_tasks_past_their_deadline(client, use
     assert "Late task" in content
     assert "Future task" not in content
     assert "Undated task" not in content
-    # The badge counts the narrowed set; the Tasks stat tile still counts all.
-    assert response.context["active_task_and_request_total"] == 1
+    # The list is narrowed to one row; the Tasks stat tile still counts all.
+    assert response.context["active_tasks_match_count"] == 1
     assert response.context["active_tasks_total"] == 3
 
 
@@ -1188,7 +1253,7 @@ def test_dashboard_review_type_keeps_only_tasks_the_user_reviews(client, user):
     assert response.status_code == 200
     assert "Mine to review" in content
     assert "Mine to do" not in content
-    assert response.context["active_task_and_request_total"] == 1
+    assert response.context["active_tasks_match_count"] == 1
 
 
 @pytest.mark.django_db
@@ -1218,13 +1283,13 @@ def test_dashboard_splits_requests_into_join_requests_and_invitations(client, us
     content = joins.content.decode()
     assert other_user.name in content
     assert "Invited Here" not in content
-    assert joins.context["active_task_and_request_total"] == 1
+    assert joins.context["incoming_request_match_count"] == 1
 
     invites = client.get(url, {"type": "invitations"})
     content = invites.content.decode()
     assert "Invited Here" in content
     assert f"{other_user.name} requested to join" not in content
-    assert invites.context["active_task_and_request_total"] == 1
+    assert invites.context["incoming_request_match_count"] == 1
 
 
 @pytest.mark.django_db
