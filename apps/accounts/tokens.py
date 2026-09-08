@@ -25,3 +25,20 @@ class PasswordResetTokenGen(PasswordResetTokenGenerator):
 
 
 password_reset_token = PasswordResetTokenGen()
+
+
+class EmailConfirmationTokenGen(PasswordResetTokenGenerator):
+    """Signup email-confirmation token generator.
+
+    Mixes in the user's email so the link invalidates if the address
+    changes before it's used, and in ``email_confirmed_at`` so a token
+    stops working the moment it's been consumed once (confirming the
+    account changes that value, which changes the hash).
+    """
+
+    def _make_hash_value(self, user, timestamp: int) -> str:  # type: ignore[override]
+        base = super()._make_hash_value(user, timestamp)
+        return f"{base}:{(user.email or '').lower()}:{user.email_confirmed_at}"
+
+
+email_confirmation_token = EmailConfirmationTokenGen()

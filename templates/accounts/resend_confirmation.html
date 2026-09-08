@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Resend confirmation email &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block brand_tabs %}{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with title="Resend confirmation email" subtitle="Enter the email you signed up with and we will send a fresh confirmation link." %}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto">
+  <div class="brand-card p-6">
+    {% if form.non_field_errors %}
+      <div class="alert alert-error mb-4">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+
+      {% include "_components/form_field.html" with field=form.email %}
+
+      <button type="submit"
+              class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0 w-full mt-2">
+        Resend confirmation email
+      </button>
+    </form>
+
+    <p class="text-sm mt-6 text-center">
+      <a href="{% url 'accounts:login' %}"
+         class="text-brand-navy hover:text-brand-coral font-medium">Back to login</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

@@ -6,7 +6,10 @@ from .models import Session, Token, User, Widget
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ("id", "email", "username", "name", "role", "is_staff", "created_at")
+    list_display = (
+        "id", "email", "username", "name", "role", "is_staff",
+        "email_confirmed_at", "created_at",
+    )
     search_fields = ("email", "username", "name", "orcid")
     list_filter = ("role", "is_staff", "is_superuser", "is_active")
     ordering = ("id",)
@@ -33,6 +36,7 @@ class UserAdmin(BaseUserAdmin):
                     "role",
                     "email_project_activity_frequency",
                     "email_overdue_task_frequency",
+                    "email_confirmed_at",
                 )
             },
         ),

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Check your email &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block brand_tabs %}{% endblock %}
+
+{% block page_header %}
+  {% include "_components/page_header.html" with title="Check your email" subtitle="Confirm your address to finish setting up your account." %}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto">
+  <div class="brand-card p-6">
+    <div class="alert alert-info">
+      <span>
+        If an account matches the email you entered, a confirmation link
+        has been sent. You must follow it before you can sign in.
+      </span>
+    </div>
+
+    <p class="text-sm mt-6 text-center">
+      Didn't get it?
+      <a href="{% url 'accounts:resend_confirmation' %}"
+         class="text-brand-navy hover:text-brand-coral font-medium">Resend confirmation email</a>
+    </p>
+    <p class="text-sm mt-2 text-center">
+      <a href="{% url 'accounts:login' %}"
+         class="text-brand-navy hover:text-brand-coral font-medium">Back to login</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

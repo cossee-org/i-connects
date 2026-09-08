@@ -146,6 +146,16 @@ class LoginForm(forms.Form):
                     "This account is locked after too many failed sign-in "
                     "attempts. Check your email for an unlock link."
                 )
+            # Same short-circuit as the lockout check above: an unconfirmed
+            # account can never authenticate, so there's no reason to run
+            # ``authenticate()`` (and no reason to let a correct password
+            # sneak a session past this gate).
+            if existing is not None and existing.email_confirmed_at is None:
+                raise ValidationError(
+                    "Please confirm your email address before signing in. "
+                    "Check your inbox for the confirmation link we sent "
+                    "when you signed up, or request a new one."
+                )
             user = authenticate(self.request, username=email, password=password)
             if user is None:
                 raise ValidationError("Invalid email or password.")
@@ -162,6 +172,18 @@ class LoginForm(forms.Form):
 # Password reset request (forgot password)
 # ---------------------------------------------------------------------------
 class PasswordResetRequestForm(forms.Form):
+    email = forms.EmailField(
+        widget=forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
+    )
+
+    def clean_email(self) -> str:
+        return self.cleaned_data["email"].lower().strip()
+
+
+# ---------------------------------------------------------------------------
+# Resend confirmation email
+# ---------------------------------------------------------------------------
+class ResendConfirmationForm(forms.Form):
     email = forms.EmailField(
         widget=forms.EmailInput(attrs={"class": "input input-bordered w-full"}),
     )
