@@ -615,44 +615,74 @@ text for the site block in G3.
 
 ### G2. DNS
 
-Covered in Part D — the A record must resolve before G3's `reload` can
-issue a cert for it.
+Covered in Part D — the A record must resolve before G3's install can issue
+a cert for it. Don't install the site file before DNS resolves: issuance
+fails and retries in the background rather than succeeding on request.
 
-### G3. Add a site block to the existing host Caddyfile
+### G3. Register your port, then add a site file
 
-Locate it, and confirm with whoever else's app it already serves before
-editing a file they depend on too:
+On `cossee-web-server` specifically, the host Caddy setup is more
+structured than a single flat `Caddyfile`: it's config-managed by the
+host's admin (`mzakir`), sites live as individual files under
+`/etc/caddy/sites/` (imported by the main config), reloads go through a
+`caddy-reload` wrapper rather than a raw `systemctl reload`, and ports are
+tracked in a shared registry so two apps don't collide on the same
+localhost port:
 
 ```bash
-sudo systemctl status caddy
-sudo find / -xdev -iname "Caddyfile" 2>/dev/null
+groups                              # confirm you're in the webdev group (added by the host admin)
+cat /etc/caddy/PORTS.md             # claim your port entry (8000, for this app) before adding anything else
 ```
 
-Append (baseline security headers as defense-in-depth on top of Django's
-own `SecurityMiddleware` — closes part of SECURITY_AUDIT M6):
+Get the site file from whoever administers the host Caddy — on this host,
+that's a template staged by `mzakir` — **read it before installing it**:
+it's about to become privileged, TLS-terminating config for this domain,
+sourced from someone else's home directory, so verify it actually does
+what it claims (proxies only to `127.0.0.1:8000`, no unexpected upstreams,
+no wildcard host match) rather than trusting the description alone. The
+confirmed-working version for this app:
 
 ```caddyfile
 i-connects.cossee.org {
     encode zstd gzip
-
+    reverse_proxy 127.0.0.1:8000 {
+        # Django needs these to build absolute URLs and to see the real
+        # client address rather than the proxy's.
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+        header_up Host {host}
+    }
     header {
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Permissions-Policy "geolocation=(), camera=(), microphone=()"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
         -Server
     }
-
-    reverse_proxy 127.0.0.1:8000
+    log
 }
 ```
 
-Validate before reloading — a bad edit here breaks every app behind this
-Caddy, not just this one:
+One accepted trade-off worth knowing about: Caddy's `header` directive
+*replaces* a response header of the same name rather than layering onto
+it, so this template's `X-Frame-Options: SAMEORIGIN` overrides Django's own
+`X_FRAME_OPTIONS = "DENY"` (`config/settings/prod.py`) — the browser sees
+`SAMEORIGIN`, not `DENY`. Still a legitimate clickjacking mitigation, just
+slightly looser than the app's own default. Not worth changing unilaterally
+since it's a shared template — raise it with the host Caddy's admin if
+strict `DENY` ever matters for this app specifically.
+
+Install and reload — validate first, since a bad file here breaks every app
+behind this Caddy, not just this one:
 
 ```bash
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy   # graceful — reload, not restart; no dropped
-                               # connections; cert is fetched on first request
+sudo caddy validate --config /etc/caddy/sites/i-connects.caddy 2>/dev/null || true  # if the wrapper doesn't validate first
+sudo install -m 644 <path-to-the-reviewed-site-file> /etc/caddy/sites/i-connects.caddy
+caddy-reload   # host-specific graceful-reload wrapper; no dropped connections
+               # for this app or others behind the same Caddy
 ```
+
+Caddy requests the certificate on the first real HTTPS request after this,
+so the very first hit to `https://i-connects.cossee.org/` right after
+`caddy-reload` may take an extra second or two.
 
 ### If this app is ever the *only* thing on a host
 
@@ -909,10 +939,10 @@ laptop, departing team member with access):
 | Caddy logs `no such host` / `dns problem` | A-record not propagated | `dig +short i-connects.cossee.org`; wait or fix DNS (Part D). |
 | Browser: `ERR_CONNECTION_REFUSED` on :443 | UFW/firewall blocks 443 | `sudo ufw status`; confirm `443/tcp` is allowed (Part B4). |
 | Django: `DisallowedHost` | `DJANGO_ALLOWED_HOSTS` mismatch | Must contain `i-connects.cossee.org` exactly (Part F). |
-| Infinite redirect loop | `SECURE_SSL_REDIRECT=True` but `X-Forwarded-Proto` not forwarded | The host Caddy's `reverse_proxy` sets it by default — confirm the site block in `/etc/caddy/Caddyfile` (Part G) wasn't edited to drop it. |
+| Infinite redirect loop | `SECURE_SSL_REDIRECT=True` but `X-Forwarded-Proto` not forwarded | Confirm the `header_up X-Forwarded-Proto {scheme}` line is still present in `/etc/caddy/sites/i-connects.caddy` (Part G). |
 | `relation "..." does not exist` | Migrations didn't run | `docker compose exec web python manage.py migrate`. |
 | Static files 404 | `collectstatic` didn't run | `docker compose exec web python manage.py collectstatic --noinput`. |
-| Cert stuck on staging / rate-limited | Repeated failed issuance attempts | Fix the underlying DNS issue first, then `sudo systemctl reload caddy` again. Let's Encrypt rate limits are per-domain-per-week — don't loop this; if truly stuck, whoever manages the host Caddy needs to clear its stored account/cert state, which affects every app behind it. |
+| Cert stuck on staging / rate-limited | Repeated failed issuance attempts | Fix the underlying DNS issue first, then `caddy-reload` again. Let's Encrypt rate limits are per-domain-per-week — don't loop this; if truly stuck, whoever manages the host Caddy needs to clear its stored account/cert state, which affects every app behind it. |
 | `docker ps` shows `0.0.0.0:5432->...` or `0.0.0.0:6379->...` | Part A7's `!reset []` fix not applied, or applied but not rebuilt | Re-check the `docker-compose.prod.yml` diff, then `up -d` (recreation, not just editing the file, is what takes effect). This also means UFW was never protecting these — see Part B4's note. |
 | New signups never get a verification email (post-A5) | SMTP/Resend/SES misconfigured | `docker compose logs web \| grep -i mail`; verify `.env`'s email block against Part F before flipping `ACCOUNT_EMAIL_VERIFICATION` back to `optional` as a stopgap. |
 | `manage.py check --deploy` warns about `SECRET_KEY` or `ALLOWED_HOSTS` | `.env` not actually loaded, or `DJANGO_SETTINGS_MODULE` wrong | `docker compose exec web env \| grep DJANGO`; confirm it reads `config.settings.prod`. |
@@ -937,11 +967,12 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v
 ```
 
 Since Part G put this app behind the host's shared Caddy rather than a
-Caddy this stack owns, also remove the `i-connects.cossee.org` block from
-`/etc/caddy/Caddyfile` and `sudo systemctl reload caddy` — otherwise the
-shared proxy keeps trying to route to a `127.0.0.1:8000` that's no longer
-listening, and its error logs (and other apps behind it) get noisier for
-no reason.
+Caddy this stack owns, also remove `/etc/caddy/sites/i-connects.caddy` and
+run `caddy-reload`, and free the port entry in `/etc/caddy/PORTS.md` —
+otherwise the shared proxy keeps trying to route to a `127.0.0.1:8000`
+that's no longer listening, its error logs (and other apps behind it) get
+noisier for no reason, and the port stays claimed for an app that no
+longer exists.
 
 To decommission the host entirely: take a final `pg_dump` + media backup,
 confirm both landed off-host, then deprovision the server through whatever
