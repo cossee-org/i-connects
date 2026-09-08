@@ -243,29 +243,94 @@ sudo apt-get install -y unattended-upgrades apt-listchanges
 sudo dpkg-reconfigure -plow unattended-upgrades   # enable when prompted
 ```
 
-### B2. Create a non-root deploy user (skip if one already exists)
+### B2. Create accounts (shared server — one per person, plus a deploy account)
+
+`cossee-web-server` is shared: other people besides whoever runs this guide
+need to keep logging in, so this isn't a single-account setup. Give **every
+person their own Linux account** (not a shared login) so `last`/`sudo` logs
+stay attributable, plus one dedicated account for running the app:
 
 ```bash
+# once per human who needs access
+sudo adduser <username>
+sudo usermod -aG sudo <username>          # only if they need sudo
+
+# once, for running Docker/the app itself
 sudo adduser deploy
 sudo usermod -aG sudo deploy
-sudo rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy
 ```
 
-Do the rest of this guide as `deploy`, not `root`.
+If someone already has a key you want carried over from the account you're
+currently using, copy it into their new account:
+
+```bash
+sudo rsync --archive --chown=<username>:<username> ~/.ssh /home/<username>
+```
+
+Otherwise have each person send you their own SSH public key and add it
+directly:
+
+```bash
+sudo mkdir -p /home/<username>/.ssh
+sudo nano /home/<username>/.ssh/authorized_keys   # paste their public key, one per line
+sudo chown -R <username>:<username> /home/<username>/.ssh
+sudo chmod 700 /home/<username>/.ssh
+sudo chmod 600 /home/<username>/.ssh/authorized_keys
+```
+
+Do the rest of this guide as `deploy` (or your own personal account with
+sudo), not `root`.
 
 ### B3. SSH hardening
 
-Edit `/etc/ssh/sshd_config` (or drop a file in `/etc/ssh/sshd_config.d/`):
+This server keeps **both SSH key and password login enabled** for people who
+need it — that's a deliberate call for this deployment, not the more
+locked-down "keys only" setup some guides default to. Root login is still
+turned off, since every human here has (or should have) their own named
+account with `sudo` instead:
 
 ```
 PermitRootLogin no
-PasswordAuthentication no
-KbdInteractiveAuthentication no
 ```
 
-Then `sudo systemctl restart ssh`. **Verify a new SSH session still logs in
-with your key before closing your current session** — a mistake here locks
-you out.
+Edit `/etc/ssh/sshd_config` (or drop a file in `/etc/ssh/sshd_config.d/`)
+with just that line, then `sudo systemctl restart ssh`. **Verify a new SSH
+session still logs in before closing your current session** — a typo here
+locks you out.
+
+Leaving password auth on does mean the server is reachable by anyone who
+guesses a valid username/password, so the compensating controls below are
+not optional — they're what makes "passwords stay allowed" an acceptable
+trade rather than an open door:
+
+- **Fail2ban (B5) is now load-bearing, not optional.** It's what turns
+  repeated bad-password attempts from a given IP into an automatic ban —
+  confirm it's actually running (`sudo fail2ban-client status sshd`) before
+  you consider this step done.
+- **Enforce a real password policy** so "password login stays on" doesn't
+  mean "weak passwords stay on":
+  ```bash
+  sudo apt-get install -y libpam-pwquality
+  ```
+  Then in `/etc/pam.d/common-password`, add `minlen=14 retry=3` to the
+  `pam_pwquality.so` line's arguments (or create it if the package didn't
+  add one). Every account created after this point is held to it; existing
+  accounts should rotate to a compliant password.
+- **Ask everyone with an account to prefer their SSH key day-to-day** and
+  treat their password as a fallback, not their normal login — the key
+  can't be brute-forced over the network the way a password can.
+- **Lower the SSH auth budget** to slow down credential-stuffing without
+  disabling passwords outright — add to the same `sshd_config` drop-in as
+  above:
+  ```
+  MaxAuthTries 3
+  LoginGraceTime 20
+  ```
+- Revisit this trade-off periodically — if the set of people needing access
+  stabilizes and everyone's comfortable with keys, switching to
+  `PasswordAuthentication no` later (per the stricter variant of this step)
+  removes the remaining attack surface entirely without removing anyone's
+  access, since their keys already work.
 
 ### B4. Firewall (UFW)
 
