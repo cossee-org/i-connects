@@ -95,6 +95,12 @@ class User(AbstractUser):
     # user consumes a ``LockoutToken`` via the email-unlock flow.
     locked_at = models.DateTimeField(null=True, blank=True)
 
+    # Mandatory email confirmation (closes SECURITY_AUDIT.md H1): set once
+    # the user follows the confirmation link mailed at signup. While null,
+    # ``LoginForm`` refuses to authenticate the account regardless of
+    # password correctness — see ``apps.accounts.forms.LoginForm.clean``.
+    email_confirmed_at = models.DateTimeField(null=True, blank=True)
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["name"]
 
@@ -109,6 +115,10 @@ class User(AbstractUser):
     @property
     def is_locked_out(self) -> bool:
         return self.locked_at is not None
+
+    @property
+    def is_email_confirmed(self) -> bool:
+        return self.email_confirmed_at is not None
 
     @property
     def display_name(self) -> str:

@@ -16,6 +16,7 @@ from django.db.models.functions import Coalesce, Concat, Lower, NullIf, Trim
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
@@ -30,18 +31,19 @@ from apps.contributions.services import (
 )
 from apps.projects.services import get_user_public_projects
 
-from .emails import send_password_reset_email, send_welcome_email
+from .emails import send_confirmation_email, send_password_reset_email, send_welcome_email
 from .lockout import unlock_with_token
 from .forms import (
     ChangePasswordForm,
     LoginForm,
     PasswordResetRequestForm,
     ProfileForm,
+    ResendConfirmationForm,
     SetPasswordForm,
     SignupForm,
 )
 from .throttle import is_throttled, record_attempt
-from .tokens import password_reset_token
+from .tokens import email_confirmation_token, password_reset_token
 
 User = get_user_model()
 
@@ -52,11 +54,11 @@ User = get_user_model()
 class SignupView(FormView):
     template_name = "accounts/signup.html"
     form_class = SignupForm
-    success_url = reverse_lazy("core:home")
+    success_url = reverse_lazy("accounts:confirmation_sent")
 
     def dispatch(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         if request.user.is_authenticated:
-            return redirect(self.success_url)
+            return redirect(reverse_lazy("core:home"))
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
@@ -79,14 +81,13 @@ class SignupView(FormView):
     def form_valid(self, form: SignupForm) -> HttpResponse:
         user = form.save()
         log_action(AuditAction.USER_SIGNUP, actor=user, entity=user)
-        # Auto-login immediately after signup.
-        login(self.request, user, backend="django.contrib.auth.backends.ModelBackend")
-        # Best-effort welcome email; don't block signup on delivery errors.
+        # Mandatory email confirmation (SECURITY_AUDIT.md H1): the account
+        # cannot log in until this link is followed, so there is no
+        # auto-login here — see ``LoginForm.clean`` and ``EmailConfirmView``.
         try:
-            send_welcome_email(user, request=self.request)
+            send_confirmation_email(user, request=self.request)
         except Exception:  # noqa: BLE001 — email failures shouldn't break signup
             pass
-        messages.success(self.request, "Welcome to i-connects!")
         return super().form_valid(form)
 
 
@@ -123,6 +124,70 @@ def logout_view(request: HttpRequest) -> HttpResponse:
     """POST-only logout. CSRF is enforced by Django's middleware."""
     logout(request)
     return redirect("/")
+
+
+# ---------------------------------------------------------------------------
+# Email confirmation (mandatory — SECURITY_AUDIT.md H1)
+# ---------------------------------------------------------------------------
+def confirmation_sent(request: HttpRequest) -> HttpResponse:
+    return render(request, "accounts/confirmation_sent.html")
+
+
+def email_confirm(request: HttpRequest, uidb64: str, token: str) -> HttpResponse:
+    """Consume a signup confirmation link.
+
+    On success the account is marked confirmed and the user is logged in
+    immediately — the same "prove receipt, then land in the app" flow as
+    ``password_reset_confirm``/``lockout_unlock``.
+    """
+    user = _user_from_uidb64(uidb64)
+    success = bool(
+        user is not None
+        and user.email_confirmed_at is None
+        and email_confirmation_token.check_token(user, token)
+    )
+    if success:
+        user.email_confirmed_at = timezone.now()
+        user.save(update_fields=["email_confirmed_at", "updated_at"])
+        log_action(AuditAction.EMAIL_CONFIRMED, actor=user, entity=user)
+        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+        try:
+            send_welcome_email(user, request=request)
+        except Exception:  # noqa: BLE001 — email failures shouldn't block confirmation
+            pass
+        messages.success(request, "Your email is confirmed. Welcome to i-connects!")
+    return render(request, "accounts/email_confirm.html", {"success": success})
+
+
+class ResendConfirmationView(FormView):
+    template_name = "accounts/resend_confirmation.html"
+    form_class = ResendConfirmationForm
+    success_url = reverse_lazy("accounts:confirmation_sent")
+
+    def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        record_attempt(request, AuditAction.EMAIL_CONFIRMATION_RESEND_ATTEMPTED)
+        if is_throttled(request, AuditAction.EMAIL_CONFIRMATION_RESEND_ATTEMPTED):
+            form = self.get_form()
+            form.add_error(
+                None,
+                "Too many requests from this network. "
+                "Please try again in a few minutes.",
+            )
+            return self.render_to_response(
+                self.get_context_data(form=form), status=429
+            )
+        return super().post(request, *args, **kwargs)
+
+    def form_valid(self, form: ResendConfirmationForm) -> HttpResponse:
+        email = form.cleaned_data["email"]
+        # Same response either way, to avoid account enumeration.
+        user = User.objects.filter(email__iexact=email).first()
+        if user is not None and user.email_confirmed_at is None:
+            try:
+                send_confirmation_email(user, request=self.request)
+            except Exception:  # noqa: BLE001 — swallow to avoid leaking info
+                pass
+        return super().form_valid(form)
 
 
 # ---------------------------------------------------------------------------

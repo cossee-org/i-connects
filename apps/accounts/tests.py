@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.urls import reverse
 
 from apps.accounts.models import Widget
 
 
 @pytest.mark.django_db
-def test_signup_creates_user_and_logs_in(client):
-    """POST /accounts/signup/ creates the user and logs them in."""
+def test_signup_creates_unconfirmed_user_and_does_not_log_in(client):
+    """POST /accounts/signup/ creates the user but does NOT log them in.
+
+    Mandatory email confirmation (SECURITY_AUDIT.md H1): a fresh signup
+    can't authenticate until the confirmation link is followed.
+    """
     url = reverse("accounts:signup")
     response = client.post(
         url,
@@ -27,9 +34,113 @@ def test_signup_creates_user_and_logs_in(client):
     )
     assert response.status_code in (301, 302)
     User = get_user_model()
-    assert User.objects.filter(email="newbie@test.com").exists()
-    # Session should be authenticated.
+    user = User.objects.get(email="newbie@test.com")
+    assert user.email_confirmed_at is None
+    # Session should NOT be authenticated.
+    assert "_auth_user_id" not in client.session
+    # A confirmation email went out, not a welcome email.
+    assert len(mail.outbox) == 1
+    assert "confirm" in mail.outbox[0].subject.lower()
+
+
+def _confirm_url_from_email(message) -> str:
+    body = message.body
+    match = re.search(r"http\S*/accounts/confirm/\S+/\S+/", body)
+    assert match, f"No confirmation URL found in email body: {body!r}"
+    return match.group(0)
+
+
+@pytest.mark.django_db
+def test_confirming_email_logs_in_and_allows_login(client):
+    """Following the confirmation link marks the account confirmed, logs
+    the user in immediately, and lets them log in normally afterwards."""
+    url = reverse("accounts:signup")
+    client.post(
+        url,
+        {
+            "given_name": "New",
+            "family_name": "Bie",
+            "email": "newbie2@test.com",
+            "email_confirm": "newbie2@test.com",
+            "password": "supersecure123",
+            "password_confirm": "supersecure123",
+            "agree_terms": "on",
+        },
+    )
+    confirm_url = _confirm_url_from_email(mail.outbox[0])
+
+    response = client.get(confirm_url)
+    assert response.status_code == 200
+    assert b"confirmed" in response.content.lower()
     assert "_auth_user_id" in client.session
+
+    User = get_user_model()
+    user = User.objects.get(email="newbie2@test.com")
+    assert user.email_confirmed_at is not None
+
+    # A welcome email is sent once confirmed.
+    assert any("welcome" in m.subject.lower() for m in mail.outbox)
+
+    # And they can now log in normally.
+    client.logout()
+    response = client.post(
+        reverse("accounts:login"),
+        {"email": "newbie2@test.com", "password": "supersecure123"},
+    )
+    assert response.status_code in (301, 302)
+    assert "_auth_user_id" in client.session
+
+
+@pytest.mark.django_db
+def test_unconfirmed_user_cannot_log_in_with_correct_password(client):
+    User = get_user_model()
+    user = User.objects.create_user(email="pending@test.com", password="correct-horse-staple")
+    response = client.post(
+        reverse("accounts:login"),
+        {"email": user.email, "password": "correct-horse-staple"},
+    )
+    assert "_auth_user_id" not in client.session
+    assert "confirm" in response.content.decode().lower()
+
+
+@pytest.mark.django_db
+def test_confirm_rejects_bogus_token(client):
+    User = get_user_model()
+    user = User.objects.create_user(email="pending2@test.com", password="password123")
+    from django.utils.encoding import force_bytes
+    from django.utils.http import urlsafe_base64_encode
+
+    uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+    response = client.get(
+        reverse("accounts:email_confirm", kwargs={"uidb64": uidb64, "token": "bogus-token"})
+    )
+    assert response.status_code == 200
+    assert b"not valid" in response.content.lower()
+    user.refresh_from_db()
+    assert user.email_confirmed_at is None
+    assert "_auth_user_id" not in client.session
+
+
+@pytest.mark.django_db
+def test_resend_confirmation_sends_new_email_for_unconfirmed_account(client):
+    User = get_user_model()
+    User.objects.create_user(email="pending3@test.com", password="password123")
+    response = client.post(
+        reverse("accounts:resend_confirmation"), {"email": "pending3@test.com"}
+    )
+    assert response.status_code in (301, 302)
+    assert len(mail.outbox) == 1
+    assert "confirm" in mail.outbox[0].subject.lower()
+
+
+@pytest.mark.django_db
+def test_resend_confirmation_does_not_leak_account_existence(client):
+    """Same redirect whether or not the email matches an account."""
+    response = client.post(
+        reverse("accounts:resend_confirmation"), {"email": "nobody@test.com"}
+    )
+    assert response.status_code in (301, 302)
+    assert len(mail.outbox) == 0
 
 
 @pytest.mark.django_db

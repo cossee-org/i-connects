@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 
 @pytest.fixture
 def user(db):
     User = get_user_model()
     return User.objects.create_user(
-        email="alice@test.com", password="password123", name="Alice"
+        email="alice@test.com",
+        password="password123",
+        name="Alice",
+        email_confirmed_at=timezone.now(),
     )
 
 
@@ -18,7 +22,10 @@ def user(db):
 def pm_user(db):
     User = get_user_model()
     return User.objects.create_user(
-        email="pm@test.com", password="password123", name="PM"
+        email="pm@test.com",
+        password="password123",
+        name="PM",
+        email_confirmed_at=timezone.now(),
     )
 
 
@@ -26,7 +33,10 @@ def pm_user(db):
 def other_user(db):
     User = get_user_model()
     return User.objects.create_user(
-        email="bob@test.com", password="password123", name="Bob"
+        email="bob@test.com",
+        password="password123",
+        name="Bob",
+        email_confirmed_at=timezone.now(),
     )
 
 
