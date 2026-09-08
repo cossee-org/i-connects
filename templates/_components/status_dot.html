@@ -1,0 +1,15 @@
+{# Status dot — {% include "_components/status_dot.html" with status=column.name %} #}
+{# A bare coloured circle for a heading that already spells out the status (A11Y_GUIDE #7: never colour alone). #}
+{# Keep the palette in sync with _components/status_badge.html. #}
+{% with s=status|lower %}
+<span aria-hidden="true"
+      class="inline-block w-2.5 h-2.5 rounded-full shrink-0
+  {% if s == 'in progress' or s == 'in_progress' or s == 'active' or s == 'open' %}bg-success
+  {% elif s == 'planning' %}bg-orange-500
+  {% elif s == 'paused' %}bg-purple-500
+  {% elif s == 'done' or s == 'completed' or s == 'closed' or s == 'archived' %}bg-brand-navy
+  {% elif s == 'to do' or s == 'to-do' or s == 'todo' or s == 'pending' or s == 'new' or s == 'draft' %}bg-warning
+  {% elif s == 'overdue' or s == 'blocked' or s == 'error' %}bg-error
+  {% elif s == 'inactive' %}bg-gray-400
+  {% else %}bg-brand-light{% endif %}"></span>
+{% endwith %}

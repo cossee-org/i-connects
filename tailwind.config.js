@@ -14,6 +14,15 @@ module.exports = {
     "./apps/**/*.py",
     "./static/js/**/*.js",
   ],
+  // The task calendar's range bars (templates/tasks/partials/calendar_range_bar.html)
+  // position each bar with `col-start-{{ bar.start_col }}` / `col-end-{{ bar.end_col|add:"1" }}`,
+  // where the column number is computed server-side and interpolated at render time.
+  // Tailwind's content scanner only detects literal class strings in source files, so
+  // these dynamically-built class names must be safelisted to always generate.
+  safelist: [
+    { pattern: /^col-start-[1-8]$/ },
+    { pattern: /^col-end-[1-9]$/ },
+  ],
   theme: {
     extend: {
       colors: {

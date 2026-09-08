@@ -17,9 +17,9 @@ class MilestoneAdmin(admin.ModelAdmin):
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "project", "container", "status", "deadline", "created_at")
+    list_display = ("id", "name", "project", "container", "status", "is_priority", "deadline", "created_at")
     search_fields = ("name", "description", "project__name")
-    list_filter = ("status", "auto_assign_new", "anonymous")
+    list_filter = ("status", "is_priority", "auto_assign_new", "anonymous")
 
 
 @admin.register(TaskLog)

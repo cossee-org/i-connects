@@ -1,0 +1,38 @@
+{% comment %}
+  One sortable column header of the contributions matrix. Rendered by
+  {% matrix_sort_header %} — see apps/contributions/templatetags.
+
+  The whole header is the button, so the click target is the column rather
+  than a word inside it. aria-sort names the current order for a screen
+  reader; the arrow says the same thing to everyone else, and only the
+  sorted column shows one.
+{% endcomment %}
+<th scope="col" aria-sort="{{ aria_sort }}"
+    class="{% if align == 'right' %}text-right{% else %}text-left{% endif %} {% if align == 'right' %}font-medium{% endif %} p-0">
+  <button type="button"
+          class="w-full px-4 py-3 inline-flex items-center gap-1 cursor-pointer hover:text-brand-coral transition-colors
+                 {% if align == 'right' %}justify-end{% else %}justify-start{% endif %}
+                 {% if active %}text-brand-coral{% endif %}"
+          hx-get="{% url 'projects:contributions_by_member' pk=project_pk %}"
+          hx-vals='{"sort": "{{ key }}", "dir": "{{ next_direction }}", "used": "{% if only_used %}1{% else %}0{% endif %}"}'
+          hx-target="#contributions-by-member-container"
+          hx-swap="innerHTML"
+          aria-label="Sort by {{ label }}{% if active and direction == 'desc' %}, ascending{% else %}{% if active %}, descending{% endif %}{% endif %}">
+    <span>{{ label }}</span>
+    {% if active %}
+      {% if direction == "desc" %}
+        {# arrow-down: biggest / last first #}
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+             class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+          <path fill-rule="evenodd" d="M10 3a.75.75 0 0 1 .75.75v9.19l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3.75A.75.75 0 0 1 10 3Z" clip-rule="evenodd" />
+        </svg>
+      {% else %}
+        {# arrow-up: smallest / first first #}
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+             class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+          <path fill-rule="evenodd" d="M10 17a.75.75 0 0 1-.75-.75V7.06L6.03 10.28a.75.75 0 0 1-1.06-1.06l4.5-4.5a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 1 1-1.06 1.06L10.75 7.06v9.19A.75.75 0 0 1 10 17Z" clip-rule="evenodd" />
+        </svg>
+      {% endif %}
+    {% endif %}
+  </button>
+</th>

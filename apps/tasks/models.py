@@ -117,17 +117,6 @@ class Task(models.Model):
         default=TaskStatus.NOT_COMPLETED,
     )
 
-    completion_mode = models.CharField(
-        max_length=16,
-        choices=CompletedAs.choices,
-        default=CompletedAs.INDIVIDUAL,
-        help_text=(
-            "How the task is completed. INDIVIDUAL: each assignee marks their "
-            "own part done and a Lead closes once everyone is done. TEAM: a "
-            "Lead closes the task at once for all assignees."
-        ),
-    )
-
     assigned_members = models.ManyToManyField(
         "projects.ProjectMember",
         blank=True,
@@ -150,6 +139,39 @@ class Task(models.Model):
     )
 
     assign_by_role = models.BooleanField(default=False)
+
+    closed_by = models.ForeignKey(
+        "projects.ProjectMember",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="closed_tasks",
+        help_text=(
+            "Who marked this task completed — the Lead who closed it, or the "
+            "reviewer whose sign-off was the last one outstanding. Kept as "
+            "written even after they leave the task, and cleared when the "
+            "task is reopened. Nulled only if their membership row is deleted "
+            "outright, which the page reports as a former member."
+        ),
+    )
+    closed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the task was marked completed. Cleared on reopening, so it "
+            "always describes the completion the task currently stands on."
+        ),
+    )
+
+    requires_review = models.BooleanField(
+        default=False,
+        help_text=(
+            "When set, each assignee's submission has to be signed off by one "
+            "of the task's reviewers before the task counts as done. The form "
+            "keeps this in step with ``reviewers``, which is what the review "
+            "rules actually read — see ``needs_review``."
+        ),
+    )
 
     auto_assign_new = models.CharField(
         max_length=16,
@@ -175,6 +197,11 @@ class Task(models.Model):
         help_text="Optional link to a GitHub issue or pull request for this task.",
     )
 
+    is_priority = models.BooleanField(
+        default=False,
+        help_text="Flags this task as high priority (shown with a colored indicator).",
+    )
+
     class Meta:
         ordering = ["container_task_order", "id"]
         indexes = [
@@ -182,6 +209,7 @@ class Task(models.Model):
             models.Index(fields=["container"]),
             models.Index(fields=["milestone"]),
             models.Index(fields=["status"]),
+            models.Index(fields=["is_priority"]),
         ]
 
     def __str__(self) -> str:
@@ -224,6 +252,44 @@ class Task(models.Model):
         """
         return self.assignees_done_count >= self.assignee_count
 
+    @property
+    def assignees_reviewed_count(self) -> int:
+        """Number of assignees whose current TaskLog carries a review."""
+        current = self._current_logs_by_member()
+        return sum(
+            1
+            for member in self.assigned_members.all()
+            if (log := current.get(member.id)) is not None and log.is_reviewed
+        )
+
+    # -- Review helpers -----------------------------------------------------
+    @property
+    def needs_review(self) -> bool:
+        """True when submissions on this task have to be signed off.
+
+        Read off the reviewer set, because that is the fact of the matter:
+        naming a reviewer is what puts a task under review, and taking the
+        last one off lifts it again. A task can therefore never end up
+        requiring a sign-off with nobody able to give it — which would be a
+        task nobody could finish.
+
+        ``requires_review`` is how the form says the same thing: ticking it
+        reveals the reviewers field and asks for at least one, unticking it
+        clears them. The flag is the intent; the reviewers are the rule.
+        """
+        return self.reviewers.exists()
+
+    def is_reviewer(self, member) -> bool:
+        """True when ``member`` is currently a reviewer on this task.
+
+        Asked of the live ``reviewers`` set on every render rather than
+        cached anywhere, so adding or removing a reviewer takes effect
+        immediately — including for a member who is also an assignee.
+        """
+        if member is None or member.pk is None:
+            return False
+        return self.reviewers.filter(pk=member.pk).exists()
+
 
 class TaskLog(models.Model):
     """Audit trail of task assignment and completion events."""
@@ -258,6 +324,38 @@ class TaskLog(models.Model):
         related_name="task_logs",
     )
     approved = models.BooleanField(null=True, blank=True)
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When this entry was marked COMPLETED. Distinct from created_at, "
+            "which is when the entry was seeded on assignment. Null on entries "
+            "that are not complete, and on ones completed before this field "
+            "existed."
+        ),
+    )
+    reviewed_by = models.ForeignKey(
+        "projects.ProjectMember",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_logs_reviewed",
+        help_text=(
+            "The reviewer who signed this submission off. Kept as written "
+            "even if they later stop being a reviewer on the task, so the "
+            "record still names who reviewed it; nulled only if their "
+            "membership row is deleted outright."
+        ),
+    )
+    reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When a reviewer signed this submission off. Null means not "
+            "reviewed: the pair is cleared when the reviewer undoes their "
+            "review, and when the assignee reverts their own done mark."
+        ),
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -265,10 +363,26 @@ class TaskLog(models.Model):
             models.Index(fields=["task"]),
             models.Index(fields=["assigned_to"]),
             models.Index(fields=["completed_by"]),
+            models.Index(fields=["reviewed_by"]),
         ]
 
     def __str__(self) -> str:
         return f"TaskLog #{self.pk} (task {self.task_id})"
+
+    @property
+    def is_reviewed(self) -> bool:
+        """True when a reviewer has signed this submission off.
+
+        ``reviewed_at`` is the flag: it is the field the review flow sets and
+        clears together with ``reviewed_by``. Distinct from ``approved``,
+        which is the Lead's ledger-writing verdict on the full detail page.
+        """
+        return self.reviewed_at is not None
+
+    @property
+    def is_reviewable(self) -> bool:
+        """True when there is a submission here for a reviewer to act on."""
+        return self.status == TaskStatus.COMPLETED
 
 
 class ActivityEvent(models.TextChoices):

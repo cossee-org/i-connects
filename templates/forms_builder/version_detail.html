@@ -3,13 +3,13 @@
 {% block title %}{{ version.name }} v{{ version.version }} &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block page_header %}
-  {% include "_components/page_header.html" with title=version.name subtitle="Preview the rendered form and inspect its JSON schema." eyebrow="Form version" %}
+  {% include "_components/page_header.html" with title=version.name subtitle="Preview the rendered survey and inspect its JSON schema." eyebrow="Survey version" %}
 {% endblock %}
 
 {% block content %}
 <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
   <div class="flex items-center gap-2 text-sm text-brand-text/70">
-    <span>Form #{{ form_obj.pk }}</span>
+    <span>Survey #{{ form_obj.pk }}</span>
     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">
       v{{ version.version }}
     </span>
@@ -43,7 +43,7 @@
       <h2 class="text-sm font-semibold text-brand-navy uppercase tracking-wide mb-3">Preview</h2>
       {% if render_error %}
         <div class="alert alert-error text-sm">
-          Could not render form: {{ render_error }}
+          Could not render survey: {{ render_error }}
         </div>
       {% elif rendered_form %}
         {% include "forms_builder/render_form.html" with form=rendered_form readonly=True %}

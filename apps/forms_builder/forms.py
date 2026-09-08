@@ -58,7 +58,7 @@ class FormVersionForm(forms.ModelForm):
             }
         ),
         required=False,
-        help_text="JSON Schema describing the form's fields.",
+        help_text="JSON Schema describing the survey's fields.",
     )
     ui_schema = forms.CharField(
         widget=forms.Textarea(
@@ -122,7 +122,7 @@ class AttachFormForm(forms.Form):
 
     form_version = forms.ModelChoiceField(
         queryset=FormVersion.objects.none(),
-        label="Form version",
+        label="Survey version",
         widget=forms.Select(attrs={"class": "select select-bordered w-full"}),
     )
 

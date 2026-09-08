@@ -69,23 +69,7 @@
 
 {% block page_header %}
   <header class="mb-6 flex flex-col gap-3">
-    <div>
-      <h1 class="page-title font-semibold text-brand-navy leading-tight">{{ project.name }}</h1>
-      <div class="flex flex-wrap gap-2 mt-3">
-        {% if project.is_public %}
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
-        {% else %}
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
-        {% endif %}
-        {% include "_components/status_badge.html" with status=project.get_status_display %}
-        {% if user_privilege %}
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-            {% if user_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-            {{ user_privilege|privilege_label }}
-          </span>
-        {% endif %}
-      </div>
-    </div>
+    {% include "_components/project_header.html" %}
     {% if user.is_authenticated and not user_privilege %}
     <div class="flex flex-wrap gap-2 justify-end">
       <div id="join-action" class="flex flex-wrap gap-2">
@@ -198,7 +182,7 @@
     {% if members %}
       {% if project_leads %}
         <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">
-          {% if project_leads|length > 1 %}Project Leads{% else %}Project Lead{% endif %}
+          {% if project_leads|length > 1 %}Leads{% else %}Lead{% endif %}
         </h3>
         <ul class="space-y-1 mb-3">
           {% for m in project_leads %}
@@ -279,7 +263,8 @@
               </div>
             </div>
             <div class="flex items-center gap-1 shrink-0">
-              {% if is_project_manager %}
+              {# Both go once the task is completed — see task_detail.html. #}
+              {% if is_project_manager and task.status != "COMPLETED" %}
               <button type="button"
                       class="btn btn-ghost btn-xs"
                       aria-label="Edit task {{ task.name }}"
@@ -298,6 +283,8 @@
               {% endif %}
             </div>
           </li>
+          {# Lead-only, like the button that opens it. #}
+          {% if is_project_manager and task.status != "COMPLETED" %}
           <dialog id="delete-task-modal-{{ task.pk }}" class="modal" aria-label="Delete task confirmation">
             <div class="modal-box max-w-xl bg-base-100 border border-error/40">
               <form method="dialog">
@@ -322,6 +309,7 @@
             </div>
             <form method="dialog" class="modal-backdrop"><button>close</button></form>
           </dialog>
+          {% endif %}
         {% endfor %}
       </ul>
       {% if task_count > 5 %}
@@ -435,6 +423,21 @@
           this.openPane('/projects/{{ project.pk }}/tasks/' + openTask + '/pane/');
           history.replaceState(null, '', window.location.pathname);
         }
+        // htmx.ajax resolves its promise even on a 5xx, and fires
+        // htmx:responseError on the body rather than the target — so without
+        // this the pane keeps its loading spinner forever when the request
+        // fails, saying nothing about why.
+        ['htmx:responseError', 'htmx:sendError'].forEach(function (evt) {
+          document.body.addEventListener(evt, function (e) {
+            var body = document.getElementById('task-pane-body');
+            if (!body || !e.detail || e.detail.target !== body) return;
+            body.innerHTML =
+              '<div class="px-5 py-10 text-center">' +
+              '<p class="text-sm font-medium text-brand-navy">This task could not be loaded.</p>' +
+              '<p class="mt-1 text-sm text-brand-text/70">Something went wrong on the server. ' +
+              'Close the pane and try again.</p></div>';
+          });
+        });
       },
       openPane(url) {
         this.paneOpen = true;
@@ -485,7 +488,7 @@
     {% if members %}
       {% if project_leads %}
         <h3 class="text-xs uppercase tracking-wider text-brand-navy/60 font-semibold mb-1">
-          {% if project_leads|length > 1 %}Project Leads{% else %}Project Lead{% endif %}
+          {% if project_leads|length > 1 %}Leads{% else %}Lead{% endif %}
         </h3>
         <ul class="space-y-1 mb-3">
           {% for m in project_leads %}

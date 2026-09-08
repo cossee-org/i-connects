@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% load project_tags %}
 
-{% block title %}Discover projects &mdash; i&bull;CONNECTS{% endblock %}
+{% block title %}Project discovery &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block page_header %}{% endblock %}
 
 {% block content %}
 <div class="flex items-center gap-3 mb-6">
-  <h1 class="page-title font-semibold text-brand-navy">Discover projects</h1>
+  <h1 class="page-title font-semibold text-brand-navy">Project discovery</h1>
   <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_project_count }}</span>
+  {% include "_components/info_popover.html" with label="Project discovery" body="Every project open to discovery across i-CONNECTS, including ones you're not part of. Search and filter to find work to join, then ask to join from the project's page." %}
 </div>
 
 {# ── Filter / sort bar ─────────────────────────────────────────────────────── #}
@@ -31,7 +32,7 @@
       {value: 'name_desc', label: 'Name Z–A'}
     ],
     current: '{{ current_sort }}',
-    get label() { return 'Sort by' },
+    get label() { return 'Sort' },
     pick(val) {
       this.current = val;
       document.getElementById('sort-input-pub').value = val;
@@ -140,7 +141,11 @@
           {# Member names — full list on sm+, truncated to 2 on smaller screens #}
           {% with mn=row.members|member_names %}
             {% if mn.full %}
-              <p class="text-xs text-brand-text/60 min-w-0">
+              <p class="inline-flex items-start gap-1 text-xs text-brand-text/60 min-w-0">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                     stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                </svg>
                 <span class="hidden sm:inline">{{ mn.full }}</span>
                 <span class="sm:hidden">{{ mn.short }}</span>
               </p>
@@ -160,6 +165,17 @@
 
         <div class="shrink-0 flex items-center gap-2 pt-0.5">
           {% include "_components/status_badge.html" with status=row.project.get_status_display %}
+          {% comment %}
+            Projects you are already in, marked as such — and in what
+            capacity, since Lead says more than Member does. Same pill in
+            the same place as My projects, so the two lists read alike.
+          {% endcomment %}
+          {% if row.my_privilege %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+              {% if row.my_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+              {{ row.my_privilege|privilege_label }}
+            </span>
+          {% endif %}
           {% if row.project.is_public %}
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
           {% else %}

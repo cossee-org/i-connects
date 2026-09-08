@@ -102,7 +102,7 @@ def form_create(request: HttpRequest) -> HttpResponse:
             name=name,
             json_schema={"title": name, "type": "object", "properties": {}},
         )
-        messages.success(request, "Form created.")
+        messages.success(request, "Survey created.")
         return redirect("forms_builder:version_list", pk=form.pk)
     return render(request, "forms_builder/form_meta_form.html", {"mode": "create"})
 
@@ -121,7 +121,7 @@ def form_update(request: HttpRequest, pk: int) -> HttpResponse:
                 if latest is not None and latest.name != display_name:
                     latest.name = display_name
                     latest.save(update_fields=["name"])
-            messages.success(request, "Form updated.")
+            messages.success(request, "Survey updated.")
             return redirect("forms_builder:form_list")
     else:
         meta_form = FormMetaForm(instance=form_obj)
@@ -138,7 +138,7 @@ def form_delete(request: HttpRequest, pk: int) -> HttpResponse:
     form_obj = _user_form_or_404(request.user, pk)
     if request.method == "POST":
         archive_form(form=form_obj)
-        messages.success(request, "Form archived.")
+        messages.success(request, "Survey archived.")
         return redirect("forms_builder:form_list")
     return render(
         request,
@@ -262,7 +262,7 @@ def project_forms(request: HttpRequest, project_pk: int) -> HttpResponse:
         if attach_form.is_valid():
             project.form_version = attach_form.cleaned_data["form_version"]
             project.save(update_fields=["form_version", "updated_at"])
-            messages.success(request, "Form attached to project.")
+            messages.success(request, "Survey attached to project.")
             return redirect("forms_builder:project_forms", project_pk=project.pk)
     else:
         attach_form = AttachFormForm(user=request.user)
@@ -286,7 +286,7 @@ def project_fill(request: HttpRequest, project_pk: int) -> HttpResponse:
         raise Http404
     version = project.form_version
     if version is None:
-        messages.error(request, "No form is attached to this project.")
+        messages.error(request, "No survey is attached to this project.")
         return redirect("forms_builder:project_forms", project_pk=project.pk)
 
     schema = version.json_schema or {}
@@ -305,7 +305,7 @@ def project_fill(request: HttpRequest, project_pk: int) -> HttpResponse:
                 metadata["form_data"] = dyn.cleaned_data
                 project.metadata = metadata
                 project.save(update_fields=["metadata", "updated_at"])
-                messages.success(request, "Form saved.")
+                messages.success(request, "Survey response saved.")
                 return redirect("forms_builder:project_fill", project_pk=project.pk)
     else:
         dyn = DynamicForm(initial=existing or None)
@@ -330,7 +330,7 @@ def task_fill(request: HttpRequest, task_pk: int) -> HttpResponse:
         raise Http404
     version = task.form_version
     if version is None:
-        messages.error(request, "No form is attached to this task.")
+        messages.error(request, "No survey is attached to this task.")
         return redirect("forms_builder:project_forms", project_pk=task.project_id)
 
     schema = version.json_schema or {}
@@ -352,7 +352,7 @@ def task_fill(request: HttpRequest, task_pk: int) -> HttpResponse:
                 tags["form_data"] = dyn.cleaned_data
                 task.tags = tags
                 task.save(update_fields=["tags", "updated_at"])
-                messages.success(request, "Form saved.")
+                messages.success(request, "Survey response saved.")
                 return redirect("forms_builder:task_fill", task_pk=task.pk)
     else:
         dyn = DynamicForm(initial=existing or None)

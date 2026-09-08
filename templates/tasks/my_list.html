@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Tasks &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <div class="flex items-center gap-3">
+    <h1 class="page-title font-semibold text-brand-navy">Tasks</h1>
+    <span id="task-total-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_task_count }}</span>
+    <div class="relative mt-1.5" x-data="{ open: false }" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              aria-label="About Tasks"
+              class="inline-flex items-center justify-center w-5 h-5 rounded-full text-brand-text/50 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+          <path fill-rule="evenodd" d="M18 10A8 8 0 1 1 2 10a8 8 0 0 1 16 0ZM9 9a1 1 0 0 1 2 0v4a1 1 0 1 1-2 0V9Zm1-3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute left-0 mt-2 w-max max-w-80 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-30">
+        <p class="text-sm text-brand-text/70">Tasks across all of your projects.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Filter / sort bar ────────────────────────────────────────────────────── #}
+<form method="get" id="filter-form-tasks" class="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-stretch sm:items-center mb-6">
+  <input type="hidden" name="type" id="type-input-tasks" value="{{ current_type }}">
+  <input type="hidden" name="status" id="status-input-tasks" value="{{ current_status }}">
+  <input type="hidden" name="priority" id="priority-input-tasks" value="{{ current_priority }}">
+  <input type="hidden" name="project" id="project-input-tasks" value="{{ current_project }}">
+  <input type="hidden" name="sort" id="sort-input-tasks" value="{{ current_sort }}">
+
+  {# Search — filters live as the user types #}
+  <div class="w-full sm:flex-1 sm:min-w-[200px]">
+    <input type="text" name="q" value="{{ current_q }}" placeholder="Search tasks…"
+           class="input input-sm input-bordered w-full"
+           hx-get="{% url 'tasks:my_list' %}"
+           hx-trigger="input changed delay:300ms"
+           hx-target="#task-results"
+           hx-swap="innerHTML"
+           hx-push-url="true" />
+  </div>
+
+  <div class="flex gap-3 w-full sm:w-auto flex-wrap items-center">
+
+    {# Type dropdown — Assigned vs To Review; unselected means both, merged #}
+    <div x-data="{
+      open: false,
+      options: [
+        {value: '', label: 'All'},
+        {value: 'assigned', label: 'Assigned'},
+        {value: 'review', label: 'To Review'}
+      ],
+      current: '{{ current_type }}',
+      get label() { return 'Type' },
+      pick(val) {
+        this.current = val;
+        document.getElementById('type-input-tasks').value = val;
+        this.open = false;
+        document.getElementById('filter-form-tasks').submit();
+      }
+    }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+        <span x-text="label"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute left-0 mt-1 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        <template x-for="opt in options" :key="opt.value">
+          <button type="button" @click="pick(opt.value)"
+                  class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                  :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                  x-text="opt.label"></button>
+        </template>
+      </div>
+    </div>
+
+    {# Status dropdown — Not Completed (default) / Completed / All #}
+    <div x-data="{
+      open: false,
+      options: [
+        {value: 'not_completed', label: 'Not Completed'},
+        {value: 'completed', label: 'Completed'},
+        {value: 'all', label: 'All'}
+      ],
+      current: '{{ current_status }}',
+      get label() { return 'Status' },
+      pick(val) {
+        this.current = val;
+        document.getElementById('status-input-tasks').value = val;
+        this.open = false;
+        document.getElementById('filter-form-tasks').submit();
+      }
+    }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+        <span x-text="label"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute left-0 mt-1 w-40 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        <template x-for="opt in options" :key="opt.value">
+          <button type="button" @click="pick(opt.value)"
+                  class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                  :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                  x-text="opt.label"></button>
+        </template>
+      </div>
+    </div>
+
+    {# Priority dropdown #}
+    <div x-data="{
+      open: false,
+      options: [
+        {value: '', label: 'All'},
+        {value: 'high', label: 'High priority'}
+      ],
+      current: '{{ current_priority }}',
+      get label() { return 'Priority' },
+      pick(val) {
+        this.current = val;
+        document.getElementById('priority-input-tasks').value = val;
+        this.open = false;
+        document.getElementById('filter-form-tasks').submit();
+      }
+    }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+        <span x-text="label"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute left-0 mt-1 w-36 max-w-[90vw] bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        <template x-for="opt in options" :key="opt.value">
+          <button type="button" @click="pick(opt.value)"
+                  class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                  :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                  x-text="opt.label"></button>
+        </template>
+      </div>
+    </div>
+
+    {# Project dropdown #}
+    <div x-data="{
+      open: false,
+      options: [{value: '', label: 'All projects'}{% for p in my_projects %}, {value: '{{ p.pk }}', label: '{{ p.name|escapejs }}'}{% endfor %}],
+      current: '{{ current_project }}',
+      get label() { return 'Project' },
+      pick(val) {
+        this.current = val;
+        document.getElementById('project-input-tasks').value = val;
+        this.open = false;
+        document.getElementById('filter-form-tasks').submit();
+      }
+    }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+        <span x-text="label"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute right-0 mt-1 w-64 max-w-[90vw] max-h-72 overflow-y-auto bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        <template x-for="opt in options" :key="opt.value">
+          <button type="button" @click="pick(opt.value)"
+                  class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors break-words"
+                  :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                  x-text="opt.label"></button>
+        </template>
+      </div>
+    </div>
+
+    {# Sort dropdown — last #}
+    <div x-data="{
+      open: false,
+      options: [
+        {value: 'newest', label: 'Newest first'},
+        {value: 'oldest', label: 'Oldest first'},
+        {value: 'deadline_asc', label: 'Deadline: soonest'},
+        {value: 'deadline_desc', label: 'Deadline: latest'},
+        {value: 'name_asc', label: 'Name A–Z'},
+        {value: 'name_desc', label: 'Name Z–A'}
+      ],
+      current: '{{ current_sort }}',
+      get label() { return 'Sort' },
+      pick(val) {
+        this.current = val;
+        document.getElementById('sort-input-tasks').value = val;
+        this.open = false;
+        document.getElementById('filter-form-tasks').submit();
+      }
+    }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+        <span x-text="label"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        <template x-for="opt in options" :key="opt.value">
+          <button type="button" @click="pick(opt.value)"
+                  class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                  :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                  x-text="opt.label"></button>
+        </template>
+      </div>
+    </div>
+
+  </div>
+
+  <noscript>
+    <select name="project">
+      <option value="">All projects</option>
+      {% for p in my_projects %}
+        <option value="{{ p.pk }}" {% if current_project == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-sm">Apply</button>
+  </noscript>
+</form>
+
+<div id="task-results">
+  {% include "tasks/partials/my_list_results.html" %}
+</div>
+
+{% endblock %}

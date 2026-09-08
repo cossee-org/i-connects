@@ -1,0 +1,32 @@
+{# Day view — agenda-style list for a single date — included by task_calendar_view.html when calendar_view == 'day'. #}
+{# `calendar_day_tasks` is a list of DayAgendaItem: {task, is_range, range_start, range_end}. #}
+{% if calendar_day_tasks %}
+  <ul class="flex flex-col gap-2">
+    {% for item in calendar_day_tasks %}
+      <li class="brand-card flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors{% if item.task.is_priority %} border-l-2 border-l-error{% endif %}"
+          @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=item.task.pk %}' })">
+
+        {# Name only — the description belongs to the side pane, not the agenda row. #}
+        <div class="flex-1 min-w-0">
+          <span class="font-medium text-brand-navy text-sm block leading-tight truncate">{{ item.task.name }}</span>
+        </div>
+
+        {% include "_components/task_dates.html" with task=item.task hide_on_mobile=True tooltip=True %}
+
+        {% include "_components/assignee_count.html" with count=item.task.assigned_members.all|length tooltip=True %}
+
+        {% include "_components/reviewer_count.html" with count=item.task.reviewers.all|length tooltip=True %}
+
+        {# Priority flag and completed check, paired at the row's end. #}
+        {% if item.task.is_priority or item.task.status == "COMPLETED" %}
+          <span class="flex items-center gap-1 shrink-0">
+            {% if item.task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True tooltip=True %}{% endif %}
+            {% include "_components/completion_check.html" with task=item.task tooltip=True %}
+          </span>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="text-sm text-brand-text/40 py-2">No dated tasks on this day.</p>
+{% endif %}

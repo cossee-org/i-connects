@@ -70,6 +70,19 @@ class AuditAction(models.TextChoices):
     TASK_COMPLETED = "task.completed", "Task marked complete"
     TASK_APPROVED = "task.approved", "Task completion approved"
     TASK_REJECTED = "task.rejected", "Task completion rejected"
+    TASK_REVIEWED = "task.reviewed", "Task submission reviewed"
+    TASK_REVIEW_CLEARED = "task.review_cleared", "Task submission review cleared"
+
+    # ---- Wiki ---------------------------------------------------------------
+    WIKI_PAGE_CREATED = "wiki.page_created", "Wiki page created"
+    WIKI_PAGE_UPDATED = "wiki.page_updated", "Wiki page edited"
+    WIKI_PAGE_DELETED = "wiki.page_deleted", "Wiki page deleted"
+    WIKI_PAGE_RESTORED = "wiki.page_restored", "Wiki page revision restored"
+
+    # ---- Contributions ------------------------------------------------------
+    CONTRIBUTION_ADDED = "contribution.added", "Contribution added by hand"
+    CONTRIBUTION_UPDATED = "contribution.updated", "Contribution corrected"
+    CONTRIBUTION_REMOVED = "contribution.removed", "Contribution withdrawn"
 
     # ---- Admin --------------------------------------------------------------
     ACCOUNT_SUSPENDED = "admin.account_suspended", "Account suspended"

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}History &mdash; {{ page.title }} &mdash; {{ project.name }}{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6">
+    {% include "_components/project_header.html" %}
+  </header>
+{% endblock %}
+
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <a href="{% url 'wiki:detail' project_pk=project.pk slug=page.slug %}"
+     class="btn btn-sm btn-ghost text-brand-navy">&larr; Back to {{ page.title }}</a>
+  {% if can_edit %}
+    <a href="{% url 'wiki:update' project_pk=project.pk slug=page.slug %}"
+       class="btn btn-sm btn-primary">Edit</a>
+  {% endif %}
+</div>
+
+<h2 class="text-lg font-semibold text-brand-navy">Page history</h2>
+<p class="text-sm text-brand-text/70 mt-1 mb-5 max-w-2xl">
+  Every save of <span class="font-medium">{{ page.title }}</span>, newest first.
+  Open a revision to read it as it stood and see what that edit changed; a
+  revision can be restored, which brings its text back as a new revision
+  rather than erasing what came after.
+</p>
+
+<div class="brand-card overflow-hidden">
+  <table class="table">
+    <thead class="bg-brand-lighter text-brand-navy">
+      <tr>
+        <th scope="col" class="w-20">Revision</th>
+        <th scope="col">What changed</th>
+        <th scope="col" class="w-44">When</th>
+        <th scope="col" class="w-40">By</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <td class="align-top">
+            <a href="{% url 'wiki:revision' project_pk=project.pk slug=page.slug number=row.revision.number %}"
+               class="font-medium text-brand-navy hover:text-brand-coral">
+              {{ row.revision.number }}
+            </a>
+            {% if row.is_current %}
+              <div class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success mt-1">Current</div>
+            {% endif %}
+          </td>
+          <td class="align-top">
+            {% if row.revision.summary %}
+              <div class="text-sm text-brand-text break-words">{{ row.revision.summary }}</div>
+            {% else %}
+              <div class="text-sm text-brand-text/50 italic">No summary given</div>
+            {% endif %}
+            <div class="text-xs text-brand-text/60 mt-1">
+              {% if row.change %}{{ row.change }}{% else %}No text change{% endif %}
+              {% if row.revision.title != page.title %}
+                &middot; titled &ldquo;{{ row.revision.title }}&rdquo;
+              {% endif %}
+            </div>
+          </td>
+          <td class="align-top text-sm text-brand-text/80">{{ row.revision.created_at|date:"M j, Y H:i" }}</td>
+          <td class="align-top text-sm text-brand-text/80">
+            {% if row.revision.editor %}
+              {{ row.revision.editor.name|default:row.revision.editor.email }}
+            {% else %}
+              <span class="text-brand-text/50 italic">unknown</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="text-sm text-brand-text/60 italic">No revisions recorded for this page.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

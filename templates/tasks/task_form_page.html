@@ -5,11 +5,11 @@
 {% block breadcrumbs %}
   <nav aria-label="Breadcrumb" class="min-w-0 hidden md:block">
     <ol class="flex items-center gap-2 text-sm text-brand-navy/80 overflow-hidden whitespace-nowrap">
-      <li class="truncate min-w-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">My projects</a></li>
+      <li class="truncate min-w-0"><a href="{% url 'projects:my_list' %}" class="hover:text-brand-coral">Projects</a></li>
       <li aria-hidden="true" class="text-brand-navy/40">/</li>
       <li class="truncate min-w-0"><a href="{% url 'projects:detail' pk=project.pk %}" class="hover:text-brand-coral truncate">{{ project.name }}</a></li>
       <li aria-hidden="true" class="text-brand-navy/40">/</li>
-      <li class="truncate min-w-0"><a href="{% url 'tasks:board' project_pk=project.pk %}" class="hover:text-brand-coral">Kanban board</a></li>
+      <li class="truncate min-w-0"><a href="{% url 'tasks:board' project_pk=project.pk %}" class="hover:text-brand-coral">Kanban</a></li>
       <li aria-hidden="true" class="text-brand-navy/40">/</li>
       <li class="truncate min-w-0"><span aria-current="page" class="font-medium text-brand-navy">{{ form_title|default:"Task" }}</span></li>
     </ol>

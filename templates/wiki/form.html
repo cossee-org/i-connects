@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if page %}Edit {{ page.title }}{% else %}New wiki page{% endif %} &mdash; {{ project.name }}
+{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6">
+    {% include "_components/project_header.html" %}
+  </header>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  {% if page %}
+    <a href="{% url 'wiki:detail' project_pk=project.pk slug=page.slug %}"
+       class="btn btn-sm btn-ghost text-brand-navy">&larr; Back to {{ page.title }}</a>
+  {% else %}
+    <a href="{% url 'wiki:list' project_pk=project.pk %}"
+       class="btn btn-sm btn-ghost text-brand-navy">&larr; All wiki pages</a>
+  {% endif %}
+</div>
+
+<section class="brand-card p-6 max-w-4xl">
+  <h2 class="text-lg font-semibold text-brand-navy mb-1">
+    {% if page %}Edit page{% else %}New wiki page{% endif %}
+  </h2>
+  <p class="text-sm text-brand-text/70 mb-5">
+    Markdown is supported. Link to another page in this wiki by writing its
+    title in double brackets &mdash;
+    <code class="text-xs bg-brand-lighter px-1 py-0.5 rounded">[[Sampling protocol]]</code>,
+    or <code class="text-xs bg-brand-lighter px-1 py-0.5 rounded">[[Sampling protocol|the protocol]]</code>
+    to show different words. A link to a page that doesn't exist yet offers to create it.
+  </p>
+
+  <form method="post" class="space-y-2">
+    {% csrf_token %}
+    {{ form.base_revision }}
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-error mb-4" role="alert">
+        <div>{% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>
+      </div>
+    {% endif %}
+
+    {% include "_components/form_field.html" with field=form.title %}
+
+    <div class="form-control w-full mb-4">
+      <label class="label pb-1" for="id_content_markdown">
+        <span class="label-text text-brand-navy font-medium">Page content</span>
+      </label>
+      {{ form.content_markdown }}
+      {% if form.content_markdown.errors %}
+        <label class="label pt-1">
+          <span class="label-text-alt text-error">{{ form.content_markdown.errors|join:" " }}</span>
+        </label>
+      {% endif %}
+    </div>
+
+    {% include "_components/form_field.html" with field=form.summary %}
+
+    {% if form.locked %}
+      <div class="form-control w-full mb-4">
+        <label class="label cursor-pointer justify-start gap-2 pb-1" for="{{ form.locked.id_for_label }}">
+          {{ form.locked }}
+          <span class="label-text text-brand-navy font-medium">{{ form.locked.label }}</span>
+        </label>
+        <label class="label pt-0">
+          <span class="label-text-alt text-brand-text/60">
+            Use this for pages the project treats as settled. Contributors can still read a locked page.
+          </span>
+        </label>
+      </div>
+    {% endif %}
+
+    {% if page %}
+      <p class="text-xs text-brand-text/60">
+        Saving keeps the current text as revision {{ page.latest_revision_number }} in the
+        <a class="underline" href="{% url 'wiki:history' project_pk=project.pk slug=page.slug %}">page history</a>.
+        The page's address stays <code class="text-xs">{{ page.slug }}</code> even if you rename it, so existing links keep working.
+      </p>
+    {% endif %}
+
+    <div class="flex justify-end gap-2 mt-6">
+      {% if page %}
+        <a href="{% url 'wiki:detail' project_pk=project.pk slug=page.slug %}" class="btn btn-ghost">Cancel</a>
+      {% else %}
+        <a href="{% url 'wiki:list' project_pk=project.pk %}" class="btn btn-ghost">Cancel</a>
+      {% endif %}
+      <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+        {% if page %}Save changes{% else %}Create page{% endif %}
+      </button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block extra_body %}
+  <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+  <script>
+    (function () {
+      var el = document.getElementById('id_content_markdown');
+      if (el && typeof EasyMDE !== 'undefined') {
+        new EasyMDE({
+          element: el,
+          spellChecker: false,
+          status: ['lines', 'words'],
+          // The editor is the page body; give it room without letting a long
+          // page push the Save button off the bottom of the screen.
+          minHeight: '320px'
+        });
+      }
+    })();
+  </script>
+{% endblock %}

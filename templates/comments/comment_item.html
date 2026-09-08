@@ -4,18 +4,31 @@
      hx-post="{% url 'comments:mark_read' pk=comment.pk %}"
      hx-trigger="intersect once"
      hx-swap="none">
-  <div class="w-8 h-8 rounded-full bg-brand-navy text-white flex items-center justify-center text-sm font-semibold shrink-0" aria-hidden="true">
+  <div class="w-6 h-6 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0" aria-hidden="true">
     <span>{{ comment.author.display_name|slice:":1"|upper }}</span>
   </div>
   <div class="flex-1 min-w-0">
     <div class="flex items-baseline justify-between gap-2">
       <div class="min-w-0">
         <span class="font-medium text-brand-navy text-sm">{{ comment.author.display_name }}</span>
-        <time class="text-xs text-brand-text/50 ml-2">{{ comment.created_at|date:"M j, Y H:i" }}</time>
-        {% if comment.updated_at != comment.created_at %}
-          <span class="text-xs text-brand-text/40 ml-1">(edited)</span>
+        {% comment %}
+          text-xs to match the dates in the completion matrix; the timestamp is
+          a note on the comment, not part of its body.
+        {% endcomment %}
+        {% include "_components/local_time.html" with at=comment.created_at css="text-xs text-brand-text/50 ml-2" %}
+        {% if comment.is_edited %}
+          {% comment %}
+            The edit time lives in a tooltip, which cannot hold an element, so
+            this restates it in place the way local_time.html does its text.
+          {% endcomment %}
+          <span class="text-xs text-brand-text/40 ml-1"
+                data-epoch="{{ comment.updated_at|date:'U' }}"
+                x-data
+                x-init="$el.title = 'Edited ' + (window.localTime($el.dataset.epoch) || $el.title.replace('Edited ', ''))"
+                title="Edited {{ comment.updated_at|date:'M j, Y g:i A' }}">(edited)</span>
         {% endif %}
       </div>
+      {# Text-only actions: no glyphs on this row. #}
       {% if project_member and comment.author_id == project_member.id %}
         <div class="flex gap-2 shrink-0">
           <button class="text-xs text-brand-text/50 hover:underline"
@@ -39,8 +52,38 @@
                 hx-confirm="Delete this comment?">Delete</button>
       {% endif %}
     </div>
-    <div class="text-sm text-brand-text mt-1 whitespace-pre-line break-words">
-      {{ comment.content }}
+    {% comment %}
+      A long comment is clamped to three lines behind See more, the same way
+      the task pane clamps a long description — and with the same two details
+      that took fixing there:
+
+      * Whether it overflows is measured in the browser on init, not guessed
+        from the character count server-side, because where the text wraps
+        depends on how wide the pane is. A comment that happens to fit gets no
+        toggle at all.
+      * line-clamp-3 is both a static class and a binding, and needs to be
+        both. Bound alone it survives one swap but not the next: Alpine
+        remembers the class's state per element, so a re-rendered comment
+        comes back expanded. Static alone could not come off on expand.
+
+      Tight under the name line: mt-0.5, and the content flush against its
+      tags. whitespace-pre-line keeps newlines — that is the point, it is what
+      renders the author's own line breaks — so indentation inside the box
+      becomes a blank line above the text and another below it.
+    {% endcomment %}
+    <div class="mt-0.5"
+         x-data="{ expanded: false, overflowing: false }"
+         x-init="$nextTick(() => { overflowing = $refs.body.scrollHeight > $refs.body.clientHeight + 1 })">
+      <div x-ref="body"
+           id="comment-body-{{ comment.pk }}"
+           class="text-sm text-brand-text whitespace-pre-line break-words line-clamp-3"
+           :class="{ 'line-clamp-3': !expanded }">{{ comment.content }}</div>
+      <button type="button" x-show="overflowing" x-cloak
+              class="mt-0.5 text-xs font-medium text-brand-navy hover:underline"
+              aria-controls="comment-body-{{ comment.pk }}"
+              :aria-expanded="expanded"
+              @click="expanded = !expanded"
+              x-text="expanded ? 'See less' : 'See more'">See more</button>
     </div>
   </div>
 </div>

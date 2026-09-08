@@ -44,18 +44,40 @@ Every page now wears the i-CONNECTS skin — navy `#323895`, coral `#f03d30`,
 lavender surfaces, Inter font, logo in the top bar. Also a new public
 landing page at `/` with a hero, feature cards, and "how it works" steps.
 
-### 2. ContributionRecord ledger (the core differentiator)
-Tasks now carry a CRediT-aligned contribution type. When a project manager
-*approves* a completed task, an **immutable** `ContributionRecord` row is
-written for each user behind the assigned member. The ledger refuses
-updates and deletes at the DB level — not even admins can edit it.
+### 2. CRediT contribution tracking (the core differentiator)
+A project picks how contributions are attributed when it is created —
+"None" or the [CRediT taxonomy](https://credit.niso.org/) — and on a CRediT
+project every task carries a **task type**, one of CRediT's 14 contributor
+roles.
 
-Two new pages show it off:
-- `/projects/<id>/contributions/` — members × CRediT-type matrix + recent
-  activity, visible to every project member (PM sees all; members see
-  their own project view).
-- `/accounts/profile/` — "My contributions" section with per-type
-  counts and a list of recent contributions across all projects.
+Closing a task is the ledger event. When a project lead completes it, a
+`ContributionRecord` is written for each assignee who marked their own part
+done; where the task carries reviewers, only for submissions a reviewer
+signed off. Reopening the task withdraws that credit again, and closing it
+writes it back. A completed task is frozen while it stands completed —
+editing it, deleting it, changing its assignees or its milestone are all
+refused until a lead marks it not complete.
+
+Review is opt-in per task: tick **Require review** on the task form and the
+Reviewers field appears (it asks for at least one). A task with no reviewers
+has no Reviewed column and no review actions at all.
+
+The ledger is correctable. A lead can change the role a contribution was
+recorded under, withdraw one, or enter one by hand for work the automatic
+writer passed over — a person who did the task without ever being an
+assignee. Hand-entered rows are marked as such, and survive the task being
+reopened. Every correction is audit-logged.
+
+Two pages show it:
+- **Contribution Tracking** on the project (`/projects/<id>/contribution-tracking/`)
+  — two views the section switches between, the same way the Tasks board
+  switches Kanban / List / Calendar: **Contributions by member** (a grid of
+  every member against all 14 CRediT roles, sortable by any column and with
+  a filter to narrow it to the roles and members that have contributions)
+  and **Every contribution** (one row per record, naming its task and who
+  closed it). Visible to every project member.
+- **Contributions** in the sidebar (`/contributions/`) — your own credit
+  across every project, filterable by project.
 
 ### 3. Audit log
 Every governance-relevant action is recorded in an append-only
@@ -86,13 +108,19 @@ images, `aria-label` on icon-only buttons, `scope="col"` on data tables,
 One known gap: the SortableJS kanban has no keyboard alternative — a
 known issue flagged for v2.
 
-### 6. CSV export of contributions
-"Export CSV" buttons on the project contributions page (PM-only) and on
-the "My contributions" section of the profile. Columns: project,
-user_name, user_email, user_orcid, contribution_type, task, closed_at
-(ISO-8601), verified_by. Streams server-side so exports scale to
-thousands of rows. Designed to be paste-ready into an authorship /
-CRediT statement spreadsheet.
+### 6. CSV downloads of contributions
+Both contributions pages hand over a CSV in either of two shapes:
+- **List** — one row per contribution: project, user_name, user_email,
+  user_orcid, contribution_type, task, closed_at (ISO-8601), verified_by.
+- **Matrix** — the grid the page shows: members (or, on your own download,
+  projects) down the side, all 14 CRediT roles across the top, counts in
+  the cells and totals on both edges.
+
+The module's downloads carry its project filter. The matrix is open to
+every project member — it is what their page already shows them — while
+the list stays with the leads, since it carries everyone's email and ORCID.
+Both stream server-side, so exports scale to thousands of rows, and are
+designed to be paste-ready into an authorship / CRediT statement.
 
 ### 7. Role-differentiated dashboard widgets
 The "My Projects" landing page (`/projects/mine/`) now surfaces two
@@ -190,6 +218,65 @@ or pull-request URL, the task detail sidebar shows a clickable
 "pull request" label. Kanban cards also get a small GitHub icon when a
 link is set. Pattern-based (regex); no API calls, no rate-limit risk.
 
+### 19. Project wiki
+The **Wiki** tab on a project is now a working wiki rather than a
+"coming soon" placeholder (`/projects/<id>/wiki/`). Every member can read
+it and write a page; markdown is supported, with an EasyMDE editor on the
+form.
+
+- **Wiki links.** Write another page's title in double brackets —
+  `[[Data dictionary]]`, or `[[Data dictionary|what the columns mean]]` to
+  show different words. A link to a page that doesn't exist yet renders in
+  coral and opens the new-page form with the title filled in, so a wiki can
+  grow an outline before it grows its pages. The page footer lists the gaps
+  it still links to.
+- **Revision history.** Every save keeps the previous text
+  (`/projects/<id>/wiki/<page>/history/`). Each revision names its editor,
+  their note on what changed, and how many lines moved; opening one shows a
+  colour-coded diff of that edit and the page as it stood. **Restore** brings
+  an old revision's text back as a *new* revision, so nothing is erased.
+- **Edit conflicts.** The edit form remembers which revision it was opened
+  from. If someone else saves first, the second save is refused with an
+  explanation rather than silently overwriting their work.
+- **Locking.** A lead can lock a page (a protocol, an approval number);
+  contributors can still read it, but only leads can edit or restore it.
+  Deleting a page is limited to a lead or the page's author.
+- **Search and navigation.** The index searches titles and page text as you
+  type, sorts A–Z or by recently updated, and each page with headings gets an
+  "On this page" contents list.
+- Page creation, edits, restores and deletions are audit-logged
+  (`wiki.page_*`), so they show up in `/projects/<id>/activity/`.
+
+A page's address is set from its first title and does not change when the
+page is renamed, so links into the wiki keep working; the `[[link]]` form
+resolves on the current title, so a renamed page is still reachable by its
+new name from inside the wiki.
+
+### 20. Survey renamed, Communication added
+Navigation changes, no behaviour behind them yet:
+
+- **Forms is now Survey**, everywhere it shows: the project tab, the module
+  page, and the flash messages / labels on the builder screens beneath it.
+  The rename is user-facing only — the app is still `forms_builder`, and the
+  routes (`/forms/`, `/projects/<id>/forms/`) and the `Form` / `FormVersion`
+  models are untouched, so nothing that links to them broke.
+- **Survey is back in the sidebar**, in the slot it held before it was
+  hidden, now under its new name. Its page is the "Coming soon" module page
+  it already was.
+- **Communication is a new module**, empty on purpose: a personal page in
+  the sidebar directly after Survey, and a section on every project, after
+  the project's Survey tab. Both render "Coming soon"; the project section
+  is members-only like every other project tab.
+
+Survey also picked up its own icon. It had been sharing the clipboard with
+Tasks — the same SVG path in both navs — which was hard to read as two
+different things once they sat next to each other.
+
+Worth knowing: the per-project **mailing list** (item 16) is the obvious
+thing to fold into Communication when it grows content. It is still at
+`/projects/<id>/mailing-list/` and unlinked from the tab strip, so it is
+reachable only by URL today.
+
 ---
 
 ## Golden-path test checklist
@@ -201,15 +288,26 @@ link is set. Pattern-based (regex); no API calls, no rate-limit risk.
    - After login, the "My Projects" page now shows **My active tasks** and
      **Pending your approval** widgets when you have anything in flight.
 2. **Project + tasks**
-   - Create a project; add a kanban column.
-   - Create a task — note the new "Contribution type" select (Investigation / Data curation / Validation / Writing / Project administration / Other).
-   - Mark the task done (the assignee or you).
-   - Approve the completion from the task detail view.
-3. **Contribution ledger + CSV export**
-   - Open `/projects/<id>/contributions/` — the matrix shows 1 in the column matching the task's contribution type.
-   - As the PM, click "Export CSV" on the same page — downloads a spreadsheet of every contribution on this project.
-   - Open `/accounts/profile/` — the "My contributions" section shows the pill + recent entry.
-   - Click "Export CSV" next to "My contributions" — downloads your own contribution sheet across all projects.
+   - Create a project — set "Choose contribution tracking" to CRediT.
+   - Add a kanban column, then create a task; note the "Task type" select,
+     offering CRediT's 14 roles (it appears only on a CRediT project), and
+     the "Require review" tickbox that reveals the Reviewers field.
+   - Assign yourself, mark your own part done, then close the task as lead.
+   - With the task completed, Edit and Delete are gone and the header names
+     who closed it and when; Mark Not Complete brings the buttons back and
+     takes the attribution away.
+3. **Contribution ledger + downloads**
+   - Open the project's **Contribution Tracking** tab — Contributions by
+     member shows 1 in the column matching the task's type; tick "Only roles
+     and members with contributions" to narrow the grid, and click any
+     column header to sort by it (click again to flip the direction).
+   - Switch to Every contribution and click "Edit" on that row to correct its
+     role, or "Add contribution" to credit someone the ledger missed.
+   - Reopen the task from its detail view and reload — the earned credit is
+     gone; close it again and it is back.
+   - Download "Matrix (CSV)" and "List (CSV)" from the same page.
+   - Open **Contributions** in the sidebar — the same credit from your side,
+     filterable by project, with both downloads carrying the filter.
 4. **Audit log**
    - Open `/my/activity/` — see your login, signup, project-created, task-created, task-completed, task-approved.
    - As the PM, open `/projects/<id>/activity/` — project-scoped view.
@@ -223,6 +321,24 @@ link is set. Pattern-based (regex); no API calls, no rate-limit risk.
    - Tab through the landing page — the skip-link should appear on first Tab.
    - Tab around the top navbar — coral focus ring visible on every control.
    - Zoom to 200% — layout holds without horizontal scroll.
+7. **Project wiki**
+   - Open a project's **Wiki** tab and write a page. Include a
+     `[[Second page]]` link to a title that doesn't exist yet — it renders in
+     coral; click it and the new-page form is prefilled.
+   - Edit the first page and save. Open **History**: two revisions, with your
+     note and a `+n −n lines` count. Open revision 1 to see the diff, then
+     **Restore this revision** — the live page comes back with the old text
+     and the history gains a third entry rather than losing the second.
+   - As a lead, tick **Lock this page** and save. Sign in as a contributor on
+     the same project: the page still reads, but Edit is gone and hitting the
+     edit URL directly gives a 403.
+8. **Survey + Communication**
+   - The sidebar reads … Requests, **Survey**, **Communication**, Project
+     discovery. Both open a "Coming soon" page; nothing says "Forms" any more.
+   - A project's tab strip reads … Wiki, **Survey**, **Communication**,
+     Settings. Both are empty for now.
+   - A non-member hitting `/projects/<id>/communications/` gets a 403.
+
 
 ---
 

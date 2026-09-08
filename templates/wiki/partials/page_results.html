@@ -1,0 +1,73 @@
+{% comment %}
+  The wiki index's result list. Rendered inside list.html on a full page
+  load and swapped on its own by the search box, so it must not depend on
+  anything the surrounding page holds.
+  Expects: rows (page + excerpt), page_obj, paginator, current_q, current_sort.
+{% endcomment %}
+{% if rows %}
+  <div class="brand-card overflow-hidden">
+    <table class="table">
+      <thead class="bg-brand-lighter text-brand-navy">
+        <tr>
+          <th scope="col">Page</th>
+          <th scope="col" class="w-40">Last updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>
+              <div class="flex items-center gap-2 flex-wrap">
+                <a href="{% url 'wiki:detail' project_pk=project.pk slug=row.page.slug %}"
+                   class="font-medium text-brand-navy hover:text-brand-coral">
+                  {{ row.page.title }}
+                </a>
+                {% if row.page.locked %}
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-light/50 text-brand-text"
+                        title="Only project leads can edit this page">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    </svg>
+                    Locked
+                  </span>
+                {% endif %}
+              </div>
+              {% if row.excerpt %}
+                <p class="text-sm text-brand-text/70 mt-1 line-clamp-2 break-words">{{ row.excerpt }}</p>
+              {% endif %}
+            </td>
+            <td class="align-top">
+              <div class="text-sm text-brand-text/80">{{ row.page.updated_at|date:"M j, Y" }}</div>
+              {% if row.page.updated_by %}
+                <div class="text-xs text-brand-text/60">
+                  by {{ row.page.updated_by.name|default:row.page.updated_by.email }}
+                </div>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.has_other_pages %}
+    <nav class="flex items-center justify-between gap-3 mt-4" aria-label="Wiki pages">
+      {% if page_obj.has_previous %}
+        <a class="btn btn-sm btn-ghost text-brand-navy"
+           href="?{% if current_q %}q={{ current_q|urlencode }}&amp;{% endif %}sort={{ current_sort }}&amp;page={{ page_obj.previous_page_number }}">&larr; Previous</a>
+      {% else %}<span></span>{% endif %}
+      <span class="text-xs text-brand-text/60">
+        Page {{ page_obj.number }} of {{ paginator.num_pages }}
+      </span>
+      {% if page_obj.has_next %}
+        <a class="btn btn-sm btn-ghost text-brand-navy"
+           href="?{% if current_q %}q={{ current_q|urlencode }}&amp;{% endif %}sort={{ current_sort }}&amp;page={{ page_obj.next_page_number }}">Next &rarr;</a>
+      {% else %}<span></span>{% endif %}
+    </nav>
+  {% endif %}
+{% elif current_q %}
+  {% include "_components/empty_state.html" with title="No pages match that search" body="Nothing in this wiki mentions those words. Try a shorter search, or start a page on the subject." %}
+{% else %}
+  {% url 'wiki:create' project_pk=project.pk as create_url %}
+  {% include "_components/empty_state.html" with title="This wiki is empty" body="A wiki is where a project's knowledge lives between meetings: the protocol you keep re-explaining, the decisions behind the data, how a new member gets started." cta_href=create_url cta_label="Write the first page" %}
+{% endif %}

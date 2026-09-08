@@ -51,7 +51,7 @@
       </p>
     </div>
 
-    {# Status and Completion mode — same row, no bounding box #}
+    {# Status and Completion — same row, no bounding box #}
     <div class="form-control w-full mb-3"
          x-data="{
            open: false,
@@ -63,14 +63,14 @@
          @keydown.escape="open = false"
          @click.outside="open = false">
       <label class="label py-0.5 pb-1">
-        <span class="label-text text-sm text-brand-navy font-medium">Status <span class="text-brand-coral" aria-hidden="true">*</span></span>
+        <span class="label-text text-sm text-brand-navy font-medium">Kanban column <span class="text-brand-coral" aria-hidden="true">*</span></span>
       </label>
       <div class="relative w-full">
         <input type="hidden" name="container" :value="value">
         <button type="button" @click="open = !open"
                 class="w-full h-12 inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 text-sm shadow-sm"
                 :class="selected ? 'text-gray-900' : 'text-gray-400'">
-          <span x-text="selected ? selected.label : 'Select status'"></span>
+          <span x-text="selected ? selected.label : 'Select Kanban column'"></span>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
             <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
@@ -100,64 +100,56 @@
       {% endif %}
     </div>
 
-    <div class="form-control w-full mb-3"
-         x-data="{
-           open: false,
-           options: [
-             {value: 'INDIVIDUAL', label: 'Individual'},
-             {value: 'TEAM',       label: 'Team'}
-           ],
-           value: '{{ form.completion_mode.value|default:'INDIVIDUAL' }}',
-           get selected() { return this.options.find(o => o.value === this.value) || this.options[0] },
-           pick(val) { this.value = val; this.open = false; }
-         }"
-         @keydown.escape="open = false"
-         @click.outside="open = false">
-      <label class="label py-0.5 pb-1">
-        <span class="label-text text-sm text-brand-navy font-medium">Completion mode</span>
-      </label>
-      <div class="relative w-full">
-        <input type="hidden" name="completion_mode" :value="value">
-        <button type="button" @click="open = !open"
-                class="w-full h-12 inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 text-sm text-gray-600 shadow-sm">
-          <span x-text="selected.label"></span>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-               class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
-            <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-          </svg>
-        </button>
-        <div x-cloak x-show="open"
-             x-transition:enter="transition ease-out duration-100"
-             x-transition:enter-start="opacity-0 scale-95"
-             x-transition:enter-end="opacity-100 scale-100"
-             x-transition:leave="transition ease-in duration-75"
-             x-transition:leave-start="opacity-100 scale-100"
-             x-transition:leave-end="opacity-0 scale-95"
-             class="absolute left-0 right-0 bottom-full bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30 mb-1">
-          <template x-for="opt in options" :key="opt.value">
-            <button type="button" @click="pick(opt.value)"
-                    class="w-full text-left px-4 py-1.5 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
-                    :class="opt.value === value ? 'font-semibold bg-gray-50' : 'font-normal'">
-              <span x-text="opt.label"></span>
-            </button>
-          </template>
-        </div>
+    {% if form.contribution_type %}
+      {# Only CRediT projects carry a task type — see TaskForm._init_task_type. #}
+      <div>
+        {% include "_components/form_field.html" with field=form.contribution_type %}
+        <p class="text-xs text-brand-text/60 -mt-2 mb-3">
+          What each role covers:
+          <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
+             class="text-brand-coral hover:underline">credit.niso.org</a>
+        </p>
       </div>
-      {% if form.completion_mode.errors %}
-        <label class="label pt-1">
-          <span class="label-text-alt text-error">{{ form.completion_mode.errors|join:" " }}</span>
-        </label>
-      {% endif %}
-    </div>
+    {% endif %}
 
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
 
+    <div class="md:col-span-2 mb-3">
+      <label class="label cursor-pointer justify-start gap-2 py-0" for="{{ form.is_priority.id_for_label }}">
+        {{ form.is_priority }}
+        <span class="label-text text-sm text-brand-navy font-medium">{{ form.is_priority.label }}</span>
+      </label>
+      {% if form.is_priority.errors %}
+        <span class="label-text-alt text-error">{{ form.is_priority.errors|join:" " }}</span>
+      {% endif %}
+    </div>
+
     <div class="md:col-span-2">
       {% include "_components/form_field.html" with field=form.assigned_members %}
     </div>
-    <div class="md:col-span-2">
-      {% include "_components/form_field.html" with field=form.reviewers %}
+
+    {% comment %}
+      Reviewers only exist to answer Require review, so the field stays out of
+      the way until the box is ticked. The form asks for at least one reviewer
+      whenever it is, and clears them again when it is not — so what the box
+      says and who is named never drift apart.
+    {% endcomment %}
+    <div class="md:col-span-2"
+         x-data="{ requiresReview: {{ form.requires_review.value|yesno:'true,false,false' }} }">
+      <div class="mb-3">
+        <label class="label cursor-pointer justify-start gap-2 py-0" for="{{ form.requires_review.id_for_label }}">
+          {{ form.requires_review }}
+          <span class="label-text text-sm text-brand-navy font-medium">{{ form.requires_review.label }}</span>
+        </label>
+        <p class="text-xs text-brand-text/60 mt-1">{{ form.requires_review.help_text }}</p>
+        {% if form.requires_review.errors %}
+          <span class="label-text-alt text-error">{{ form.requires_review.errors|join:" " }}</span>
+        {% endif %}
+      </div>
+      <div x-cloak x-show="requiresReview" x-transition>
+        {% include "_components/form_field.html" with field=form.reviewers %}
+      </div>
     </div>
   </div>
 

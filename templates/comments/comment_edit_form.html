@@ -1,6 +1,6 @@
 {# Inline edit form for a comment. Swaps back to comment_item.html on save or cancel. #}
 <div id="comment-{{ comment.pk }}" class="flex items-start gap-3">
-  <div class="w-8 h-8 rounded-full bg-brand-navy text-white flex items-center justify-center text-sm font-semibold shrink-0" aria-hidden="true">
+  <div class="w-6 h-6 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0" aria-hidden="true">
     <span>{{ comment.author.display_name|slice:":1"|upper }}</span>
   </div>
   <form class="flex-1 min-w-0 space-y-2"
@@ -9,14 +9,23 @@
         hx-swap="outerHTML">
     {% csrf_token %}
     {{ form.content }}
-    <div class="flex gap-2">
-      <button type="submit"
-              class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Save</button>
+    {% comment %}
+      Right-aligned, and Cancel before Save: the submit sits at the right edge
+      where the Comment button does, so the action does not move when a
+      comment flips between reading and editing. Matches every other form in
+      the app (STYLE_GUIDE: cancel, ghost, to the left of the submit).
+
+      btn-xs like that Comment button, and like the actions above the thread:
+      the task surfaces run every button at that size.
+    {% endcomment %}
+    <div class="flex gap-2 justify-end">
       <button type="button"
-              class="btn btn-sm btn-ghost"
+              class="btn btn-xs btn-ghost"
               hx-get="{% url 'comments:edit' pk=comment.pk %}?cancel=1"
               hx-target="#comment-{{ comment.pk }}"
               hx-swap="outerHTML">Cancel</button>
+      <button type="submit"
+              class="btn btn-xs btn-primary">Save</button>
     </div>
   </form>
 </div>

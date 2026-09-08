@@ -1,0 +1,94 @@
+{% comment %}
+The active-task rows of the dashboard's "Active tasks and requests"
+list — tasks assigned to the current user and tasks they review, merged,
+ordered by the section's Sort control. Capped at
+DashboardView.ACTIVE_TASK_LIMIT; the Tasks page carries the full,
+filterable list.
+
+Rows share their shape with the request rows in dashboard_requests.html
+so the two read as one list: line one names the thing at text-sm with the
+nouns in semibold navy and a pill cluster at the top right, then a text-xs
+meta line of dot-separated context with the date last behind a clock.
+Keep the two partials in step.
+
+The section's heading lives in dashboard.html, so this group labels
+itself for screen readers through the list's aria-label rather than a
+heading of its own.
+{% endcomment %}
+
+{% if active_tasks %}
+  <ul aria-label="Active tasks" class="flex flex-col gap-2 list-none p-0 m-0">
+    {% for task in active_tasks %}
+      <li>
+        <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
+           class="brand-card px-3 py-2 hover:shadow-md transition flex items-start gap-3">
+          <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+            <p class="text-sm leading-snug truncate">
+              <span class="font-semibold text-brand-navy">{{ task.name }}</span>
+            </p>
+
+            <div class="flex items-center gap-2 text-xs text-brand-text/60 min-w-0">
+              <span class="truncate">{{ task.project.name }}</span>
+              {% if task.deadline %}
+                <span aria-hidden="true">&middot;</span>
+                {% comment %}
+                A bare date next to the project name read as "something
+                happened then" rather than "this is when it is due", so a
+                deadline still to come is labelled: "Due Mar 12". An
+                overdue one keeps the design it already had -- red, and
+                led by the word Overdue, which says what the date means
+                on its own.
+                {% endcomment %}
+                <span class="inline-flex items-center gap-1 shrink-0
+                  {% if task.deadline < now %}text-error font-medium{% endif %}">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                       stroke-width="1.8" stroke="currentColor" class="w-3 h-3 shrink-0" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  {% if task.deadline < now %}Overdue &middot; {% else %}Due {% endif %}{{ task.deadline|date:"M j" }}
+                </span>
+              {% endif %}
+            </div>
+          </div>
+
+          {% if task.is_priority or task.is_reviewing %}
+            <div class="flex items-center gap-2 shrink-0 mt-0.5">
+              {% if task.is_priority %}
+                {% comment %}
+                The flag carries "high priority" on its own, so the row no
+                longer doubles it with a red left border -- one mark per
+                meaning, and the rows stay a single shape whatever their
+                priority.
+
+                Icon alone: the wording moves to the tooltip and to an
+                aria-label. tooltip_left, because this list is a scroll
+                box -- its computed overflow-x is auto, and a bubble
+                centred under a flag this close to the right edge pushed
+                scrollWidth 15px past clientWidth. Hung off the flag's
+                left it opens across the row's own width instead.
+                {% endcomment %}
+                {% include "_components/priority_flag.html" with icon_only=True tooltip=True tooltip_left=True %}
+              {% endif %}
+              {% if task.is_reviewing %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-coral/10 text-brand-coral">To review</span>
+              {% endif %}
+            </div>
+          {% endif %}
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+  {% if active_tasks_match_count > active_tasks|length %}
+    <a href="{% url 'tasks:my_list' %}"
+       class="inline-flex items-center gap-1 self-start text-sm text-brand-navy hover:text-brand-coral">
+      All {{ active_tasks_match_count }} {{ active_tasks_label }}
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+      </svg>
+    </a>
+  {% endif %}
+{% else %}
+  {# One muted line, not a full panel: the other group's rows sit right below. #}
+  <p class="text-sm text-brand-text/60 px-1">No {{ active_tasks_label }} right now.</p>
+{% endif %}

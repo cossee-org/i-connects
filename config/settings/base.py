@@ -74,6 +74,8 @@ LOCAL_APPS = [
     "apps.comments",
     "apps.notifications",
     "apps.notes",
+    "apps.wiki",
+    "apps.communications",
     "apps.forms_builder",
     "apps.contributions",
     "apps.audit",
@@ -89,6 +91,9 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # ---------------------------------------------------------------------------
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Turns "column ... does not exist" into "run migrate". Removes itself
+    # from the chain when DEBUG is off — see apps.core.middleware.
+    "apps.core.middleware.UnappliedMigrationsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -124,6 +129,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "apps.projects.context_processors.sidebar_counts",
+                "apps.notifications.context_processors.unread_notifications",
             ],
         },
     },

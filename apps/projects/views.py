@@ -22,6 +22,10 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET
 
 from apps.audit.services import AuditAction, log_action
+from apps.contributions.services import (
+    get_project_contributions,
+    get_project_contributions_matrix,
+)
 from apps.core.enums import MemberPrivileges
 
 
@@ -40,10 +44,16 @@ _STATUS_LABELS = {
     "INACTIVE": "inactive",
 }
 
+_ROLE_LABELS = {
+    "PROJECT_MANAGER": "lead",
+    "CONTRIBUTOR": "member",
+}
 
-def _build_results_summary(count, q, status, sort, visibility=None):
+def _build_results_summary(count, q, status, sort, visibility=None, role=None):
     """Return a human-readable results summary string, or None if no filters active."""
     parts = []
+    if role:
+        parts.append(_ROLE_LABELS.get(role, role.lower()))
     if visibility:
         parts.append(visibility)
     if status:
@@ -55,7 +65,7 @@ def _build_results_summary(count, q, status, sort, visibility=None):
     if q:
         desc += f' matching “{q}”'
     sort_label = _SORT_LABELS.get(sort)
-    has_filters = bool(q or status or visibility or sort_label)
+    has_filters = bool(q or status or visibility or role or sort_label)
     if not has_filters:
         return None, count
     n = f"{count} result{'s' if count != 1 else ''}"
@@ -111,18 +121,71 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     template_name = "dashboard.html"
 
+    # The dashboard shows a preview of each list, not the whole thing — the
+    # Tasks and Requests pages are where the full, filterable lists live.
+    ACTIVE_TASK_LIMIT = 5
+    REQUEST_LIMIT = 5
+
+    # Controls on the "Active tasks and requests" section. "" is no type
+    # filter (both groups); "date" sort is the default reading order --
+    # tasks by how soon they are due, requests newest first.
+    #
+    # Each type narrows to one group and, for the finer ones, to a slice of
+    # it. Which map a type appears in is what decides whether that group
+    # renders at all; the value is the noun its "All N ..." link and its
+    # empty line use, so both say what was actually filtered to.
+    _TASK_TYPE_LABELS = {
+        "": "tasks",
+        "tasks": "tasks",
+        "overdue": "overdue tasks",
+        "review": "tasks to review",
+    }
+    _REQUEST_TYPE_LABELS = {
+        "": "requests",
+        "requests": "requests",
+        "join_requests": "join requests",
+        "invitations": "invitations",
+    }
+    _TYPES = tuple(
+        t for t in (*_TASK_TYPE_LABELS, *_REQUEST_TYPE_LABELS) if t
+    )
+    # Both sorts key off the date each row already shows -- a task's
+    # deadline, a request's age -- so the order always matches what is on
+    # screen. A task with no deadline has nothing to compare, so it sorts
+    # last either way rather than leading the "oldest" list.
+    #
+    # "oldest" is the default: this list is capped at a handful of rows, and
+    # newest-first pushes the overdue and the imminent off the end of it --
+    # exactly the rows the dashboard exists to surface.
+    _SORTS = ("oldest", "newest")
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
-        from django.db.models import Count, OuterRef, Subquery, Q
+        from django.db.models import Count, Exists, F, OuterRef, Subquery, Q
         from django.utils import timezone
         from apps.core.enums import TaskStatus, MemberPrivileges
         from apps.tasks.models import Task, TaskLog
         from apps.notifications.models import Notification
 
-        now = timezone.now()
-        soon = now + timezone.timedelta(days=7)
+        # --- "Active tasks and requests" controls --------------------------
+        current_type = self.request.GET.get("type", "")
+        if current_type not in self._TYPES:
+            current_type = ""
+        current_sort = self.request.GET.get("sort", "")
+        if current_sort not in self._SORTS:
+            current_sort = "oldest"
+        context["current_type"] = current_type
+        context["current_sort"] = current_sort
+        shows_tasks = current_type in self._TASK_TYPE_LABELS
+        shows_requests = current_type in self._REQUEST_TYPE_LABELS
+        context["shows_tasks"] = shows_tasks
+        context["shows_requests"] = shows_requests
+        context["active_tasks_label"] = self._TASK_TYPE_LABELS.get(current_type, "tasks")
+        context["incoming_requests_label"] = self._REQUEST_TYPE_LABELS.get(
+            current_type, "requests"
+        )
 
         # --- Privilege map -------------------------------------------------
         privs = ProjectPrivilege.objects.filter(user=user).select_related("project")
@@ -159,24 +222,84 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 status=TaskStatus.NOT_COMPLETED,
             )
             .annotate(_user_log_status=latest_log_status)
-            .exclude(_user_log_status=TaskStatus.COMPLETED)
+            # NULL-safe: a task with no TaskLog yet has _user_log_status=NULL,
+            # and `exclude(_user_log_status=COMPLETED)` would silently drop it
+            # too (NOT (NULL = COMPLETED) is NULL/false in SQL), so it must be
+            # explicitly kept.
+            .filter(Q(_user_log_status__isnull=True) | ~Q(_user_log_status=TaskStatus.COMPLETED))
             .select_related("project", "container")
             .order_by("deadline", "id")
             .distinct()
         )
 
-        all_active = list(assigned_tasks)
-        overdue = [t for t in all_active if t.deadline and t.deadline < now]
-        due_soon = [t for t in all_active if t.deadline and now <= t.deadline <= soon]
-        no_deadline = [t for t in all_active if not t.deadline]
+        context["active_task_count"] = assigned_tasks.count()
 
-        context["overdue_tasks"] = overdue
-        context["due_soon_tasks"] = due_soon
-        context["no_deadline_tasks"] = no_deadline
-        context["all_open_tasks"] = all_active
-        context["active_task_count"] = len(all_active)
-        context["overdue_count"] = len(overdue)
+        # --- Tasks assigned to the user to review --------------------------
+        context["review_task_count"] = (
+            Task.objects.filter(reviewers__users=user, status=TaskStatus.NOT_COMPLETED)
+            .distinct()
+            .count()
+        )
+
+        # Every task still open for the user, whether they are assigned to it
+        # or reviewing it -- the source of both the "Tasks" tile count and the
+        # active-task list below it. A task the user is both assigned to and
+        # reviewing appears once, matching the Tasks page's and sidebar's
+        # merged total (summing active_task_count + review_task_count would
+        # double-count those).
+        active_tasks_qs = (
+            Task.objects.filter(
+                Q(assigned_members__users=user) | Q(reviewers__users=user),
+                status=TaskStatus.NOT_COMPLETED,
+            )
+            .annotate(
+                user_log_status=latest_log_status,
+                is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
+                is_reviewing=Exists(user_member_qs.filter(reviewed_tasks=OuterRef("pk"))),
+            )
+            .filter(
+                Q(is_assigned=False)
+                | Q(user_log_status__isnull=True)
+                | ~Q(user_log_status=TaskStatus.COMPLETED)
+            )
+            .distinct()
+        )
+
+        context["active_tasks_total"] = active_tasks_qs.count()
+        now = timezone.now()
         context["now"] = now
+
+        # The finer task types narrow the same queryset; the count follows,
+        # so the section's badge and the "All N ..." link below the rows
+        # both describe the filtered set rather than the whole one.
+        if current_type == "overdue":
+            matching_tasks_qs = active_tasks_qs.filter(deadline__lt=now)
+        elif current_type == "review":
+            matching_tasks_qs = active_tasks_qs.filter(is_reviewing=True)
+        else:
+            matching_tasks_qs = active_tasks_qs
+
+        # nulls_last keeps undated tasks at the end in both directions
+        # (SQLite orders NULLs before everything by default, Postgres after).
+        if current_sort == "newest":
+            task_order = (F("deadline").desc(nulls_last=True), "-created_at", "id")
+        else:
+            task_order = (F("deadline").asc(nulls_last=True), "created_at", "id")
+
+        if not shows_tasks:
+            context["active_tasks"] = []
+            context["active_tasks_match_count"] = 0
+        else:
+            context["active_tasks"] = list(
+                matching_tasks_qs.select_related("project", "container")
+                .prefetch_related("assigned_members")
+                .order_by(*task_order)[: self.ACTIVE_TASK_LIMIT]
+            )
+            context["active_tasks_match_count"] = (
+                matching_tasks_qs.count()
+                if matching_tasks_qs is not active_tasks_qs
+                else context["active_tasks_total"]
+            )
 
         # --- Pending approvals (PM only) -----------------------------------
         if pm_project_ids:
@@ -203,7 +326,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                     status=JoinRequestStatus.PENDING,
                 )
                 .select_related("user", "project")
-                .order_by("created_at")
+                .order_by("-created_at")
             )
         else:
             pending_join_requests = []
@@ -218,6 +341,31 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         )
         context["invitation_requests"] = invitation_requests
         context["invitation_request_count"] = len(invitation_requests)
+
+        # --- Incoming requests list -------------------------------------------
+        # Join requests awaiting the user's review plus invitations addressed
+        # to them, merged and tagged by kind so a single list can render both
+        # -- the same item shape the Requests page's "Incoming" tab uses.
+        incoming_requests = [
+            {"kind": "join_request", "obj": jr} for jr in pending_join_requests
+        ] + [{"kind": "invitation", "obj": inv} for inv in invitation_requests]
+        incoming_requests.sort(
+            key=lambda item: item["obj"].created_at,
+            reverse=current_sort == "newest",
+        )
+        context["incoming_request_count"] = len(incoming_requests)
+
+        if current_type == "join_requests":
+            matching_requests = [i for i in incoming_requests if i["kind"] == "join_request"]
+        elif current_type == "invitations":
+            matching_requests = [i for i in incoming_requests if i["kind"] == "invitation"]
+        else:
+            matching_requests = incoming_requests
+
+        if not shows_requests:
+            matching_requests = []
+        context["incoming_request_match_count"] = len(matching_requests)
+        context["incoming_requests"] = matching_requests[: self.REQUEST_LIMIT]
 
         # --- Notifications -------------------------------------------------
         context["recent_notifications"] = list(
@@ -296,8 +444,24 @@ class PublicProjectListView(ListView):
         for pid in members_by_project:
             members_by_project[pid].sort(key=lambda p: (0 if p.privilege == pm else 1))
 
+        # The viewer's own standing on each project, read out of the rows
+        # already fetched above rather than a query of its own. Anonymous
+        # visitors reach this page too, and belong to nothing.
+        my_privilege_by_project: dict[int, str] = {}
+        if self.request.user.is_authenticated:
+            for mp in all_member_privs:
+                if mp.user_id == self.request.user.pk:
+                    # ProjectPrivilege orders newest first, so the first row
+                    # seen for a project is the one _get_user_privilege would
+                    # have picked.
+                    my_privilege_by_project.setdefault(mp.project_id, mp.privilege)
+
         context["project_rows"] = [
-            {"project": p, "members": members_by_project.get(p.id, [])}
+            {
+                "project": p,
+                "members": members_by_project.get(p.id, []),
+                "my_privilege": my_privilege_by_project.get(p.id),
+            }
             for p in context["projects"]
         ]
         context["total_project_count"] = Project.objects.filter(is_public=True).count()
@@ -311,6 +475,11 @@ class MyProjectListView(LoginRequiredMixin, ListView):
     template_name = "projects/my_list.html"
     context_object_name = "projects"
     paginate_by = 12
+
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["projects/partials/my_list_results.html"]
+        return [self.template_name]
 
     _SORT_MAP = {
         "newest": "-created_at",
@@ -330,7 +499,11 @@ class MyProjectListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         from django.db.models import Q
         user = self.request.user
-        qs = Project.objects.filter(privileges__user=user).distinct()
+        role = self.request.GET.get("role", "")
+        privilege_filter = {"privileges__user": user}
+        if role in MemberPrivileges.values:
+            privilege_filter["privileges__privilege"] = role
+        qs = Project.objects.filter(**privilege_filter).distinct()
         status = self.request.GET.get("status", "")
         if status:
             qs = qs.filter(status=status)
@@ -356,10 +529,6 @@ class MyProjectListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        privs_map = {
-            p.project_id: p.privilege
-            for p in ProjectPrivilege.objects.filter(user=user)
-        }
 
         # Fetch all member privileges for visible projects in one query.
         project_ids = [p.id for p in context["projects"]]
@@ -380,12 +549,18 @@ class MyProjectListView(LoginRequiredMixin, ListView):
                 key=lambda p: (0 if p.privilege == pm else 1)
             )
 
+        # The current user's own privilege on each project, for the "Role" pill.
+        my_privileges = dict(
+            ProjectPrivilege.objects.filter(project_id__in=project_ids, user=user)
+            .values_list("project_id", "privilege")
+        )
+
         # Templates can't do dict lookups by variable key, so pre-zip here.
         context["project_rows"] = [
             {
                 "project": p,
-                "privilege": privs_map.get(p.id),
                 "members": members_by_project.get(p.id, []),
+                "my_privilege": my_privileges.get(p.id),
             }
             for p in context["projects"]
         ]
@@ -393,19 +568,21 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         # Filter / sort context
         context["current_q"] = self.request.GET.get("q", "")
         context["current_sort"] = self.request.GET.get("sort", "newest")
-        context["current_status"] = self.request.GET.get("status", "")
         context["current_visibility"] = self.request.GET.get("visibility", "")
+        context["current_status"] = self.request.GET.get("status", "")
+        context["current_role"] = self.request.GET.get("role", "")
         context["current_per_page"] = self.get_paginate_by(self.get_queryset())
         context["valid_per_page"] = sorted(self._VALID_PER_PAGE)
+        context["create_url"] = reverse("projects:create")
+        params = self.request.GET.copy()
+        params.pop("page", None)
+        context["filter_params"] = params.urlencode()
+
         from apps.core.enums import ProjectStatus
         _STATUS_ORDER = ["PLANNING", "ACTIVE", "PAUSED", "COMPLETED", "INACTIVE"]
         context["project_statuses"] = [
             c for key in _STATUS_ORDER for c in ProjectStatus.choices if c[0] == key
         ]
-        context["create_url"] = reverse("projects:create")
-        params = self.request.GET.copy()
-        params.pop("page", None)
-        context["filter_params"] = params.urlencode()
 
         total = context["paginator"].count
         context["total_project_count"] = (
@@ -417,63 +594,8 @@ class MyProjectListView(LoginRequiredMixin, ListView):
             context["current_status"],
             context["current_sort"],
             context["current_visibility"],
+            context["current_role"],
         )
-
-        # --- Dashboard widgets (Ultra Plan §A3) ---------------------------
-        # Late-import to keep the projects app free of a hard task dep.
-        from django.db.models import OuterRef, Subquery
-        from apps.core.enums import TaskStatus
-        from apps.tasks.models import Task, TaskLog
-
-        user_member_qs = ProjectMember.objects.filter(users=user)
-
-        # Subquery: status of the user's most-recent log for each task.
-        # If it's COMPLETED the user already marked their part done, so the
-        # task should not appear in "active" even though Task.status is still
-        # NOT_COMPLETED (it stays that way until a PM closes it).
-        latest_log_status = Subquery(
-            TaskLog.objects.filter(
-                task=OuterRef("pk"),
-                assigned_to__in=user_member_qs,
-            )
-            .order_by("-created_at")
-            .values("status")[:1]
-        )
-
-        all_active_tasks = list(
-            Task.objects.filter(
-                assigned_members__users=user,
-                status=TaskStatus.NOT_COMPLETED,
-            )
-            .annotate(_user_log_status=latest_log_status)
-            .exclude(_user_log_status=TaskStatus.COMPLETED)
-            .select_related("project", "container")
-            .order_by("deadline", "id")
-            .distinct()
-        )
-        context["my_active_tasks"] = all_active_tasks[:5]
-        context["my_active_tasks_all"] = all_active_tasks
-
-        # Pending approvals — only meaningful if the user is a PM somewhere.
-        pm_project_ids = [
-            pid for pid, priv in privs_map.items()
-            if priv == MemberPrivileges.PROJECT_MANAGER
-        ]
-        if pm_project_ids:
-            all_pending_approvals = list(
-                TaskLog.objects.filter(
-                    status=TaskStatus.COMPLETED,
-                    approved__isnull=True,
-                    task__project_id__in=pm_project_ids,
-                )
-                .select_related("task", "task__project", "assigned_to")
-                .order_by("-created_at")
-            )
-            context["pending_approvals"] = all_pending_approvals[:5]
-            context["pending_approvals_all"] = all_pending_approvals
-        else:
-            context["pending_approvals"] = []
-            context["pending_approvals_all"] = []
 
         return context
 
@@ -746,16 +868,58 @@ class ProjectMemberListView(
         return context
 
 
-class ContributionTrackingView(
-    ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
-):
+class ContributionTrackingMixin(ProjectMemberRequiredMixin, ProjectContextMixin):
+    """Shared context for the Contribution Tracking section and its views.
+
+    Open to every project member — a contribution matrix that only its
+    leads could read would be no use to the people in it.
+    """
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["is_project_manager"] = (
+            context.get("user_privilege") == MemberPrivileges.PROJECT_MANAGER
+        )
+        if self.project.tracks_credit:
+            # ``?used=1`` trims the grid to roles and members with something
+            # in them; the default is the whole taxonomy and every member.
+            # ``?sort=`` names a column and ``?dir=`` its direction — both
+            # fall back to the default rather than erroring on a stale link.
+            only_used = self.request.GET.get("used") == "1"
+            context["only_used"] = only_used
+            context["matrix"] = get_project_contributions_matrix(
+                self.project,
+                only_used=only_used,
+                sort=self.request.GET.get("sort"),
+                direction=self.request.GET.get("dir"),
+            )
+            context["records"] = get_project_contributions(self.project).order_by(
+                "-closed_at", "-id"
+            )
+        return context
+
+
+class ContributionTrackingView(ContributionTrackingMixin, TemplateView):
+    """The project's credit ledger, in two views the section switches between.
+
+    Both ship in the first render, the way the board ships its three, so the
+    switcher is instant; the partials below re-fetch whichever one is being
+    switched to, so it is never stale.
+    """
+
     template_name = "projects/contribution_tracking.html"
 
 
-class WikiView(
-    ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
-):
-    template_name = "projects/wiki.html"
+class ContributionsByMemberPartialView(ContributionTrackingMixin, TemplateView):
+    """HTMX partial: the members x CRediT-role matrix, freshly counted."""
+
+    template_name = "projects/partials/contributions_by_member.html"
+
+
+class EveryContributionPartialView(ContributionTrackingMixin, TemplateView):
+    """HTMX partial: every contribution on the project, one row each."""
+
+    template_name = "projects/partials/every_contribution.html"
 
 
 class ProjectFormsView(
@@ -1379,6 +1543,182 @@ class IncomingJoinRequestsView(LoginRequiredMixin, ListView):
             .select_related("user", "project")
             .order_by("created_at")
         )
+
+
+class RequestsView(LoginRequiredMixin, TemplateView):
+    """Consolidated view of all incoming and outgoing requests.
+
+    Incoming: join requests awaiting your review (as a project manager)
+    and invitations you've received, merged into one list tagged by type
+    so the "type" pill can distinguish them. Outgoing: join requests
+    you've sent and invitations you've sent out (for projects you
+    manage), merged the same way.
+
+    A shared search box and Type/Status/Sort filters apply to both tabs.
+    Invitations have no "completed" state of their own -- they're
+    deleted outright once accepted or declined -- so the "Completed"
+    status only ever matches join requests; "Active" (the default)
+    matches pending join requests plus every invitation, since an
+    invitation still on file is by definition not yet resolved.
+    """
+
+    template_name = "projects/requests.html"
+
+    _STATUSES = ("active", "completed", "all")
+    _SORTS = ("newest", "oldest", "name_asc", "name_desc")
+    _SORT_LABELS = {
+        "newest": None,
+        "oldest": "oldest first",
+        "name_asc": "project A–Z",
+        "name_desc": "project Z–A",
+    }
+    _TYPE_LABELS = {
+        "join_request": "join request",
+        "invitation": "invitation",
+    }
+
+    @classmethod
+    def _build_summary(cls, count, current_q, current_type, current_status, current_sort):
+        """Human-readable results summary, or None if no filters are active."""
+        parts = []
+        if current_type:
+            parts.append(cls._TYPE_LABELS.get(current_type, current_type))
+        if current_status == "completed":
+            parts.append("completed")
+        desc = (" ".join(parts) + " requests") if parts else "requests"
+        if current_status == "all":
+            desc += " (including completed)"
+        if current_q:
+            desc += f' matching "{current_q}"'
+        sort_label = cls._SORT_LABELS.get(current_sort)
+        has_filters = bool(current_q or current_type or current_status != "active" or sort_label)
+        if not has_filters:
+            return None
+        n = f"{count} result{'s' if count != 1 else ''}"
+        summary = f"{n} for {desc}"
+        if sort_label:
+            summary += f", sorted by {sort_label}"
+        return summary
+
+    @staticmethod
+    def _merge_and_sort(join_requests, invitations, sort):
+        items = [{"kind": "join_request", "obj": jr} for jr in join_requests]
+        items += [{"kind": "invitation", "obj": inv} for inv in invitations]
+        if sort in ("name_asc", "name_desc"):
+            items.sort(key=lambda item: item["obj"].project.name.lower(), reverse=sort == "name_desc")
+        else:
+            items.sort(key=lambda item: item["obj"].created_at, reverse=sort != "oldest")
+        return items
+
+    def get_context_data(self, **kwargs):
+        from django.db.models import Q
+
+        from apps.core.enums import MemberPrivileges
+
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        user_email = (user.email or "").lower()
+
+        current_q = self.request.GET.get("q", "").strip()
+        current_status = self.request.GET.get("status", "")
+        if current_status not in self._STATUSES:
+            current_status = "active"
+        current_sort = self.request.GET.get("sort", "")
+        if current_sort not in self._SORTS:
+            current_sort = "newest"
+        current_tab = self.request.GET.get("tab", "")
+        if current_tab not in ("incoming", "outgoing"):
+            current_tab = "incoming"
+        current_type = self.request.GET.get("type", "")
+        if current_type not in ("join_request", "invitation"):
+            current_type = ""
+
+        pm_project_ids = ProjectPrivilege.objects.filter(
+            user=user,
+            privilege=MemberPrivileges.PROJECT_MANAGER,
+        ).values_list("project_id", flat=True)
+
+        incoming_jr_qs = JoinRequest.objects.filter(project_id__in=pm_project_ids)
+        incoming_inv_qs = Invitation.objects.filter(email__iexact=user_email)
+        outgoing_jr_qs = JoinRequest.objects.filter(user=user)
+        # Invitations sent out to others, for projects the user manages.
+        outgoing_inv_qs = Invitation.objects.filter(project_id__in=pm_project_ids)
+
+        if current_status == "active":
+            incoming_jr_qs = incoming_jr_qs.filter(status=JoinRequestStatus.PENDING)
+            outgoing_jr_qs = outgoing_jr_qs.filter(status=JoinRequestStatus.PENDING)
+        elif current_status == "completed":
+            incoming_jr_qs = incoming_jr_qs.exclude(status=JoinRequestStatus.PENDING)
+            outgoing_jr_qs = outgoing_jr_qs.exclude(status=JoinRequestStatus.PENDING)
+            incoming_inv_qs = incoming_inv_qs.none()
+            outgoing_inv_qs = outgoing_inv_qs.none()
+        # "all": no status filter on either side.
+
+        if current_type == "join_request":
+            incoming_inv_qs = incoming_inv_qs.none()
+            outgoing_inv_qs = outgoing_inv_qs.none()
+        elif current_type == "invitation":
+            incoming_jr_qs = incoming_jr_qs.none()
+            outgoing_jr_qs = outgoing_jr_qs.none()
+
+        if current_q:
+            jr_q = (
+                Q(user__name__icontains=current_q)
+                | Q(user__given_name__icontains=current_q)
+                | Q(user__family_name__icontains=current_q)
+                | Q(user__email__icontains=current_q)
+                | Q(project__name__icontains=current_q)
+            )
+            incoming_jr_qs = incoming_jr_qs.filter(jr_q)
+            outgoing_jr_qs = outgoing_jr_qs.filter(jr_q)
+
+            inv_q = (
+                Q(email__icontains=current_q)
+                | Q(invited_user__name__icontains=current_q)
+                | Q(invited_user__given_name__icontains=current_q)
+                | Q(invited_user__family_name__icontains=current_q)
+                | Q(added_by__icontains=current_q)
+                | Q(project__name__icontains=current_q)
+            )
+            incoming_inv_qs = incoming_inv_qs.filter(inv_q)
+            outgoing_inv_qs = outgoing_inv_qs.filter(inv_q)
+
+        incoming_join_requests = list(
+            incoming_jr_qs.select_related("user", "project").order_by("created_at")
+        )
+        incoming_invitations = list(
+            incoming_inv_qs.select_related("project").order_by("-created_at")
+        )
+        outgoing_join_requests = list(
+            outgoing_jr_qs.select_related("project").order_by("-created_at")
+        )
+        outgoing_invitations = list(
+            outgoing_inv_qs.select_related("project").order_by("-created_at")
+        )
+
+        context["incoming_items"] = self._merge_and_sort(
+            incoming_join_requests, incoming_invitations, current_sort
+        )
+        context["outgoing_items"] = self._merge_and_sort(
+            outgoing_join_requests, outgoing_invitations, current_sort
+        )
+
+        context["current_q"] = current_q
+        context["current_status"] = current_status
+        context["current_sort"] = current_sort
+        context["current_tab"] = current_tab
+        context["current_type"] = current_type
+
+        context["incoming_total"] = len(context["incoming_items"])
+        context["requests_total"] = context["incoming_total"]
+
+        context["incoming_results_summary"] = self._build_summary(
+            context["incoming_total"], current_q, current_type, current_status, current_sort
+        )
+        context["outgoing_results_summary"] = self._build_summary(
+            len(context["outgoing_items"]), current_q, current_type, current_status, current_sort
+        )
+        return context
 
 
 @login_required

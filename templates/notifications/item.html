@@ -3,11 +3,18 @@
   id="notification-{{ notification.id }}" so the "mark as read" button
   can target it for an in-place swap.
 
-  If ``swap_oob_badge`` is true, we also include an out-of-band badge
-  update so the navbar count stays in sync.
+  The whole row follows the notification to whatever it is about — see
+  ``Notification.url`` and the ``notifications:open`` view, which marks it
+  read on the way through. The anchor's ::after covers the row (.row-link
+  in base.html), so anything that must stay separately clickable — the
+  Mark-read button, an announcement's off-site link — is raised above it
+  with .row-link-above.
+
+  If ``swap_oob_badge`` is true, we also include out-of-band badge
+  updates so the top-bar and sidebar counts stay in sync.
 {% endcomment %}
 <div id="notification-{{ notification.id }}"
-     class="flex items-start gap-3 p-4 hover:bg-brand-lighter/60 transition-colors
+     class="relative flex items-start gap-3 p-4 hover:bg-brand-lighter/60 transition-colors
             {% if not notification.read %}bg-brand-lighter/40 border-l-4 border-brand-coral{% endif %}">
   <div class="pt-1.5 shrink-0">
     <span class="inline-block w-2 h-2 rounded-full
@@ -20,20 +27,29 @@
         Announcement
       </div>
     {% endif %}
-    <div class="font-medium text-brand-navy whitespace-pre-wrap break-words">{{ notification.message }}</div>
+
+    {% if notification.url %}
+      <a href="{% url 'notifications:open' notification.id %}"
+         class="row-link font-medium text-brand-navy whitespace-pre-wrap break-words block hover:text-brand-coral">{{ notification.message }}</a>
+    {% else %}
+      <div class="font-medium text-brand-navy whitespace-pre-wrap break-words">{{ notification.message }}</div>
+    {% endif %}
+
     <div class="text-xs text-brand-text/50 mt-1">
-      {{ notification.created_at|date:"Y-m-d H:i" }}
+      {% include "_components/local_time.html" with at=notification.created_at %}
       {% if notification.project %} &middot; {{ notification.project.name }}{% endif %}
     </div>
-    {% if notification.route_data and notification.route_data.link %}
-      <a href="{{ notification.route_data.link }}"
-         class="text-xs text-brand-navy hover:text-brand-coral font-medium mt-1 inline-block">
-        Open
+
+    {% if notification.external_link %}
+      <a href="{{ notification.external_link }}"
+         target="_blank" rel="noopener noreferrer"
+         class="row-link-above text-xs text-brand-navy hover:text-brand-coral font-medium mt-1 inline-block">
+        Open link
       </a>
     {% endif %}
   </div>
 
-  <div class="shrink-0">
+  <div class="row-link-above shrink-0">
     {% if not notification.read %}
       <form hx-post="{% url 'notifications:mark_read' notification.id %}"
             hx-target="#notification-{{ notification.id }}"
@@ -49,11 +65,4 @@
   </div>
 </div>
 
-{% if swap_oob_badge %}
-  {# Out-of-band update for the navbar badge. #}
-  <span id="notification-badge" hx-swap-oob="innerHTML">
-    {% if unread_count and unread_count > 0 %}
-      <span class="badge badge-sm bg-brand-coral border-brand-coral text-white">{{ unread_count }}</span>
-    {% endif %}
-  </span>
-{% endif %}
+{% if swap_oob_badge %}{% include "notifications/_badge_oob.html" %}{% endif %}

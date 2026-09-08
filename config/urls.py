@@ -29,6 +29,8 @@ urlpatterns = [
     path("", include("apps.comments.urls")),
     path("", include("apps.notifications.urls")),
     path("", include("apps.notes.urls")),
+    path("", include("apps.wiki.urls")),
+    path("", include("apps.communications.urls")),
     path("", include("apps.forms_builder.urls")),
     path("", include("apps.contributions.urls")),
     path("", include("apps.audit.urls")),

@@ -34,9 +34,14 @@ urlpatterns = [
         name="contribution_tracking",
     ),
     path(
-        "projects/<int:pk>/wiki/",
-        views.WikiView.as_view(),
-        name="wiki",
+        "projects/<int:pk>/contribution-tracking/by-member/",
+        views.ContributionsByMemberPartialView.as_view(),
+        name="contributions_by_member",
+    ),
+    path(
+        "projects/<int:pk>/contribution-tracking/every/",
+        views.EveryContributionPartialView.as_view(),
+        name="every_contribution",
     ),
     path(
         "projects/<int:pk>/forms/",
@@ -120,6 +125,12 @@ urlpatterns = [
         "joins/incoming/",
         views.IncomingJoinRequestsView.as_view(),
         name="incoming_join_requests",
+    ),
+    # Requests (consolidated incoming + outgoing)
+    path(
+        "requests/",
+        views.RequestsView.as_view(),
+        name="requests",
     ),
     path(
         "my-projects/badge/",

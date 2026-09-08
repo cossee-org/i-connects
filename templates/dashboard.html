@@ -11,294 +11,241 @@
   <h1 class="page-title font-semibold text-brand-navy">Dashboard</h1>
 </div>
 
-<div class="flex flex-col gap-6" x-data="{ selected: null }">
+<div class="flex flex-col gap-6">
 
   {# Stats bar #}
   <div class="flex flex-row flex-wrap gap-4">
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
-         style="flex: 1 1 160px"
-         data-tooltip="Total projects you belong to"
-         @click="selected = selected === 'projects' ? null : 'projects'"
-         :class="selected === 'projects' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
-      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ project_count }}</span>
-    </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
-         style="flex: 1 1 160px"
-         data-tooltip="Tasks currently assigned to you"
-         @click="selected = selected === 'open-tasks' ? null : 'open-tasks'"
-         :class="selected === 'open-tasks' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Open tasks</span>
-      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ active_task_count }}</span>
-    </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
-         style="flex: 1 1 160px"
-         data-tooltip="Tasks past their deadline"
-         @click="selected = selected === 'overdue' ? null : 'overdue'"
-         :class="selected === 'overdue' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Overdue</span>
-      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ overdue_count }}</span>
-    </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
-         style="flex: 1 1 160px"
-         data-tooltip="Pending requests to join your projects"
-         @click="selected = selected === 'join-requests' ? null : 'join-requests'"
-         :class="selected === 'join-requests' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Join requests</span>
-      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ pending_join_request_count }}</span>
-    </div>
-    <div class="brand-card p-4 flex flex-col gap-1 has-tooltip cursor-pointer transition-shadow"
-         style="flex: 1 1 160px"
-         data-tooltip="Invitations sent to you"
-         @click="selected = selected === 'invitations' ? null : 'invitations'"
-         :class="selected === 'invitations' ? 'stat-card-selected' : 'hover:ring-1 hover:ring-brand-navy/20'">
-      <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Invitations</span>
-      <span class="stat-number text-3xl font-bold text-brand-navy self-end">{{ invitation_request_count }}</span>
-    </div>
+    <a href="{% url 'projects:my_list' %}"
+       class="group relative brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow hover:ring-1 hover:ring-brand-navy/20 overflow-hidden"
+       style="flex: 1 1 160px">
+      <div class="flex items-center gap-2">
+        <span class="stat-icon flex items-center justify-center text-brand-text/50 shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.379a1.5 1.5 0 0 1 1.06.44l1.122 1.12a1.5 1.5 0 0 0 1.06.44H19.5A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-10Z" />
+          </svg>
+        </span>
+        <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Projects</span>
+      </div>
+      <span class="stat-number text-4xl font-bold text-brand-navy self-end">{{ project_count }}</span>
+      <span class="absolute bottom-3 left-3 flex items-center gap-1 pl-3 pr-2.5 py-1.5 rounded-full bg-brand-navy text-white text-xs font-semibold whitespace-nowrap
+                   opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150">
+        All projects
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+        </svg>
+      </span>
+    </a>
+    <a href="{% url 'tasks:my_list' %}"
+       class="group relative brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow hover:ring-1 hover:ring-brand-navy/20 overflow-hidden"
+       style="flex: 1 1 160px">
+      <div class="flex items-center gap-2">
+        <span class="stat-icon flex items-center justify-center text-brand-text/50 shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
+          </svg>
+        </span>
+        <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Tasks</span>
+      </div>
+      <span class="stat-number text-4xl font-bold text-brand-navy self-end">{{ active_tasks_total }}</span>
+      <span class="absolute bottom-3 left-3 flex items-center gap-1 pl-3 pr-2.5 py-1.5 rounded-full bg-brand-navy text-white text-xs font-semibold whitespace-nowrap
+                   opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150">
+        All tasks
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+        </svg>
+      </span>
+    </a>
+    <a href="{% url 'projects:requests' %}"
+       class="group relative brand-card p-4 flex flex-col gap-1 cursor-pointer transition-shadow hover:ring-1 hover:ring-brand-navy/20 overflow-hidden"
+       style="flex: 1 1 160px">
+      <div class="flex items-center gap-2">
+        <span class="stat-icon flex items-center justify-center text-brand-text/50 shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-2a4 4 0 0 1 4 -4h4c.96 0 1.84 .338 2.53 .901" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16 3.13a4 4 0 0 1 0 7.75" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16 19h6" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 16v6" />
+          </svg>
+        </span>
+        <span class="stat-label text-xs font-medium uppercase tracking-wide text-brand-text/50">Requests</span>
+      </div>
+      <span class="stat-number text-4xl font-bold text-brand-navy self-end">{{ incoming_request_count }}</span>
+      <span class="absolute bottom-3 left-3 flex items-center gap-1 pl-3 pr-2.5 py-1.5 rounded-full bg-brand-navy text-white text-xs font-semibold whitespace-nowrap
+                   opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150">
+        All requests
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="2.2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+        </svg>
+      </span>
+    </a>
   </div>
 
-  {# Projects #}
-  <section class="brand-card p-5" aria-labelledby="projects-heading"
-           x-data="{ showAll: false }"
-           x-show="selected === null || selected === 'projects'"
-           x-cloak>
-    <h2 id="projects-heading" class="section-heading flex items-center gap-2 mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v8.25m19.5 0A2.25 2.25 0 0 1 19.5 18H4.5a2.25 2.25 0 0 1-2.25-2.25v-.75" />
-      </svg>
-      Projects
-    </h2>
+  {% comment %}
+  Everything waiting on the user, under one heading — their active tasks
+  followed by the requests they can act on, in one scrolling column. A
+  preview of each; the Tasks and Requests pages carry the full,
+  filterable lists.
+  {% endcomment %}
+  <section aria-labelledby="dashboard-open-work-heading" class="flex flex-col gap-3">
+    <div class="flex items-center gap-3 flex-wrap">
+      {# Small-uppercase grey, the app's label treatment for a heading over a #}
+      {# list (the Kanban column heads, the task pane's section heads). Still an #}
+      {# <h2>: this labels a real section, only its type has changed. #}
+      <h2 id="dashboard-open-work-heading" class="text-sm font-semibold uppercase tracking-wide text-brand-text/70">Active tasks and requests</h2>
 
-    {% if recent_projects %}
-      <ul class="divide-y divide-brand-light/60">
-        {% for project in recent_projects %}
-        <li class="py-3 flex items-start justify-between gap-3"
-            {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
-          <div class="flex-1 min-w-0">
-            <a href="{% url 'projects:detail' pk=project.pk %}"
-               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ project.name }}</a>
-            <div class="text-xs text-brand-text/60 mt-0.5">
-              {{ project.get_status_display }}
-              &middot; updated {{ project.updated_at|date:"M j, Y" }}
-            </div>
+      {% comment %}
+      Type / Sort controls. Same Alpine dropdown the Tasks and Requests
+      pages use, except the Type button shows the choice it is on: those
+      pages spell the active filters out in a results-summary line, and
+      this section has no room for one.
+
+      A size down from that shared trigger, too. There the dropdowns are
+      w-full in a filter panel of their own; here two of them sit on the
+      section's heading row, where the full-size control outweighed the
+      heading it was attached to.
+      {% endcomment %}
+      <form method="get" id="filter-form-open-work" class="ml-auto flex items-center gap-2">
+        <input type="hidden" name="type" id="type-input-open-work" value="{{ current_type }}">
+        <input type="hidden" name="sort" id="sort-input-open-work" value="{{ current_sort }}">
+
+        <div x-data="{
+          open: false,
+          options: [
+            {value: '', label: 'All'},
+            {value: 'tasks', label: 'Tasks'},
+            {value: 'overdue', label: 'Overdue'},
+            {value: 'review', label: 'To Review'},
+            {value: 'requests', label: 'Requests'},
+            {value: 'join_requests', label: 'Join Requests'},
+            {value: 'invitations', label: 'Invitations'}
+          ],
+          current: '{{ current_type }}',
+          get label() {
+            const opt = this.options.find(o => o.value === this.current);
+            return this.current && opt ? opt.label : 'Type';
+          },
+          pick(val) {
+            this.current = val;
+            document.getElementById('type-input-open-work').value = val;
+            this.open = false;
+            document.getElementById('filter-form-open-work').submit();
+          }
+        }" class="relative" @keydown.escape="open = false" @click.outside="open = false">
+          <button type="button" @click="open = !open" :aria-expanded="open"
+                  class="inline-flex items-center justify-between gap-1 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-md px-2 py-1 text-xs text-gray-600 shadow-sm">
+            <span x-text="label"></span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 text-brand-text/50 shrink-0" aria-hidden="true">
+              <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+            </svg>
+          </button>
+          <div x-cloak x-show="open"
+               x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+               x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+               class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-30">
+            <template x-for="opt in options" :key="opt.value">
+              <button type="button" @click="pick(opt.value)"
+                      class="w-full text-left px-3 py-1.5 text-xs text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                      :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                      x-text="opt.label"></button>
+            </template>
           </div>
-        </li>
-        {% endfor %}
-      </ul>
-      {% if project_count > 5 %}
-      <button @click="showAll = !showAll"
-              class="mt-3 flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
-        <span x-text="showAll ? 'Show less' : 'Show all {{ project_count }} projects'">Show all {{ project_count }} projects</span>
-      </button>
-      {% endif %}
-    {% else %}
-      <p class="text-sm text-brand-text/60 italic">No projects yet.</p>
-    {% endif %}
-  </section>
+        </div>
 
-  {# Open Tasks (includes overdue filter) #}
-  <section class="brand-card p-5" aria-labelledby="active-tasks-heading"
-           x-data="{ showAll: false }"
-           x-show="selected === null || selected === 'open-tasks' || selected === 'overdue'"
-           x-cloak>
-    <h2 id="active-tasks-heading" class="section-heading flex items-center gap-2 mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
-      </svg>
-      <span x-text="selected === 'overdue' ? 'Overdue Tasks' : 'Open Tasks'">Open Tasks</span>
-    </h2>
-
-    {% if all_open_tasks %}
-      <ul class="divide-y divide-brand-light/60">
-        {% for task in all_open_tasks %}
-        <li class="py-3 flex items-start gap-3"
-            data-overdue="{% if task.deadline and task.deadline < now %}1{% else %}0{% endif %}"
-            x-show="(selected !== 'overdue' || $el.dataset.overdue === '1') && ({{ forloop.counter }} <= 5 || showAll)"
-            x-cloak>
-          <div>
-            <a href="{% url 'tasks:detail' project_pk=task.project_id pk=task.pk %}"
-               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ task.name }}</a>
-            <div class="text-xs text-brand-text/60 mt-0.5">
-              {{ task.project.name }}
-              {% if task.deadline %}
-                &middot;
-                {% if task.deadline < now %}
-                  <span class="text-error font-medium">due {{ task.deadline|date:"M j, Y" }}</span>
-                {% else %}
-                  <span>due {{ task.deadline|date:"M j, Y" }}</span>
-                {% endif %}
-              {% endif %}
-            </div>
+        <div x-data="{
+          open: false,
+          options: [
+            {value: 'oldest', label: 'Date (oldest first)', short: 'Oldest'},
+            {value: 'newest', label: 'Date (newest first)', short: 'Newest'}
+          ],
+          current: '{{ current_sort }}',
+          get label() {
+            const opt = this.options.find(o => o.value === this.current);
+            return 'Sort: ' + (opt ? opt.short : 'Oldest');
+          },
+          pick(val) {
+            this.current = val;
+            document.getElementById('sort-input-open-work').value = val;
+            this.open = false;
+            document.getElementById('filter-form-open-work').submit();
+          }
+        }" class="relative" @keydown.escape="open = false" @click.outside="open = false">
+          {% comment %}
+          Just the word, where Type shows the choice it is on: the sort has
+          a default every list already reads in, so spelling it out on the
+          button said little and made the wider of the two controls. The
+          open menu still marks the current one, and the button keeps it in
+          its accessible name for anyone who cannot see that (A11Y_GUIDE #6).
+          {% endcomment %}
+          <button type="button" @click="open = !open" :aria-expanded="open" :aria-label="label"
+                  class="inline-flex items-center justify-between gap-1 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-md px-2 py-1 text-xs text-gray-600 shadow-sm">
+            <span>Sort</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 text-brand-text/50 shrink-0" aria-hidden="true">
+              <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+            </svg>
+          </button>
+          <div x-cloak x-show="open"
+               x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+               x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+               class="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-30">
+            <template x-for="opt in options" :key="opt.value">
+              <button type="button" @click="pick(opt.value)"
+                      class="w-full text-left px-3 py-1.5 text-xs text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                      :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                      x-text="opt.label"></button>
+            </template>
           </div>
-        </li>
-        {% endfor %}
-      </ul>
-      {% if overdue_count == 0 %}
-      <p x-show="selected === 'overdue'" x-cloak
-         class="text-sm text-brand-text/60 italic">No overdue tasks.</p>
-      {% endif %}
-      {% if active_task_count > 5 %}
-      <button x-show="selected !== 'overdue'" @click="showAll = !showAll"
-              class="mt-3 flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
-        <span x-text="showAll ? 'Show less' : 'Show all {{ active_task_count }} tasks'">Show all {{ active_task_count }} tasks</span>
-      </button>
-      {% endif %}
+        </div>
+
+        <noscript>
+          <label class="sr-only" for="type-select-open-work">Show</label>
+          <select id="type-select-open-work" name="type">
+            <option value="" {% if not current_type %}selected{% endif %}>All</option>
+            <option value="tasks" {% if current_type == 'tasks' %}selected{% endif %}>Tasks</option>
+            <option value="overdue" {% if current_type == 'overdue' %}selected{% endif %}>Overdue</option>
+            <option value="review" {% if current_type == 'review' %}selected{% endif %}>To Review</option>
+            <option value="requests" {% if current_type == 'requests' %}selected{% endif %}>Requests</option>
+            <option value="join_requests" {% if current_type == 'join_requests' %}selected{% endif %}>Join Requests</option>
+            <option value="invitations" {% if current_type == 'invitations' %}selected{% endif %}>Invitations</option>
+          </select>
+          <label class="sr-only" for="sort-select-open-work">Sort by</label>
+          <select id="sort-select-open-work" name="sort">
+            <option value="oldest" {% if current_sort == 'oldest' %}selected{% endif %}>Date (oldest first)</option>
+            <option value="newest" {% if current_sort == 'newest' %}selected{% endif %}>Date (newest first)</option>
+          </select>
+          <button type="submit" class="btn btn-xs">Apply</button>
+        </noscript>
+      </form>
+    </div>
+
+    {% if active_tasks or incoming_requests or current_type %}
+      {% comment %}
+      One scrolling column: tasks first, then requests. tabindex makes the
+      scroll box reachable by keyboard, which a scrollable region needs
+      whenever its content overflows.
+      {% endcomment %}
+      <div tabindex="0" role="group" aria-label="Active tasks and requests"
+           class="flex flex-col gap-3 max-h-96 overflow-y-auto pr-2">
+        {% if shows_tasks %}
+          {% include "projects/partials/dashboard_active_tasks.html" %}
+        {% endif %}
+        {% if shows_requests %}
+          {% include "projects/partials/dashboard_requests.html" %}
+        {% endif %}
+      </div>
     {% else %}
-      <p class="text-sm text-brand-text/60 italic">No open tasks assigned to you.</p>
-    {% endif %}
-  </section>
-
-  {# Join Requests #}
-  {% if is_pm_anywhere %}
-  <section class="brand-card p-5" aria-labelledby="join-requests-heading"
-           x-data="{ showAll: false }"
-           x-show="selected === null || selected === 'join-requests'"
-           x-cloak>
-    <h2 id="join-requests-heading" class="section-heading flex items-center gap-2 mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
-      </svg>
-      Join Requests
-    </h2>
-
-    {% if pending_join_requests %}
-      <ul class="divide-y divide-brand-light/60">
-        {% for jr in pending_join_requests %}
-        <li class="py-3 flex items-start justify-between gap-3"
-            {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
-          <div class="flex-1 min-w-0">
-            <a href="{% url 'projects:join_requests' pk=jr.project.pk %}"
-               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ jr.user.name|default:jr.user.email }}</a>
-            <span class="text-xs text-brand-text/60 ml-1">{{ jr.user.email }}</span>
-            <div class="text-xs text-brand-text/60 mt-0.5 flex items-center gap-2">
-              <span>{{ jr.project.name }}</span>
-            </div>
-          </div>
-        </li>
-        {% endfor %}
-      </ul>
-      {% if pending_join_request_count > 5 %}
-      <button @click="showAll = !showAll"
-              class="mt-3 flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
-        <span x-text="showAll ? 'Show less' : 'Show all {{ pending_join_request_count }} requests'">Show all {{ pending_join_request_count }} requests</span>
-      </button>
-      {% endif %}
-    {% else %}
-      <p class="text-sm text-brand-text/60 italic">No pending join requests.</p>
-    {% endif %}
-  </section>
-  {% endif %}
-
-  {# Invitations #}
-  <section class="brand-card p-5" aria-labelledby="invitations-heading"
-           x-data="{ showAll: false }"
-           x-show="selected === null || selected === 'invitations'"
-           x-cloak>
-    <h2 id="invitations-heading" class="section-heading flex items-center gap-2 mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-      </svg>
-      Invitations
-    </h2>
-
-    {% if invitation_requests %}
-      <ul class="divide-y divide-brand-light/60">
-        {% for inv in invitation_requests %}
-        <li class="py-3 flex items-start justify-between gap-3"
-            {% if forloop.counter > 5 %}x-show="showAll" x-cloak{% endif %}>
-          <div class="flex-1 min-w-0">
-            <a href="{% url 'projects:detail' pk=inv.project.pk %}"
-               class="font-medium text-brand-navy hover:text-brand-coral text-sm">{{ inv.project.name }}</a>
-            <div class="text-xs text-brand-text/60 mt-0.5">
-              Invited by {{ inv.added_by }}
-              &middot; {{ inv.get_privilege_display }}
-              &middot; {{ inv.created_at|date:"M j, Y" }}
-            </div>
-          </div>
-        </li>
-        {% endfor %}
-      </ul>
-      {% if invitation_request_count > 5 %}
-      <button @click="showAll = !showAll"
-              class="mt-3 flex items-center gap-1 text-xs text-brand-text/40 hover:text-brand-coral transition-colors">
-        <span x-text="showAll ? 'Show less' : 'Show all {{ invitation_request_count }} invitations'">Show all {{ invitation_request_count }} invitations</span>
-      </button>
-      {% endif %}
-    {% else %}
-      <p class="text-sm text-brand-text/60 italic">No pending invitations.</p>
+      {% include "_components/empty_state.html" with title="Nothing waiting on you" body="Tasks assigned to you or awaiting your review, join requests to the projects you manage, and invitations you've received will all appear here." %}
     {% endif %}
   </section>
 
 </div>{# end main content #}
-
-<style>
-  [x-cloak] { display: none !important; }
-
-  .stat-card-selected {
-    background-color: #1f2963;
-    border-color: #1f2963;
-  }
-  .stat-card-selected .stat-label { color: rgba(255, 255, 255, 0.65); }
-  .stat-card-selected .stat-number { color: #ffffff; }
-
-  .section-heading {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: rgb(var(--color-brand-navy, 31 41 99) / 0.8);
-  }
-
-  .has-tooltip {
-    position: relative;
-  }
-  .has-tooltip::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: #1e293b;
-    color: #f8fafc;
-    font-size: 0.7rem;
-    font-weight: 400;
-    text-transform: none;
-    letter-spacing: normal;
-    line-height: 1.4;
-    padding: 4px 9px;
-    border-radius: 5px;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-    z-index: 50;
-    box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
-  }
-  .has-tooltip::before {
-    content: "";
-    position: absolute;
-    bottom: calc(100% + 1px);
-    left: 50%;
-    transform: translateX(-50%);
-    border: 5px solid transparent;
-    border-top-color: #1e293b;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-    z-index: 50;
-  }
-  .has-tooltip:hover::after,
-  .has-tooltip:hover::before {
-    opacity: 1;
-  }
-</style>
 
 {% endblock %}

@@ -1,26 +1,49 @@
 {% extends "base.html" %}
 {% load project_tags %}
 
-{% block title %}My projects &mdash; i&bull;CONNECTS{% endblock %}
+{% block title %}Projects &mdash; i&bull;CONNECTS{% endblock %}
 
 {% block page_header %}{% endblock %}
 
 {% block content %}
-<div class="flex items-center gap-3 mb-6">
-  <h1 class="page-title font-semibold text-brand-navy">My projects</h1>
-  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_project_count }}</span>
+<div class="mb-6">
+  <div class="flex items-center gap-3">
+    <h1 class="page-title font-semibold text-brand-navy">Projects</h1>
+    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_project_count }}</span>
+    <div class="relative mt-1.5" x-data="{ open: false }" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              aria-label="About Projects"
+              class="inline-flex items-center justify-center w-5 h-5 rounded-full text-brand-text/50 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+          <path fill-rule="evenodd" d="M18 10A8 8 0 1 1 2 10a8 8 0 0 1 16 0ZM9 9a1 1 0 0 1 2 0v4a1 1 0 1 1-2 0V9Zm1-3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute left-0 mt-2 w-max max-w-80 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-30">
+        <p class="text-sm text-brand-text/70">Projects that you are a contributor to or manage.</p>
+      </div>
+    </div>
+  </div>
 </div>
 
 {# ── Filter / sort bar ────────────────────────────────────────────────────── #}
 <form method="get" id="filter-form-my" class="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-stretch sm:items-center mb-6">
   <input type="hidden" name="sort" id="sort-input-my" value="{{ current_sort }}">
-  <input type="hidden" name="status" id="status-input-my" value="{{ current_status }}">
   <input type="hidden" name="visibility" id="visibility-input-my" value="{{ current_visibility }}">
+  <input type="hidden" name="status" id="status-input-my" value="{{ current_status }}">
+  <input type="hidden" name="role" id="role-input-my" value="{{ current_role }}">
 
-  {# Row 1: Search #}
+  {# Row 1: Search — filters live as the user types #}
   <div class="w-full sm:flex-1 sm:min-w-[200px]">
     <input type="text" name="q" value="{{ current_q }}" placeholder="Search projects…"
-           class="input input-sm input-bordered w-full" />
+           class="input input-sm input-bordered w-full"
+           hx-get="{% url 'projects:my_list' %}"
+           hx-trigger="input changed delay:300ms"
+           hx-target="#project-results"
+           hx-swap="innerHTML"
+           hx-push-url="true" />
   </div>
 
   {# Row 2: Filter dropdowns — grouped so they share a row and fill width on mobile #}
@@ -36,7 +59,7 @@
         {value: 'name_desc', label: 'Name Z–A'}
       ],
       current: '{{ current_sort }}',
-      get label() { return 'Sort by' },
+      get label() { return 'Sort' },
       pick(val) {
         this.current = val;
         document.getElementById('sort-input-my').value = val;
@@ -55,6 +78,43 @@
            x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
            x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
            class="absolute left-0 mt-1 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        <template x-for="opt in options" :key="opt.value">
+          <button type="button" @click="pick(opt.value)"
+                  class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                  :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                  x-text="opt.label"></button>
+        </template>
+      </div>
+    </div>
+
+    {# Visibility dropdown #}
+    <div x-data="{
+      open: false,
+      options: [
+        {value: '', label: 'All'},
+        {value: 'public', label: 'Public'},
+        {value: 'private', label: 'Private'}
+      ],
+      current: '{{ current_visibility }}',
+      get label() { return 'Visibility' },
+      pick(val) {
+        this.current = val;
+        document.getElementById('visibility-input-my').value = val;
+        this.open = false;
+        document.getElementById('filter-form-my').submit();
+      }
+    }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+        <span x-text="label"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute left-0 mt-1 w-32 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
         <template x-for="opt in options" :key="opt.value">
           <button type="button" @click="pick(opt.value)"
                   class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
@@ -107,19 +167,19 @@
       </div>
     </div>
 
-    {# Visibility dropdown #}
+    {# Role dropdown #}
     <div x-data="{
       open: false,
       options: [
         {value: '', label: 'All'},
-        {value: 'public', label: 'Public'},
-        {value: 'private', label: 'Private'}
+        {value: 'PROJECT_MANAGER', label: 'Lead'},
+        {value: 'CONTRIBUTOR', label: 'Member'}
       ],
-      current: '{{ current_visibility }}',
-      get label() { return 'Visibility' },
+      current: '{{ current_role }}',
+      get label() { return 'Role' },
       pick(val) {
         this.current = val;
-        document.getElementById('visibility-input-my').value = val;
+        document.getElementById('role-input-my').value = val;
         this.open = false;
         document.getElementById('filter-form-my').submit();
       }
@@ -163,95 +223,28 @@
       <option value="name_asc" {% if current_sort == "name_asc" %}selected{% endif %}>Name A–Z</option>
       <option value="name_desc" {% if current_sort == "name_desc" %}selected{% endif %}>Name Z–A</option>
     </select>
+    <select name="visibility">
+      <option value="">All</option>
+      <option value="public" {% if current_visibility == "public" %}selected{% endif %}>Public</option>
+      <option value="private" {% if current_visibility == "private" %}selected{% endif %}>Private</option>
+    </select>
     <select name="status">
       <option value="">All</option>
       {% for value, label in project_statuses %}
         <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
-    <select name="visibility">
+    <select name="role">
       <option value="">All</option>
-      <option value="public" {% if current_visibility == "public" %}selected{% endif %}>Public</option>
-      <option value="private" {% if current_visibility == "private" %}selected{% endif %}>Private</option>
+      <option value="PROJECT_MANAGER" {% if current_role == "PROJECT_MANAGER" %}selected{% endif %}>Lead</option>
+      <option value="CONTRIBUTOR" {% if current_role == "CONTRIBUTOR" %}selected{% endif %}>Member</option>
     </select>
     <button type="submit" class="btn btn-sm">Apply</button>
   </noscript>
 </form>
 
-{% if results_summary %}
-  <div class="flex items-center gap-3 mb-4">
-    <p class="text-sm text-brand-text">{{ results_summary }}</p>
-    <a href="{% url 'projects:my_list' %}" class="ml-auto inline-flex items-center gap-1 text-sm text-gray-400 hover:!text-blue-500 hover:underline shrink-0">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"/></svg>
-      Clear filter
-    </a>
-  </div>
-{% endif %}
-
-{% if project_rows %}
-  <div class="flex flex-col gap-4">
-    {% for row in project_rows %}
-      <a href="{% url 'projects:detail' pk=row.project.pk %}"
-         class="brand-card p-5 hover:shadow-md transition flex items-start gap-4">
-        <div class="flex-1 min-w-0 flex flex-col gap-1.5">
-          <h2 class="text-lg font-semibold text-brand-navy leading-snug">{{ row.project.name }}</h2>
-
-          {# Member names — full list on sm+, truncated to 2 on smaller screens #}
-          {% with mn=row.members|member_names %}
-            {% if mn.full %}
-              <p class="text-xs text-brand-text/60 min-w-0">
-                <span class="hidden sm:inline">{{ mn.full }}</span>
-                <span class="sm:hidden">{{ mn.short }}</span>
-              </p>
-            {% endif %}
-          {% endwith %}
-
-          {% if row.project.description %}
-            <p class="text-xs text-brand-text/70 line-clamp-2">{{ row.project.description }}</p>
-          {% elif row.project.abstract %}
-            <p class="text-xs text-brand-text/70 line-clamp-2">{{ row.project.abstract }}</p>
-          {% endif %}
-
-          <div class="mt-auto pt-3">
-            <p class="text-xs text-brand-text/40">{{ row.project.updated_at|relative_updated }}</p>
-          </div>
-        </div>
-
-        <div class="shrink-0 flex items-center gap-2 pt-0.5">
-          {% if row.project.is_public %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Public</span>
-          {% else %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-300 text-gray-500">Private</span>
-          {% endif %}
-          {% include "_components/status_badge.html" with status=row.project.get_status_display %}
-          {% if row.privilege %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-              {% if row.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-              {{ row.privilege|privilege_label }}
-            </span>
-          {% endif %}
-        </div>
-      </a>
-    {% endfor %}
-  </div>
-
-  {% if is_paginated %}
-    <div class="join mt-8 flex justify-center">
-      {% if page_obj.has_previous %}
-        <a class="join-item btn btn-sm"
-           href="?{{ filter_params }}&page={{ page_obj.previous_page_number }}">&laquo;</a>
-      {% endif %}
-      <span class="join-item btn btn-sm btn-active">
-        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
-      </span>
-      {% if page_obj.has_next %}
-        <a class="join-item btn btn-sm"
-           href="?{{ filter_params }}&page={{ page_obj.next_page_number }}">&raquo;</a>
-      {% endif %}
-    </div>
-  {% endif %}
-{% else %}
-  {% include "_components/empty_state.html" with title="No projects yet" body="Create your first project or accept an invitation to join one." cta_label="New project" cta_href=create_url %}
-{% endif %}
+<div id="project-results">
+  {% include "projects/partials/my_list_results.html" %}
+</div>
 
 {% endblock %}

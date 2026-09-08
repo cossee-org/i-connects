@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Requests &mdash; i&bull;CONNECTS{% endblock %}
+
+{% block page_header %}{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <div class="flex items-center gap-3">
+    <h1 class="page-title font-semibold text-brand-navy">Requests</h1>
+    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ requests_total }}</span>
+    <div class="relative mt-1.5" x-data="{ open: false }" @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open"
+              aria-label="About Requests"
+              class="inline-flex items-center justify-center w-5 h-5 rounded-full text-brand-text/50 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+          <path fill-rule="evenodd" d="M18 10A8 8 0 1 1 2 10a8 8 0 0 1 16 0ZM9 9a1 1 0 0 1 2 0v4a1 1 0 1 1-2 0V9Zm1-3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute left-0 mt-2 w-max max-w-80 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-30">
+        <p class="text-sm text-brand-text/70">All incoming and outgoing join requests and invitations.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div x-data="{ tab: '{{ current_tab }}' }">
+
+  {# ── Tabs ── #}
+  <div class="flex gap-6 border-b border-brand-light mb-6">
+    <button type="button" @click="tab = 'incoming'; document.getElementById('tab-input-requests').value = 'incoming';"
+            class="brand-tab inline-flex items-center gap-1.5" :class="tab === 'incoming' ? 'brand-tab-active' : ''">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+      </svg>
+      Incoming
+      {% if incoming_total %}
+        <span class="text-[11px] font-semibold leading-none bg-brand-coral text-white rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">{{ incoming_total }}</span>
+      {% endif %}
+    </button>
+    <button type="button" @click="tab = 'outgoing'; document.getElementById('tab-input-requests').value = 'outgoing';"
+            class="brand-tab inline-flex items-center gap-1.5" :class="tab === 'outgoing' ? 'brand-tab-active' : ''">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M7.5 7.5 12 3m0 0 4.5 4.5M12 3v13.5" />
+      </svg>
+      Outgoing
+    </button>
+  </div>
+
+  {# ── Filter / sort bar — shared by both tabs ── #}
+  <form method="get" id="filter-form-requests" class="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-stretch sm:items-center mb-6">
+    <input type="hidden" name="tab" id="tab-input-requests" value="{{ current_tab }}">
+    <input type="hidden" name="type" id="type-input-requests" value="{{ current_type }}">
+    <input type="hidden" name="status" id="status-input-requests" value="{{ current_status }}">
+    <input type="hidden" name="sort" id="sort-input-requests" value="{{ current_sort }}">
+
+    <div class="w-full sm:flex-1 sm:min-w-[200px]">
+      <input type="text" name="q" value="{{ current_q }}" placeholder="Search requests…"
+             class="input input-sm input-bordered w-full" />
+    </div>
+
+    <div class="flex gap-3 w-full sm:w-auto flex-wrap">
+
+      {# Type dropdown #}
+      <div x-data="{
+        open: false,
+        options: [
+          {value: '', label: 'All'},
+          {value: 'join_request', label: 'Join request'},
+          {value: 'invitation', label: 'Invitation'}
+        ],
+        current: '{{ current_type }}',
+        get label() { return 'Type' },
+        pick(val) {
+          this.current = val;
+          document.getElementById('type-input-requests').value = val;
+          this.open = false;
+          document.getElementById('filter-form-requests').submit();
+        }
+      }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+        <button type="button" @click="open = !open"
+                class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+          <span x-text="label"></span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+            <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+          </svg>
+        </button>
+        <div x-cloak x-show="open"
+             x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+             class="absolute left-0 mt-1 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+          <template x-for="opt in options" :key="opt.value">
+            <button type="button" @click="pick(opt.value)"
+                    class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                    :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                    x-text="opt.label"></button>
+          </template>
+        </div>
+      </div>
+
+      {# Status dropdown #}
+      <div x-data="{
+        open: false,
+        options: [
+          {value: 'active', label: 'Active'},
+          {value: 'completed', label: 'Completed'},
+          {value: 'all', label: 'All'}
+        ],
+        current: '{{ current_status }}',
+        get label() { return 'Status' },
+        pick(val) {
+          this.current = val;
+          document.getElementById('status-input-requests').value = val;
+          this.open = false;
+          document.getElementById('filter-form-requests').submit();
+        }
+      }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+        <button type="button" @click="open = !open"
+                class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+          <span x-text="label"></span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+            <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+          </svg>
+        </button>
+        <div x-cloak x-show="open"
+             x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+             class="absolute left-0 mt-1 w-32 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+          <template x-for="opt in options" :key="opt.value">
+            <button type="button" @click="pick(opt.value)"
+                    class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                    :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                    x-text="opt.label"></button>
+          </template>
+        </div>
+      </div>
+
+      {# Sort dropdown #}
+      <div x-data="{
+        open: false,
+        options: [
+          {value: 'newest', label: 'Newest first'},
+          {value: 'oldest', label: 'Oldest first'},
+          {value: 'name_asc', label: 'Project A–Z'},
+          {value: 'name_desc', label: 'Project Z–A'}
+        ],
+        current: '{{ current_sort }}',
+        get label() { return 'Sort' },
+        pick(val) {
+          this.current = val;
+          document.getElementById('sort-input-requests').value = val;
+          this.open = false;
+          document.getElementById('filter-form-requests').submit();
+        }
+      }" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+        <button type="button" @click="open = !open"
+                class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+          <span x-text="label"></span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
+            <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+          </svg>
+        </button>
+        <div x-cloak x-show="open"
+             x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+             class="absolute left-0 mt-1 w-40 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+          <template x-for="opt in options" :key="opt.value">
+            <button type="button" @click="pick(opt.value)"
+                    class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                    :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+                    x-text="opt.label"></button>
+          </template>
+        </div>
+      </div>
+
+    </div>
+  </form>
+
+  {# ── Incoming: join requests awaiting your review + invitations you've received, merged ── #}
+  <div x-show="tab === 'incoming'" x-cloak>
+    {% if incoming_results_summary %}
+      <div class="flex items-center gap-3 mb-4">
+        <p class="text-sm text-brand-text">{{ incoming_results_summary }}</p>
+        <a href="{% url 'projects:requests' %}?tab=incoming" class="ml-auto inline-flex items-center gap-1 text-sm text-gray-400 hover:!text-blue-500 hover:underline shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"/></svg>
+          Clear filter
+        </a>
+      </div>
+    {% endif %}
+    {% if incoming_items %}
+      <div class="flex flex-col gap-3">
+        {% for item in incoming_items %}
+          {% if item.kind == 'join_request' %}
+            {% with jr=item.obj %}
+              <div class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
+                <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                  {% include "_components/request_type_pill.html" with kind="join_request" %}
+                  <p class="text-sm">
+                    <span class="font-medium text-brand-navy">{{ jr.user.name|default:jr.user.email }}</span>
+                    <span class="text-brand-text/70">requested to join</span>
+                    <a href="{% url 'projects:join_requests' pk=jr.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ jr.project.name }}</a>
+                  </p>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                      {{ jr.get_requested_privilege_display }}
+                    </span>
+                    {% if jr.status != 'PENDING' %}
+                      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                        {% if jr.status == 'APPROVED' %}bg-green-100 text-green-700
+                        {% elif jr.status == 'DECLINED' %}bg-red-100 text-red-700
+                        {% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                        {{ jr.get_status_display }}
+                      </span>
+                    {% endif %}
+                  </div>
+                  <p class="text-xs text-brand-text/60">{{ jr.user.email }}</p>
+                  {% if jr.message %}
+                    <p class="text-xs text-brand-text/70 whitespace-pre-line mt-1">{{ jr.message }}</p>
+                  {% endif %}
+                  <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"M j, Y H:i" }}</p>
+                </div>
+                <div class="shrink-0">
+                  {% if jr.status == 'PENDING' %}
+                    <a href="{% url 'projects:review_join_request' pk=jr.project.pk join_request_pk=jr.pk %}?source=incoming"
+                       class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+                      Review
+                    </a>
+                  {% endif %}
+                </div>
+              </div>
+            {% endwith %}
+          {% else %}
+            {% with inv=item.obj %}
+              <div class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
+                <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                  {% include "_components/request_type_pill.html" with kind="invitation" %}
+                  <p class="text-sm">
+                    <span class="font-medium text-brand-navy">{{ inv.added_by }}</span>
+                    <span class="text-brand-text/70">invited you to join</span>
+                    <a href="{% url 'projects:detail' pk=inv.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ inv.project.name }}</a>
+                  </p>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit
+                    {% if inv.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                    {{ inv.get_privilege_display }}
+                  </span>
+                  <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"M j, Y" }}</p>
+                </div>
+                <div class="shrink-0">
+                  <a class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                     href="{% url 'projects:accept_or_decline' code=inv.invitation_code %}"
+                     aria-label="Review invitation to {{ inv.project.name }}">
+                    Review
+                  </a>
+                </div>
+              </div>
+            {% endwith %}
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% else %}
+      {% include "_components/empty_state.html" with title="No incoming requests" body="Join requests to your projects and invitations you've received will appear here." %}
+    {% endif %}
+  </div>
+
+  {# ── Outgoing: join requests you've sent + invitations you've sent out, merged ── #}
+  <div x-show="tab === 'outgoing'" x-cloak>
+    {% if outgoing_results_summary %}
+      <div class="flex items-center gap-3 mb-4">
+        <p class="text-sm text-brand-text">{{ outgoing_results_summary }}</p>
+        <a href="{% url 'projects:requests' %}?tab=outgoing" class="ml-auto inline-flex items-center gap-1 text-sm text-gray-400 hover:!text-blue-500 hover:underline shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"/></svg>
+          Clear filter
+        </a>
+      </div>
+    {% endif %}
+    {% if outgoing_items %}
+      <div class="flex flex-col gap-3">
+        {% for item in outgoing_items %}
+          {% if item.kind == 'join_request' %}
+            {% with jr=item.obj %}
+              <div class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
+                <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                  {% include "_components/request_type_pill.html" with kind="join_request" %}
+                  <p class="text-sm">
+                    <span class="text-brand-text/70">Requested to join</span>
+                    <a href="{% url 'projects:detail' pk=jr.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ jr.project.name }}</a>
+                  </p>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                      {{ jr.get_requested_privilege_display }}
+                    </span>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      {% if jr.status == 'PENDING' %}bg-brand-coral/10 text-brand-coral
+                      {% elif jr.status == 'APPROVED' %}bg-green-100 text-green-700
+                      {% elif jr.status == 'DECLINED' %}bg-red-100 text-red-700
+                      {% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                      {{ jr.get_status_display }}
+                    </span>
+                  </div>
+                  <p class="text-xs text-brand-text/40 mt-1">{{ jr.created_at|date:"M j, Y" }}</p>
+                </div>
+                <div class="shrink-0">
+                  {% if jr.status == 'PENDING' %}
+                    <form method="post" action="{% url 'projects:cancel_join_request' join_request_pk=jr.pk %}">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-ghost">Cancel</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </div>
+            {% endwith %}
+          {% else %}
+            {% with inv=item.obj %}
+              <div class="brand-card p-4 flex items-start justify-between gap-4 hover:shadow-md transition">
+                <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                  {% include "_components/request_type_pill.html" with kind="invitation" %}
+                  <p class="text-sm">
+                    <span class="text-brand-text/70">Invited</span>
+                    <span class="font-medium text-brand-navy">{{ inv.invited_user.name|default:inv.email }}</span>
+                    <span class="text-brand-text/70">to join</span>
+                    <a href="{% url 'projects:detail' pk=inv.project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">{{ inv.project.name }}</a>
+                  </p>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      {% if inv.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
+                      {{ inv.get_privilege_display }}
+                    </span>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">
+                      Pending
+                    </span>
+                  </div>
+                  <p class="text-xs text-brand-text/60">Sent by {{ inv.added_by }}</p>
+                  <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"M j, Y" }}</p>
+                </div>
+                <div class="shrink-0">
+                  <form method="post" action="{% url 'projects:cancel_invitation' pk=inv.project.pk invitation_pk=inv.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-ghost">Cancel</button>
+                  </form>
+                </div>
+              </div>
+            {% endwith %}
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% else %}
+      {% include "_components/empty_state.html" with title="No outgoing requests" body="Join requests and invitations you've sent will appear here." %}
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

@@ -4,41 +4,40 @@
 
 {% block page_header %}
   <header class="mb-6">
-    <p class="text-xs font-bold uppercase tracking-widest text-brand-coral mb-1">{{ project.name }}</p>
-    <h1 class="page-title font-semibold text-brand-navy leading-tight">Contributors</h1>
-    {% if user_privilege == "PROJECT_MANAGER" %}
-      <div class="flex flex-wrap gap-2 mt-3 justify-end">
-        <a href="{% url 'projects:join_requests' pk=project.pk %}"
-           class="btn btn-sm btn-ghost relative">
-          Join requests
-          {% if pending_join_request_count %}
-            <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
-              {{ pending_join_request_count }}
-            </span>
-          {% endif %}
-        </a>
-        <a href="{% url 'projects:project_invitations' pk=project.pk %}"
-           class="btn btn-sm btn-ghost relative">
-          Invitations
-          {% if pending_invitation_count %}
-            <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
-              {{ pending_invitation_count }}
-            </span>
-          {% endif %}
-        </a>
-        <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                hx-get="{% url 'projects:invite' pk=project.pk %}"
-                hx-target="#invite-modal-body"
-                hx-swap="innerHTML"
-                onclick="document.getElementById('invite-modal').showModal()">
-          Invite member
-        </button>
-      </div>
-    {% endif %}
+    {% include "_components/project_header.html" %}
   </header>
 {% endblock %}
 
 {% block content %}
+{% if user_privilege == "PROJECT_MANAGER" %}
+  <div class="flex flex-wrap gap-2 justify-end mb-4">
+    <a href="{% url 'projects:join_requests' pk=project.pk %}"
+       class="btn btn-sm btn-ghost relative">
+      Join requests
+      {% if pending_join_request_count %}
+        <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
+          {{ pending_join_request_count }}
+        </span>
+      {% endif %}
+    </a>
+    <a href="{% url 'projects:project_invitations' pk=project.pk %}"
+       class="btn btn-sm btn-ghost relative">
+      Invitations
+      {% if pending_invitation_count %}
+        <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
+          {{ pending_invitation_count }}
+        </span>
+      {% endif %}
+    </a>
+    <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+            hx-get="{% url 'projects:invite' pk=project.pk %}"
+            hx-target="#invite-modal-body"
+            hx-swap="innerHTML"
+            onclick="document.getElementById('invite-modal').showModal()">
+      Invite member
+    </button>
+  </div>
+{% endif %}
 {% if rows %}
   <div class="brand-card overflow-hidden">
     <div class="overflow-x-auto">

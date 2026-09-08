@@ -7,7 +7,13 @@ from django.contrib.auth import get_user_model
 
 from apps.core.enums import MemberPrivileges
 
-from .models import Invitation, JoinRequest, Project, ProjectPrivilege
+from .models import (
+    ContributionTracking,
+    Invitation,
+    JoinRequest,
+    Project,
+    ProjectPrivilege,
+)
 
 
 class ProjectForm(forms.ModelForm):
@@ -43,6 +49,19 @@ class ProjectForm(forms.ModelForm):
             "is_public": forms.HiddenInput(),
             "contribution_tracking": forms.HiddenInput(),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # The tracking dropdown always posts a value, but a form submitted
+        # without one (an API client, an older cached page) should land on
+        # the model's default rather than failing validation.
+        self.fields["contribution_tracking"].required = False
+
+    def clean_contribution_tracking(self):
+        return (
+            self.cleaned_data.get("contribution_tracking")
+            or ContributionTracking.NONE
+        )
 
 
 class InvitationForm(forms.ModelForm):

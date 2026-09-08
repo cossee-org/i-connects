@@ -14,11 +14,13 @@ Eight Django apps ported from the original Prisma / Blitz schema:
 | `core`           | Shared enums, email backends (console / SMTP / Resend / SES), `setup_cron` management command, base templates. |
 | `projects`       | Project CRUD, membership, privileges (PM / contributor), invitations with URL-safe tokens, member row HTMX partials. |
 | `roles`          | Per-project Role model + CRUD.                                                              |
-| `tasks`          | Kanban board with drag-drop (HTMX move endpoint), task CRUD, task completion + approval, milestones, task logs for audit trail. |
+| `tasks`          | Kanban board with drag-drop (HTMX move endpoint), List view with search / filter / sort, calendar view, task CRUD, task completion + approval, peer review of each assignee's submission by the task's reviewers, milestones, task logs for audit trail. |
 | `comments`       | Threaded comments on task logs.                                                             |
 | `notifications`  | In-app notifications (M2M recipients), badge / dropdown partials, admin announcements.      |
 | `notes`          | Project notes with three visibility tiers (private / PM-only / contributors), markdown rendering with raw HTML escaping. |
-| `forms_builder`  | Dynamic JSON-Schema -> Django Form renderer, versioned `FormVersion`s, jsonschema validation. |
+| `wiki`           | Per-project wiki pages: markdown + `[[wiki links]]`, append-only `WikiRevision` history with diffs / restore, lead-only page locking, edit-conflict detection, search. |
+| `forms_builder`  | Dynamic JSON-Schema -> Django Form renderer, versioned `FormVersion`s, jsonschema validation. Surfaced as **Survey**; the module page is a placeholder for now. |
+| `communications` | Placeholder module — a sidebar page and a project section, both empty. No models yet. |
 
 Plus `cron/tasks.py` with four Celery-beat jobs (daily digest, weekly
 digest, overdue-task reminders, tmp-file cleanup), scheduled via

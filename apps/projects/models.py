@@ -65,6 +65,11 @@ class Project(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    @property
+    def tracks_credit(self) -> bool:
+        """True when this project attributes contributions using CRediT."""
+        return self.contribution_tracking == ContributionTracking.CREDIT
+
 
 class ProjectMember(models.Model):
     """A membership (individual or team-shaped) on a project."""

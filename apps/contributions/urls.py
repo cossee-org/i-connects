@@ -25,6 +25,21 @@ urlpatterns = [
         name="project_contributions",
     ),
     path(
+        "projects/<int:project_pk>/contributions/add/",
+        views.ContributionAddView.as_view(),
+        name="contribution_add",
+    ),
+    path(
+        "projects/<int:project_pk>/contributions/<int:pk>/edit/",
+        views.ContributionEditView.as_view(),
+        name="contribution_edit",
+    ),
+    path(
+        "projects/<int:project_pk>/contributions/<int:pk>/remove/",
+        views.ContributionRemoveView.as_view(),
+        name="contribution_remove",
+    ),
+    path(
         "projects/<int:project_pk>/contributions.csv",
         views.ProjectContributionsCSVView.as_view(),
         name="project_contributions_csv",

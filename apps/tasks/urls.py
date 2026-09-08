@@ -9,6 +9,12 @@ from apps.tasks import views
 app_name = "tasks"
 
 urlpatterns = [
+    # All tasks (cross-project)
+    path(
+        "tasks/",
+        views.MyTaskListView.as_view(),
+        name="my_list",
+    ),
     # Kanban board
     path(
         "projects/<int:project_pk>/board/",
@@ -24,6 +30,11 @@ urlpatterns = [
         "projects/<int:project_pk>/board/kanban/",
         views.BoardKanbanPartialView.as_view(),
         name="board_kanban",
+    ),
+    path(
+        "projects/<int:project_pk>/board/calendar/",
+        views.BoardCalendarPartialView.as_view(),
+        name="board_calendar",
     ),
     # Task CRUD (project-scoped)
     path(
@@ -111,6 +122,16 @@ urlpatterns = [
         "tasks/<int:pk>/logs/<int:log_pk>/approve/",
         views.TaskLogApproveView.as_view(),
         name="approve_log",
+    ),
+    path(
+        "tasks/<int:pk>/members/<int:member_pk>/done/",
+        views.TaskMemberDoneView.as_view(),
+        name="member_done",
+    ),
+    path(
+        "tasks/<int:pk>/logs/<int:log_pk>/review/",
+        views.TaskLogReviewView.as_view(),
+        name="review_log",
     ),
     # Board columns
     path(

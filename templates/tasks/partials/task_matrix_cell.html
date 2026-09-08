@@ -1,0 +1,23 @@
+{# One yes/no cell of the completion matrix — {% include with on=s.done %}. #}
+{# The column header names what is being reported, so the cell only has to say #}
+{# yes or no; the glyph carries that for sighted readers and the label for the #}
+{# rest (A11Y_GUIDE #7 — never colour alone). #}
+{# Pass at=<datetime> to print when it happened beside the glyph. Entries #}
+{# completed before that was recorded have none, and show the glyph alone. #}
+{# The date is a note on the cell rather than its content, so it sits a step #}
+{# below the table's text-sm — three of these can share one narrow column. #}
+<span class="inline-flex items-center gap-1.5">
+  <span role="img" aria-label="{% if on %}Yes{% else %}No{% endif %}"
+        class="inline-flex shrink-0 {% if on %}text-success{% else %}text-brand-text/30{% endif %}">
+    {% if on %}
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.3 3.3 6.8-6.8a1 1 0 0 1 1.4 0Z" clip-rule="evenodd"/>
+      </svg>
+    {% else %}
+      <span class="inline-block w-4 h-4 rounded-full border border-brand-light" aria-hidden="true"></span>
+    {% endif %}
+  </span>
+  {% if on and at %}
+    <span class="text-xs text-brand-text/60 whitespace-nowrap">{{ at|date:"M j, Y" }}</span>
+  {% endif %}
+</span>

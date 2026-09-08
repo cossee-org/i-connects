@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from apps.audit.models import AuditAction, AuditLog
-from apps.core.enums import JoinRequestStatus, MemberPrivileges, ProjectStatus
+from apps.core.enums import JoinRequestStatus, MemberPrivileges, ProjectStatus, TaskStatus
 from apps.projects.models import (
+    ContributionTracking,
     Invitation,
     JoinRequest,
     Project,
@@ -43,6 +45,83 @@ def test_my_list_requires_login(client):
 
 
 @pytest.mark.django_db
+def test_my_list_htmx_search_returns_results_partial_only(client, user):
+    create_project_with_owner(
+        user=user,
+        form_data={"name": "Alpha Findable", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    create_project_with_owner(
+        user=user,
+        form_data={"name": "Beta Other", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    client.force_login(user)
+
+    response = client.get(
+        reverse("projects:my_list"), {"q": "Findable"}, HTTP_HX_REQUEST="true"
+    )
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Alpha Findable" in content
+    assert "Beta Other" not in content
+    # The partial doesn't re-render the page shell (sidebar, filter form, etc.).
+    assert 'id="filter-form-my"' not in content
+    assert 'aria-label="Sidebar navigation"' not in content
+
+
+@pytest.mark.django_db
+def test_my_list_shows_open_due_and_join_request_counts(client, user, other_user):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.projects.models import ProjectMember
+    from apps.tasks.models import KanbanBoard, Task
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Counted", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    column = KanbanBoard.objects.filter(project=project).first()
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=0,
+        name="Open task",
+    )
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=1,
+        name="Overdue task",
+        deadline=timezone.now() - timedelta(days=1),
+    )
+    Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=2,
+        name="Completed task",
+        status=TaskStatus.COMPLETED,
+        deadline=timezone.now() - timedelta(days=1),
+    )
+    create_join_request(project=project, user=other_user, requested_privilege="CONTRIBUTOR")
+
+    client.force_login(user)
+    response = client.get(reverse("projects:my_list"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "2 open tasks" in content
+    assert "1 task overdue" in content
+    assert "1 join request" in content
+
+
+@pytest.mark.django_db
 def test_create_project_makes_creator_a_pm(client_logged_in, user):
     response = client_logged_in.post(
         reverse("projects:create"),
@@ -69,6 +148,39 @@ def test_create_project_makes_creator_a_pm(client_logged_in, user):
     assert AuditLog.objects.filter(
         action=AuditAction.PROJECT_CREATED, actor=user, project=project
     ).exists()
+
+
+@pytest.mark.django_db
+def test_create_project_can_select_credit_tracking(client_logged_in, user):
+    response = client_logged_in.post(
+        reverse("projects:create"),
+        {
+            "name": "CRediT Project",
+            "description": "A project",
+            "status": ProjectStatus.PLANNING,
+            "is_public": "on",
+            "contribution_tracking": ContributionTracking.CREDIT,
+        },
+    )
+    assert response.status_code in (301, 302)
+    project = Project.objects.get(name="CRediT Project")
+    assert project.contribution_tracking == ContributionTracking.CREDIT
+
+
+@pytest.mark.django_db
+def test_create_project_without_tracking_defaults_to_none(client_logged_in, user):
+    response = client_logged_in.post(
+        reverse("projects:create"),
+        {
+            "name": "Untracked Project",
+            "description": "A project",
+            "status": ProjectStatus.PLANNING,
+            "is_public": "on",
+        },
+    )
+    assert response.status_code in (301, 302)
+    project = Project.objects.get(name="Untracked Project")
+    assert project.contribution_tracking == ContributionTracking.NONE
 
 
 @pytest.mark.django_db
@@ -689,3 +801,620 @@ def test_members_page_disables_self_controls_for_last_pm(client, user):
     assert response.status_code == 200
     content = response.content.decode()
     assert "A project must always have at least one Project Manager." in content
+
+
+@pytest.mark.django_db
+def test_dashboard_projects_card_links_to_projects_module_and_drops_old_sections(client, user):
+    create_project_with_owner(
+        user=user,
+        form_data={"name": "Sole Project", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    client.force_login(user)
+    response = client.get(reverse("projects:dashboard"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert reverse("projects:my_list") in content
+    # The standalone Projects/Open Tasks/Join Requests/Invitations sections
+    # are gone -- their content now lives in the unified timeline instead.
+    assert 'id="projects-heading"' not in content
+    assert 'id="active-tasks-heading"' not in content
+    assert 'id="join-requests-heading"' not in content
+    assert 'id="invitations-heading"' not in content
+
+
+# ---------------------------------------------------------------------------
+# Dashboard: active-task and request lists
+# ---------------------------------------------------------------------------
+
+
+def _task(project, member, name, **kwargs):
+    """Create a task on ``project``, ordered after the ones before it."""
+    from apps.tasks.models import KanbanBoard, Task
+
+    column = KanbanBoard.objects.filter(project=project).first()
+    return Task.objects.create(
+        project=project,
+        created_by=member,
+        container=column,
+        container_task_order=Task.objects.filter(project=project).count(),
+        name=name,
+        **kwargs,
+    )
+
+
+def _active_task_rows(content):
+    """The dashboard's active-task list, sliced out of the rendered page so
+    an assertion about a row cannot be satisfied by the surrounding chrome."""
+    start = content.index('<ul aria-label="Active tasks"')
+    return content[start : content.index("</ul>", start)]
+
+
+@pytest.mark.django_db
+def test_dashboard_active_task_list_orders_by_deadline_and_caps(client, user):
+    """The list is ordered by deadline (undated last either way) and shows
+    at most ACTIVE_TASK_LIMIT rows, with a link out to the full Tasks
+    page."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.projects.views import DashboardView
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Deadlines", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    now = timezone.now()
+
+    overflow = DashboardView.ACTIVE_TASK_LIMIT + 1
+    for i in range(overflow):
+        task = _task(project, member, f"Dated task {i}", deadline=now + timedelta(days=i + 1))
+        task.assigned_members.add(member)
+    undated = _task(project, member, "Undated task")
+    undated.assigned_members.add(member)
+
+    client.force_login(user)
+    response = client.get(reverse("projects:dashboard"), {"sort": "oldest"})
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert 'id="dashboard-open-work-heading"' in content
+    # Oldest first, capped: the earliest deadlines are shown...
+    for i in range(DashboardView.ACTIVE_TASK_LIMIT):
+        assert f"Dated task {i}" in content
+    # ...and everything past the cap is not, undated tasks included even
+    # though they sort last only because of the nulls_last ordering.
+    assert f"Dated task {overflow - 1}" not in content
+    assert "Undated task" not in content
+    # The count on the section, and the link out, cover the whole list.
+    assert response.context["active_tasks_total"] == overflow + 1
+    assert f"All {overflow + 1} tasks" in content
+    assert reverse("tasks:my_list") in content
+
+
+@pytest.mark.django_db
+def test_dashboard_active_task_list_flags_review_work_and_skips_finished_tasks(client, user):
+    """A task the user only reviews is listed and marked "To review"; tasks
+    the user has already marked complete, and closed tasks, are not listed."""
+    from apps.tasks.models import TaskLog
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Mixed", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+
+    reviewing = _task(project, member, "Task to review")
+    reviewing.reviewers.add(member)
+
+    self_marked = _task(project, member, "Task I finished")
+    self_marked.assigned_members.add(member)
+    TaskLog.objects.create(task=self_marked, assigned_to=member, status=TaskStatus.COMPLETED)
+
+    closed = _task(project, member, "Closed task", status=TaskStatus.COMPLETED)
+    closed.assigned_members.add(member)
+
+    client.force_login(user)
+    response = client.get(reverse("projects:dashboard"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Task to review" in content
+    assert "To review" in content
+    assert "Task I finished" not in content
+    assert "Closed task" not in content
+    assert response.context["active_tasks_total"] == 1
+
+
+@pytest.mark.django_db
+def test_dashboard_active_task_rows_label_the_deadline_and_drop_assignees(client, user):
+    """A deadline still to come reads "Due <date>"; an overdue one keeps
+    the red "Overdue" wording it already had. Neither row names who the
+    task is assigned to -- on this list that is almost always the reader."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Dated", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    now = timezone.now()
+
+    upcoming = _task(project, member, "Upcoming task", deadline=now + timedelta(days=3))
+    upcoming.assigned_members.add(member)
+    late = _task(project, member, "Late task", deadline=now - timedelta(days=3))
+    late.assigned_members.add(member)
+
+    client.force_login(user)
+    content = client.get(reverse("projects:dashboard")).content.decode()
+    rows = _active_task_rows(content)
+
+    assert f"Due {(now + timedelta(days=3)).strftime('%b %-d')}" in rows
+    assert f"Overdue &middot; {(now - timedelta(days=3)).strftime('%b %-d')}" in rows
+    # The overdue row keeps its red treatment.
+    assert "text-error font-medium" in rows
+    # Neither row names who the task is assigned to. Scoped to the list:
+    # the navbar prints the reader's own name too.
+    assert user.name not in rows
+
+@pytest.mark.django_db
+def test_dashboard_priority_task_row_marks_priority_with_the_flag_alone(client, user):
+    """A high-priority task is marked once -- the red flag, carrying its
+    wording in a hover tooltip and an aria-label -- rather than by a flag
+    and a red border down the row."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Urgent", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    task = _task(project, member, "Urgent task", is_priority=True)
+    task.assigned_members.add(member)
+
+    client.force_login(user)
+    rows = _active_task_rows(client.get(reverse("projects:dashboard")).content.decode())
+
+    assert 'aria-label="High priority"' in rows
+    assert 'data-tooltip="High priority"' in rows
+    # Left-hung, so the scroll box the list sits in cannot clip it.
+    assert "hover-tooltip hover-tooltip-left" in rows
+    assert "border-l-error" not in rows
+
+
+@pytest.mark.django_db
+def test_dashboard_active_task_list_shows_an_empty_state(client, user):
+    create_project_with_owner(
+        user=user,
+        form_data={"name": "Quiet", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    client.force_login(user)
+    response = client.get(reverse("projects:dashboard"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    # Both halves of the section are empty, so it collapses to one panel
+    # rather than stacking a "no tasks" and a "no requests" one.
+    assert "Nothing waiting on you" in content
+    assert "No tasks right now" not in content
+    assert "No requests waiting" not in content
+    # Nothing is hidden, so there is no "view the rest" link to render.
+    assert "All 0 tasks" not in content
+
+
+@pytest.mark.django_db
+def test_dashboard_request_list_merges_join_requests_and_invitations(client, user, other_user):
+    """Join requests on a project the user manages and invitations addressed
+    to the user land in one list, each with a link to act on it."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Managed", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    join_request = create_join_request(
+        project=project, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    invited_to = create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Invited", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    invitation = create_invitation(
+        project=invited_to,
+        email=user.email,
+        privilege=MemberPrivileges.CONTRIBUTOR,
+        added_by=other_user,
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("projects:dashboard"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert 'id="dashboard-open-work-heading"' in content
+    assert response.context["incoming_request_count"] == 2
+    assert other_user.name in content
+    assert "Invited" in content
+    assert (
+        reverse(
+            "projects:review_join_request",
+            kwargs={"pk": project.pk, "join_request_pk": join_request.pk},
+        )
+        in content
+    )
+    assert (
+        reverse("projects:accept_or_decline", kwargs={"code": invitation.invitation_code})
+        in content
+    )
+
+
+@pytest.mark.django_db
+def test_dashboard_request_list_ignores_requests_the_user_cannot_act_on(client, user, other_user):
+    """A join request on someone else's project, and a resolved one on the
+    user's own project, are both absent -- neither is waiting on the user."""
+    mine = create_project_with_owner(
+        user=user,
+        form_data={"name": "Mine", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    theirs = create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Theirs", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    resolved = create_join_request(
+        project=mine, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    resolved.status = JoinRequestStatus.DECLINED
+    resolved.save(update_fields=["status"])
+    create_join_request(
+        project=theirs, user=user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    # An active task keeps the section from collapsing to its combined
+    # empty state, so the requests column's own empty panel is what shows.
+    member = ProjectMember.objects.filter(project=mine, users=user).first()
+    _task(mine, member, "Something to do").assigned_members.add(member)
+
+    client.force_login(user)
+    response = client.get(reverse("projects:dashboard"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert response.context["incoming_request_count"] == 0
+    assert "No requests waiting" in content
+    assert "All 0 requests" not in content
+
+
+@pytest.mark.django_db
+def test_dashboard_type_filter_shows_one_group_at_a_time(client, user, other_user):
+    """"Tasks only" drops the request rows and "Requests only" drops the
+    task rows, and the section's count follows what is left showing."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Filtered", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    _task(project, member, "A task of mine").assigned_members.add(member)
+    create_join_request(
+        project=project, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+
+    client.force_login(user)
+    url = reverse("projects:dashboard")
+
+    both = client.get(url).content.decode()
+    assert "A task of mine" in both
+    assert other_user.name in both
+
+    tasks_only = client.get(url, {"type": "tasks"})
+    content = tasks_only.content.decode()
+    assert "A task of mine" in content
+    assert other_user.name not in content
+    # Not the "no requests" line either -- they were filtered out, not absent.
+    assert "No requests waiting" not in content
+    assert tasks_only.context["active_tasks_match_count"] == 1
+    assert tasks_only.context["incoming_request_match_count"] == 0
+
+    requests_only = client.get(url, {"type": "requests"})
+    content = requests_only.content.decode()
+    assert other_user.name in content
+    assert "A task of mine" not in content
+    assert "No tasks right now" not in content
+    assert requests_only.context["incoming_request_match_count"] == 1
+    assert requests_only.context["active_tasks_match_count"] == 0
+
+
+@pytest.mark.django_db
+def test_dashboard_sort_runs_tasks_by_deadline_in_both_directions(client, user):
+    """Both sorts key off the deadline the row shows; a task with no
+    deadline sorts last either way rather than leading the oldest list."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Sorted", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    now = timezone.now()
+    _task(project, member, "Soon", deadline=now + timedelta(days=1)).assigned_members.add(member)
+    _task(project, member, "Later", deadline=now + timedelta(days=9)).assigned_members.add(member)
+    _task(project, member, "Undated").assigned_members.add(member)
+
+    client.force_login(user)
+    url = reverse("projects:dashboard")
+
+    # Oldest first is the default: soonest due leads, undated trails.
+    oldest = client.get(url)
+    assert [t.name for t in oldest.context["active_tasks"]] == ["Soon", "Later", "Undated"]
+    assert oldest.context["current_sort"] == "oldest"
+
+    newest = client.get(url, {"sort": "newest"})
+    assert [t.name for t in newest.context["active_tasks"]] == ["Later", "Soon", "Undated"]
+    assert newest.context["current_sort"] == "newest"
+
+
+@pytest.mark.django_db
+def test_dashboard_sort_runs_requests_by_age_in_both_directions(client, user, other_user):
+    """A request has no deadline, so its date is when it arrived."""
+    first = create_project_with_owner(
+        user=user,
+        form_data={"name": "First Asked", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    second = create_project_with_owner(
+        user=user,
+        form_data={"name": "Second Asked", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    create_join_request(
+        project=first, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    create_join_request(
+        project=second, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+
+    client.force_login(user)
+    url = reverse("projects:dashboard")
+
+    oldest = client.get(url)
+    assert [
+        item["obj"].project.name for item in oldest.context["incoming_requests"]
+    ] == ["First Asked", "Second Asked"]
+
+    newest = client.get(url, {"sort": "newest"})
+    assert [
+        item["obj"].project.name for item in newest.context["incoming_requests"]
+    ] == ["Second Asked", "First Asked"]
+
+
+@pytest.mark.django_db
+def test_dashboard_ignores_unknown_filter_and_sort_values(client, user):
+    """A hand-edited query string falls back to the defaults rather than
+    erroring or dropping the list."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Defaults", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    _task(project, member, "Still listed").assigned_members.add(member)
+
+    client.force_login(user)
+    response = client.get(
+        reverse("projects:dashboard"), {"type": "bogus", "sort": "whatever"}
+    )
+
+    assert response.status_code == 200
+    assert response.context["current_type"] == ""
+    assert response.context["current_sort"] == "oldest"
+    assert "Still listed" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_dashboard_overdue_type_keeps_only_tasks_past_their_deadline(client, user):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Due", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    now = timezone.now()
+    _task(project, member, "Late task", deadline=now - timedelta(days=2)).assigned_members.add(member)
+    _task(project, member, "Future task", deadline=now + timedelta(days=2)).assigned_members.add(member)
+    _task(project, member, "Undated task").assigned_members.add(member)
+
+    client.force_login(user)
+    response = client.get(reverse("projects:dashboard"), {"type": "overdue"})
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Late task" in content
+    assert "Future task" not in content
+    assert "Undated task" not in content
+    # The list is narrowed to one row; the Tasks stat tile still counts all.
+    assert response.context["active_tasks_match_count"] == 1
+    assert response.context["active_tasks_total"] == 3
+
+
+@pytest.mark.django_db
+def test_dashboard_review_type_keeps_only_tasks_the_user_reviews(client, user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Reviewed", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    _task(project, member, "Mine to do").assigned_members.add(member)
+    _task(project, member, "Mine to review").reviewers.add(member)
+
+    client.force_login(user)
+    response = client.get(reverse("projects:dashboard"), {"type": "review"})
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Mine to review" in content
+    assert "Mine to do" not in content
+    assert response.context["active_tasks_match_count"] == 1
+
+
+@pytest.mark.django_db
+def test_dashboard_splits_requests_into_join_requests_and_invitations(client, user, other_user):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Managed", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    create_join_request(
+        project=project, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    invited_to = create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Invited Here", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    create_invitation(
+        project=invited_to,
+        email=user.email,
+        privilege=MemberPrivileges.CONTRIBUTOR,
+        added_by=other_user,
+    )
+
+    client.force_login(user)
+    url = reverse("projects:dashboard")
+
+    joins = client.get(url, {"type": "join_requests"})
+    content = joins.content.decode()
+    assert other_user.name in content
+    assert "Invited Here" not in content
+    assert joins.context["incoming_request_match_count"] == 1
+
+    invites = client.get(url, {"type": "invitations"})
+    content = invites.content.decode()
+    assert "Invited Here" in content
+    assert f"{other_user.name} requested to join" not in content
+    assert invites.context["incoming_request_match_count"] == 1
+
+
+@pytest.mark.django_db
+def test_dashboard_link_and_empty_line_name_the_narrowed_set(client, user):
+    """A filtered group says what it was filtered to, so "All N ..." never
+    promises a count of something the user is not looking at."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.projects.views import DashboardView
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Named", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.filter(project=project, users=user).first()
+    now = timezone.now()
+    overflow = DashboardView.ACTIVE_TASK_LIMIT + 1
+    for i in range(overflow):
+        _task(
+            project, member, f"Late task {i}", deadline=now - timedelta(days=i + 1)
+        ).assigned_members.add(member)
+
+    client.force_login(user)
+    url = reverse("projects:dashboard")
+
+    overdue = client.get(url, {"type": "overdue"}).content.decode()
+    assert f"All {overflow} overdue tasks" in overdue
+
+    # Nothing is overdue for a user whose only task is undated.
+    _task(project, member, "Someday").assigned_members.add(member)
+    review = client.get(url, {"type": "review"}).content.decode()
+    assert "No tasks to review right now" in review
+
+    invitations = client.get(url, {"type": "invitations"}).content.decode()
+    assert "No invitations waiting on you right now" in invitations
+
+
+@pytest.mark.django_db
+def test_dashboard_request_rows_pill_lead_requests_only(client, user, other_user):
+    """"Member" is what nearly every request asks for, so only the
+    exception -- a request to lead the project -- carries a pill."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Pilled", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    create_join_request(
+        project=project, user=other_user, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+
+    client.force_login(user)
+    content = client.get(reverse("projects:dashboard")).content.decode()
+    assert other_user.name in content
+    assert "Member" not in content
+
+    lead_asker = get_user_model().objects.create_user(
+        email="lead@test.com", password="password123", name="Lead Asker"
+    )
+    create_join_request(
+        project=project, user=lead_asker, requested_privilege=MemberPrivileges.PROJECT_MANAGER
+    )
+    content = client.get(reverse("projects:dashboard")).content.decode()
+    assert "Lead" in content
+    assert "Member" not in content
+
+
+# ---------------------------------------------------------------------------
+# Discover projects: the projects you are already in
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_discover_marks_the_projects_you_belong_to(client, user, other_user):
+    mine = create_project_with_owner(
+        user=user,
+        form_data={"name": "Mine", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    joined = create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Joined", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    ProjectPrivilege.objects.create(
+        project=joined, user=user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    theirs = create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Theirs", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+
+    client.force_login(user)
+    rows = {
+        row["project"].name: row["my_privilege"]
+        for row in client.get(reverse("projects:list")).context["project_rows"]
+    }
+    assert rows["Mine"] == MemberPrivileges.PROJECT_MANAGER
+    assert rows["Joined"] == MemberPrivileges.CONTRIBUTOR
+    # Nothing on a project you have no standing in.
+    assert rows["Theirs"] is None
+
+
+@pytest.mark.django_db
+def test_discover_shows_the_membership_pill(client, user, other_user):
+    create_project_with_owner(
+        user=user,
+        form_data={"name": "Mine", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Theirs", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+
+    client.force_login(user)
+    body = client.get(reverse("projects:list")).content.decode()
+    # "Lead" is the label for the privilege that owning a project grants.
+    assert "Lead" in body
+
+
+@pytest.mark.django_db
+def test_discover_marks_nothing_for_an_anonymous_visitor(client, user):
+    """The page is open to visitors, who belong to nothing."""
+    create_project_with_owner(
+        user=user,
+        form_data={"name": "Mine", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    response = client.get(reverse("projects:list"))
+    assert response.status_code == 200
+    assert [row["my_privilege"] for row in response.context["project_rows"]] == [None]

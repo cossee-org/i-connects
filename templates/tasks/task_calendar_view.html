@@ -1,0 +1,70 @@
+{# Calendar view partial — included in board.html inside x-show="$store.board.viewMode === 'calendar'". #}
+{# Only tasks with `deadline` and/or `start_date` set are passed in (filtered server-side); tasks with neither field never appear here. #}
+
+{% url 'tasks:board_calendar' project_pk=project.pk as calendar_url %}
+
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <div class="flex items-center gap-3">
+    <h2 class="text-lg font-semibold text-brand-navy whitespace-nowrap">{{ calendar_label }}</h2>
+    <button type="button" class="btn btn-ghost btn-xs"
+            hx-get="{{ calendar_url }}?view={{ calendar_view }}&date={{ calendar_today_date }}"
+            hx-target="#calendar-view-container" hx-swap="innerHTML">
+      Today
+    </button>
+    {% if is_project_manager and calendar_view != 'year' and calendar_view != 'day' %}
+      <button type="button" class="btn btn-ghost btn-xs"
+              :class="{ 'btn-active': rangeSelect }"
+              @click="toggleRangeSelect()">
+        <span x-text="rangeSelect ? (rangeStart ? 'Pick the end date…' : 'Pick the start date…') : 'Select dates'"></span>
+      </button>
+    {% endif %}
+  </div>
+
+  <div class="flex items-center gap-2">
+    <div class="join">
+      <button type="button" class="btn btn-ghost btn-sm join-item{% if calendar_view == 'year' %} btn-active{% endif %}"
+              hx-get="{{ calendar_url }}?view=year&date={{ calendar_date }}"
+              hx-target="#calendar-view-container" hx-swap="innerHTML">
+        Year
+      </button>
+      <button type="button" class="btn btn-ghost btn-sm join-item{% if calendar_view == 'month' %} btn-active{% endif %}"
+              hx-get="{{ calendar_url }}?view=month&date={{ calendar_date }}"
+              hx-target="#calendar-view-container" hx-swap="innerHTML">
+        Month
+      </button>
+      <button type="button" class="btn btn-ghost btn-sm join-item{% if calendar_view == 'week' %} btn-active{% endif %}"
+              hx-get="{{ calendar_url }}?view=week&date={{ calendar_date }}"
+              hx-target="#calendar-view-container" hx-swap="innerHTML">
+        Week
+      </button>
+      <button type="button" class="btn btn-ghost btn-sm join-item{% if calendar_view == 'day' %} btn-active{% endif %}"
+              hx-get="{{ calendar_url }}?view=day&date={{ calendar_date }}"
+              hx-target="#calendar-view-container" hx-swap="innerHTML">
+        Day
+      </button>
+    </div>
+
+    <div class="join">
+      <button type="button" class="btn btn-ghost btn-sm join-item" aria-label="Previous"
+              hx-get="{{ calendar_url }}?view={{ calendar_view }}&date={{ calendar_prev_date }}"
+              hx-target="#calendar-view-container" hx-swap="innerHTML">
+        &laquo;
+      </button>
+      <button type="button" class="btn btn-ghost btn-sm join-item" aria-label="Next"
+              hx-get="{{ calendar_url }}?view={{ calendar_view }}&date={{ calendar_next_date }}"
+              hx-target="#calendar-view-container" hx-swap="innerHTML">
+        &raquo;
+      </button>
+    </div>
+  </div>
+</div>
+
+{% if calendar_view == 'year' %}
+  {% include "tasks/partials/calendar_year.html" %}
+{% elif calendar_view == 'week' %}
+  {% include "tasks/partials/calendar_week.html" %}
+{% elif calendar_view == 'day' %}
+  {% include "tasks/partials/calendar_day.html" %}
+{% else %}
+  {% include "tasks/partials/calendar_month.html" %}
+{% endif %}
