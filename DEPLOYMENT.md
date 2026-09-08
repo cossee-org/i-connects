@@ -512,13 +512,14 @@ CELERY_RESULT_BACKEND=redis://:<same password>@redis:6379/0
 
 # ---- Email (pick ONE backend) ----
 EMAIL_BACKEND_CHOICE=smtp
-DEFAULT_FROM_EMAIL=i-connects <noreply@i-connects.cossee.org>
+DEFAULT_FROM_EMAIL=i-connects <your-account@gmail.com>
 
-# smtp:
-EMAIL_HOST=<your SMTP relay, e.g. University of Alberta's or a transactional provider's>
+# smtp, via a Gmail account — see "Setting up Gmail SMTP" below for how to
+# get EMAIL_HOST_PASSWORD (it is NOT the account's normal login password):
+EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
-EMAIL_HOST_USER=<smtp username>
-EMAIL_HOST_PASSWORD=<smtp password>
+EMAIL_HOST_USER=<your-account@gmail.com>
+EMAIL_HOST_PASSWORD=<16-character App Password, no spaces>
 EMAIL_USE_TLS=True
 
 # resend (use instead of the smtp block above; set EMAIL_BACKEND_CHOICE=resend):
@@ -554,6 +555,85 @@ Lock down the file permissions since it holds every production secret:
 ```bash
 chmod 600 .env
 ```
+
+### F1. Setting up Gmail SMTP
+
+Emailing (signup verification, invitations, password reset, mailing-list
+announcements, digests) uses a Google Mail account as the SMTP relay for
+this deployment. This is a genuine, working option for Django's SMTP
+backend, but Gmail imposes a few constraints worth knowing before you rely
+on it — see the caveats at the end.
+
+**1. Use (or create) a Google account dedicated to this app**, not a
+personal one — e.g. something like `iconnects.notifications@gmail.com`.
+Sharing a personal account's credentials with a server is a bad habit to
+start, and a dedicated account makes credential rotation and offboarding
+trivial later.
+
+**2. Turn on 2-Step Verification.** Gmail's SMTP no longer accepts a
+plain account password for third-party apps ("less secure app access" was
+removed); an **App Password** is required instead, and Google only lets
+you generate one once 2-Step Verification is enabled on the account:
+`myaccount.google.com` → **Security** → **2-Step Verification** → follow
+the setup flow (phone number or authenticator app).
+
+**3. Generate an App Password:** `myaccount.google.com` → **Security** →
+**2-Step Verification** → scroll to **App passwords** (or go directly to
+`myaccount.google.com/apppasswords`). Create one named something like
+`i-connects production`. Google shows it once as a 16-character string —
+copy it immediately (spaces are just for display; strip them when pasting
+into `.env`).
+
+**4. Set the values in `.env`** (per the block above):
+```ini
+EMAIL_BACKEND_CHOICE=smtp
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=<the gmail address>
+EMAIL_HOST_PASSWORD=<the 16-character App Password, no spaces>
+EMAIL_USE_TLS=True
+DEFAULT_FROM_EMAIL=i-connects <the gmail address>
+```
+
+**5. Test it end to end** once the stack is up:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec web \
+  python manage.py sendtestemail your-real-address@example.com
+```
+(Django's built-in `sendtestemail` command — sends a plain test message
+using whatever `EMAIL_*` settings are active.) If that lands in your inbox,
+also walk the real signup flow once — Part A5 makes email verification
+**mandatory**, so a broken SMTP config silently locks out every new user,
+not just this test.
+
+**Caveats specific to using Gmail here, not a transactional provider:**
+
+- **`DEFAULT_FROM_EMAIL` should be the same Gmail address you authenticate
+  as** (or a verified "Send mail as" alias configured inside that Gmail
+  account) — `noreply@i-connects.cossee.org` or any address Gmail doesn't
+  recognize as belonging to the account will often get rewritten or
+  flagged, since Gmail enforces alignment between the authenticated
+  account and the `From` header.
+- **Sending limits.** A regular Gmail account is capped at roughly 500
+  recipients/day (Google Workspace accounts get a higher limit, commonly
+  2000/day) — fine for auth emails and moderate invitation/notification
+  volume, but a large mailing-list send (see the app's per-project mailing
+  list feature) or a burst of signups could hit it. If that becomes a real
+  constraint, `EMAIL_BACKEND_CHOICE=resend` (already wired up, just needs
+  `RESEND_API_KEY`) is the lower-effort switch to a provider built for this.
+- **If this Google account is a University of Alberta Workspace account**
+  rather than a personal `gmail.com` one, an org admin may have App
+  Passwords disabled entirely by policy (some Workspace orgs require OAuth2
+  for SMTP instead). If App Passwords aren't available under **Security**
+  for that account, that's why — coordinate with whoever administers UA's
+  Workspace rather than assuming the steps above are missing something.
+- **Treat the App Password exactly like every other secret in `.env`** —
+  covered by A8's `.gitignore` fix and the `chmod 600` above already, but
+  worth restating: it grants send-as access to that Gmail account.
+- Revoking access later (offboarding, suspected leak) is a single click:
+  `myaccount.google.com/apppasswords` → delete the entry — no password
+  rotation on the Google account itself required, since App Passwords are
+  independently revocable.
 
 ---
 
@@ -615,44 +695,74 @@ text for the site block in G3.
 
 ### G2. DNS
 
-Covered in Part D — the A record must resolve before G3's `reload` can
-issue a cert for it.
+Covered in Part D — the A record must resolve before G3's install can issue
+a cert for it. Don't install the site file before DNS resolves: issuance
+fails and retries in the background rather than succeeding on request.
 
-### G3. Add a site block to the existing host Caddyfile
+### G3. Register your port, then add a site file
 
-Locate it, and confirm with whoever else's app it already serves before
-editing a file they depend on too:
+On `cossee-web-server` specifically, the host Caddy setup is more
+structured than a single flat `Caddyfile`: it's config-managed by the
+host's admin (`mzakir`), sites live as individual files under
+`/etc/caddy/sites/` (imported by the main config), reloads go through a
+`caddy-reload` wrapper rather than a raw `systemctl reload`, and ports are
+tracked in a shared registry so two apps don't collide on the same
+localhost port:
 
 ```bash
-sudo systemctl status caddy
-sudo find / -xdev -iname "Caddyfile" 2>/dev/null
+groups                              # confirm you're in the webdev group (added by the host admin)
+cat /etc/caddy/PORTS.md             # claim your port entry (8000, for this app) before adding anything else
 ```
 
-Append (baseline security headers as defense-in-depth on top of Django's
-own `SecurityMiddleware` — closes part of SECURITY_AUDIT M6):
+Get the site file from whoever administers the host Caddy — on this host,
+that's a template staged by `mzakir` — **read it before installing it**:
+it's about to become privileged, TLS-terminating config for this domain,
+sourced from someone else's home directory, so verify it actually does
+what it claims (proxies only to `127.0.0.1:8000`, no unexpected upstreams,
+no wildcard host match) rather than trusting the description alone. The
+confirmed-working version for this app:
 
 ```caddyfile
 i-connects.cossee.org {
     encode zstd gzip
-
+    reverse_proxy 127.0.0.1:8000 {
+        # Django needs these to build absolute URLs and to see the real
+        # client address rather than the proxy's.
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+        header_up Host {host}
+    }
     header {
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Permissions-Policy "geolocation=(), camera=(), microphone=()"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
         -Server
     }
-
-    reverse_proxy 127.0.0.1:8000
+    log
 }
 ```
 
-Validate before reloading — a bad edit here breaks every app behind this
-Caddy, not just this one:
+One accepted trade-off worth knowing about: Caddy's `header` directive
+*replaces* a response header of the same name rather than layering onto
+it, so this template's `X-Frame-Options: SAMEORIGIN` overrides Django's own
+`X_FRAME_OPTIONS = "DENY"` (`config/settings/prod.py`) — the browser sees
+`SAMEORIGIN`, not `DENY`. Still a legitimate clickjacking mitigation, just
+slightly looser than the app's own default. Not worth changing unilaterally
+since it's a shared template — raise it with the host Caddy's admin if
+strict `DENY` ever matters for this app specifically.
+
+Install and reload — validate first, since a bad file here breaks every app
+behind this Caddy, not just this one:
 
 ```bash
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy   # graceful — reload, not restart; no dropped
-                               # connections; cert is fetched on first request
+sudo caddy validate --config /etc/caddy/sites/i-connects.caddy 2>/dev/null || true  # if the wrapper doesn't validate first
+sudo install -m 644 <path-to-the-reviewed-site-file> /etc/caddy/sites/i-connects.caddy
+caddy-reload   # host-specific graceful-reload wrapper; no dropped connections
+               # for this app or others behind the same Caddy
 ```
+
+Caddy requests the certificate on the first real HTTPS request after this,
+so the very first hit to `https://i-connects.cossee.org/` right after
+`caddy-reload` may take an extra second or two.
 
 ### If this app is ever the *only* thing on a host
 
@@ -909,12 +1019,15 @@ laptop, departing team member with access):
 | Caddy logs `no such host` / `dns problem` | A-record not propagated | `dig +short i-connects.cossee.org`; wait or fix DNS (Part D). |
 | Browser: `ERR_CONNECTION_REFUSED` on :443 | UFW/firewall blocks 443 | `sudo ufw status`; confirm `443/tcp` is allowed (Part B4). |
 | Django: `DisallowedHost` | `DJANGO_ALLOWED_HOSTS` mismatch | Must contain `i-connects.cossee.org` exactly (Part F). |
-| Infinite redirect loop | `SECURE_SSL_REDIRECT=True` but `X-Forwarded-Proto` not forwarded | The host Caddy's `reverse_proxy` sets it by default — confirm the site block in `/etc/caddy/Caddyfile` (Part G) wasn't edited to drop it. |
+| Infinite redirect loop | `SECURE_SSL_REDIRECT=True` but `X-Forwarded-Proto` not forwarded | Confirm the `header_up X-Forwarded-Proto {scheme}` line is still present in `/etc/caddy/sites/i-connects.caddy` (Part G). |
 | `relation "..." does not exist` | Migrations didn't run | `docker compose exec web python manage.py migrate`. |
 | Static files 404 | `collectstatic` didn't run | `docker compose exec web python manage.py collectstatic --noinput`. |
-| Cert stuck on staging / rate-limited | Repeated failed issuance attempts | Fix the underlying DNS issue first, then `sudo systemctl reload caddy` again. Let's Encrypt rate limits are per-domain-per-week — don't loop this; if truly stuck, whoever manages the host Caddy needs to clear its stored account/cert state, which affects every app behind it. |
+| Cert stuck on staging / rate-limited | Repeated failed issuance attempts | Fix the underlying DNS issue first, then `caddy-reload` again. Let's Encrypt rate limits are per-domain-per-week — don't loop this; if truly stuck, whoever manages the host Caddy needs to clear its stored account/cert state, which affects every app behind it. |
 | `docker ps` shows `0.0.0.0:5432->...` or `0.0.0.0:6379->...` | Part A7's `!reset []` fix not applied, or applied but not rebuilt | Re-check the `docker-compose.prod.yml` diff, then `up -d` (recreation, not just editing the file, is what takes effect). This also means UFW was never protecting these — see Part B4's note. |
 | New signups never get a verification email (post-A5) | SMTP/Resend/SES misconfigured | `docker compose logs web \| grep -i mail`; verify `.env`'s email block against Part F before flipping `ACCOUNT_EMAIL_VERIFICATION` back to `optional` as a stopgap. |
+| Gmail SMTP: `535 5.7.8 Username and Password not accepted` | Using the account's normal password instead of an App Password, or 2-Step Verification isn't on | Re-check Part F1 — `EMAIL_HOST_PASSWORD` must be the 16-character App Password from `myaccount.google.com/apppasswords`, which doesn't exist until 2-Step Verification is enabled. |
+| Gmail account has no "App passwords" option under Security | Workspace org policy disables them | If this is a University of Alberta Workspace account rather than a personal one, an admin may need to allow App Passwords, or the account may require OAuth2 for SMTP instead — this isn't a config mistake on your end. |
+| Gmail-sent mail lands in spam, or `From` gets silently rewritten | `DEFAULT_FROM_EMAIL` doesn't match the authenticated Gmail address/alias | Set `DEFAULT_FROM_EMAIL` to the same address as `EMAIL_HOST_USER` (or a verified Gmail "Send mail as" alias), per Part F1. |
 | `manage.py check --deploy` warns about `SECRET_KEY` or `ALLOWED_HOSTS` | `.env` not actually loaded, or `DJANGO_SETTINGS_MODULE` wrong | `docker compose exec web env \| grep DJANGO`; confirm it reads `config.settings.prod`. |
 | Container runs as root (`docker compose exec web id` shows `uid=0`) | Part A3 not applied/rebuilt | Re-check the `Dockerfile` diff, then `up -d --build` (not just `up -d`). |
 
@@ -937,11 +1050,12 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v
 ```
 
 Since Part G put this app behind the host's shared Caddy rather than a
-Caddy this stack owns, also remove the `i-connects.cossee.org` block from
-`/etc/caddy/Caddyfile` and `sudo systemctl reload caddy` — otherwise the
-shared proxy keeps trying to route to a `127.0.0.1:8000` that's no longer
-listening, and its error logs (and other apps behind it) get noisier for
-no reason.
+Caddy this stack owns, also remove `/etc/caddy/sites/i-connects.caddy` and
+run `caddy-reload`, and free the port entry in `/etc/caddy/PORTS.md` —
+otherwise the shared proxy keeps trying to route to a `127.0.0.1:8000`
+that's no longer listening, its error logs (and other apps behind it) get
+noisier for no reason, and the port stays claimed for an app that no
+longer exists.
 
 To decommission the host entirely: take a final `pg_dump` + media backup,
 confirm both landed off-host, then deprovision the server through whatever
