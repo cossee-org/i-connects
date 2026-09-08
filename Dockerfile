@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # --- Stage 1: build Tailwind/DaisyUI CSS ---
-FROM node:20-bookworm-slim AS css-builder
+FROM node:22-bookworm-slim AS css-builder
 
 WORKDIR /src
 
@@ -22,7 +22,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    DJANGO_SETTINGS_MODULE=config.settings.dev
+    DJANGO_SETTINGS_MODULE=config.settings.prod
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -40,6 +40,11 @@ COPY . .
 
 # Bring in the Tailwind-compiled CSS from the css-builder stage.
 COPY --from=css-builder /src/static/css/output.css ./static/css/output.css
+
+RUN useradd -m -u 1000 appuser \
+  && mkdir -p /app/staticfiles /app/media \
+  && chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8000
 
