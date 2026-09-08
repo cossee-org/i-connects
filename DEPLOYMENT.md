@@ -136,7 +136,7 @@ attacker root inside the container. Add, in the final stage, after
 Run `pytest -q` after bumping — no code changes are expected, this is a
 patch-level bump only.
 
-### A5. Require verified email before invitations/login trust it (closes H1)
+### A5. Require verified email before invitations/login trust it (closes H1) — settings change alone is NOT sufficient
 
 `config/settings/base.py` sets `ACCOUNT_EMAIL_VERIFICATION = "optional"`,
 and `AcceptOrDeclineInviteView` authorizes purely by string-matching
@@ -147,12 +147,44 @@ up.
 ```diff
 -ACCOUNT_EMAIL_VERIFICATION = "optional"
 +ACCOUNT_EMAIL_VERIFICATION = "mandatory"
++ACCOUNT_EMAIL_REQUIRED = True
 ```
 
-This requires outbound email to work (Part F, SMTP/Resend/SES) — verify
-signup → confirmation email → login works end-to-end in staging before
-flipping this in production, since a broken email path with `mandatory`
-verification locks every new signup out.
+(`ACCOUNT_EMAIL_REQUIRED` is a companion setting allauth's own settings
+check requires alongside `mandatory` verification — omitting it is a
+CRITICAL-level boot failure at `manage.py migrate`, confirmed live during
+this deployment.)
+
+**Important — confirmed live on `cossee-web-server`: this settings change
+alone does not close H1.** `ACCOUNT_EMAIL_VERIFICATION` is an **allauth**
+setting; it only gates allauth's own account views/adapter flow, which
+this app uses solely for ORCID social login (per the docstring atop
+`apps/accounts/views.py`). The app's actual email/password signup and
+login are hand-rolled views in that same file — `SignupView.form_valid`
+calls `login(self.request, user, ...)` directly right after
+`form.save()`, and `LoginView.form_valid` does the same, with **no check
+of email-verification status anywhere in either path**. A real signup with
+an unconfirmed address still gets a fully authenticated session; the
+setting change above does nothing to stop it. `AcceptOrDeclineInviteView`
+is unchanged and still trusts `request.user.email` outright.
+
+Actually closing H1 needs an app-code change to `apps/accounts/views.py`
+(and likely `apps/accounts/forms.py`/templates for the confirmation-sent
+and confirm-your-email screens) — at minimum, per the audit's own
+suggested fix, gating `AcceptOrDeclineInviteView` and password-reset trust
+behind a real `email_verified` check, and/or not fully authenticating a
+session until that check passes. That's a genuine feature change with UX
+implications (this app currently auto-logs a user in immediately on
+signup, by design), not a one-line deployment-config fix — treat the
+settings change above as necessary-but-not-sufficient, track the actual
+code fix separately, and don't rely on `ACCOUNT_EMAIL_VERIFICATION` for
+security guarantees on the email/password path until it lands.
+
+The settings change is still worth making now regardless, since it's
+required for the ORCID login path to behave correctly and is a
+prerequisite either way. This requires outbound email to work (Part F,
+SMTP/Resend/SES) for the paths that do use it — verify signup →
+confirmation email → login works end-to-end in staging.
 
 ### A6. Guard `seed_demo` against production databases (closes M3)
 
@@ -1024,7 +1056,8 @@ laptop, departing team member with access):
 | Static files 404 | `collectstatic` didn't run | `docker compose exec web python manage.py collectstatic --noinput`. |
 | Cert stuck on staging / rate-limited | Repeated failed issuance attempts | Fix the underlying DNS issue first, then `caddy-reload` again. Let's Encrypt rate limits are per-domain-per-week — don't loop this; if truly stuck, whoever manages the host Caddy needs to clear its stored account/cert state, which affects every app behind it. |
 | `docker ps` shows `0.0.0.0:5432->...` or `0.0.0.0:6379->...` | Part A7's `!reset []` fix not applied, or applied but not rebuilt | Re-check the `docker-compose.prod.yml` diff, then `up -d` (recreation, not just editing the file, is what takes effect). This also means UFW was never protecting these — see Part B4's note. |
-| New signups never get a verification email (post-A5) | SMTP/Resend/SES misconfigured | `docker compose logs web \| grep -i mail`; verify `.env`'s email block against Part F before flipping `ACCOUNT_EMAIL_VERIFICATION` back to `optional` as a stopgap. |
+| A signup with an unconfirmed/fake email still gets a logged-in session | Expected today, not a config bug — see Part A5's note: the app's `SignupView`/`LoginView` are hand-rolled and never check email-verification status, so `ACCOUNT_EMAIL_VERIFICATION=mandatory` doesn't gate this path at all | Real fix is an app-code change to `apps/accounts/views.py`, tracked separately from deployment config — don't spend time debugging `.env`/SMTP for this specific symptom. |
+| No confirmation email ever arrives for a regular (non-ORCID) signup | Expected today — the primary signup path doesn't call allauth's email-confirmation flow at all, so nothing is sent to debug | Only the "welcome email" (`send_welcome_email`) fires on regular signup; allauth's confirmation email only exists for the ORCID social-login path. `docker compose logs web \| grep -i mail` will show the welcome email attempt, not a confirmation one. |
 | Gmail SMTP: `535 5.7.8 Username and Password not accepted` | Using the account's normal password instead of an App Password, or 2-Step Verification isn't on | Re-check Part F1 — `EMAIL_HOST_PASSWORD` must be the 16-character App Password from `myaccount.google.com/apppasswords`, which doesn't exist until 2-Step Verification is enabled. |
 | Gmail account has no "App passwords" option under Security | Workspace org policy disables them | If this is a University of Alberta Workspace account rather than a personal one, an admin may need to allow App Passwords, or the account may require OAuth2 for SMTP instead — this isn't a config mistake on your end. |
 | Gmail-sent mail lands in spam, or `From` gets silently rewritten | `DEFAULT_FROM_EMAIL` doesn't match the authenticated Gmail address/alias | Set `DEFAULT_FROM_EMAIL` to the same address as `EMAIL_HOST_USER` (or a verified Gmail "Send mail as" alias), per Part F1. |
