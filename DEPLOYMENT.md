@@ -26,7 +26,7 @@ public internet" class bugs, not theoretical hardening.
 - [Part D — DNS](#part-d)
 - [Part E — Get the code onto the server](#part-e)
 - [Part F — Configure `.env`](#part-f)
-- [Part G — Production Caddyfile](#part-g)
+- [Part G — Reverse proxy (shared host Caddy)](#part-g)
 - [Part H — Launch](#part-h)
 - [Part I — Post-launch verification](#part-i)
 - [Part J — Day-2 operations](#part-j)
@@ -174,19 +174,56 @@ docstring. Add one:
 `seed_demo` is unavailable once Part A2 takes effect in production, which is
 the intent — never run it against `i-connects.cossee.org`.
 
-### A7. Add Redis authentication (closes M4)
+### A7. Fix `ports: []` not actually closing db/redis, and add Redis auth (closes M4)
 
-Neither compose file sets a Redis password. `docker-compose.prod.yml`
-already zeroes `ports: []` for `redis`, so it isn't reachable from the
-public internet in a *correctly launched* prod stack — but any compromised
-container on the same Docker network (web, celery) has full unauthenticated
-read/write to the broker and result backend. Add a password:
+Two separate bugs, same symptom — `db` and `redis` reachable on `0.0.0.0`
+in production.
 
-In `docker-compose.prod.yml`, under the `redis:` service:
+**Bug 1 — `docker-compose.prod.yml`'s `ports: []` is a no-op.** Docker
+Compose merges `ports:` (and `expose`, `volumes`, a few other list fields)
+across `-f` files by **union, not replacement** — an empty list in an
+override contributes zero *additional* entries, it does not clear what the
+base `docker-compose.yml` already published (`"5432:5432"` /
+`"6379:6379"`). Confirmed live: `docker compose -f docker-compose.yml -f
+docker-compose.prod.yml up -d` still leaves both published to the public
+internet, even though the override was applied (verify with `docker ps
+--format '{{.Names}}\t{{.Ports}}'`). Worth stating plainly: this also means
+UFW (Part B4) is **not** protecting these ports even if it's configured
+correctly — Docker inserts its own `iptables`/`DOCKER-USER` rules ahead of
+UFW's, so a published container port bypasses the host firewall entirely.
+
+Fix it with Compose's `!reset` tag, which explicitly replaces a field
+instead of merging it (needs Compose v2.24+; check with `docker compose
+version` — anything from `get.docker.com` on Ubuntu 24.04 in 2026
+qualifies):
+
+```diff
+ db:
+-  ports: []
++  ports: !reset []
+   restart: unless-stopped
+ ...
+ redis:
+-  ports: []
++  ports: !reset []
+   restart: unless-stopped
+```
+
+If you already brought the stack up before applying this, the running
+containers keep their old (exposed) config until recreated — after editing,
+re-run `up -d` and confirm with `docker ps` that neither shows a
+`0.0.0.0:...->...` mapping. If you need to stop the exposure immediately
+before you can edit and rebuild, `docker stop <db-container>
+<redis-container>` first.
+
+**Bug 2 — no Redis password.** Even fully unpublished (internal-network
+only), any compromised container on the same Docker network (web, celery)
+has full unauthenticated read/write to the broker and result backend. Add a
+password:
 
 ```diff
  redis:
-   ports: []
+   ports: !reset []
    restart: unless-stopped
 +  command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
 ```
@@ -344,9 +381,15 @@ sudo ufw enable
 sudo ufw status verbose
 ```
 
-No other port should be open. Postgres (`5432`) and Redis (`6379`) are
-**not** exposed here on purpose — `docker-compose.prod.yml` keeps them off
-the host network entirely (`ports: []`); don't add UFW rules for them.
+No other port should be open. Postgres (`5432`) and Redis (`6379`) should
+never need a UFW rule — `docker-compose.prod.yml` is meant to keep them off
+the host network entirely. **Don't treat UFW as a backstop for that,
+though**: Docker publishes container ports by inserting its own
+`iptables`/`DOCKER-USER` rules ahead of UFW's, so a container that ends up
+published to `0.0.0.0` (see Part A7's merge-bug fix) is reachable from the
+internet regardless of what UFW says. UFW here is for the host's own
+listening processes (SSH) — it is not a safety net for Docker port
+publishing.
 
 ### B5. Fail2ban for SSH brute-force protection
 
@@ -389,17 +432,24 @@ docker compose version
 <a id="part-d"></a>
 ## Part D — DNS
 
-Point the production A record (and AAAA if the server has IPv6) at the
-server's public IP:
+`cossee.org` is registered at Namecheap. Add an **A** record there: host
+`i-connects`, value the server's public IP —
+`142.244.87.193` for `cossee-web-server` as of this writing; reconfirm with
+`curl -s https://api.ipify.org` run on the server itself, since that's the
+authoritative source, not this document. Skip the AAAA/IPv6 record unless
+`curl -6 -s https://api64.ipify.org` on the server actually returns an
+address — most hosts here don't have IPv6 configured, and a stale AAAA
+record pointing nowhere breaks IPv6-preferring clients even though the A
+record is fine.
 
 ```
-i-connects.cossee.org.   A   <server public IP>
+i-connects.cossee.org.   A   142.244.87.193
 ```
 
 Verify propagation from the server and from an outside network before
-proceeding — Caddy's automatic TLS issuance in Part H fails, and can hit
-Let's Encrypt rate limits on repeated failed attempts, if this isn't
-resolvable yet:
+proceeding — automatic TLS issuance in Part G fails, and can hit Let's
+Encrypt rate limits on repeated failed attempts, if this isn't resolvable
+yet:
 
 ```bash
 dig +short i-connects.cossee.org
@@ -508,44 +558,109 @@ chmod 600 .env
 ---
 
 <a id="part-g"></a>
-## Part G — Production Caddyfile
+## Part G — Reverse proxy: `cossee-web-server` already runs a shared Caddy
 
-The committed `Caddyfile` points at the demo subdomain. For production, use
-the real domain and add baseline security headers (defense-in-depth on top
-of Django's own `SecurityMiddleware` — closes part of SECURITY_AUDIT M6):
+`cossee-web-server` is a shared host: it already runs a **host-level Caddy**
+(a systemd service, not a Docker container) that owns `:80`/`:443` for the
+whole machine and fronts at least one other app. Confirmed live —
+`docker-compose.prod.yml`'s own `caddy:` service fails to start with
+`address already in use` because of this, and `docker ps` shows no Caddy
+container at all, only a `caddy` process bound to `*:80`/`*:443` outside
+Docker entirely. That means the committed `Caddyfile` and the `caddy:`
+service in `docker-compose.prod.yml` (written for a single-app, dedicated
+host) don't apply here — use the existing host Caddy instead.
+
+### G1. Drop this repo's own `caddy` service; bind `web` to loopback only
+
+```diff
+ services:
+   web:
+     command: >
+       sh -c "python manage.py migrate --noinput &&
+              python manage.py collectstatic --noinput &&
+              gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+     volumes: []
+     restart: unless-stopped
+-    ports: []
+-    expose:
+-      - "8000"
++    ports:
++      - "127.0.0.1:8000:8000"
+   ...
+-  caddy:
+-    image: caddy:2
+-    restart: unless-stopped
+-    ports:
+-      - "80:80"
+-      - "443:443"
+-    volumes:
+-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+-      - caddy_data:/data
+-      - caddy_config:/config
+-    depends_on:
+-      - web
+-
+-volumes:
+-  caddy_data:
+-  caddy_config:
+```
+
+Binding to `127.0.0.1` rather than `0.0.0.0` means only processes on the
+host itself — the host Caddy — can reach gunicorn on `:8000`; the outside
+world can't hit it directly, with or without a firewall rule.
+
+This repo's own `Caddyfile` (pointing at `demo.i-connects.cossee.org`) is
+now unused on this host — either delete it or keep it only as the source
+text for the site block in G3.
+
+### G2. DNS
+
+Covered in Part D — the A record must resolve before G3's `reload` can
+issue a cert for it.
+
+### G3. Add a site block to the existing host Caddyfile
+
+Locate it, and confirm with whoever else's app it already serves before
+editing a file they depend on too:
+
+```bash
+sudo systemctl status caddy
+sudo find / -xdev -iname "Caddyfile" 2>/dev/null
+```
+
+Append (baseline security headers as defense-in-depth on top of Django's
+own `SecurityMiddleware` — closes part of SECURITY_AUDIT M6):
 
 ```caddyfile
 i-connects.cossee.org {
     encode zstd gzip
 
     header {
-        # Belt-and-suspenders on top of Django's SecurityMiddleware —
-        # harmless if duplicated, useful if either layer is misconfigured.
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "geolocation=(), camera=(), microphone=()"
         -Server
     }
 
-    reverse_proxy web:8000
+    reverse_proxy 127.0.0.1:8000
 }
 ```
 
-Do **not** point this at `demo.i-connects.cossee.org` — that's a separate
-Caddy/cert scope if the demo stack is still running elsewhere. If both the
-demo and production stacks run on this same host, give them distinct
-Caddyfiles/compose projects (separate directories, separate
-`docker compose -p` project names) so their `caddy_data` volumes — and
-Let's Encrypt certs — don't collide.
-
-Edit the repo's `Caddyfile` directly (it's already the file
-`docker-compose.prod.yml` mounts) and commit the domain change, or keep a
-local, uncommitted override if you intend to run demo and prod from the
-same checkout. For a single-purpose production host, just edit it in place:
+Validate before reloading — a bad edit here breaks every app behind this
+Caddy, not just this one:
 
 ```bash
-cd ~/i-connects
-nano Caddyfile   # replace demo.i-connects.cossee.org with i-connects.cossee.org, add the header block above
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy   # graceful — reload, not restart; no dropped
+                               # connections; cert is fetched on first request
 ```
+
+### If this app is ever the *only* thing on a host
+
+The original per-repo Dockerized `caddy:` service (the one G1 removes) is a
+perfectly good, simpler default when nothing else shares the machine — one
+`docker compose up`, TLS included, no host-level Caddy to coordinate with.
+`cossee-web-server` isn't that kind of host, so this guide documents the
+shared-host path as the one that actually applies here.
 
 ---
 
@@ -556,20 +671,23 @@ nano Caddyfile   # replace demo.i-connects.cossee.org with i-connects.cossee.org
 cd ~/i-connects
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 docker compose ps
-docker compose logs --tail=100 web caddy celery celery-beat
+docker compose logs --tail=100 web celery celery-beat
+docker ps --format '{{.Names}}\t{{.Ports}}'   # confirm the state below
 ```
 
-What this does:
+What this does (assuming Part G's `docker-compose.prod.yml` edits are
+applied — no `caddy` service in this stack on this host):
 
 - `web` runs `migrate` → `collectstatic` → `gunicorn :8000` as `appuser`
-  (after Part A3), reachable only from the Docker network.
-- `caddy` binds `:80`/`:443`, issues a Let's Encrypt cert for
-  `i-connects.cossee.org` on first request, and reverse-proxies to
-  `web:8000`. Cert + state persist in the `caddy_data`/`caddy_config`
-  volumes.
+  (after Part A3), bound to `127.0.0.1:8000` only — reachable from the host
+  itself (i.e., the host-level Caddy from Part G), not from the network.
+- TLS and the public `:80`/`:443` edge are handled entirely by the existing
+  host-level Caddy (Part G) — this app doesn't run or manage a reverse
+  proxy of its own on `cossee-web-server`.
 - `db` and `redis` are unreachable from the host network or the public
-  internet (`ports: []`), and `redis` now requires the password from Part
-  F/A7.
+  internet once Part A7's `!reset []` fix is applied — verify with the
+  `docker ps` line above; neither should show a `0.0.0.0:...` mapping.
+  `redis` also requires the password from Part F/A7.
 - `celery` and `celery-beat` start once `db` and `redis` pass their health
   checks.
 
@@ -662,7 +780,7 @@ newer code may already have written in the new shape.
 ```bash
 docker compose logs -f web
 docker compose logs -f celery celery-beat
-docker compose logs -f caddy
+sudo journalctl -u caddy -f   # host-level Caddy (Part G) — not a compose service on this host
 ```
 
 **Review dependency updates:** `.github/workflows/ci.yml` runs `pytest` on
@@ -745,10 +863,11 @@ into a fresh deploy).
   `df -h /` periodically, or alert on it. `docker system df` shows what
   Docker itself is holding; `docker image prune` after deploys reclaims
   old, unused build layers.
-- **Cert renewal**: Caddy renews Let's Encrypt certs automatically; confirm
-  once a quarter with `docker compose logs caddy | grep -i certificate`
-  that a renewal actually happened in the preceding ~60 days rather than
-  silently failing.
+- **Cert renewal**: the host-level Caddy (Part G) renews Let's Encrypt certs
+  automatically; confirm once a quarter with
+  `sudo journalctl -u caddy | grep -i certificate` that a renewal actually
+  happened in the preceding ~60 days rather than silently failing. This
+  affects every app behind that Caddy, not just this one.
 
 ---
 
@@ -786,13 +905,15 @@ laptop, departing team member with access):
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
+| `docker compose up`: `address already in use` on :80/:443 | This host already runs Caddy (host-level or another app's) | You're on `cossee-web-server`, a shared host — see Part G. Drop this repo's own `caddy:` service; use the existing host Caddy instead. |
 | Caddy logs `no such host` / `dns problem` | A-record not propagated | `dig +short i-connects.cossee.org`; wait or fix DNS (Part D). |
 | Browser: `ERR_CONNECTION_REFUSED` on :443 | UFW/firewall blocks 443 | `sudo ufw status`; confirm `443/tcp` is allowed (Part B4). |
 | Django: `DisallowedHost` | `DJANGO_ALLOWED_HOSTS` mismatch | Must contain `i-connects.cossee.org` exactly (Part F). |
-| Infinite redirect loop | `SECURE_SSL_REDIRECT=True` but `X-Forwarded-Proto` not forwarded | Caddy's `reverse_proxy` sets it by default — confirm the directive wasn't replaced. |
+| Infinite redirect loop | `SECURE_SSL_REDIRECT=True` but `X-Forwarded-Proto` not forwarded | The host Caddy's `reverse_proxy` sets it by default — confirm the site block in `/etc/caddy/Caddyfile` (Part G) wasn't edited to drop it. |
 | `relation "..." does not exist` | Migrations didn't run | `docker compose exec web python manage.py migrate`. |
 | Static files 404 | `collectstatic` didn't run | `docker compose exec web python manage.py collectstatic --noinput`. |
-| Cert stuck on staging / rate-limited | Repeated failed issuance attempts | Fix the underlying DNS/firewall issue first, then `docker compose down && docker volume rm i-connects_caddy_data && docker compose up -d`. Let's Encrypt rate limits are per-domain-per-week — don't loop this. |
+| Cert stuck on staging / rate-limited | Repeated failed issuance attempts | Fix the underlying DNS issue first, then `sudo systemctl reload caddy` again. Let's Encrypt rate limits are per-domain-per-week — don't loop this; if truly stuck, whoever manages the host Caddy needs to clear its stored account/cert state, which affects every app behind it. |
+| `docker ps` shows `0.0.0.0:5432->...` or `0.0.0.0:6379->...` | Part A7's `!reset []` fix not applied, or applied but not rebuilt | Re-check the `docker-compose.prod.yml` diff, then `up -d` (recreation, not just editing the file, is what takes effect). This also means UFW was never protecting these — see Part B4's note. |
 | New signups never get a verification email (post-A5) | SMTP/Resend/SES misconfigured | `docker compose logs web \| grep -i mail`; verify `.env`'s email block against Part F before flipping `ACCOUNT_EMAIL_VERIFICATION` back to `optional` as a stopgap. |
 | `manage.py check --deploy` warns about `SECRET_KEY` or `ALLOWED_HOSTS` | `.env` not actually loaded, or `DJANGO_SETTINGS_MODULE` wrong | `docker compose exec web env \| grep DJANGO`; confirm it reads `config.settings.prod`. |
 | Container runs as root (`docker compose exec web id` shows `uid=0`) | Part A3 not applied/rebuilt | Re-check the `Dockerfile` diff, then `up -d --build` (not just `up -d`). |
@@ -814,6 +935,13 @@ confirm you have a current off-host backup (Part K) first**:
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v
 ```
+
+Since Part G put this app behind the host's shared Caddy rather than a
+Caddy this stack owns, also remove the `i-connects.cossee.org` block from
+`/etc/caddy/Caddyfile` and `sudo systemctl reload caddy` — otherwise the
+shared proxy keeps trying to route to a `127.0.0.1:8000` that's no longer
+listening, and its error logs (and other apps behind it) get noisier for
+no reason.
 
 To decommission the host entirely: take a final `pg_dump` + media backup,
 confirm both landed off-host, then deprovision the server through whatever
