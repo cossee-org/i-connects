@@ -105,14 +105,25 @@
 <script>
 function selectInviteUser(pk, label) {
   document.getElementById('id_invited_user').value = pk;
+  document.getElementById('id_email').value = '';
   document.getElementById('user-search-results').innerHTML = '';
   document.getElementById('selected-user-label').textContent = label;
   document.getElementById('user-search-block').classList.add('hidden');
   document.getElementById('selected-user-display').classList.remove('hidden');
 }
 
+function selectInviteEmail(email) {
+  document.getElementById('id_invited_user').value = '';
+  document.getElementById('id_email').value = email;
+  document.getElementById('user-search-results').innerHTML = '';
+  document.getElementById('selected-user-label').textContent = email;
+  document.getElementById('user-search-block').classList.add('hidden');
+  document.getElementById('selected-user-display').classList.remove('hidden');
+}
+
 function clearInviteSelection() {
   document.getElementById('id_invited_user').value = '';
+  document.getElementById('id_email').value = '';
   document.getElementById('selected-user-display').classList.add('hidden');
   document.getElementById('selected-user-label').textContent = '';
   var searchBlock = document.getElementById('user-search-block');
