@@ -27,6 +27,7 @@ from apps.projects.services import (
     create_project_with_owner,
     decline_join_request,
     is_last_project_manager,
+    resend_invitation,
 )
 
 
@@ -240,6 +241,82 @@ def test_invitation_code_is_unique_urlsafe(user):
         entity_type="invitation",
         entity_id=invitation.pk,
     ).exists()
+
+
+@pytest.mark.django_db
+def test_resend_invitation_regenerates_code_and_resends_email(user):
+    from django.core import mail
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Inv Resend", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    invitation = create_invitation(
+        project=project,
+        email="new@test.com",
+        privilege=MemberPrivileges.CONTRIBUTOR,
+        added_by="alice",
+    )
+    original_code = invitation.invitation_code
+    mail.outbox.clear()
+
+    resend_invitation(invitation=invitation, resender=user)
+    invitation.refresh_from_db()
+
+    assert invitation.invitation_code != original_code
+    assert len(mail.outbox) == 1
+    assert invitation.invitation_code in mail.outbox[0].body
+    assert AuditLog.objects.filter(
+        action=AuditAction.INVITATION_RESENT,
+        entity_type="invitation",
+        entity_id=invitation.pk,
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_resend_invitation_view_requires_project_manager(client, user, other_user):
+    project = _make_project(user)
+    invitation = create_invitation(
+        project=project,
+        email="new@test.com",
+        privilege=MemberPrivileges.CONTRIBUTOR,
+        added_by="alice",
+    )
+    # A contributor, not a PM, may not resend.
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(other_user)
+    response = client.post(
+        reverse(
+            "projects:resend_invitation",
+            kwargs={"pk": project.pk, "invitation_pk": invitation.pk},
+        )
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_resend_invitation_view_redirects_pm_to_invitation_list(client_logged_in, user):
+    project = _make_project(user)
+    invitation = create_invitation(
+        project=project,
+        email="new@test.com",
+        privilege=MemberPrivileges.CONTRIBUTOR,
+        added_by="alice",
+    )
+    response = client_logged_in.post(
+        reverse(
+            "projects:resend_invitation",
+            kwargs={"pk": project.pk, "invitation_pk": invitation.pk},
+        )
+    )
+    assert response.status_code in (301, 302)
+    assert response["Location"] == reverse(
+        "projects:project_invitations", kwargs={"pk": project.pk}
+    )
 
 
 @pytest.mark.django_db

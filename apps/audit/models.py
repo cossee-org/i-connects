@@ -52,6 +52,7 @@ class AuditAction(models.TextChoices):
 
     # ---- Membership / invitations ------------------------------------------
     INVITATION_SENT = "invitation.sent", "Invitation sent"
+    INVITATION_RESENT = "invitation.resent", "Invitation resent"
     INVITATION_ACCEPTED = "invitation.accepted", "Invitation accepted"
     INVITATION_DECLINED = "invitation.declined", "Invitation declined"
     JOIN_REQUEST_CREATED = "join_request.created", "Join request submitted"

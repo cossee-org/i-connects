@@ -22,7 +22,13 @@ def _invitation_url(invitation) -> str:
     except NoReverseMatch:
         path = f"/invites/{invitation.invitation_code}/"
     site = getattr(settings, "SITE_URL", "").rstrip("/")
-    return f"{site}{path}" if site else path
+    if not site:
+        logger.warning(
+            "SITE_URL is not set — invitation email link will be a bare "
+            "relative path instead of an absolute URL."
+        )
+        return path
+    return f"{site}{path}"
 
 
 @shared_task(name="projects.send_invitation_email")

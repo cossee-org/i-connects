@@ -79,6 +79,11 @@ urlpatterns = [
         views.CancelInvitationView.as_view(),
         name="cancel_invitation",
     ),
+    path(
+        "projects/<int:pk>/invitations/<int:invitation_pk>/resend/",
+        views.ResendInvitationView.as_view(),
+        name="resend_invitation",
+    ),
     path("invites/", views.MyInvitationsView.as_view(), name="my_invitations"),
     path(
         "invites/<str:code>/",
