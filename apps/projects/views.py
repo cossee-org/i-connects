@@ -1085,6 +1085,8 @@ class RemoveMemberView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
 def user_invite_search(request, pk):
     """Return an HTML fragment of users matching ``?q=`` for the invite modal search."""
     from django.contrib.auth import get_user_model
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
     from django.db.models import Q
 
     project = get_object_or_404(Project, pk=pk)
@@ -1096,11 +1098,19 @@ def user_invite_search(request, pk):
         return HttpResponse(status=403)
 
     q = request.GET.get("q", "").strip()
+
+    def is_email(value):
+        try:
+            validate_email(value)
+        except ValidationError:
+            return False
+        return True
+
     if not q:
         return render(
             request,
             "projects/partials/user_search_results.html",
-            {"users_data": [], "q": q},
+            {"users_data": [], "q": q, "q_is_email": False},
         )
 
     User = get_user_model()
@@ -1135,7 +1145,7 @@ def user_invite_search(request, pk):
     return render(
         request,
         "projects/partials/user_search_results.html",
-        {"users_data": users_data, "q": q},
+        {"users_data": users_data, "q": q, "q_is_email": is_email(q)},
     )
 
 
@@ -1168,6 +1178,8 @@ class InviteCreateView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
                     selected_user_label = f"{full_name} ({u.email})" if full_name else u.email
                 except get_user_model().DoesNotExist:
                     pass
+            if not selected_user_label:
+                selected_user_label = request.POST.get("email", "").strip()
             return render(
                 request,
                 self.template_name,
