@@ -341,7 +341,11 @@
                   <p class="text-xs text-brand-text/60">Sent by {{ inv.added_by }}</p>
                   <p class="text-xs text-brand-text/40 mt-1">{{ inv.created_at|date:"M j, Y" }}</p>
                 </div>
-                <div class="shrink-0">
+                <div class="shrink-0 flex gap-2">
+                  <form method="post" action="{% url 'projects:resend_invitation' pk=inv.project.pk invitation_pk=inv.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-ghost">Resend</button>
+                  </form>
                   <form method="post" action="{% url 'projects:cancel_invitation' pk=inv.project.pk invitation_pk=inv.pk %}">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-sm btn-ghost">Cancel</button>
