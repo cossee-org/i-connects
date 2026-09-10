@@ -69,6 +69,11 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options) -> None:
+        from django.conf import settings
+        if not settings.DEBUG:
+            raise CommandError(
+                "seed_demo is dev/demo-only and refuses to run when DEBUG=False."
+            )
         users_by_email = {}
         for email, name, _priv in DEMO_USERS:
             user, created = User.objects.get_or_create(

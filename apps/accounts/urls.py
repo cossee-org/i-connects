@@ -17,6 +17,21 @@ urlpatterns = [
     path("login/", views.LoginView.as_view(), name="login"),
     path("logout/", views.logout_view, name="logout"),
     path(
+        "confirm/sent/",
+        views.confirmation_sent,
+        name="confirmation_sent",
+    ),
+    path(
+        "confirm/resend/",
+        views.ResendConfirmationView.as_view(),
+        name="resend_confirmation",
+    ),
+    path(
+        "confirm/<uidb64>/<token>/",
+        views.email_confirm,
+        name="email_confirm",
+    ),
+    path(
         "password/forgot/",
         views.PasswordResetRequestView.as_view(),
         name="password_reset_request",

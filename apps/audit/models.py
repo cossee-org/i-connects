@@ -35,6 +35,11 @@ class AuditAction(models.TextChoices):
     PASSWORD_RESET_COMPLETED = "user.password_reset_completed", "Password reset completed"
     PASSWORD_CHANGED = "user.password_changed", "Password changed"
     PROFILE_UPDATED = "user.profile_updated", "Profile updated"
+    EMAIL_CONFIRMED = "user.email_confirmed", "Email address confirmed"
+    EMAIL_CONFIRMATION_RESEND_ATTEMPTED = (
+        "user.email_confirmation_resend_attempted",
+        "Email confirmation resend attempted",
+    )
 
     # ---- Projects -----------------------------------------------------------
     PROJECT_CREATED = "project.created", "Project created"

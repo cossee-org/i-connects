@@ -26,7 +26,11 @@
       {% include "_components/form_field.html" with field=form.email %}
       {% include "_components/form_field.html" with field=form.password %}
 
-      <div class="flex justify-end -mt-2 mb-4">
+      <div class="flex justify-between -mt-2 mb-4 gap-4">
+        <a href="{% url 'accounts:resend_confirmation' %}"
+           class="text-sm text-brand-navy hover:text-brand-coral font-medium">
+          Resend confirmation email
+        </a>
         <a href="{% url 'accounts:password_reset_request' %}"
            class="text-sm text-brand-navy hover:text-brand-coral font-medium">
           Forgot password?

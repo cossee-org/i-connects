@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
-from .tokens import password_reset_token
+from .tokens import email_confirmation_token, password_reset_token
 
 
 def _render_subject(template_name: str, context: dict) -> str:
@@ -45,6 +45,32 @@ def send_welcome_email(user, *, request=None) -> None:
     subject = _render_subject("accounts/emails/welcome_subject.txt", ctx)
     text_body = render_to_string("accounts/emails/welcome.txt", ctx)
     html_body = render_to_string("accounts/emails/welcome.html", ctx)
+    _send(subject, text_body, html_body, user.email)
+
+
+def send_confirmation_email(
+    user,
+    *,
+    request=None,
+    token_generator: PasswordResetTokenGenerator | None = None,
+) -> None:
+    """Send the signup confirmation link to ``user.email``.
+
+    Required before the account can log in — see
+    ``apps.accounts.forms.LoginForm.clean``.
+    """
+    generator = token_generator or email_confirmation_token
+    uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+    token = generator.make_token(user)
+    path = reverse(
+        "accounts:email_confirm",
+        kwargs={"uidb64": uidb64, "token": token},
+    )
+    confirm_url = request.build_absolute_uri(path) if request is not None else path
+    ctx = {"user": user, "confirm_url": confirm_url}
+    subject = _render_subject("accounts/emails/confirmation_subject.txt", ctx)
+    text_body = render_to_string("accounts/emails/confirmation.txt", ctx)
+    html_body = render_to_string("accounts/emails/confirmation.html", ctx)
     _send(subject, text_body, html_body, user.email)
 
 

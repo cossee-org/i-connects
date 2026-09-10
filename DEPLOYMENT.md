@@ -26,7 +26,7 @@ public internet" class bugs, not theoretical hardening.
 - [Part D — DNS](#part-d)
 - [Part E — Get the code onto the server](#part-e)
 - [Part F — Configure `.env`](#part-f)
-- [Part G — Production Caddyfile](#part-g)
+- [Part G — Reverse proxy (shared host Caddy)](#part-g)
 - [Part H — Launch](#part-h)
 - [Part I — Post-launch verification](#part-i)
 - [Part J — Day-2 operations](#part-j)
@@ -136,7 +136,7 @@ attacker root inside the container. Add, in the final stage, after
 Run `pytest -q` after bumping — no code changes are expected, this is a
 patch-level bump only.
 
-### A5. Require verified email before invitations/login trust it (closes H1)
+### A5. Require verified email before invitations/login trust it (closes H1) — settings change alone is NOT sufficient
 
 `config/settings/base.py` sets `ACCOUNT_EMAIL_VERIFICATION = "optional"`,
 and `AcceptOrDeclineInviteView` authorizes purely by string-matching
@@ -147,12 +147,44 @@ up.
 ```diff
 -ACCOUNT_EMAIL_VERIFICATION = "optional"
 +ACCOUNT_EMAIL_VERIFICATION = "mandatory"
++ACCOUNT_EMAIL_REQUIRED = True
 ```
 
-This requires outbound email to work (Part F, SMTP/Resend/SES) — verify
-signup → confirmation email → login works end-to-end in staging before
-flipping this in production, since a broken email path with `mandatory`
-verification locks every new signup out.
+(`ACCOUNT_EMAIL_REQUIRED` is a companion setting allauth's own settings
+check requires alongside `mandatory` verification — omitting it is a
+CRITICAL-level boot failure at `manage.py migrate`, confirmed live during
+this deployment.)
+
+**Important — confirmed live on `cossee-web-server`: this settings change
+alone does not close H1.** `ACCOUNT_EMAIL_VERIFICATION` is an **allauth**
+setting; it only gates allauth's own account views/adapter flow, which
+this app uses solely for ORCID social login (per the docstring atop
+`apps/accounts/views.py`). The app's actual email/password signup and
+login are hand-rolled views in that same file — `SignupView.form_valid`
+calls `login(self.request, user, ...)` directly right after
+`form.save()`, and `LoginView.form_valid` does the same, with **no check
+of email-verification status anywhere in either path**. A real signup with
+an unconfirmed address still gets a fully authenticated session; the
+setting change above does nothing to stop it. `AcceptOrDeclineInviteView`
+is unchanged and still trusts `request.user.email` outright.
+
+Actually closing H1 needs an app-code change to `apps/accounts/views.py`
+(and likely `apps/accounts/forms.py`/templates for the confirmation-sent
+and confirm-your-email screens) — at minimum, per the audit's own
+suggested fix, gating `AcceptOrDeclineInviteView` and password-reset trust
+behind a real `email_verified` check, and/or not fully authenticating a
+session until that check passes. That's a genuine feature change with UX
+implications (this app currently auto-logs a user in immediately on
+signup, by design), not a one-line deployment-config fix — treat the
+settings change above as necessary-but-not-sufficient, track the actual
+code fix separately, and don't rely on `ACCOUNT_EMAIL_VERIFICATION` for
+security guarantees on the email/password path until it lands.
+
+The settings change is still worth making now regardless, since it's
+required for the ORCID login path to behave correctly and is a
+prerequisite either way. This requires outbound email to work (Part F,
+SMTP/Resend/SES) for the paths that do use it — verify signup →
+confirmation email → login works end-to-end in staging.
 
 ### A6. Guard `seed_demo` against production databases (closes M3)
 
@@ -174,19 +206,56 @@ docstring. Add one:
 `seed_demo` is unavailable once Part A2 takes effect in production, which is
 the intent — never run it against `i-connects.cossee.org`.
 
-### A7. Add Redis authentication (closes M4)
+### A7. Fix `ports: []` not actually closing db/redis, and add Redis auth (closes M4)
 
-Neither compose file sets a Redis password. `docker-compose.prod.yml`
-already zeroes `ports: []` for `redis`, so it isn't reachable from the
-public internet in a *correctly launched* prod stack — but any compromised
-container on the same Docker network (web, celery) has full unauthenticated
-read/write to the broker and result backend. Add a password:
+Two separate bugs, same symptom — `db` and `redis` reachable on `0.0.0.0`
+in production.
 
-In `docker-compose.prod.yml`, under the `redis:` service:
+**Bug 1 — `docker-compose.prod.yml`'s `ports: []` is a no-op.** Docker
+Compose merges `ports:` (and `expose`, `volumes`, a few other list fields)
+across `-f` files by **union, not replacement** — an empty list in an
+override contributes zero *additional* entries, it does not clear what the
+base `docker-compose.yml` already published (`"5432:5432"` /
+`"6379:6379"`). Confirmed live: `docker compose -f docker-compose.yml -f
+docker-compose.prod.yml up -d` still leaves both published to the public
+internet, even though the override was applied (verify with `docker ps
+--format '{{.Names}}\t{{.Ports}}'`). Worth stating plainly: this also means
+UFW (Part B4) is **not** protecting these ports even if it's configured
+correctly — Docker inserts its own `iptables`/`DOCKER-USER` rules ahead of
+UFW's, so a published container port bypasses the host firewall entirely.
+
+Fix it with Compose's `!reset` tag, which explicitly replaces a field
+instead of merging it (needs Compose v2.24+; check with `docker compose
+version` — anything from `get.docker.com` on Ubuntu 24.04 in 2026
+qualifies):
+
+```diff
+ db:
+-  ports: []
++  ports: !reset []
+   restart: unless-stopped
+ ...
+ redis:
+-  ports: []
++  ports: !reset []
+   restart: unless-stopped
+```
+
+If you already brought the stack up before applying this, the running
+containers keep their old (exposed) config until recreated — after editing,
+re-run `up -d` and confirm with `docker ps` that neither shows a
+`0.0.0.0:...->...` mapping. If you need to stop the exposure immediately
+before you can edit and rebuild, `docker stop <db-container>
+<redis-container>` first.
+
+**Bug 2 — no Redis password.** Even fully unpublished (internal-network
+only), any compromised container on the same Docker network (web, celery)
+has full unauthenticated read/write to the broker and result backend. Add a
+password:
 
 ```diff
  redis:
-   ports: []
+   ports: !reset []
    restart: unless-stopped
 +  command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
 ```
@@ -344,9 +413,15 @@ sudo ufw enable
 sudo ufw status verbose
 ```
 
-No other port should be open. Postgres (`5432`) and Redis (`6379`) are
-**not** exposed here on purpose — `docker-compose.prod.yml` keeps them off
-the host network entirely (`ports: []`); don't add UFW rules for them.
+No other port should be open. Postgres (`5432`) and Redis (`6379`) should
+never need a UFW rule — `docker-compose.prod.yml` is meant to keep them off
+the host network entirely. **Don't treat UFW as a backstop for that,
+though**: Docker publishes container ports by inserting its own
+`iptables`/`DOCKER-USER` rules ahead of UFW's, so a container that ends up
+published to `0.0.0.0` (see Part A7's merge-bug fix) is reachable from the
+internet regardless of what UFW says. UFW here is for the host's own
+listening processes (SSH) — it is not a safety net for Docker port
+publishing.
 
 ### B5. Fail2ban for SSH brute-force protection
 
@@ -389,17 +464,24 @@ docker compose version
 <a id="part-d"></a>
 ## Part D — DNS
 
-Point the production A record (and AAAA if the server has IPv6) at the
-server's public IP:
+`cossee.org` is registered at Namecheap. Add an **A** record there: host
+`i-connects`, value the server's public IP —
+`142.244.87.193` for `cossee-web-server` as of this writing; reconfirm with
+`curl -s https://api.ipify.org` run on the server itself, since that's the
+authoritative source, not this document. Skip the AAAA/IPv6 record unless
+`curl -6 -s https://api64.ipify.org` on the server actually returns an
+address — most hosts here don't have IPv6 configured, and a stale AAAA
+record pointing nowhere breaks IPv6-preferring clients even though the A
+record is fine.
 
 ```
-i-connects.cossee.org.   A   <server public IP>
+i-connects.cossee.org.   A   142.244.87.193
 ```
 
 Verify propagation from the server and from an outside network before
-proceeding — Caddy's automatic TLS issuance in Part H fails, and can hit
-Let's Encrypt rate limits on repeated failed attempts, if this isn't
-resolvable yet:
+proceeding — automatic TLS issuance in Part G fails, and can hit Let's
+Encrypt rate limits on repeated failed attempts, if this isn't resolvable
+yet:
 
 ```bash
 dig +short i-connects.cossee.org
@@ -462,13 +544,22 @@ CELERY_RESULT_BACKEND=redis://:<same password>@redis:6379/0
 
 # ---- Email (pick ONE backend) ----
 EMAIL_BACKEND_CHOICE=smtp
-DEFAULT_FROM_EMAIL=i-connects <noreply@i-connects.cossee.org>
+DEFAULT_FROM_EMAIL=i-connects <your-account@gmail.com>
 
-# smtp:
-EMAIL_HOST=<your SMTP relay, e.g. University of Alberta's or a transactional provider's>
+# Absolute base URL (scheme + host, no trailing slash). Required — links in
+# emails sent from Celery tasks (invitations, join requests, digests) are
+# built from this, since those tasks have no HTTP request to derive a
+# domain from. Left unset, those links silently degrade to a bare relative
+# path (e.g. "/invites/<code>/"), which email clients then mangle into a
+# broken "http:///invites/<code>/" link.
+SITE_URL=https://i-connects.cossee.org
+
+# smtp, via a Gmail account — see "Setting up Gmail SMTP" below for how to
+# get EMAIL_HOST_PASSWORD (it is NOT the account's normal login password):
+EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
-EMAIL_HOST_USER=<smtp username>
-EMAIL_HOST_PASSWORD=<smtp password>
+EMAIL_HOST_USER=<your-account@gmail.com>
+EMAIL_HOST_PASSWORD=<16-character App Password, no spaces>
 EMAIL_USE_TLS=True
 
 # resend (use instead of the smtp block above; set EMAIL_BACKEND_CHOICE=resend):
@@ -492,6 +583,12 @@ Notes:
 - `DJANGO_ALLOWED_HOSTS` must be exactly `i-connects.cossee.org` (comma-
   separate if you also serve `www.i-connects.cossee.org` — and add that as
   a second entry in the Caddyfile in Part G too).
+- `SITE_URL` should match `DJANGO_ALLOWED_HOSTS` (with a scheme, e.g.
+  `https://i-connects.cossee.org`). Unlike `DJANGO_SECRET_KEY`, an unset
+  `SITE_URL` does **not** crash the app — it silently produces broken
+  links in invitation/join-request/digest emails instead, so there's no
+  startup signal that it's missing. Verify it by sending a real
+  invitation after launch and checking the link in the email.
 - `STATICFILES_STORAGE` is whitenoise's
   `CompressedManifestStaticFilesStorage`, so `collectstatic` **must** run
   before gunicorn starts — `docker-compose.prod.yml`'s `web` command
@@ -505,47 +602,221 @@ Lock down the file permissions since it holds every production secret:
 chmod 600 .env
 ```
 
+### F1. Setting up Gmail SMTP
+
+Emailing (signup verification, invitations, password reset, mailing-list
+announcements, digests) uses a Google Mail account as the SMTP relay for
+this deployment. This is a genuine, working option for Django's SMTP
+backend, but Gmail imposes a few constraints worth knowing before you rely
+on it — see the caveats at the end.
+
+**1. Use (or create) a Google account dedicated to this app**, not a
+personal one — e.g. something like `iconnects.notifications@gmail.com`.
+Sharing a personal account's credentials with a server is a bad habit to
+start, and a dedicated account makes credential rotation and offboarding
+trivial later.
+
+**2. Turn on 2-Step Verification.** Gmail's SMTP no longer accepts a
+plain account password for third-party apps ("less secure app access" was
+removed); an **App Password** is required instead, and Google only lets
+you generate one once 2-Step Verification is enabled on the account:
+`myaccount.google.com` → **Security** → **2-Step Verification** → follow
+the setup flow (phone number or authenticator app).
+
+**3. Generate an App Password:** `myaccount.google.com` → **Security** →
+**2-Step Verification** → scroll to **App passwords** (or go directly to
+`myaccount.google.com/apppasswords`). Create one named something like
+`i-connects production`. Google shows it once as a 16-character string —
+copy it immediately (spaces are just for display; strip them when pasting
+into `.env`).
+
+**4. Set the values in `.env`** (per the block above):
+```ini
+EMAIL_BACKEND_CHOICE=smtp
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=<the gmail address>
+EMAIL_HOST_PASSWORD=<the 16-character App Password, no spaces>
+EMAIL_USE_TLS=True
+DEFAULT_FROM_EMAIL=i-connects <the gmail address>
+```
+
+**5. Test it end to end** once the stack is up:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec web \
+  python manage.py sendtestemail your-real-address@example.com
+```
+(Django's built-in `sendtestemail` command — sends a plain test message
+using whatever `EMAIL_*` settings are active.) If that lands in your inbox,
+also walk the real signup flow once — Part A5 makes email verification
+**mandatory**, so a broken SMTP config silently locks out every new user,
+not just this test.
+
+**Caveats specific to using Gmail here, not a transactional provider:**
+
+- **`DEFAULT_FROM_EMAIL` should be the same Gmail address you authenticate
+  as** (or a verified "Send mail as" alias configured inside that Gmail
+  account) — `noreply@i-connects.cossee.org` or any address Gmail doesn't
+  recognize as belonging to the account will often get rewritten or
+  flagged, since Gmail enforces alignment between the authenticated
+  account and the `From` header.
+- **Sending limits.** A regular Gmail account is capped at roughly 500
+  recipients/day (Google Workspace accounts get a higher limit, commonly
+  2000/day) — fine for auth emails and moderate invitation/notification
+  volume, but a large mailing-list send (see the app's per-project mailing
+  list feature) or a burst of signups could hit it. If that becomes a real
+  constraint, `EMAIL_BACKEND_CHOICE=resend` (already wired up, just needs
+  `RESEND_API_KEY`) is the lower-effort switch to a provider built for this.
+- **If this Google account is a University of Alberta Workspace account**
+  rather than a personal `gmail.com` one, an org admin may have App
+  Passwords disabled entirely by policy (some Workspace orgs require OAuth2
+  for SMTP instead). If App Passwords aren't available under **Security**
+  for that account, that's why — coordinate with whoever administers UA's
+  Workspace rather than assuming the steps above are missing something.
+- **Treat the App Password exactly like every other secret in `.env`** —
+  covered by A8's `.gitignore` fix and the `chmod 600` above already, but
+  worth restating: it grants send-as access to that Gmail account.
+- Revoking access later (offboarding, suspected leak) is a single click:
+  `myaccount.google.com/apppasswords` → delete the entry — no password
+  rotation on the Google account itself required, since App Passwords are
+  independently revocable.
+
 ---
 
 <a id="part-g"></a>
-## Part G — Production Caddyfile
+## Part G — Reverse proxy: `cossee-web-server` already runs a shared Caddy
 
-The committed `Caddyfile` points at the demo subdomain. For production, use
-the real domain and add baseline security headers (defense-in-depth on top
-of Django's own `SecurityMiddleware` — closes part of SECURITY_AUDIT M6):
+`cossee-web-server` is a shared host: it already runs a **host-level Caddy**
+(a systemd service, not a Docker container) that owns `:80`/`:443` for the
+whole machine and fronts at least one other app. Confirmed live —
+`docker-compose.prod.yml`'s own `caddy:` service fails to start with
+`address already in use` because of this, and `docker ps` shows no Caddy
+container at all, only a `caddy` process bound to `*:80`/`*:443` outside
+Docker entirely. That means the committed `Caddyfile` and the `caddy:`
+service in `docker-compose.prod.yml` (written for a single-app, dedicated
+host) don't apply here — use the existing host Caddy instead.
+
+### G1. Drop this repo's own `caddy` service; bind `web` to loopback only
+
+```diff
+ services:
+   web:
+     command: >
+       sh -c "python manage.py migrate --noinput &&
+              python manage.py collectstatic --noinput &&
+              gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+     volumes: []
+     restart: unless-stopped
+-    ports: []
+-    expose:
+-      - "8000"
++    ports:
++      - "127.0.0.1:8000:8000"
+   ...
+-  caddy:
+-    image: caddy:2
+-    restart: unless-stopped
+-    ports:
+-      - "80:80"
+-      - "443:443"
+-    volumes:
+-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+-      - caddy_data:/data
+-      - caddy_config:/config
+-    depends_on:
+-      - web
+-
+-volumes:
+-  caddy_data:
+-  caddy_config:
+```
+
+Binding to `127.0.0.1` rather than `0.0.0.0` means only processes on the
+host itself — the host Caddy — can reach gunicorn on `:8000`; the outside
+world can't hit it directly, with or without a firewall rule.
+
+This repo's own `Caddyfile` (pointing at `demo.i-connects.cossee.org`) is
+now unused on this host — either delete it or keep it only as the source
+text for the site block in G3.
+
+### G2. DNS
+
+Covered in Part D — the A record must resolve before G3's install can issue
+a cert for it. Don't install the site file before DNS resolves: issuance
+fails and retries in the background rather than succeeding on request.
+
+### G3. Register your port, then add a site file
+
+On `cossee-web-server` specifically, the host Caddy setup is more
+structured than a single flat `Caddyfile`: it's config-managed by the
+host's admin (`mzakir`), sites live as individual files under
+`/etc/caddy/sites/` (imported by the main config), reloads go through a
+`caddy-reload` wrapper rather than a raw `systemctl reload`, and ports are
+tracked in a shared registry so two apps don't collide on the same
+localhost port:
+
+```bash
+groups                              # confirm you're in the webdev group (added by the host admin)
+cat /etc/caddy/PORTS.md             # claim your port entry (8000, for this app) before adding anything else
+```
+
+Get the site file from whoever administers the host Caddy — on this host,
+that's a template staged by `mzakir` — **read it before installing it**:
+it's about to become privileged, TLS-terminating config for this domain,
+sourced from someone else's home directory, so verify it actually does
+what it claims (proxies only to `127.0.0.1:8000`, no unexpected upstreams,
+no wildcard host match) rather than trusting the description alone. The
+confirmed-working version for this app:
 
 ```caddyfile
 i-connects.cossee.org {
     encode zstd gzip
-
+    reverse_proxy 127.0.0.1:8000 {
+        # Django needs these to build absolute URLs and to see the real
+        # client address rather than the proxy's.
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+        header_up Host {host}
+    }
     header {
-        # Belt-and-suspenders on top of Django's SecurityMiddleware —
-        # harmless if duplicated, useful if either layer is misconfigured.
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Permissions-Policy "geolocation=(), camera=(), microphone=()"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
         -Server
     }
-
-    reverse_proxy web:8000
+    log
 }
 ```
 
-Do **not** point this at `demo.i-connects.cossee.org` — that's a separate
-Caddy/cert scope if the demo stack is still running elsewhere. If both the
-demo and production stacks run on this same host, give them distinct
-Caddyfiles/compose projects (separate directories, separate
-`docker compose -p` project names) so their `caddy_data` volumes — and
-Let's Encrypt certs — don't collide.
+One accepted trade-off worth knowing about: Caddy's `header` directive
+*replaces* a response header of the same name rather than layering onto
+it, so this template's `X-Frame-Options: SAMEORIGIN` overrides Django's own
+`X_FRAME_OPTIONS = "DENY"` (`config/settings/prod.py`) — the browser sees
+`SAMEORIGIN`, not `DENY`. Still a legitimate clickjacking mitigation, just
+slightly looser than the app's own default. Not worth changing unilaterally
+since it's a shared template — raise it with the host Caddy's admin if
+strict `DENY` ever matters for this app specifically.
 
-Edit the repo's `Caddyfile` directly (it's already the file
-`docker-compose.prod.yml` mounts) and commit the domain change, or keep a
-local, uncommitted override if you intend to run demo and prod from the
-same checkout. For a single-purpose production host, just edit it in place:
+Install and reload — validate first, since a bad file here breaks every app
+behind this Caddy, not just this one:
 
 ```bash
-cd ~/i-connects
-nano Caddyfile   # replace demo.i-connects.cossee.org with i-connects.cossee.org, add the header block above
+sudo caddy validate --config /etc/caddy/sites/i-connects.caddy 2>/dev/null || true  # if the wrapper doesn't validate first
+sudo install -m 644 <path-to-the-reviewed-site-file> /etc/caddy/sites/i-connects.caddy
+caddy-reload   # host-specific graceful-reload wrapper; no dropped connections
+               # for this app or others behind the same Caddy
 ```
+
+Caddy requests the certificate on the first real HTTPS request after this,
+so the very first hit to `https://i-connects.cossee.org/` right after
+`caddy-reload` may take an extra second or two.
+
+### If this app is ever the *only* thing on a host
+
+The original per-repo Dockerized `caddy:` service (the one G1 removes) is a
+perfectly good, simpler default when nothing else shares the machine — one
+`docker compose up`, TLS included, no host-level Caddy to coordinate with.
+`cossee-web-server` isn't that kind of host, so this guide documents the
+shared-host path as the one that actually applies here.
 
 ---
 
@@ -556,20 +827,23 @@ nano Caddyfile   # replace demo.i-connects.cossee.org with i-connects.cossee.org
 cd ~/i-connects
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 docker compose ps
-docker compose logs --tail=100 web caddy celery celery-beat
+docker compose logs --tail=100 web celery celery-beat
+docker ps --format '{{.Names}}\t{{.Ports}}'   # confirm the state below
 ```
 
-What this does:
+What this does (assuming Part G's `docker-compose.prod.yml` edits are
+applied — no `caddy` service in this stack on this host):
 
 - `web` runs `migrate` → `collectstatic` → `gunicorn :8000` as `appuser`
-  (after Part A3), reachable only from the Docker network.
-- `caddy` binds `:80`/`:443`, issues a Let's Encrypt cert for
-  `i-connects.cossee.org` on first request, and reverse-proxies to
-  `web:8000`. Cert + state persist in the `caddy_data`/`caddy_config`
-  volumes.
+  (after Part A3), bound to `127.0.0.1:8000` only — reachable from the host
+  itself (i.e., the host-level Caddy from Part G), not from the network.
+- TLS and the public `:80`/`:443` edge are handled entirely by the existing
+  host-level Caddy (Part G) — this app doesn't run or manage a reverse
+  proxy of its own on `cossee-web-server`.
 - `db` and `redis` are unreachable from the host network or the public
-  internet (`ports: []`), and `redis` now requires the password from Part
-  F/A7.
+  internet once Part A7's `!reset []` fix is applied — verify with the
+  `docker ps` line above; neither should show a `0.0.0.0:...` mapping.
+  `redis` also requires the password from Part F/A7.
 - `celery` and `celery-beat` start once `db` and `redis` pass their health
   checks.
 
@@ -662,7 +936,7 @@ newer code may already have written in the new shape.
 ```bash
 docker compose logs -f web
 docker compose logs -f celery celery-beat
-docker compose logs -f caddy
+sudo journalctl -u caddy -f   # host-level Caddy (Part G) — not a compose service on this host
 ```
 
 **Review dependency updates:** `.github/workflows/ci.yml` runs `pytest` on
@@ -745,10 +1019,11 @@ into a fresh deploy).
   `df -h /` periodically, or alert on it. `docker system df` shows what
   Docker itself is holding; `docker image prune` after deploys reclaims
   old, unused build layers.
-- **Cert renewal**: Caddy renews Let's Encrypt certs automatically; confirm
-  once a quarter with `docker compose logs caddy | grep -i certificate`
-  that a renewal actually happened in the preceding ~60 days rather than
-  silently failing.
+- **Cert renewal**: the host-level Caddy (Part G) renews Let's Encrypt certs
+  automatically; confirm once a quarter with
+  `sudo journalctl -u caddy | grep -i certificate` that a renewal actually
+  happened in the preceding ~60 days rather than silently failing. This
+  affects every app behind that Caddy, not just this one.
 
 ---
 
@@ -786,14 +1061,22 @@ laptop, departing team member with access):
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
+| `docker compose up`: `address already in use` on :80/:443 | This host already runs Caddy (host-level or another app's) | You're on `cossee-web-server`, a shared host — see Part G. Drop this repo's own `caddy:` service; use the existing host Caddy instead. |
 | Caddy logs `no such host` / `dns problem` | A-record not propagated | `dig +short i-connects.cossee.org`; wait or fix DNS (Part D). |
 | Browser: `ERR_CONNECTION_REFUSED` on :443 | UFW/firewall blocks 443 | `sudo ufw status`; confirm `443/tcp` is allowed (Part B4). |
 | Django: `DisallowedHost` | `DJANGO_ALLOWED_HOSTS` mismatch | Must contain `i-connects.cossee.org` exactly (Part F). |
-| Infinite redirect loop | `SECURE_SSL_REDIRECT=True` but `X-Forwarded-Proto` not forwarded | Caddy's `reverse_proxy` sets it by default — confirm the directive wasn't replaced. |
+| Infinite redirect loop | `SECURE_SSL_REDIRECT=True` but `X-Forwarded-Proto` not forwarded | Confirm the `header_up X-Forwarded-Proto {scheme}` line is still present in `/etc/caddy/sites/i-connects.caddy` (Part G). |
 | `relation "..." does not exist` | Migrations didn't run | `docker compose exec web python manage.py migrate`. |
 | Static files 404 | `collectstatic` didn't run | `docker compose exec web python manage.py collectstatic --noinput`. |
-| Cert stuck on staging / rate-limited | Repeated failed issuance attempts | Fix the underlying DNS/firewall issue first, then `docker compose down && docker volume rm i-connects_caddy_data && docker compose up -d`. Let's Encrypt rate limits are per-domain-per-week — don't loop this. |
-| New signups never get a verification email (post-A5) | SMTP/Resend/SES misconfigured | `docker compose logs web \| grep -i mail`; verify `.env`'s email block against Part F before flipping `ACCOUNT_EMAIL_VERIFICATION` back to `optional` as a stopgap. |
+| Cert stuck on staging / rate-limited | Repeated failed issuance attempts | Fix the underlying DNS issue first, then `caddy-reload` again. Let's Encrypt rate limits are per-domain-per-week — don't loop this; if truly stuck, whoever manages the host Caddy needs to clear its stored account/cert state, which affects every app behind it. |
+| `docker ps` shows `0.0.0.0:5432->...` or `0.0.0.0:6379->...` | Part A7's `!reset []` fix not applied, or applied but not rebuilt | Re-check the `docker-compose.prod.yml` diff, then `up -d` (recreation, not just editing the file, is what takes effect). This also means UFW was never protecting these — see Part B4's note. |
+| A signup with an unconfirmed/fake email still gets a logged-in session | Expected today, not a config bug — see Part A5's note: the app's `SignupView`/`LoginView` are hand-rolled and never check email-verification status, so `ACCOUNT_EMAIL_VERIFICATION=mandatory` doesn't gate this path at all | Real fix is an app-code change to `apps/accounts/views.py`, tracked separately from deployment config — don't spend time debugging `.env`/SMTP for this specific symptom. |
+| No confirmation email ever arrives for a regular (non-ORCID) signup | Expected today — the primary signup path doesn't call allauth's email-confirmation flow at all, so nothing is sent to debug | Only the "welcome email" (`send_welcome_email`) fires on regular signup; allauth's confirmation email only exists for the ORCID social-login path. `docker compose logs web \| grep -i mail` will show the welcome email attempt, not a confirmation one. |
+| Gmail SMTP: `535 5.7.8 Username and Password not accepted` | Using the account's normal password instead of an App Password, or 2-Step Verification isn't on | Re-check Part F1 — `EMAIL_HOST_PASSWORD` must be the 16-character App Password from `myaccount.google.com/apppasswords`, which doesn't exist until 2-Step Verification is enabled. |
+| Gmail account has no "App passwords" option under Security | Workspace org policy disables them | If this is a University of Alberta Workspace account rather than a personal one, an admin may need to allow App Passwords, or the account may require OAuth2 for SMTP instead — this isn't a config mistake on your end. |
+| Gmail-sent mail lands in spam, or `From` gets silently rewritten | `DEFAULT_FROM_EMAIL` doesn't match the authenticated Gmail address/alias | Set `DEFAULT_FROM_EMAIL` to the same address as `EMAIL_HOST_USER` (or a verified Gmail "Send mail as" alias), per Part F1. |
+| Recipient's mail server bounces `550 5.7.30 ... DKIM authentication didn't pass` | `From` domain doesn't align with the authenticated sending account (same root cause as the spam/rewrite row above), or — if the sending account is a Google Workspace domain rather than plain `gmail.com` — the Workspace admin hasn't turned on DKIM signing for that domain | First check `DEFAULT_FROM_EMAIL` alignment per the row above. If the account is a Workspace domain (e.g. a University Workspace account), DKIM signing isn't on by default for SMTP-relayed mail — the domain admin must enable it under Admin console → Apps → Google Workspace → Gmail → Authenticate email, then publish the generated TXT record at the domain's DNS. |
+| Invitation/join-request/digest email link is broken — e.g. `http:///invites/<code>/` (empty host) | `SITE_URL` isn't set. Those emails are sent from Celery tasks with no HTTP request to build an absolute URL from, so they fall back to `SITE_URL`; left unset it silently degrades to a bare relative path, which the recipient's mail client then mangles into a schemeless-host link | Set `SITE_URL=https://i-connects.cossee.org` in `.env` (Part F) and restart the `web` and `celery` services, then send a fresh invitation to confirm the link is now absolute. |
 | `manage.py check --deploy` warns about `SECRET_KEY` or `ALLOWED_HOSTS` | `.env` not actually loaded, or `DJANGO_SETTINGS_MODULE` wrong | `docker compose exec web env \| grep DJANGO`; confirm it reads `config.settings.prod`. |
 | Container runs as root (`docker compose exec web id` shows `uid=0`) | Part A3 not applied/rebuilt | Re-check the `Dockerfile` diff, then `up -d --build` (not just `up -d`). |
 
@@ -814,6 +1097,14 @@ confirm you have a current off-host backup (Part K) first**:
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v
 ```
+
+Since Part G put this app behind the host's shared Caddy rather than a
+Caddy this stack owns, also remove `/etc/caddy/sites/i-connects.caddy` and
+run `caddy-reload`, and free the port entry in `/etc/caddy/PORTS.md` —
+otherwise the shared proxy keeps trying to route to a `127.0.0.1:8000`
+that's no longer listening, its error logs (and other apps behind it) get
+noisier for no reason, and the port stays claimed for an app that no
+longer exists.
 
 To decommission the host entirely: take a final `pg_dump` + media backup,
 confirm both landed off-host, then deprovision the server through whatever
