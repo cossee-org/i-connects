@@ -8,9 +8,34 @@ import pytest
 from django.core.exceptions import MiddlewareNotUsed
 from django.core.management import call_command
 from django.http import HttpResponse
+from django.urls import reverse
 from django_celery_beat.models import PeriodicTask
 
+from apps.accounts.models import User
+from apps.audit.models import AuditAction, AuditLog
+from apps.core.enums import UserRole
 from cron.tasks import daily_digest_cron
+
+
+@pytest.mark.django_db
+def test_admin_console_renders_with_actorless_audit_events(client):
+    """A signup/lockout event with no actor (``actor`` is nullable via
+    ``SET_NULL``) used to crash the whole page: ``{{ event.actor.name|
+    default:event.actor.email }}`` resolves ``event.actor.email`` as a
+    filter *argument*, and unlike a template's primary variable, a failed
+    lookup there isn't swallowed into an empty string -- it raises
+    ``VariableDoesNotExist`` straight through the render.
+    """
+    admin = User.objects.create_user(
+        email="admin@example.com", password="x", role=UserRole.ADMIN
+    )
+    AuditLog.objects.create(actor=None, action=AuditAction.USER_SIGNUP)
+    AuditLog.objects.create(actor=None, action=AuditAction.ACCOUNT_LOCKED_OUT)
+
+    client.force_login(admin)
+    resp = client.get(reverse("core:admin_console"))
+
+    assert resp.status_code == 200
 
 
 @pytest.mark.django_db
