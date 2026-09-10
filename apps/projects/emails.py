@@ -6,10 +6,34 @@ is console-based, so this is visible in the runserver output.
 
 from __future__ import annotations
 
+import logging
+
 from django.conf import settings
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.urls import NoReverseMatch, reverse
+
+logger = logging.getLogger(__name__)
+
+
+def _absolute_url(path: str) -> str:
+    """Prefix ``path`` with ``settings.SITE_URL``.
+
+    These emails are sent from request-less contexts (services, Celery
+    tasks), so there's no ``request.build_absolute_uri`` to fall back on.
+    An unset ``SITE_URL`` would otherwise silently degrade to a bare
+    relative path that mail clients mangle into a broken link (e.g.
+    ``http:///invites/<code>/``) — log loudly instead.
+    """
+    site = getattr(settings, "SITE_URL", "").rstrip("/")
+    if not site:
+        logger.warning(
+            "SITE_URL is not set — email link for %s will be a bare "
+            "relative path instead of an absolute URL.",
+            path,
+        )
+        return path
+    return f"{site}{path}"
 
 
 def _invitation_url(invitation) -> str:
@@ -22,8 +46,7 @@ def _invitation_url(invitation) -> str:
         # Phase 5 may not yet have wired the project urls into the root
         # urlconf; fall back to a bare path so the message is still useful.
         path = f"/invites/{invitation.invitation_code}/"
-    site = getattr(settings, "SITE_URL", "").rstrip("/")
-    return f"{site}{path}" if site else path
+    return _absolute_url(path)
 
 
 def send_invitation_email(invitation) -> None:
@@ -51,8 +74,7 @@ def _project_join_requests_url(project) -> str:
         path = reverse("projects:join_requests", kwargs={"pk": project.pk})
     except NoReverseMatch:
         path = f"/projects/{project.pk}/join-requests/"
-    site = getattr(settings, "SITE_URL", "").rstrip("/")
-    return f"{site}{path}" if site else path
+    return _absolute_url(path)
 
 
 def send_join_request_email_to_pms(*, join_request, pm_user_ids) -> None:
@@ -101,8 +123,7 @@ def _project_detail_url(project) -> str:
         path = reverse("projects:detail", kwargs={"pk": project.pk})
     except NoReverseMatch:
         path = f"/projects/{project.pk}/"
-    site = getattr(settings, "SITE_URL", "").rstrip("/")
-    return f"{site}{path}" if site else path
+    return _absolute_url(path)
 
 
 def send_join_request_decision_email(*, join_request, approved: bool) -> None:

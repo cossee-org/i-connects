@@ -546,6 +546,14 @@ CELERY_RESULT_BACKEND=redis://:<same password>@redis:6379/0
 EMAIL_BACKEND_CHOICE=smtp
 DEFAULT_FROM_EMAIL=i-connects <your-account@gmail.com>
 
+# Absolute base URL (scheme + host, no trailing slash). Required — links in
+# emails sent from Celery tasks (invitations, join requests, digests) are
+# built from this, since those tasks have no HTTP request to derive a
+# domain from. Left unset, those links silently degrade to a bare relative
+# path (e.g. "/invites/<code>/"), which email clients then mangle into a
+# broken "http:///invites/<code>/" link.
+SITE_URL=https://i-connects.cossee.org
+
 # smtp, via a Gmail account — see "Setting up Gmail SMTP" below for how to
 # get EMAIL_HOST_PASSWORD (it is NOT the account's normal login password):
 EMAIL_HOST=smtp.gmail.com
@@ -575,6 +583,12 @@ Notes:
 - `DJANGO_ALLOWED_HOSTS` must be exactly `i-connects.cossee.org` (comma-
   separate if you also serve `www.i-connects.cossee.org` — and add that as
   a second entry in the Caddyfile in Part G too).
+- `SITE_URL` should match `DJANGO_ALLOWED_HOSTS` (with a scheme, e.g.
+  `https://i-connects.cossee.org`). Unlike `DJANGO_SECRET_KEY`, an unset
+  `SITE_URL` does **not** crash the app — it silently produces broken
+  links in invitation/join-request/digest emails instead, so there's no
+  startup signal that it's missing. Verify it by sending a real
+  invitation after launch and checking the link in the email.
 - `STATICFILES_STORAGE` is whitenoise's
   `CompressedManifestStaticFilesStorage`, so `collectstatic` **must** run
   before gunicorn starts — `docker-compose.prod.yml`'s `web` command
@@ -1061,6 +1075,8 @@ laptop, departing team member with access):
 | Gmail SMTP: `535 5.7.8 Username and Password not accepted` | Using the account's normal password instead of an App Password, or 2-Step Verification isn't on | Re-check Part F1 — `EMAIL_HOST_PASSWORD` must be the 16-character App Password from `myaccount.google.com/apppasswords`, which doesn't exist until 2-Step Verification is enabled. |
 | Gmail account has no "App passwords" option under Security | Workspace org policy disables them | If this is a University of Alberta Workspace account rather than a personal one, an admin may need to allow App Passwords, or the account may require OAuth2 for SMTP instead — this isn't a config mistake on your end. |
 | Gmail-sent mail lands in spam, or `From` gets silently rewritten | `DEFAULT_FROM_EMAIL` doesn't match the authenticated Gmail address/alias | Set `DEFAULT_FROM_EMAIL` to the same address as `EMAIL_HOST_USER` (or a verified Gmail "Send mail as" alias), per Part F1. |
+| Recipient's mail server bounces `550 5.7.30 ... DKIM authentication didn't pass` | `From` domain doesn't align with the authenticated sending account (same root cause as the spam/rewrite row above), or — if the sending account is a Google Workspace domain rather than plain `gmail.com` — the Workspace admin hasn't turned on DKIM signing for that domain | First check `DEFAULT_FROM_EMAIL` alignment per the row above. If the account is a Workspace domain (e.g. a University Workspace account), DKIM signing isn't on by default for SMTP-relayed mail — the domain admin must enable it under Admin console → Apps → Google Workspace → Gmail → Authenticate email, then publish the generated TXT record at the domain's DNS. |
+| Invitation/join-request/digest email link is broken — e.g. `http:///invites/<code>/` (empty host) | `SITE_URL` isn't set. Those emails are sent from Celery tasks with no HTTP request to build an absolute URL from, so they fall back to `SITE_URL`; left unset it silently degrades to a bare relative path, which the recipient's mail client then mangles into a schemeless-host link | Set `SITE_URL=https://i-connects.cossee.org` in `.env` (Part F) and restart the `web` and `celery` services, then send a fresh invitation to confirm the link is now absolute. |
 | `manage.py check --deploy` warns about `SECRET_KEY` or `ALLOWED_HOSTS` | `.env` not actually loaded, or `DJANGO_SETTINGS_MODULE` wrong | `docker compose exec web env \| grep DJANGO`; confirm it reads `config.settings.prod`. |
 | Container runs as root (`docker compose exec web id` shows `uid=0`) | Part A3 not applied/rebuilt | Re-check the `Dockerfile` diff, then `up -d --build` (not just `up -d`). |
 
