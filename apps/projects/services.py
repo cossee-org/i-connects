@@ -113,6 +113,30 @@ def create_invitation(
 
 
 @transaction.atomic
+def resend_invitation(*, invitation: Invitation, resender=None) -> Invitation:
+    """Regenerate the invitation's code and re-send the email.
+
+    Regenerating the code invalidates whatever link was in the original
+    email — the right default for a resend, since the usual reason to
+    resend is that the first email never arrived, was broken (e.g. a
+    misconfigured link), or was lost. ``created_at`` is bumped too, so the
+    invitation resurfaces at the top of the pending list.
+    """
+    invitation.invitation_code = generate_invitation_code()
+    invitation.created_at = timezone.now()
+    invitation.save(update_fields=["invitation_code", "created_at"])
+    send_invitation_email(invitation)
+    log_action(
+        AuditAction.INVITATION_RESENT,
+        actor=resender,
+        entity=invitation,
+        project=invitation.project,
+        metadata={"email": invitation.email},
+    )
+    return invitation
+
+
+@transaction.atomic
 def accept_invitation(*, invitation: Invitation, user) -> Project:
     """Consume an invitation and attach ``user`` to the project."""
     project = invitation.project

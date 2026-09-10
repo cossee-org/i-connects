@@ -108,6 +108,7 @@ from .services import (
     decline_invitation,
     decline_join_request,
     is_last_project_manager,
+    resend_invitation,
 )
 
 
@@ -951,6 +952,16 @@ class CancelInvitationView(ProjectManagerRequiredMixin, ProjectContextMixin, Vie
         invitation = get_object_or_404(Invitation, pk=invitation_pk, project=self.project)
         invitation.delete()
         messages.success(request, "Invitation cancelled.")
+        return redirect("projects:project_invitations", pk=self.project.pk)
+
+
+class ResendInvitationView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, pk, invitation_pk):
+        invitation = get_object_or_404(Invitation, pk=invitation_pk, project=self.project)
+        resend_invitation(invitation=invitation, resender=request.user)
+        messages.success(request, f"Invitation resent to {invitation.email}.")
         return redirect("projects:project_invitations", pk=self.project.pk)
 
 
