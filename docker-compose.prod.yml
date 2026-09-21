@@ -4,8 +4,18 @@
 #
 # Requires .env with DJANGO_SETTINGS_MODULE=config.settings.prod,
 # DJANGO_SECRET_KEY, DJANGO_ALLOWED_HOSTS=demo.i-connects.cossee.org,
-# POSTGRES_PASSWORD, and DATABASE_URL.
-# Caddy terminates TLS and proxies to gunicorn; SECURE_SSL_REDIRECT can stay True.
+# POSTGRES_PASSWORD, DATABASE_URL, and REDIS_PASSWORD.
+#
+# cossee-web-server already runs a host-level Caddy (systemd, not Docker)
+# that owns :80/:443 for the whole machine — see DEPLOYMENT.md Part G.
+# This file has no caddy: service of its own; web is bound to loopback
+# only and the host Caddy reverse-proxies to it.
+#
+# NOTE: Compose merges list fields (ports/expose/volumes) across `-f`
+# files by union, not replacement — a bare `[]` here does NOT clear what
+# docker-compose.yml already set (see DEPLOYMENT.md Part A7). Every list
+# override below uses `!reset`/`!override` to force an actual replacement;
+# do not change these back to a bare `[]`.
 
 services:
   web:
@@ -13,42 +23,24 @@ services:
       sh -c "python manage.py migrate --noinput &&
              python manage.py collectstatic --noinput &&
              gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
-    volumes: []
+    volumes: !reset []
     restart: unless-stopped
-    ports: []
-    expose:
-      - "8000"
+    ports: !override
+      - "127.0.0.1:8000:8000"
 
   celery:
-    volumes: []
+    volumes: !reset []
     restart: unless-stopped
 
   celery-beat:
-    volumes: []
+    volumes: !reset []
     restart: unless-stopped
 
   db:
-    ports: []
+    ports: !reset []
     restart: unless-stopped
 
   redis:
-    ports: []
+    ports: !reset []
     restart: unless-stopped
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
-
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - web
-
-volumes:
-  caddy_data:
-  caddy_config:

@@ -206,10 +206,19 @@ docstring. Add one:
 `seed_demo` is unavailable once Part A2 takes effect in production, which is
 the intent — never run it against `i-connects.cossee.org`.
 
-### A7. Fix `ports: []` not actually closing db/redis, and add Redis auth (closes M4)
+### A7. Fix `ports: []` / `volumes: []` not actually closing db/redis or dropping the dev bind-mount, and add Redis auth (closes M4)
 
-Two separate bugs, same symptom — `db` and `redis` reachable on `0.0.0.0`
-in production.
+**Update:** `docker-compose.prod.yml` now applies all three fixes below
+(`!reset`/`!override` on `ports`/`volumes`, plus Redis auth) and drops its
+own `caddy:` service per Part G1 — this used to be a diff you had to apply
+by hand and, on at least one deployment, never was; `docker compose config`
+against the old file confirmed db/redis were still published to `0.0.0.0`
+and web/celery/celery-beat were still bind-mounting the host source tree
+into `/app` despite the `ports: []` / `volumes: []` overrides being
+present. If you deployed before this fix landed, treat any data that isn't
+in the `postgres_data` volume as unrecoverable and re-check Part K.
+
+Three separate bugs, same root cause.
 
 **Bug 1 — `docker-compose.prod.yml`'s `ports: []` is a no-op.** Docker
 Compose merges `ports:` (and `expose`, `volumes`, a few other list fields)
@@ -248,7 +257,45 @@ re-run `up -d` and confirm with `docker ps` that neither shows a
 before you can edit and rebuild, `docker stop <db-container>
 <redis-container>` first.
 
-**Bug 2 — no Redis password.** Even fully unpublished (internal-network
+**Bug 2 — the same no-op applies to `volumes: []` on `web`/`celery`/
+`celery-beat`.** These override blocks were meant to drop the dev-only
+`.:/app` bind mount from `docker-compose.yml` (so production runs the
+image `COPY . .` built into it, not whatever happens to be sitting in the
+host checkout). Because `volumes` merges by the same union rule as `ports`,
+`volumes: []` left the bind mount in place — production was silently
+running off the live host directory the whole time. This doesn't affect
+the database (`db`'s named `postgres_data` volume is untouched by any of
+this), but it does mean a code change on disk, a bad `git` operation, or
+the host directory going away could have changed production's actual
+running code without a rebuild, or with confusing effect after one. Fix it
+the same way:
+
+```diff
+ web:
+   ...
+-  volumes: []
++  volumes: !reset []
+   ...
+-  ports: []
++  ports: !override
++    - "127.0.0.1:8000:8000"
+
+ celery:
+-  volumes: []
++  volumes: !reset []
+   restart: unless-stopped
+
+ celery-beat:
+-  volumes: []
++  volumes: !reset []
+   restart: unless-stopped
+```
+
+(`web`'s `ports` uses `!override` here rather than `!reset []` because it
+also needs new content — the loopback-only binding from Part G1 — not just
+an empty result.)
+
+**Bug 3 — no Redis password.** Even fully unpublished (internal-network
 only), any compromised container on the same Docker network (web, celery)
 has full unauthenticated read/write to the broker and result backend. Add a
 password:
@@ -705,38 +752,12 @@ host) don't apply here — use the existing host Caddy instead.
 
 ### G1. Drop this repo's own `caddy` service; bind `web` to loopback only
 
-```diff
- services:
-   web:
-     command: >
-       sh -c "python manage.py migrate --noinput &&
-              python manage.py collectstatic --noinput &&
-              gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
-     volumes: []
-     restart: unless-stopped
--    ports: []
--    expose:
--      - "8000"
-+    ports:
-+      - "127.0.0.1:8000:8000"
-   ...
--  caddy:
--    image: caddy:2
--    restart: unless-stopped
--    ports:
--      - "80:80"
--      - "443:443"
--    volumes:
--      - ./Caddyfile:/etc/caddy/Caddyfile:ro
--      - caddy_data:/data
--      - caddy_config:/config
--    depends_on:
--      - web
--
--volumes:
--  caddy_data:
--  caddy_config:
-```
+**Already applied** in the committed `docker-compose.prod.yml` (see Part
+A7's Bug 2/3 fixes, which land the same file changes): no `caddy:` service,
+`web` publishes only `127.0.0.1:8000:8000`, and there's no `caddy_data`/
+`caddy_config` volume. If your checkout predates this, diff against the
+current file — this used to be a manual step and, on the host where the
+data-loss incident happened, evidently wasn't applied.
 
 Binding to `127.0.0.1` rather than `0.0.0.0` means only processes on the
 host itself — the host Caddy — can reach gunicorn on `:8000`; the outside
