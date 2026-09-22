@@ -238,7 +238,12 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
-CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# django-celery-beat's DatabaseScheduler, wrapped so it touches a heartbeat
+# file after every successful tick. Celery beat has no ping endpoint, so this
+# file's age is what the celery-beat container's Docker health check reads
+# (see apps.core.celery_scheduler and docker-compose.yml).
+CELERY_BEAT_SCHEDULER = "apps.core.celery_scheduler:HeartbeatDatabaseScheduler"
+BEAT_HEARTBEAT_FILE = env("BEAT_HEARTBEAT_FILE", "/tmp/celerybeat-heartbeat")
 
 
 # ---------------------------------------------------------------------------

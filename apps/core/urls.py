@@ -6,6 +6,8 @@ app_name = "core"
 
 urlpatterns = [
     path("", views.home, name="home"),
+    # Docker health check + uptime probe. Unauthenticated JSON; see the view.
+    path("healthz/", views.healthz, name="healthz"),
     path(
         "admin/console/",
         views.AdminConsoleView.as_view(),
