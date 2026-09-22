@@ -5,10 +5,9 @@ server, over SSH. Domain: **`i-connects.cossee.org`**. Target host:
 `cossee-web-server`, Ubuntu 24.04.4 LTS (`noble`), kernel 6.8, x86_64.
 
 Stack: Docker Compose (Django/gunicorn + Postgres 16 + Redis 7 + Celery +
-Celery Beat), fronted by Caddy 2 for automatic Let's Encrypt TLS. This
-mirrors the pattern in `DEMO_DEPLOYMENT.md`, but this guide is written for
-the **real production deployment** and closes the gaps that doc
-deliberately left open for a throwaway demo.
+Celery Beat), fronted by the host's shared Caddy 2 for automatic Let's
+Encrypt TLS (Part G). `DEMO_DEPLOYMENT.md` is retired; this guide is the one
+that matches the committed compose files.
 
 This repo already contains a full audit at `SECURITY_AUDIT.md`
 (2026-07-08). **Part A below applies every Critical/High finding from that
@@ -636,10 +635,23 @@ Notes:
   links in invitation/join-request/digest emails instead, so there's no
   startup signal that it's missing. Verify it by sending a real
   invitation after launch and checking the link in the email.
-- `STATICFILES_STORAGE` is whitenoise's
-  `CompressedManifestStaticFilesStorage`, so `collectstatic` **must** run
-  before gunicorn starts — `docker-compose.prod.yml`'s `web` command
-  already does this.
+- `REDIS_PASSWORD` is mandatory, not merely recommended:
+  `docker-compose.prod.yml` references it as `${REDIS_PASSWORD:?...}`, so
+  `docker compose` refuses to start with a clear error if it is unset or
+  empty. (Before this guard, an empty value brought Redis up with *no*
+  password together with a health check that then failed authentication —
+  Redis sat unhealthy forever and `web`, `celery` and `celery-beat`, all
+  gated on it, never started.)
+- Static files use whitenoise's `CompressedManifestStaticFilesStorage`
+  through Django's `STORAGES` setting (Django 5.1 removed the old
+  `STATICFILES_STORAGE` name, which is now silently ignored).
+  `collectstatic` runs **when the image is built** (see the `Dockerfile`),
+  not at container start — a deploy that changes static files needs
+  `up -d --build`, and a plain restart never waits on it.
+- `/healthz/` is an unauthenticated JSON endpoint that answers `200` only
+  when the process is serving *and* can query Postgres, `503` otherwise.
+  The `web` container's Docker health check and any external uptime
+  monitor (Part L) both point at it.
 - Never commit `.env`. It's covered by `.gitignore` after Part A8; double
   check with `git status` before any commit from this checkout.
 
@@ -763,9 +775,9 @@ Binding to `127.0.0.1` rather than `0.0.0.0` means only processes on the
 host itself — the host Caddy — can reach gunicorn on `:8000`; the outside
 world can't hit it directly, with or without a firewall rule.
 
-This repo's own `Caddyfile` (pointing at `demo.i-connects.cossee.org`) is
-now unused on this host — either delete it or keep it only as the source
-text for the site block in G3.
+This repo's `Caddyfile` is not used by any compose service; it is kept only
+as the source text for the host Caddy site block installed in G3 (same
+content, `127.0.0.1:8000` upstream).
 
 ### G2. DNS
 
@@ -851,29 +863,60 @@ shared-host path as the one that actually applies here.
 <a id="part-h"></a>
 ## Part H — Launch
 
+**First, the data volumes.** Postgres data and uploaded media live in two
+named volumes that the compose files declare `external: true`, so that
+`docker compose down -v` can never delete them. Compose therefore does not
+create them either — create them once per host:
+
+```bash
+docker volume create i-connects_postgres_data
+docker volume create i-connects_media_data
+```
+
+On a host that already ran this stack, `docker volume ls` shows both names
+already (the project name is fixed to `i-connects` in `docker-compose.yml`,
+so they no longer depend on the checkout directory's name) — skip the
+`create` lines. If it shows *differently named* volumes carrying real data
+(for example from a checkout that wasn't called `i-connects`), copy the
+data across before the first `up` rather than starting from an empty
+database:
+
+```bash
+docker run --rm -v <old-volume>:/from:ro -v i-connects_postgres_data:/to alpine sh -c 'cp -a /from/. /to/'
+```
+
+**Then launch:**
+
 ```bash
 cd ~/i-connects
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-docker compose ps
+docker compose ps                               # every service must reach (healthy)
 docker compose logs --tail=100 web celery celery-beat
-docker ps --format '{{.Names}}\t{{.Ports}}'   # confirm the state below
+docker ps --format '{{.Names}}\t{{.Ports}}'    # confirm the state below
+curl -sS -H 'Host: i-connects.cossee.org' http://127.0.0.1:8000/healthz/   # {"status": "ok", "database": "ok"}
 ```
 
-What this does (assuming Part G's `docker-compose.prod.yml` edits are
-applied — no `caddy` service in this stack on this host):
+What this does:
 
-- `web` runs `migrate` → `collectstatic` → `gunicorn :8000` as `appuser`
-  (after Part A3), bound to `127.0.0.1:8000` only — reachable from the host
-  itself (i.e., the host-level Caddy from Part G), not from the network.
+- `web` runs `migrate` and then `exec`s `gunicorn :8000` as `appuser`, bound
+  to `127.0.0.1:8000` only — reachable from the host itself (i.e., the
+  host-level Caddy from Part G), not from the network. `collectstatic`
+  already ran when the image was built.
 - TLS and the public `:80`/`:443` edge are handled entirely by the existing
   host-level Caddy (Part G) — this app doesn't run or manage a reverse
   proxy of its own on `cossee-web-server`.
 - `db` and `redis` are unreachable from the host network or the public
-  internet once Part A7's `!reset []` fix is applied — verify with the
-  `docker ps` line above; neither should show a `0.0.0.0:...` mapping.
-  `redis` also requires the password from Part F/A7.
-- `celery` and `celery-beat` start once `db` and `redis` pass their health
-  checks.
+  internet — verify with the `docker ps` line above; neither should show a
+  `0.0.0.0:...` mapping. `redis` requires the password from Part F and
+  keeps its queue on the `i-connects_redis_data` volume (append-only
+  file), so queued emails survive a crash.
+- Every service has a health check: `db` (`pg_isready` over TCP), `redis`
+  (authenticated `PING`), `web` (`/healthz/` with the site's `Host`
+  header), `celery` (`celery inspect ping` to its own node) and
+  `celery-beat` (a heartbeat file the scheduler touches on every tick).
+  `celery` and `celery-beat` are only started once `web` is healthy, i.e.
+  once `migrate` has finished, so the first `docker compose ps` after a
+  fresh deploy can take a minute to settle.
 
 Create the platform's first admin account:
 
@@ -899,8 +942,9 @@ docker compose exec web python manage.py setup_cron
 
 ```bash
 curl -I https://i-connects.cossee.org/                 # expect 200 or 302, not 5xx
+curl -sS https://i-connects.cossee.org/healthz/        # {"status": "ok", "database": "ok"}
 curl -sI https://i-connects.cossee.org/ | grep -i strict-transport-security
-docker compose ps                                        # every service healthy/running
+docker compose ps                                        # every service (healthy)
 docker compose exec web python manage.py check --deploy  # Django's own deploy checklist
 ```
 
@@ -941,10 +985,25 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 docker compose logs --tail=50 web
 ```
 
-Migrations and `collectstatic` re-run automatically on container start (the
-prod `web` command chains them before `gunicorn`). Watch the first
-`docker compose logs` after every deploy for migration errors before
-walking away.
+Migrations run automatically on container start (the prod `web` command
+runs `migrate` and then `exec`s `gunicorn`); `collectstatic` ran during
+`--build`. Watch the first `docker compose logs` after every deploy for
+migration errors before walking away, and confirm `docker compose ps`
+shows every service `(healthy)` — `celery` and `celery-beat` are not
+recreated until `web` is.
+
+Stopping or restarting is graceful: gunicorn receives SIGTERM directly
+(35 s grace), Celery finishes in-flight tasks (60 s), and Postgres gets
+SIGINT for a fast, clean shutdown (60 s). If `docker compose stop` takes
+longer than that, something is wedged — read the logs rather than raising
+the timeouts.
+
+**Postgres major versions:** the `db` service is pinned to `postgres:16`.
+Never bump the major version in place — the data directory format is
+version-specific and the container will refuse to start on the old data.
+Upgrading means `scripts/backup.sh`, a new empty volume, then
+`scripts/restore.sh` into the new major (or `pg_upgrade`), planned as its
+own change.
 
 **Roll back a bad deploy:**
 
@@ -977,19 +1036,31 @@ sit — those are exactly what Part A4 flagged as already stale once.
 <a id="part-k"></a>
 ## Part K — Backups & disaster recovery
 
-**Database backup (one-off):**
+**What to back up.** Everything durable is in two Docker volumes:
+`i-connects_postgres_data` (the database — users, projects, tasks,
+sessions, the beat schedule) and `i-connects_media_data` (`MEDIA_ROOT`;
+today only scratch files under `tmp/`, but any future upload lands here).
+Redis holds only in-flight queue state and is not backed up. Static files
+are rebuilt from the image.
+
+**One-off backup**, from the checkout directory:
 
 ```bash
 mkdir -p ~/backups
-docker compose exec -T db pg_dump -U iconnects iconnects \
-  | gzip > ~/backups/db-$(date +%F).sql.gz
+scripts/backup.sh
 ```
+
+This writes `~/backups/db-<timestamp>.dump` (a `pg_dump -Fc` custom-format
+archive, verified with `pg_restore --list` before it is kept) and
+`~/backups/media-<timestamp>.tar.gz`, then deletes copies older than 30
+days. `BACKUP_DIR` and `RETENTION_DAYS` override the defaults. The dump
+runs inside the `db` container with that container's own credentials, so
+nothing is read from `.env`.
 
 **Nightly cron**, `crontab -e` as `deploy`:
 
 ```cron
-0 3 * * * cd ~/i-connects && docker compose exec -T db pg_dump -U iconnects iconnects | gzip > ~/backups/db-$(date +\%F).sql.gz
-30 3 * * 0 find ~/backups -name 'db-*.sql.gz' -mtime +30 -delete
+0 3 * * * cd ~/i-connects && scripts/backup.sh >> ~/backups/backup.log 2>&1
 ```
 
 (Nightly for 30 days locally; ship copies off-host — see below — for
@@ -1002,20 +1073,30 @@ uses). This guide intentionally doesn't hardcode a specific provider since
 none was specified — pick one and wire it into the cron job above before
 calling backups "done."
 
-**Media files:** if user uploads accumulate under `MEDIA_ROOT`
-(`/app/media` in the container), back those up too — `pg_dump` only covers
-the database:
+**Restore.** `scripts/restore.sh` restores a database dump and/or a media
+tarball. Without `--target` it replaces the **live** database: it stops
+`web`, `celery` and `celery-beat`, runs `pg_restore --clean` into the
+production database, extracts the media tarball over `/app/media`, and
+brings the app back up:
 
 ```bash
-docker compose cp web:/app/media ~/backups/media-$(date +%F)
+scripts/restore.sh --db ~/backups/db-<timestamp>.dump --media ~/backups/media-<timestamp>.tar.gz --yes
 ```
 
-**Restore from a dump:**
+**Quarterly restore drill** — a backup nobody has restored is a hope, not
+a backup. `--target` restores into a fresh, separately named database on
+the same Postgres server and leaves production untouched; spot-check a
+table, then drop it:
 
 ```bash
-gunzip -c ~/backups/db-YYYY-MM-DD.sql.gz \
-  | docker compose exec -T db psql -U iconnects -d iconnects
+scripts/restore.sh --db ~/backups/db-<timestamp>.dump --target drill_$(date +%Y%m) --yes
+docker compose exec -T db psql -U iconnects -d drill_$(date +%Y%m) -c 'select count(*) from accounts_user;'
+docker compose exec -T db dropdb -U iconnects drill_$(date +%Y%m)
 ```
+
+Older plain-SQL dumps (`db-YYYY-MM-DD.sql.gz`, from before the script
+existed) restore with
+`gunzip -c <file> | docker compose exec -T db psql -U iconnects -d iconnects`.
 
 **Disk snapshots** (whatever hypervisor/host provider `cossee-web-server`
 runs on) are the fastest full-system recovery path if available — schedule
@@ -1030,19 +1111,26 @@ into a fresh deploy).
 ## Part L — Monitoring & log rotation
 
 - **Container logs** grow unbounded under Docker's default `json-file`
-  driver. Cap them — add to `docker-compose.prod.yml` under each service
-  (or globally via `/etc/docker/daemon.json`'s `log-opts`):
-  ```yaml
-  logging:
-    driver: json-file
-    options:
-      max-size: "10m"
-      max-file: "5"
+  driver. `docker-compose.prod.yml` caps every service at 5 × 10 MB via
+  the shared `x-logging` anchor; leave it in place (or set the same
+  `log-opts` globally in `/etc/docker/daemon.json`).
+- **Unhealthy containers are not restarted by Docker.** A failing health
+  check only shows in `docker compose ps` and gates `depends_on`;
+  `restart: unless-stopped` acts on process exit, not on health. The
+  repo's `scripts/restart-unhealthy.sh` restarts every container of this
+  project whose check is failing. Run it from cron every two minutes, as
+  `deploy` (`mkdir -p ~/logs` first):
+  ```cron
+  */2 * * * * cd ~/i-connects && scripts/restart-unhealthy.sh >> ~/logs/restart-unhealthy.log 2>&1
   ```
+  Each restart is one line in that log. A container that gets restarted
+  repeatedly is a bug to chase in `docker compose logs`, not something to
+  leave to the cron job.
 - **Uptime**: point an external uptime check (whatever your org already
   uses — even a simple cron `curl` + alert is fine to start) at
-  `https://i-connects.cossee.org/` so an outage is caught before a user
-  reports it.
+  `https://i-connects.cossee.org/healthz/` so a database outage is caught
+  too, not just a dead proxy. It answers `200` with `{"status": "ok", ...}`
+  or `503`.
 - **Disk space**: Postgres and container logs both grow over time —
   `df -h /` periodically, or alert on it. `docker system df` shows what
   Docker itself is holding; `docker image prune` after deploys reclaims
@@ -1095,7 +1183,11 @@ laptop, departing team member with access):
 | Django: `DisallowedHost` | `DJANGO_ALLOWED_HOSTS` mismatch | Must contain `i-connects.cossee.org` exactly (Part F). |
 | Infinite redirect loop | `SECURE_SSL_REDIRECT=True` but `X-Forwarded-Proto` not forwarded | Confirm the `header_up X-Forwarded-Proto {scheme}` line is still present in `/etc/caddy/sites/i-connects.caddy` (Part G). |
 | `relation "..." does not exist` | Migrations didn't run | `docker compose exec web python manage.py migrate`. |
-| Static files 404 | `collectstatic` didn't run | `docker compose exec web python manage.py collectstatic --noinput`. |
+| Static files 404, or a page 500s with `Missing staticfiles manifest entry` | The image was built without `collectstatic` (or a template references a static file that doesn't exist) | `collectstatic` runs at image build: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`. For the manifest error, the named file is missing from `static/` — fix the template or add the file, then rebuild. |
+| `docker compose up` ends with `dependency failed to start: container i-connects-web-1 is unhealthy` | `web`'s health check (`/healthz/` with the site `Host` header) is failing, so `celery`/`celery-beat` were not started | `docker inspect --format '{{json .State.Health}}' i-connects-web-1` shows the last probe outputs. `migrate` still running or failed → `docker compose logs web`. A `400` means `DJANGO_ALLOWED_HOSTS` is empty or malformed (the check uses its first entry). A `503` means gunicorn is up but cannot reach Postgres. Fix, then `up -d` again. |
+| `docker compose up` fails immediately with `required variable REDIS_PASSWORD is missing a value` | `REDIS_PASSWORD` unset or empty in `.env` | Set it (Part F) and make `REDIS_URL` / `CELERY_*` carry the same password. This is a deliberate guard — see Part F's note. |
+| `docker compose ps` shows a service `(unhealthy)` but it keeps running | Docker never restarts on health status alone | Expected; the Part L cron (`scripts/restart-unhealthy.sh`) restarts it within two minutes. Read the health log (`docker inspect` as above) for the cause. |
+| `external volume "i-connects_postgres_data" not found` (or `..._media_data`) | The data volumes are `external: true` and were never created on this host | `docker volume create` both names — Part H, first block. Never work around this by removing `external: true`: it is what stops `down -v` from deleting the database. |
 | Cert stuck on staging / rate-limited | Repeated failed issuance attempts | Fix the underlying DNS issue first, then `caddy-reload` again. Let's Encrypt rate limits are per-domain-per-week — don't loop this; if truly stuck, whoever manages the host Caddy needs to clear its stored account/cert state, which affects every app behind it. |
 | `docker ps` shows `0.0.0.0:5432->...` or `0.0.0.0:6379->...` | Part A7's `!reset []` fix not applied, or applied but not rebuilt | Re-check the `docker-compose.prod.yml` diff, then `up -d` (recreation, not just editing the file, is what takes effect). This also means UFW was never protecting these — see Part B4's note. |
 | A signup with an unconfirmed/fake email still gets a logged-in session | Expected today, not a config bug — see Part A5's note: the app's `SignupView`/`LoginView` are hand-rolled and never check email-verification status, so `ACCOUNT_EMAIL_VERIFICATION=mandatory` doesn't gate this path at all | Real fix is an app-code change to `apps/accounts/views.py`, tracked separately from deployment config — don't spend time debugging `.env`/SMTP for this specific symptom. |
@@ -1119,11 +1211,15 @@ Stop the stack but keep data:
 docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 ```
 
-Wipe everything, including the database and Redis volumes — **irreversible,
-confirm you have a current off-host backup (Part K) first**:
+Wipe everything — **irreversible, confirm you have a current off-host
+backup (Part K) first**. `down -v` removes the containers, the network and
+the Redis volume, but deliberately *not* the database or media volumes:
+those are `external: true` precisely so this command cannot take them.
+Removing them is a separate, explicit step:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v
+docker volume rm i-connects_postgres_data i-connects_media_data
 ```
 
 Since Part G put this app behind the host's shared Caddy rather than a
