@@ -13,3 +13,15 @@ staticfiles/
 .pytest_cache
 htmlcov
 .coverage
+# Local virtualenvs, a stray SQLite DB, logs and beat state must never ride
+# along in `COPY . .`.
+.venv/
+venv/
+env/
+db.sqlite3
+db.sqlite3-journal
+*.log
+celerybeat-schedule
+celerybeat.pid
+.idea/
+.vscode/
