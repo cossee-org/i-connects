@@ -1,4 +1,22 @@
-demo.i-connects.cossee.org {
+# Source text for the host-level Caddy site block, installed as
+# /etc/caddy/sites/i-connects.caddy on cossee-web-server (DEPLOYMENT.md,
+# Part G3). No compose service mounts or reads this file: the shared host
+# Caddy owns :80/:443 and proxies to the web container's loopback-only port.
+# For a standalone host that runs its own caddy container instead, the
+# upstream becomes web:8000 (see DEMO_DEPLOYMENT.md).
+i-connects.cossee.org {
     encode zstd gzip
-    reverse_proxy web:8000
+    reverse_proxy 127.0.0.1:8000 {
+        # Django needs these to build absolute URLs and to see the real
+        # client address rather than the proxy's.
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+        header_up Host {host}
+    }
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        -Server
+    }
+    log
 }
