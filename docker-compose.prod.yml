@@ -17,30 +17,110 @@
 # override below uses `!reset`/`!override` to force an actual replacement;
 # do not change these back to a bare `[]`.
 
+# Cap container logs so an unbounded json-file log can't fill the host
+# disk (DEPLOYMENT.md Part L). `logging:` is a map, not a list, so this
+# merges cleanly per-service without needing !override/!reset.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   web:
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py collectstatic --noinput &&
              gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
-    volumes: !reset []
+    # Named volume, not `!reset []`: user-uploaded files under MEDIA_ROOT
+    # (/app/media) must survive container recreation (redeploys, crashes,
+    # `docker compose up -d --build`), which a plain image COPY does not.
+    # NOTE: use `!override` here, not `!reset` — `!reset` forces the field
+    # empty/null regardless of what follows it; only `!override` actually
+    # replaces the merged value with new content (verified against this
+    # host's `docker compose config` output).
+    volumes: !override
+      - media_data:/app/media
     restart: unless-stopped
     ports: !override
       - "127.0.0.1:8000:8000"
+    logging: *default-logging
+    # `celery`/`celery-beat` gate their startup on this turning healthy
+    # (below), so it can only pass once migrate has actually finished —
+    # not just once the container process has started.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    # Plain-field limits, not `deploy.resources.limits` (that key only
+    # takes effect under `docker stack deploy`/swarm, not `docker compose
+    # up`). Caps a runaway/leaking worker instead of it OOM-killing the
+    # host; revisit these numbers after watching real usage.
+    mem_limit: 1g
+    cpus: 1.5
 
   celery:
-    volumes: !reset []
+    # Shares media_data with web — cron.cleanup_tmp_files (cron/tasks.py)
+    # and any future media-writing task run here, and must see the same
+    # files web serves/receives. `!override`, not `!reset` — see web's
+    # volumes comment above.
+    volumes: !override
+      - media_data:/app/media
     restart: unless-stopped
+    logging: *default-logging
+    # Base docker-compose.yml's `depends_on: [db, redis, web]` (short
+    # syntax) only waits for each container to *start*, not for web's
+    # `migrate` step to finish — celery-beat's DatabaseScheduler can hit
+    # missing tables on a fresh deploy before migrations land. Overriding
+    # just the `web` key merges with the base file's db/redis entries
+    # (depends_on merges per-key, not list-replace) rather than replacing
+    # the whole thing, so db/redis stay as-is.
+    depends_on:
+      web:
+        condition: service_healthy
+    # `celery inspect ping` round-trips through the broker to this
+    # worker's own event loop, so it catches a process that's alive but
+    # wedged (a task holding a lock, a stuck DB call) — a bare
+    # process-alive check would miss that. `$$HOSTNAME` (escaped for
+    # Compose's own interpolation) targets this specific worker instance;
+    # celery's default worker hostname is `celery@<container hostname>`.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   celery-beat:
     volumes: !reset []
     restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      web:
+        condition: service_healthy
 
   db:
     ports: !reset []
     restart: unless-stopped
+    logging: *default-logging
 
   redis:
     ports: !reset []
     restart: unless-stopped
+    logging: *default-logging
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    # Base docker-compose.yml's healthcheck ("redis-cli ping" with no
+    # auth) returns NOAUTH once --requirepass is set above, so Redis
+    # reports unhealthy forever and web/celery/celery-beat (which depend
+    # on `redis: condition: service_healthy`) never start. Override with
+    # an authenticated check.
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  media_data:
