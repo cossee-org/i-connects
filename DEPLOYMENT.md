@@ -725,7 +725,14 @@ localhost port:
 ```bash
 groups                              # confirm you're in the webdev group (added by the host admin)
 cat /etc/caddy/PORTS.md             # claim your port entry (8000, for this app) before adding anything else
+sudo ss -ltnp 'sport = :8000'       # and confirm nothing on the host is already listening on it
 ```
+
+If 8000 is already taken by another app, don't fight over it: pick a free
+port, set `WEB_PORT=<port>` in `.env` (the compose file publishes `web` on
+`127.0.0.1:${WEB_PORT:-8000}`), use that port in the `reverse_proxy` line
+below, and register it in `PORTS.md`. The container itself always listens
+on 8000; only the host side moves.
 
 Get the site file from whoever administers the host Caddy — on this host,
 that's a template staged by `mzakir` — **read it before installing it**:
@@ -816,7 +823,7 @@ cd ~/i-connects
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 docker compose ps                               # every service must reach (healthy)
 docker compose logs --tail=100 web celery celery-beat
-docker ps --format '{{.Names}}\t{{.Ports}}'    # only web, only 127.0.0.1:8000->8000
+docker ps --format '{{.Names}}\t{{.Ports}}'    # only web, only 127.0.0.1:8000->8000 (or your WEB_PORT)
 curl -sS -H 'Host: i-connects.cossee.org' http://127.0.0.1:8000/healthz/   # {"status": "ok", "database": "ok"}
 ```
 
@@ -1170,6 +1177,7 @@ laptop, departing team member with access):
 | --- | --- | --- |
 | `docker compose up` fails immediately with `required variable REDIS_PASSWORD is missing a value` | `REDIS_PASSWORD` unset or empty in `.env` | Set it (Part F) and make `REDIS_URL` / `CELERY_*` carry the same password. This is a deliberate guard — see Part F's note. |
 | `external volume "i-connects_postgres_data" not found` (or `..._media_data`) | The data volumes are `external: true` and were never created on this host | `docker volume create` both names — Part H, first block. Never work around this by removing `external: true`: it is what stops `down -v` from deleting the database. |
+| `docker compose up` fails with `failed to bind host port 127.0.0.1:8000/tcp: address already in use` | Something on the host already owns loopback port 8000. Three usual suspects: a `web` container from an *earlier* compose project (a checkout under another directory name, before the project name was fixed), a leaked `docker-proxy` left behind by a crash-looping container, or another app on the shared host | Find the owner: `sudo ss -ltnp 'sport = :8000'` and `docker ps -a --filter publish=8000 --format '{{.Names}}\t{{.Status}}\t{{.Ports}}'`. **Old container** (a name not starting with `i-connects-`): `docker stop <name> && docker rm <name>` — then `docker volume ls`: if its project had its own `<oldname>_postgres_data`, that is where the real data is; copy it across per Part H *before* `up`. **`docker-proxy` with no container behind it**: `sudo kill <pid>` from the `ss` output (restarting the Docker daemon also clears it but restarts every app on this shared host). **Another app**: set `WEB_PORT=<free port>` in `.env`, point the Caddy site block at it, register it in `PORTS.md` (Part G3). Then `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`. |
 | `docker compose up` ends with `dependency failed to start: container i-connects-web-1 is unhealthy` | `web`'s health check (`/healthz/` with the site `Host` header) is failing, so `celery`/`celery-beat` were not started | `docker inspect --format '{{json .State.Health}}' i-connects-web-1` shows the last probe outputs. `migrate` still running or failed → `docker compose logs web`. A `400` means `DJANGO_ALLOWED_HOSTS` is empty or malformed (the check uses its first entry). A `503` means gunicorn is up but cannot reach Postgres. Fix, then `up -d` again. |
 | `docker compose ps` shows a service `(unhealthy)` but it keeps running | Docker never restarts on health status alone | Expected; the Part L cron (`scripts/restart-unhealthy.sh`) restarts it within two minutes. Read the health log (`docker inspect` as above) for the cause. |
 | `web` log shows `start-web: database not reachable yet: ...` and `retrying in 2s (attempt n/30)` | Postgres isn't answering yet — normal for a few seconds after a reboot or a fresh `up`, since the first connection can race the container's network setup (`failed to resolve host 'db'`) | Expected while `n` is small; `web` turns healthy on its own. If it reaches 30 and exits with `giving up`: `docker compose logs db` (Postgres itself isn't up), then `docker compose exec web getent hosts db` and `docker network inspect i-connects_default --format '{{range .Containers}}{{.Name}} {{end}}'` — both `web` and `db` must be listed on the same network. |
