@@ -55,12 +55,15 @@ services:
   web:
     build: .
     # docker-init as PID 1: forwards SIGTERM/SIGINT to the process and reaps
-    # zombies. Together with `exec` below, the server -- not a shell -- is
-    # what receives the stop signal.
+    # zombies. Together with the `exec` in start-web.sh, the server -- not a
+    # shell -- is what receives the stop signal.
     init: true
-    # `exec` matters: without it `sh` stays PID 1, never forwards SIGTERM,
-    # and Docker SIGKILLs the whole container after the grace period.
-    command: sh -c "python manage.py migrate --noinput && exec python manage.py runserver 0.0.0.0:8000"
+    # scripts/start-web.sh waits for Postgres (retrying instead of exiting,
+    # so a slow database never takes celery/celery-beat's dependency down
+    # with it), runs `migrate`, then `exec`s the server. Never write this as
+    # a multi-line folded string: YAML keeps the line breaks and the shell
+    # runs each continuation line as its own command.
+    command: ["/app/scripts/start-web.sh", "runserver"]
     env_file:
       - .env
     volumes:
