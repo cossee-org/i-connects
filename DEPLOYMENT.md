@@ -66,7 +66,8 @@ Things that follow from this table and come up repeatedly below:
   to be healthy, which happens only after `migrate` has finished. A fresh
   deploy therefore takes about a minute to settle in `docker compose ps`.
 - **`collectstatic` runs when the image is built**, not when a container
-  starts. A container start runs `migrate` and then `exec`s the server.
+  starts. A `web` container start (`scripts/start-web.sh`) waits for
+  Postgres to answer, runs `migrate`, then `exec`s the server.
 - **The project name is fixed to `i-connects`** in `docker-compose.yml`, so
   container, network and volume names never depend on the checkout
   directory's name.
@@ -426,10 +427,12 @@ docker compose version     # v2.24 or newer — the compose files use !reset/!ov
 
 Docker's daemon starts on boot and restarts containers marked
 `restart: unless-stopped` with it, so a host reboot brings the stack back
-without anyone logging in. Note that at daemon start Docker restarts
-containers by policy and ignores compose's `depends_on`, so `web` or
-`celery-beat` may come up before Postgres and crash-loop for a few seconds
-until it does. That is expected and self-heals; see Part N if it doesn't.
+without anyone logging in. At daemon start Docker restarts containers by
+policy and ignores compose's `depends_on`, so containers can come up before
+Postgres: `web` handles that itself (`scripts/start-web.sh` retries the
+database connection for up to a minute before it does anything else), while
+`celery` and `celery-beat` may restart a few times until it answers. Both
+are expected and self-heal; see Part N if they don't.
 
 ---
 
@@ -824,11 +827,14 @@ What this does:
 - `db` and `redis` start and turn healthy; `redis` requires the password
   from Part F and keeps its queue on the `i-connects_redis_data` volume
   (append-only file), so queued emails survive a crash.
-- `web` waits for both, runs `migrate`, then `exec`s `gunicorn :8000` as
-  `appuser`, bound to `127.0.0.1:8000` only — reachable from the host
-  itself (the host Caddy), not from the network. It turns healthy once
-  `/healthz/` answers 200, i.e. once migrations are done and the database
-  answers.
+- `web` waits for both, then runs `scripts/start-web.sh`: it retries the
+  database connection until Postgres answers (up to a minute — the first
+  connection can race the container's network setup, which shows up as
+  `failed to resolve host 'db'`), runs `migrate`, then `exec`s
+  `gunicorn :8000` as `appuser`, bound to `127.0.0.1:8000` only — reachable
+  from the host itself (the host Caddy), not from the network. It turns
+  healthy once `/healthz/` answers 200, i.e. once migrations are done and
+  the database answers.
 - `celery` and `celery-beat` are only started once `web` is healthy, so no
   task ever runs against a half-migrated schema. Their own checks
   (`celery inspect ping`; the beat heartbeat file) turn green within about
@@ -911,8 +917,8 @@ docker compose ps
 docker compose logs --tail=50 web
 ```
 
-Migrations run automatically on container start (the prod `web` command
-runs `migrate` and then `exec`s `gunicorn`); `collectstatic` ran during
+Migrations run automatically on container start (`scripts/start-web.sh`
+waits for Postgres, runs `migrate`, then `exec`s `gunicorn`); `collectstatic` ran during
 `--build`, so a deploy that touches static files **must** include
 `--build` — a plain `up -d` or `restart` serves the old assets. Watch the
 first `docker compose logs` after every deploy for migration errors before
@@ -1166,7 +1172,9 @@ laptop, departing team member with access):
 | `external volume "i-connects_postgres_data" not found` (or `..._media_data`) | The data volumes are `external: true` and were never created on this host | `docker volume create` both names — Part H, first block. Never work around this by removing `external: true`: it is what stops `down -v` from deleting the database. |
 | `docker compose up` ends with `dependency failed to start: container i-connects-web-1 is unhealthy` | `web`'s health check (`/healthz/` with the site `Host` header) is failing, so `celery`/`celery-beat` were not started | `docker inspect --format '{{json .State.Health}}' i-connects-web-1` shows the last probe outputs. `migrate` still running or failed → `docker compose logs web`. A `400` means `DJANGO_ALLOWED_HOSTS` is empty or malformed (the check uses its first entry). A `503` means gunicorn is up but cannot reach Postgres. Fix, then `up -d` again. |
 | `docker compose ps` shows a service `(unhealthy)` but it keeps running | Docker never restarts on health status alone | Expected; the Part L cron (`scripts/restart-unhealthy.sh`) restarts it within two minutes. Read the health log (`docker inspect` as above) for the cause. |
-| After a host reboot, `web` or `celery-beat` restart a few times before settling | Docker restarts containers by policy at daemon start and ignores `depends_on`, so they can come up before Postgres | Expected and self-healing within a few seconds. If it's still looping after a minute, `docker compose logs db` — Postgres itself isn't coming up. |
+| `web` log shows `start-web: database not reachable yet: ...` and `retrying in 2s (attempt n/30)` | Postgres isn't answering yet — normal for a few seconds after a reboot or a fresh `up`, since the first connection can race the container's network setup (`failed to resolve host 'db'`) | Expected while `n` is small; `web` turns healthy on its own. If it reaches 30 and exits with `giving up`: `docker compose logs db` (Postgres itself isn't up), then `docker compose exec web getent hosts db` and `docker network inspect i-connects_default --format '{{range .Containers}}{{.Name}} {{end}}'` — both `web` and `db` must be listed on the same network. |
+| After a host reboot, `celery` or `celery-beat` restart a few times before settling | Docker restarts containers by policy at daemon start and ignores `depends_on`, so they can come up before Postgres | Expected and self-healing within a few seconds. If still looping after a minute, `docker compose logs db`. |
+| `web` exits with code 127 and the log shows `sh: 3: --bind: not found` | The `web` command was written as a multi-line folded YAML string; YAML kept the line breaks and the shell ran each line as its own command | The committed files use `command: ["/app/scripts/start-web.sh", ...]` — a plain list. Never rewrite it as a `>` block; CI renders both stacks and fails on any command containing a newline. |
 | Caddy logs `no such host` / `dns problem` | A-record not propagated | `dig +short i-connects.cossee.org`; wait or fix DNS (Part D). |
 | Browser: `ERR_CONNECTION_REFUSED` on :443 | UFW/firewall blocks 443 | `sudo ufw status`; confirm `443/tcp` is allowed (Part B4). |
 | Browser: `502 Bad Gateway` from Caddy | Nothing listening on `127.0.0.1:8000` | `docker compose ps` — `web` is down or still starting; `docker compose logs web`. Or the site file proxies to the wrong port: `cat /etc/caddy/PORTS.md`. |
