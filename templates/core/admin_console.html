@@ -90,7 +90,11 @@
           {% for event in recent_signups %}
             <li class="py-2">
               <div class="text-sm text-brand-navy font-medium">
-                {{ event.actor.name|default:event.actor.email|default:"&mdash;" }}
+                {% if event.actor %}
+                  {{ event.actor.name|default:event.actor.email }}
+                {% else %}
+                  &mdash;
+                {% endif %}
               </div>
               <div class="text-xs text-brand-text/60">{{ event.timestamp }}</div>
             </li>
@@ -132,7 +136,11 @@
           {% for event in recent_lockouts %}
             <li class="py-2">
               <div class="text-sm text-brand-navy font-medium">
-                {{ event.actor.name|default:event.actor.email|default:"&mdash;" }}
+                {% if event.actor %}
+                  {{ event.actor.name|default:event.actor.email }}
+                {% else %}
+                  &mdash;
+                {% endif %}
               </div>
               <div class="text-xs text-brand-text/60">{{ event.timestamp }}</div>
             </li>

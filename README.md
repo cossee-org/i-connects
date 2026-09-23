@@ -70,6 +70,18 @@ docker compose up --build
 
 Visit <http://localhost:8000/>.
 
+`docker compose ps` has a health column: `db`, `redis`, `web`, `celery` and
+`celery-beat` all reach `(healthy)` within about a minute. `celery` and
+`celery-beat` wait for `web` to be healthy, which happens only after
+`migrate` has finished. The probe itself is <http://localhost:8000/healthz/>
+(200 with `{"status": "ok"}` when the app can reach Postgres, 503 otherwise).
+
+The compose project name is fixed to `i-connects`, so the dev database volume
+is always `i-connects_postgres_data` whatever the checkout directory is
+called. If you had a dev database under another project name from before
+this change, `docker volume ls` still lists it; copy it across (see
+`DEPLOYMENT.md`, Part H) or just start fresh.
+
 Create a superuser:
 ```bash
 docker compose exec web python manage.py createsuperuser

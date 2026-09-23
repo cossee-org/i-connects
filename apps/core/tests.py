@@ -2,15 +2,47 @@
 
 from __future__ import annotations
 
+import importlib
 import re
+import sys
+from unittest import mock
 
 import pytest
 from django.core.exceptions import MiddlewareNotUsed
 from django.core.management import call_command
+from django.db import DEFAULT_DB_ALIAS, connections
+from django.db.utils import OperationalError
 from django.http import HttpResponse
+from django.urls import reverse
 from django_celery_beat.models import PeriodicTask
+from django_celery_beat.schedulers import DatabaseScheduler
 
+from apps.accounts.models import User
+from apps.audit.models import AuditAction, AuditLog
+from apps.core.celery_scheduler import HeartbeatDatabaseScheduler
+from apps.core.enums import UserRole
 from cron.tasks import daily_digest_cron
+
+
+@pytest.mark.django_db
+def test_admin_console_renders_with_actorless_audit_events(client):
+    """A signup/lockout event with no actor (``actor`` is nullable via
+    ``SET_NULL``) used to crash the whole page: ``{{ event.actor.name|
+    default:event.actor.email }}`` resolves ``event.actor.email`` as a
+    filter *argument*, and unlike a template's primary variable, a failed
+    lookup there isn't swallowed into an empty string -- it raises
+    ``VariableDoesNotExist`` straight through the render.
+    """
+    admin = User.objects.create_user(
+        email="admin@example.com", password="x", role=UserRole.ADMIN
+    )
+    AuditLog.objects.create(actor=None, action=AuditAction.USER_SIGNUP)
+    AuditLog.objects.create(actor=None, action=AuditAction.ACCOUNT_LOCKED_OUT)
+
+    client.force_login(admin)
+    resp = client.get(reverse("core:admin_console"))
+
+    assert resp.status_code == 200
 
 
 @pytest.mark.django_db
@@ -181,3 +213,102 @@ def test_an_unreachable_database_is_left_to_speak_for_itself(rf):
     """A DB outage is a different error; don't dress it up as a migration."""
     middleware = _middleware(None)
     assert middleware(rf.get("/dashboard/")).content == b"view"
+
+
+# ---------------------------------------------------------------------------
+# /healthz/ -- what the web container's Docker health check calls
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_healthz_answers_ok_when_the_database_answers(client):
+    response = client.get(reverse("core:healthz"))
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "database": "ok"}
+    # A probe result must never be served from a cache.
+    assert "no-store" in response["Cache-Control"]
+
+
+@pytest.mark.django_db
+def test_healthz_answers_503_when_the_database_query_fails(client):
+    """A process that is up but cannot reach Postgres is *not* healthy."""
+    with mock.patch.object(
+        connections[DEFAULT_DB_ALIAS], "cursor", side_effect=OperationalError("gone")
+    ):
+        response = client.get(reverse("core:healthz"))
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "unhealthy", "database": "error"}
+
+
+@pytest.mark.django_db
+def test_healthz_allows_head_and_rejects_writes(client):
+    """Uptime monitors often probe with HEAD; nothing should ever POST here."""
+    assert client.head(reverse("core:healthz")).status_code == 200
+    assert client.post(reverse("core:healthz")).status_code == 405
+
+
+def test_production_settings_wire_whitenoise_through_storages_and_exempt_healthz(
+    monkeypatch,
+):
+    """Django 5.1 removed STATICFILES_STORAGE; only STORAGES is read now.
+
+    Guards against the setting quietly coming back under its old name, and
+    against the health check's redirect exemption being dropped (without
+    it the in-container probe gets a 301, which ``curl -f`` treats as a
+    pass without ever reaching the database).
+    """
+    monkeypatch.setenv("DJANGO_SECRET_KEY", "test-only")
+    sys.modules.pop("config.settings.prod", None)
+    prod = importlib.import_module("config.settings.prod")
+    try:
+        assert not hasattr(prod, "STATICFILES_STORAGE")
+        assert (
+            prod.STORAGES["staticfiles"]["BACKEND"]
+            == "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        )
+        assert any(re.search(pattern, "healthz/") for pattern in prod.SECURE_REDIRECT_EXEMPT)
+    finally:
+        sys.modules.pop("config.settings.prod", None)
+
+
+# ---------------------------------------------------------------------------
+# celery-beat heartbeat -- what the celery-beat container's health check reads
+# ---------------------------------------------------------------------------
+
+
+def _scheduler_without_init() -> HeartbeatDatabaseScheduler:
+    # DatabaseScheduler.__init__ wants a Celery app and a live schedule
+    # table; the heartbeat wrapper touches neither, so skip it.
+    return HeartbeatDatabaseScheduler.__new__(HeartbeatDatabaseScheduler)
+
+
+def test_beat_scheduler_records_a_heartbeat_after_each_successful_tick(
+    tmp_path, settings, monkeypatch
+):
+    heartbeat = tmp_path / "beat" / "heartbeat"
+    settings.BEAT_HEARTBEAT_FILE = str(heartbeat)
+    monkeypatch.setattr(DatabaseScheduler, "tick", lambda self, *args, **kwargs: 5.0)
+
+    assert _scheduler_without_init().tick() == 5.0
+
+    assert heartbeat.exists()
+
+
+def test_beat_scheduler_leaves_no_heartbeat_when_the_tick_fails(
+    tmp_path, settings, monkeypatch
+):
+    """A tick that blows up (database gone) must read as *not* alive."""
+    heartbeat = tmp_path / "heartbeat"
+    settings.BEAT_HEARTBEAT_FILE = str(heartbeat)
+
+    def broken_tick(self, *args, **kwargs):
+        raise RuntimeError("database went away")
+
+    monkeypatch.setattr(DatabaseScheduler, "tick", broken_tick)
+
+    with pytest.raises(RuntimeError):
+        _scheduler_without_init().tick()
+
+    assert not heartbeat.exists()

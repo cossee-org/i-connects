@@ -1,8 +1,13 @@
+import logging
 from datetime import timedelta
 
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.db import connection
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_safe
 from django.views.generic import TemplateView
 
 from apps.accounts.models import User
@@ -11,6 +16,8 @@ from apps.contributions.models import ContributionRecord
 from apps.core.enums import TaskStatus, UserRole
 from apps.projects.models import Project
 from apps.tasks.models import Task
+
+logger = logging.getLogger(__name__)
 
 
 def home(request):
@@ -22,6 +29,32 @@ def home(request):
     if request.user.is_authenticated:
         return redirect("projects:dashboard")
     return render(request, "core/home.html")
+
+
+@never_cache
+@require_safe
+def healthz(request):
+    """Health probe for the Docker health check and external uptime monitors.
+
+    Answers ``200`` only when this process is serving *and* can run a query
+    against the database; ``503`` when that query fails, so a web container
+    whose Postgres connection is gone is reported unhealthy rather than
+    "up". Deliberately cheap and dependency-free: one round trip, no ORM,
+    no template, no session. Redis is not checked here on purpose -- a
+    broker outage breaks background work, not page serving, and the celery
+    service's own health check (``celery inspect ping``) catches it.
+
+    The JSON content type also keeps allauth's ``AccountMiddleware`` from
+    touching the session on the way out, so a probe never writes anything.
+    """
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except Exception:  # noqa: BLE001 -- any failure here means "not healthy"
+        logger.exception("healthz: database check failed")
+        return JsonResponse({"status": "unhealthy", "database": "error"}, status=503)
+    return JsonResponse({"status": "ok", "database": "ok"})
 
 
 class TermsOfUseView(TemplateView):

@@ -238,7 +238,12 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
-CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# django-celery-beat's DatabaseScheduler, wrapped so it touches a heartbeat
+# file after every successful tick. Celery beat has no ping endpoint, so this
+# file's age is what the celery-beat container's Docker health check reads
+# (see apps.core.celery_scheduler and docker-compose.yml).
+CELERY_BEAT_SCHEDULER = "apps.core.celery_scheduler:HeartbeatDatabaseScheduler"
+BEAT_HEARTBEAT_FILE = env("BEAT_HEARTBEAT_FILE", "/tmp/celerybeat-heartbeat")
 
 
 # ---------------------------------------------------------------------------
@@ -277,3 +282,30 @@ AWS_SES_REGION_ENDPOINT = env("AWS_SES_REGION_ENDPOINT", "email.us-east-1.amazon
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "i-connects <noreply@iconnects.local>")
 SITE_URL = env("SITE_URL", "")
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+# Django's own default LOGGING config only sends "django" (including
+# django.request, which is what logs an unhandled 500) to the console
+# when DEBUG is True; with DEBUG=False its sole handler is mail_admins,
+# which is a silent no-op without an ADMINS setting. Left as the default,
+# a production 500 leaves no trace anywhere docker/journald can see.
+# Force a console handler unconditionally so tracebacks always reach
+# `docker compose logs web`, whatever DEBUG is set to.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}

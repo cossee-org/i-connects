@@ -1,3 +1,16 @@
+# Development stack. Production layers docker-compose.prod.yml on top:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Everything that is true in both environments lives here: health checks,
+# startup ordering, signal handling and shutdown timeouts, and the fixed
+# names of the data volumes. The prod file only changes what differs.
+
+# Fixed project name: container, network and volume names no longer depend
+# on what the checkout directory happens to be called. A clone under another
+# name used to come up with a brand-new, empty database.
+name: i-connects
+
 services:
   db:
     image: postgres:16
@@ -7,11 +20,24 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iconnects}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Over TCP on purpose. During a first-run initdb the image starts a
+    # temporary server that listens on the Unix socket only; a socket-based
+    # `pg_isready` answers "ready" to that, web starts `migrate` against it,
+    # and the temporary server goes away underneath. TCP only answers once
+    # the real server is up.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-iconnects}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-iconnects} -d ${POSTGRES_DB:-iconnects}"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 30s
+    # SIGINT is Postgres's "fast" shutdown: disconnect clients, flush, exit
+    # clean. The default SIGTERM ("smart") waits for every client to leave,
+    # which gunicorn's persistent connections (CONN_MAX_AGE=600) never do, so
+    # it would sit until Docker's kill timeout and force crash recovery on
+    # the next start.
+    stop_signal: SIGINT
+    stop_grace_period: 60s
     ports:
       - "5432:5432"
 
@@ -22,12 +48,19 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    stop_grace_period: 30s
     ports:
       - "6379:6379"
 
   web:
     build: .
-    command: sh -c "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
+    # docker-init as PID 1: forwards SIGTERM/SIGINT to the process and reaps
+    # zombies. Together with `exec` below, the server -- not a shell -- is
+    # what receives the stop signal.
+    init: true
+    # `exec` matters: without it `sh` stays PID 1, never forwards SIGTERM,
+    # and Docker SIGKILLs the whole container after the grace period.
+    command: sh -c "python manage.py migrate --noinput && exec python manage.py runserver 0.0.0.0:8000"
     env_file:
       - .env
     volumes:
@@ -39,30 +72,83 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # /healthz/ answers 200 only once the process is serving AND can query
+    # Postgres (apps.core.views.healthz). start_period covers `migrate`;
+    # failures inside it do not count toward `unhealthy`.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    stop_grace_period: 35s
 
   celery:
     build: .
+    init: true
     command: celery -A config worker -l info
     env_file:
       - .env
     volumes:
       - .:/app
+    # Gate on web being *healthy*, not merely started: web's health only
+    # passes once `migrate` has finished, so no task ever runs against a
+    # half-migrated schema on a fresh deploy.
     depends_on:
-      - db
-      - redis
-      - web
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    # `celery inspect ping` round-trips through the broker to this worker's
+    # own event loop, so it catches a process that is alive but wedged (a
+    # task holding a lock, a stuck DB call) -- a bare process-alive check
+    # would miss that. `$$HOSTNAME` (escaped for Compose's own interpolation)
+    # targets this specific worker instance; celery's default worker
+    # hostname is `celery@<container hostname>`.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # Long enough for an in-flight email task to finish on SIGTERM (celery's
+    # warm shutdown) instead of being killed mid-send.
+    stop_grace_period: 60s
 
   celery-beat:
     build: .
-    command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    init: true
+    # HeartbeatDatabaseScheduler = django-celery-beat's DatabaseScheduler
+    # plus a heartbeat file touched after every tick (apps.core.celery_scheduler).
+    command: celery -A config beat -l info --scheduler apps.core.celery_scheduler:HeartbeatDatabaseScheduler
     env_file:
       - .env
     volumes:
       - .:/app
     depends_on:
-      - db
-      - redis
-      - web
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    # Beat has no ping. The scheduler ticks at least every 5 s and touches
+    # this file each time it completes a tick, so "modified within the last
+    # minute" is a genuine liveness signal -- a scheduler wedged on the
+    # database stops touching it. `$$(` is Compose's escape for a literal `$(`.
+    healthcheck:
+      test: ["CMD-SHELL", "test -n \"$$(find /tmp/celerybeat-heartbeat -mmin -1 2>/dev/null)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    stop_grace_period: 15s
 
 volumes:
   postgres_data:
+    # Explicit name so it is stable across checkouts and `-p` flags; this is
+    # the name already carrying data on the production host. The prod file
+    # additionally marks it external.
+    name: i-connects_postgres_data
