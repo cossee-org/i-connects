@@ -75,6 +75,15 @@ jobs:
       - name: Production stack renders
         run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
 
+      - name: Rendered service commands contain no embedded newlines
+        # A folded YAML block (`>`) keeps line breaks when continuation lines are
+        # indented deeper than the first, and `sh -c` then runs each line as a
+        # separate command. This caught nothing until it broke a launch; keep it.
+        run: |
+          for files in "-f docker-compose.yml" "-f docker-compose.yml -f docker-compose.prod.yml"; do
+            docker compose $files config --format json | python3 -c "import json,sys; s=json.load(sys.stdin)['services']; bad=[n for n,v in s.items() if any('\n' in p for p in (v.get('command') or []))]; sys.exit('multi-line command in: %s' % bad if bad else 0)"
+          done
+
       - name: Production stack refuses to render without REDIS_PASSWORD
         run: |
           sed -i 's/^REDIS_PASSWORD=.*/REDIS_PASSWORD=/' .env
@@ -101,6 +110,9 @@ jobs:
 
       - name: Runs as appuser
         run: docker run --rm i-connects:ci id -u | grep -qx 1000
+
+      - name: Start script is present and executable
+        run: docker run --rm i-connects:ci test -x /app/scripts/start-web.sh
 
       - name: Django system checks pass without a database
         run: docker run --rm -e DJANGO_SECRET_KEY=ci-only -e DJANGO_ALLOWED_HOSTS=ci i-connects:ci python manage.py check

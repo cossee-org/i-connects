@@ -50,7 +50,10 @@ COPY . .
 # Bring in the Tailwind-compiled CSS from the css-builder stage.
 COPY --from=css-builder /src/static/css/output.css ./static/css/output.css
 
-RUN mkdir -p /app/staticfiles /app/media \
+# Executable bits can be lost by some checkouts (Windows, zip uploads);
+# the start script must be runnable whatever the build context looked like.
+RUN chmod 755 /app/scripts/*.sh \
+ && mkdir -p /app/staticfiles /app/media \
  && chown appuser:appuser /app/staticfiles /app/media
 
 USER appuser
@@ -69,4 +72,6 @@ EXPOSE 8000
 # and celery-beat, each with a different notion of "healthy". The checks live
 # per service in docker-compose.yml / docker-compose.prod.yml.
 
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "60", "--graceful-timeout", "30"]
+# Same start sequence as the prod compose file: wait for Postgres, migrate,
+# exec gunicorn on 0.0.0.0:8000.
+CMD ["/app/scripts/start-web.sh", "gunicorn"]
