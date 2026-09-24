@@ -13,11 +13,15 @@
 # ("dependency failed to start"); one that retries just turns healthy a few
 # seconds later. Migration errors are NOT retried: only the connection is.
 #
-#   DB_WAIT_ATTEMPTS (default 30) x DB_WAIT_SECONDS (default 2) = how long to wait.
+#   DB_WAIT_TIMEOUT   total seconds to keep trying (default 60) -- a deadline, not
+#                     an attempt count, because a resolver that times out makes
+#                     every attempt slow and the container must not sit in this
+#                     loop past the health check's start_period.
+#   DB_WAIT_SECONDS   pause between attempts (default 2)
 set -eu
 
 mode="${1:-gunicorn}"
-attempts="${DB_WAIT_ATTEMPTS:-30}"
+timeout="${DB_WAIT_TIMEOUT:-60}"
 delay="${DB_WAIT_SECONDS:-2}"
 
 case "$mode" in
@@ -46,14 +50,14 @@ except Exception as exc:  # noqa: BLE001 -- any failure means "not yet"
 PY
 }
 
-i=1
+deadline=$(( $(date +%s) + timeout ))
 until db_ready; do
-  if [ "$i" -ge "$attempts" ]; then
-    echo "start-web: database still unreachable after $attempts attempts; giving up" >&2
+  now=$(date +%s)
+  if [ "$now" -ge "$deadline" ]; then
+    echo "start-web: database still unreachable after ${timeout}s; giving up" >&2
     exit 1
   fi
-  echo "start-web: retrying in ${delay}s (attempt $i/$attempts)" >&2
-  i=$((i + 1))
+  echo "start-web: retrying in ${delay}s ($(( deadline - now ))s left)" >&2
   sleep "$delay"
 done
 
