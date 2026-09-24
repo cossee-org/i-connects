@@ -1069,6 +1069,11 @@ Older plain-SQL dumps (`db-YYYY-MM-DD.sql.gz`, from before the script
 existed) restore with
 `gunzip -c <file> | docker compose exec -T db psql -U iconnects -d iconnects`.
 
+**Persistence drill** — the companion check for the live volumes rather
+than the backups: `PERSISTENCE_DRILL.md` plants canary data, SIGKILLs the
+stack, recreates the containers and (optionally) reboots the host, and
+diffs what survived. Run it after any change to the compose volumes.
+
 **Rebuilding from nothing** (lost host): Parts B–G on the new machine,
 `docker volume create` both data volumes (Part H), restore the latest dump
 and media tarball with `scripts/restore.sh` *before* the first `up` has run
