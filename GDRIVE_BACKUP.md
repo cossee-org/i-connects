@@ -631,6 +631,7 @@ Off-site backups are "done" (per Part K) only when every box is ticked:
 - [ ] §2.2 set-up record filled in and committed, including the data approval (P3)
 - [ ] Nightly account is a functional or service account, **not** a person's, or the risk is accepted in writing (P1)
 - [ ] Nightly account is a Content manager, **not** a Manager, and the drive has two Managers who are staying (P2)
+- [ ] Confirmed on the real drive that the nightly account can't delete for good: `echo x > /tmp/probe && rclone copy /tmp/probe gdrive:i-connects-backups && rclone deletefile --drive-use-trash=false gdrive:i-connects-backups/probe` must **fail**. Then `rclone deletefile gdrive:i-connects-backups/probe` (to the trash) must succeed
 - [ ] Space covers 90 days of copies plus 30 days of trash (P4)
 - [ ] OAuth consent screen is **Internal** (or External and In production)
 - [ ] Crypt passwords, OAuth client and settings file stored in the team secret store (§3.7)
