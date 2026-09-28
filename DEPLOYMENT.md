@@ -673,6 +673,9 @@ just this test.
   for SMTP instead). If App Passwords aren't available under **Security**
   for that account, that's why — coordinate with whoever administers UA's
   Workspace rather than assuming the steps above are missing something.
+- **Don't use this account for the off-site backups** (`GDRIVE_BACKUP.md`):
+  those run under their own account on a shared drive, so one leaked
+  credential can't reach both email and the backups.
 - **Treat the App Password exactly like every other secret in `.env`** —
   covered by `.gitignore` and the `chmod 600` above already, but worth
   restating: it grants send-as access to that Gmail account.
@@ -1038,11 +1041,23 @@ container on the web image, so it works even while `web` is down.
 anything you actually need to survive a lost disk.)
 
 **Off-host copy** — cron dumps alone don't protect against losing the VM.
-Sync `~/backups` to durable off-host storage on the same schedule (object
-storage, another host via `rsync`/`rclone`, whatever your org already
-uses). This guide intentionally doesn't hardcode a specific provider since
-none was specified — pick one and wire it into the cron job above before
-calling backups "done."
+`scripts/offsite-sync.sh` copies every new backup to a Google shared
+drive, encrypted on this host before upload, right after `backup.sh`
+succeeds. It only ever adds copies, verifies each upload, and keeps 90
+days. The nightly account can add files but not delete them; pruning is
+a monthly, manual step with a second account. Set-up, restore and
+troubleshooting are in **`GDRIVE_BACKUP.md`**; once it is set up, the
+nightly line above becomes:
+
+```cron
+0 3 * * * cd ~/i-connects && scripts/backup.sh >> ~/backups/backup.log 2>&1 && scripts/offsite-sync.sh --env ~/.config/i-connects/offsite-gdrive.env >> ~/backups/offsite-gdrive.log 2>&1
+```
+
+Backups aren't "done" until the `GDRIVE_BACKUP.md` §9 checklist is. The
+crypt passwords in its §3.7 belong in the same secret store as `.env`:
+without them the off-site copies can't be read. Restoring from Drive is
+`scripts/offsite-sync.sh --env … --fetch <file>`, then `restore.sh` as
+below.
 
 **Restore.** `scripts/restore.sh` restores a database dump and/or a media
 tarball. Without `--target` it replaces the **live** database: it stops
@@ -1055,7 +1070,8 @@ scripts/restore.sh --db ~/backups/db-<timestamp>.dump --media ~/backups/media-<t
 ```
 
 **Quarterly restore drill** — a backup nobody has restored is a hope, not
-a backup. `--target` restores into a fresh, separately named database on
+a backup (do it from a copy fetched off Drive — `GDRIVE_BACKUP.md` §7.2).
+`--target` restores into a fresh, separately named database on
 the same Postgres server and leaves production untouched; spot-check a
 table, then drop it:
 
@@ -1075,7 +1091,9 @@ stack, recreates the containers and (optionally) reboots the host, and
 diffs what survived. Run it after any change to the compose volumes.
 
 **Rebuilding from nothing** (lost host): Parts B–G on the new machine,
-`docker volume create` both data volumes (Part H), restore the latest dump
+`docker volume create` both data volumes (Part H), fetch the latest backup
+from Google Drive if `~/backups` went with the old host (`GDRIVE_BACKUP.md`
+§5), restore the latest dump
 and media tarball with `scripts/restore.sh` *before* the first `up` has run
 `migrate` — or run `up`, let it migrate an empty database, and restore over
 it; `--clean` handles either — then Part I. DNS (Part D) is the long pole:
@@ -1151,6 +1169,13 @@ image layers all grow — `df -h /` periodically, or alert on it.
 prune` after deploys reclaims old build layers. `scripts/backup.sh` prunes
 its own output after 30 days.
 
+**Backups.** `~/backups/.gdrive-last-ok` is touched after every
+successful off-site sync; older than ~26 hours means the nightly backup or
+its off-site copy is failing. Point a dead-man's-switch check at it
+through `OFFSITE_PING_URL` (`GDRIVE_BACKUP.md` §3.11). `backup.log` and
+`offsite-gdrive.log` in `~/backups` grow without limit; the logrotate rule
+in `GDRIVE_BACKUP.md` §3.9 rotates both monthly.
+
 **Cert renewal.** The host-level Caddy (Part G) renews Let's Encrypt certs
 automatically; confirm once a quarter with
 `sudo journalctl -u caddy | grep -i certificate` that a renewal actually
@@ -1178,6 +1203,11 @@ laptop, departing team member with access):
    value from `.env` at `up` time. Queued tasks survive: the queue is on
    the `i-connects_redis_data` volume, not in the container.
 5. Any SMTP/Resend/SES credential: rotate at the provider, update `.env`.
+   The off-site backup's Google OAuth token, client secret and crypt
+   passwords live outside `.env` (`~/.config/rclone/rclone.conf`); rotate
+   them per `GDRIVE_BACKUP.md` §7.4. A leaked crypt password means
+   re-uploading everything under a new key, like any other data-exposing
+   leak.
 6. After any rotation:
    ```bash
    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
