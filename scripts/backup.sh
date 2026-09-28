@@ -15,7 +15,8 @@
 #   RETENTION_DAYS  delete backups older than N  (default: 30)
 #   COMPOSE_FILES   `docker compose` -f flags    (default: dev + prod files)
 #
-# Restore with scripts/restore.sh.
+# Off-site copies: scripts/offsite-sync.sh, chained after this in the same
+# cron line (GDRIVE_BACKUP.md). Restore with scripts/restore.sh.
 set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-$HOME/backups}"
