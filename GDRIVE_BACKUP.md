@@ -3,8 +3,8 @@
 **Status: plan only, nothing here is implemented yet.** This closes the gap
 named in `DEPLOYMENT.md` Part K ("Off-host copy"): the nightly
 `scripts/backup.sh` writes to `~/backups` on `cossee-web-server`, and if that
-host is lost, the backups go with it. This plan copies every new backup to
-**Google Drive** right after the nightly backup finishes.
+host is lost, the backups go with it. This plan copies every new backup to a
+**Google Drive shared drive** right after the nightly backup finishes.
 
 It follows the same design as `RDS_BACKUP.md` (the UAlberta Research Data
 Storage plan, on branch `claude/ecstatic-hawking-sr34ja`): the same
@@ -78,28 +78,34 @@ keep the off-site copies safe from a compromised host. VM disk snapshots
 | --- | --- | --- |
 | Protocol | rclone's `drive` backend uses the Drive API over HTTPS (TCP 443). | No mount, no root, no VPN. The host's UFW already allows outgoing traffic (Part B4), and the rebuilt host in §6 can be anywhere. |
 | Login for an unattended job | rclone stores an OAuth **refresh token** in `rclone.conf`. The token is created once, in a browser, with `rclone authorize "drive"` on a laptop, then pasted into the server's config. | No password is stored on the host. The token can be revoked on its own, without changing the account's password. |
-| Token expiry | Google expires refresh tokens after **7 days** for OAuth apps whose consent screen is **External** with publishing status **Testing**. Tokens from **Internal** apps (Workspace only) or External apps set to **In production** don't have this limit. Tokens also expire after 6 months unused, or when revoked. | The OAuth client must be Internal or In production (§3.2), or the job stops working after a week. A nightly job never hits the 6-month limit. Changing the account's password doesn't revoke a Drive-only token (only tokens that include Gmail scopes). |
+| Token expiry | Google expires refresh tokens after **7 days** for OAuth apps whose consent screen is **External** with publishing status **Testing**. Tokens from **Internal** apps (Workspace only) or External apps set to **In production** don't have this limit. Tokens also expire after 6 months unused, or when revoked. | The OAuth client must be Internal or In production (§4 step 3), or the job stops working after a week. A nightly job never hits the 6-month limit. Changing the account's password doesn't revoke a Drive-only token (only tokens that include Gmail scopes). |
 | OAuth client | rclone ships a shared client ID, but its quota is shared by every rclone user and is often rate-limited. The rclone docs recommend creating your own. | Create a Google Cloud project and OAuth client for this job (§4 step 3). Whoever owns that project matters for offboarding (§7). |
 | Scopes | `drive` (everything in the account) or `drive.file` (only files and folders this OAuth client created). | Use `drive.file`: a leaked token can reach the backups but nothing else in the account. See the note in §3.2 about restores. |
-| Service accounts | Service accounts have no Drive storage of their own. They can only write to a **shared drive** they're a member of. | Service accounts only fit option (a) of Q1, and only if the org allows service-account keys and sharing with them. OAuth on a real account works everywhere, so it's the default. |
+| Service accounts | Service accounts have no Drive storage of their own. They can only write to a **shared drive** they're a member of. | Possible here, because the destination is a shared drive, but only if the Workspace allows service-account keys and adding the service account to the drive (Q1). OAuth on a real account needs neither, so it's the default. |
 | Checksums | Drive stores an MD5 checksum for every uploaded file. With a `crypt` remote on top, `rclone cryptcheck` can compare local files with the encrypted copies without downloading them. | Verification is cheaper than on RDS, where SMB has no checksums (§3.4 rule 4). |
 | Duplicate names | Drive allows two files with the same name in one folder. | `--list` reports duplicates, and the job treats one as an error to investigate (§3.4, §7). |
 | Trash | By default rclone moves deleted files to the trash (`--drive-use-trash`, on by default). Drive empties the trash after 30 days. Trash counts against the storage quota. | Pruning gets a 30-day undo window. Plan quota for about 30 extra days of copies (Q3). |
-| Shared drive roles | In a shared drive, a **Contributor** can add and edit files but can't move them to the trash or delete them. A **Content manager** can. Files in a shared drive belong to the organization, not to a person. | This is how the nightly job gets write-but-not-delete (§3.4 rule 8), the same idea as RDS Q5. It's only possible with option (a) of Q1. |
+| Shared drive roles | In a shared drive, a **Contributor** can add and edit files but can't move them to the trash or delete them. A **Content manager** can. Files in a shared drive belong to the organization, not to a person. | This is how the nightly job gets write-but-not-delete (§3.4 rule 8), the same idea as RDS Q5 (Q5 below). Because the files belong to the drive, they stay when the person who set up the job leaves. |
 | Upload limit | 750 GB of uploads per user per day. | Far above what this job needs. `~/backups` today is a few GB at most (`du -sh ~/backups`). |
 
-### 2.2 Still open — decide, or ask the account's admin
+### 2.2 Decided
+
+| Date | Decision | What it means for this plan |
+| --- | --- | --- |
+| 2026-09-28 | The destination is a Google **shared drive**. | The files belong to the Workspace, not to a person, so they stay when people leave. The nightly job can be a Contributor that can't delete (Q5, §3.4 rule 8). A service account is an option for the login (Q1). rclone needs the drive's ID (`team_drive`, §3.2). |
+
+### 2.3 Still open — ask the shared drive's manager or the Workspace admin
 
 | # | Question | Why it matters |
 | --- | --- | --- |
-| **Q1** | **Which Google account and which drive?** In this order of preference: (a) a **shared drive** in a Google Workspace the team belongs to (UAlberta's, or a `cossee.org` one if it exists), with the nightly job logged in as a functional account (not a person's), or as a service account, added as **Contributor**; (b) a **dedicated** Google account, used for nothing but these backups, writing to a folder in its own My Drive; (c) a named person's UAlberta or personal account, with the risks written down (below). | With (c), the backups sit in a person's My Drive. When that person leaves and their account is closed, **the files are deleted with it**. A shared drive (a) survives people leaving. Don't reuse the Gmail account from Part F1 either: one leaked credential would then reach both email and the backups, and backups would eat its 15 GB. |
-| **Q2** | **Is Google Drive approved for this data?** The dump contains personal information (names, emails, password hashes, session data), **encrypted on our side before upload**. If the account is UAlberta's, check the university's data classification for Google Workspace. Where is the data stored (country)? | Encryption is planned either way (§3.3), but it doesn't replace approval. A personal `gmail.com` account (option b) may not be acceptable for UAlberta users' data at all. Find out before uploading anything. |
-| **Q3** | **How much space is there?** A free consumer account has 15 GB shared across Gmail, Drive and Photos. Workspace accounts and shared drives have whatever quota the admin sets. Size needed ≈ (size of one night's db dump + media tarball) × (90 days + 30 days of trash). | If it doesn't fit: lower `OFFSITE_RETENTION_DAYS`, prune with `--drive-use-trash=false` (loses the undo window), buy more storage, or ask the admin. |
+| **Q1** | **Which account does the nightly job log in as, and which Workspace owns the drive** (UAlberta's, or a `cossee.org` one)? In this order of preference: (a) a functional Workspace account (not a person's), used for nothing but this job, added to the drive as **Contributor**; (b) a service account added as **Contributor**, if the Workspace allows service-account keys and adding it to the drive; (c) a named person's account as Contributor, with the risks written down (below). | With (c), the files are safe, since they belong to the shared drive, but the job's token stops working when that person leaves or their account is suspended, and a leaked token reaches whatever else that person can open. Don't reuse the Gmail account from Part F1 either: one leaked credential would then reach both email and the backups. |
+| **Q2** | **Is Google Drive approved for this data?** The dump contains personal information (names, emails, password hashes, session data), **encrypted on our side before upload**. If the drive is in UAlberta's Workspace, check the university's data classification for Google Workspace. Where is the data stored (country)? | Encryption is planned either way (§3.3), but it doesn't replace approval. Find out before uploading anything. |
+| **Q3** | **How much space is there?** Shared-drive files count against the Workspace's storage, and the admin may set a limit per shared drive. Size needed ≈ (size of one night's db dump + media tarball) × (90 days + 30 days of trash). | If it doesn't fit: lower `OFFSITE_RETENTION_DAYS`, prune with `--drive-use-trash=false` (loses the undo window), or ask the admin for more. |
 | **Q4** | **Can we create an OAuth client for this?** A Workspace admin may block unapproved third-party apps, or restricted Drive scopes, under Admin console → Security → API controls. Can the app be **Internal** (Workspace), or must it be External and set **In production**? | If apps are blocked, the admin has to allow this client ID. If the app stays in Testing, the token dies after 7 days (§2.1). |
-| **Q5** | With a shared drive (Q1 a): can the nightly account be a **Contributor**, with pruning done by a second account that is a **Content manager**? | Without it, a compromised host can delete every off-site copy and empty the trash. It's the same protection as RDS Q5 (§3.4 rule 8). |
+| **Q5** | **Who has which role on the drive?** The nightly account should be a **Contributor**, with pruning done by a second account that is a **Content manager**. At least two **Managers** should be people who are staying. Sharing outside the organization should be off for this drive. | Without the split, a compromised host can delete every off-site copy and empty the trash. It's the same protection as RDS Q5 (§3.4 rule 8). With only one Manager, the drive can end up with nobody able to change its members. |
 
-**Record the answers in this file** (a short "Decided on <date>" table)
-before starting §4 step 2.
+**Record the answers in this file** (add rows to the "Decided" table in
+§2.2) before starting §4 step 2.
 
 ---
 
@@ -144,8 +150,7 @@ client_id = <OAuth client ID from §4 step 3>
 client_secret = <OAuth client secret>
 scope = drive.file
 token = <JSON from `rclone authorize "drive"` on a laptop>
-# Option (a) of Q1, a shared drive: add its ID. Leave unset for My Drive.
-# team_drive = <shared drive ID>
+team_drive = <shared drive ID>     # `rclone config` offers a list of the account's shared drives
 
 [gdrive-crypt]
 type = crypt
@@ -164,10 +169,12 @@ OAuth client* created. So:
 - A restore on a rebuilt host must use the **same client ID** (it's in
   the secret store, §3.3). If that Google Cloud project is ever lost,
   authorize a new client with `scope = drive` instead; the full scope can
-  see every file in the account, including the old backups.
-- If `drive.file` turns out not to work with the shared drive in Q1 (a),
-  use `scope = drive`. That's acceptable only because the account holds
-  nothing but the backups (Q1).
+  see every file the account can open, including the old backups.
+- If `drive.file` turns out not to work with the shared drive, use
+  `scope = drive`. That's acceptable only if the account can open nothing
+  but this shared drive (Q1 a or b).
+- A Content manager can move the folder in the web page; don't. Anything
+  outside the folder rclone created is invisible to the job.
 
 `offsite-gdrive.env` variables (script defaults in brackets; the same
 variables as the RDS plan, plus `OFFSITE_NAME`):
@@ -202,9 +209,11 @@ variables as the RDS plan, plus `OFFSITE_NAME`):
   this backup exists for the case where the VM is gone. The refresh token
   itself doesn't need storing: a new one can be made with
   `rclone authorize` (§6).
-- **Protect the Google account:** 2-Step Verification on, recovery email
-  and phone that belong to the team (not one person), and the account used
-  for nothing else (Q1).
+- **Protect the Google account** (Q1 a or c): 2-Step Verification on, and
+  for a functional account, recovery details that belong to the team (not
+  one person) and no use other than this job. For a service account (Q1
+  b), its JSON key is the credential: store it in the secret store, keep it
+  `0600` on the host, and rotate it like the other secrets (Part M).
 - Treat a leak of the crypt passwords the same as a `.env` leak (Part M):
   rotate them, then upload everything again under the new key into a new
   folder. Delete the old folder once the new copies pass verification.
@@ -254,9 +263,9 @@ These are the same rules as the RDS plan. Only rules 4 and 8 differ.
    add files but can't trash or delete them. Pruning (step 5) then runs
    under a second credential, a **Content manager**, that isn't stored in
    the nightly job's config, for example monthly and by hand with
-   `--prune-only` (§4 step 3). A compromised host could then add junk but
-   couldn't delete history. If Q5 isn't possible (options b and c of Q1),
-   one account does both, and the 30-day trash is the only protection.
+   `--prune-only` (§4 step 4). A compromised host could then add junk but
+   couldn't delete history. If Q5 isn't possible, one account is a Content
+   manager and does both, and the 30-day trash is the only protection.
 
 ### 3.5 Fallback: the rclone shared client ID
 
@@ -315,26 +324,29 @@ that adds Google Drive.
 
 Do these in order. Each code step can be its own PR.
 
-1. **Choose the account and drive (Q1), and get approval (Q2).**
-   - For option (a), ask the Workspace admin for a shared drive (e.g.
-     `i-connects backups`) and the Contributor / Content manager split
-     (Q5).
-   - For option (b), create the dedicated Google account, turn on 2-Step
-     Verification, and put the login in the secret store.
+1. **Set up the shared drive's members (Q1, Q5), and get approval (Q2).**
+   - Ask the drive's Manager or the Workspace admin to add the nightly
+     account (or service account) as **Contributor** and the pruning
+     account as **Content manager**, and to confirm there are two Managers
+     who are staying.
+   - For a functional account, turn on 2-Step Verification and put the
+     login in the secret store.
    - Check the quota against the size estimate in Q3.
 2. **Record the answers** in §2.2 of this file.
-3. **Create the OAuth client** in a Google Cloud project owned by the
-   team (or by the Workspace, for option a):
+3. **Create the OAuth client** in a Google Cloud project in the same
+   Workspace as the shared drive, owned by the team rather than one person.
+   Skip this step for a service account (Q1 b): create its key in the same
+   project instead, and set `service_account_file` in place of
+   `client_id` / `token` in §3.2:
    - enable the **Google Drive API**;
-   - OAuth consent screen: **Internal** if the account is in a Workspace,
-     otherwise **External** and then **Publish app** so its status is
-     **In production** (not Testing, §2.1). An unverified External app
-     shows a warning on the consent page; that's fine for our own account;
+   - OAuth consent screen: **Internal**, so it isn't subject to the 7-day
+     Testing expiry. If Internal isn't allowed (Q4), **External** and then
+     **Publish app** so its status is **In production** (§2.1);
    - add the `https://www.googleapis.com/auth/drive.file` scope;
    - create credentials of type **Desktop app**, and store the client ID
      and secret in the secret store;
-   - for option (a) with a Workspace that blocks third-party apps, have
-     the admin allow this client ID (Q4).
+   - if the Workspace blocks third-party apps, have the admin allow this
+     client ID (Q4).
 4. **Add `scripts/offsite-sync.sh`** following §3.2–3.4, or extend the
    RDS plan's script if it has landed:
    - `--env FILE` (default `~/.config/i-connects/offsite.env`); fail
@@ -399,10 +411,10 @@ curl -sSI https://www.googleapis.com/drive/v3/about | head -1
 mkdir -p ~/.config/i-connects && chmod 700 ~/.config/i-connects
 rclone config                       # create "gdrive" (drive, scope drive.file, your client ID;
                                     #   answer "n" to "Use web browser" and paste the token from the laptop;
-                                    #   for a shared drive answer "y" to "Configure this as a Shared Drive")
+                                    #   answer "y" to "Configure this as a Shared Drive" and pick the drive)
                                     # then "gdrive-crypt" per §3.2
 chmod 600 ~/.config/rclone/rclone.conf
-rclone about gdrive:                # shows quota → login and token are right
+rclone lsd gdrive:                  # lists the shared drive's top level → login, token and drive ID are right
 rclone mkdir gdrive:i-connects-backups   # rclone must create it itself (drive.file, §3.2)
 
 cat > ~/.config/i-connects/offsite-gdrive.env <<'EOF'
@@ -430,8 +442,8 @@ scripts/offsite-sync.sh --env $E --list      # the files Drive now holds
 ```
 
 To see the result the way a person would, open
-[drive.google.com](https://drive.google.com) as the backup account (or
-the shared drive). `i-connects-backups/cossee-web-server/` should contain
+[drive.google.com](https://drive.google.com) → **Shared drives** → the
+backup drive. `i-connects-backups/cossee-web-server/` should contain
 `db-*.dump` and `media-*.tar.gz` files, whose contents are ciphertext.
 
 ### 5.3 Wire into cron
@@ -476,17 +488,18 @@ first follow `DEPLOYMENT.md` Parts B–H, then:
 Decrypt them with the same `gdrive-crypt` settings: point a crypt remote at
 the local folder and `rclone copy` out of it.
 
-**A file pruned by mistake** is in the Drive trash for 30 days. Restore it
-from the trash in the web page, or with
-`rclone backend untrash gdrive:i-connects-backups`.
+**A file pruned by mistake** is in the shared drive's trash for 30 days. A
+Content manager or Manager can restore it from the trash in the web page,
+or with `rclone backend untrash gdrive:i-connects-backups` using the pruning
+account's credential. The nightly Contributor account can't.
 
 **Quarterly drill** (extends the Part K drill): fetch the newest dump
 **from Drive**, not from `~/backups`, into a scratch directory, and restore
 it with `--target drill_$(date +%Y%m)`. Also run
 `rclone check --download` on that one file against the local copy. This
-proves the token, the client ID and the encryption key all still work. Sign
-in to the backup account in a browser at the same time, so a consumer
-account (Q1 b) never looks inactive to Google.
+proves the token, the client ID and the encryption key all still work.
+Check the drive's member list at the same time (Q5): the roles are still
+right, and at least two Managers are still here.
 
 ---
 
@@ -502,15 +515,18 @@ account (Q1 b) never looks inactive to Google.
 - **Logs:** `~/backups/offsite-gdrive.log`, one timestamped line per step,
   in the same style as `backup.log`. Both files grow without limit. Add
   them to the log rotation in Part L, or have the scripts cap their size.
-- **Quota:** check `rclone about gdrive:` monthly, or when the dead-man's
-  switch fires. Trash counts.
+- **Quota:** check `rclone size gdrive:i-connects-backups` monthly, and
+  compare with any limit the admin set on the drive (Q3). Trash counts, and
+  `rclone size` doesn't include it, so leave room.
 - **People changes:** add these to the team's offboarding list.
   - Whoever owns the Google Cloud project and the OAuth client: move the
     project to someone who is staying before they leave.
-  - If the backups are in a person's account (Q1 c) and they leave, move
-    the files to a shared drive or a dedicated account **before** their
-    account is closed; closing it deletes the files.
-  - Whoever holds the 2-Step Verification recovery for the backup
+  - If the nightly job logs in as a person's account (Q1 c) and they
+    leave, switch it to another account and re-authorize **before** their
+    account is closed. The files stay in the shared drive either way.
+  - If a Manager of the shared drive leaves, add another, so the drive
+    always has two (Q5).
+  - Whoever holds the 2-Step Verification recovery for a functional backup
     account: update it.
 
 | Symptom in `offsite-gdrive.log` | Likely cause | Action |
@@ -518,7 +534,7 @@ account (Q1 b) never looks inactive to Google.
 | `invalid_grant` / `Token has been expired or revoked` | the OAuth app is still in Testing (7-day expiry), the token was revoked, or the account was suspended | Publish the app (§4 step 3), then `rclone config reconnect gdrive:` with a new token from a laptop |
 | `access_denied` / `admin_policy_enforced` | the Workspace admin blocked the app or the scope (Q4) | Ask the admin to allow the client ID |
 | `403 rateLimitExceeded` / `userRateLimitExceeded` | too many API calls, usually on the shared rclone client (§3.5) | rclone retries by itself; if it keeps failing, use our own client ID |
-| `403 storageQuotaExceeded` | the account or shared drive is full, trash included | Empty old trash, lower `OFFSITE_RETENTION_DAYS`, or get more storage (Q3) |
+| `403 storageQuotaExceeded` | the shared drive, or the Workspace's storage, is full, trash included | Empty old trash, lower `OFFSITE_RETENTION_DAYS`, or get more storage (Q3) |
 | `insufficientFilePermissions` when pruning | the nightly account is a Contributor (§3.4 rule 8) | Expected if pruning is meant to run under the second account: use `--no-prune` in cron |
 | `directory not found` for `i-connects-backups` | the folder was made by hand, or by another client ID, and `drive.file` can't see it (§3.2) | Let rclone create the folder, or check `client_id` matches the one in the secret store |
 | `--immutable` / `cryptcheck` mismatch | a file on Drive differs from the local file of the same name | **Investigate before doing anything else**: possible corruption or tampering. Don't delete either copy |
@@ -531,8 +547,9 @@ account (Q1 b) never looks inactive to Google.
 
 Off-site backups are "done" (per Part K) only when every box is ticked:
 
-- [ ] Account and drive chosen, Q1–Q5 answers and data approval (Q2) recorded in §2.2
-- [ ] Backups are in a shared drive or a dedicated account, **not** a person's account, or the risk is accepted in writing (Q1)
+- [ ] Q1–Q5 answers and data approval (Q2) recorded in §2.2
+- [ ] Nightly job logs in as a functional account or a service account, **not** a person's, or the risk is accepted in writing (Q1)
+- [ ] Nightly account is a Contributor, pruning account a Content manager, and the drive has two Managers who are staying (Q5)
 - [ ] Quota covers 90 days of copies plus 30 days of trash (Q3)
 - [ ] OAuth client is Internal or **In production**, not Testing; client ID and secret in the secret store
 - [ ] Crypt passwords and Google account login stored in the team secret store, off the host
