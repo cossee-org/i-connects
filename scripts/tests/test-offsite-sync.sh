@@ -158,6 +158,11 @@ grep -q 'verification failed' "$T/out" || die "no verification failure reported"
 remote_ls | grep -qx "db-$O1.dump" || die "pruned after a failed verification"
 [[ "$(date -r "$BK/.test-last-ok" +%Y)" == 2000 ]] || die "marker touched after a failed verification"
 ok "a failed verification exits non-zero, does not prune and does not touch the marker"
+[[ "$(cat "$BK/.test-unverified")" == "db-$S4.dump" ]] || die "the unverified upload was not recorded"
+run || die "sync after a failed verification failed"
+grep -q 'verifying 1 uploaded files' "$T/out" || die "the next run did not re-verify the failed upload"
+[[ ! -e "$BK/.test-unverified" ]] || die "unverified list kept after a good verification"
+ok "the next run re-verifies a file whose verification failed, then forgets it"
 
 # --- Only one run at a time ---------------------------------------------------------------------
 write_env

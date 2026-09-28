@@ -16,7 +16,8 @@
 # differs from the local one is an error, never overwritten), verifies what
 # it uploaded, prunes remote copies older than OFFSITE_RETENTION_DAYS by the
 # date in their names, then touches BACKUP_DIR/.<OFFSITE_NAME>-last-ok and
-# pings OFFSITE_PING_URL. --prune-only runs just the prune, for a separate
+# pings OFFSITE_PING_URL. Files that fail verification are listed in
+# BACKUP_DIR/.<OFFSITE_NAME>-unverified and checked again on the next run. --prune-only runs just the prune, for a separate
 # account that may delete; --list prints what the remote holds; --fetch
 # downloads named backups for scripts/restore.sh.
 #
@@ -77,6 +78,9 @@ OFFSITE_VERIFY="${OFFSITE_VERIFY:-cryptcheck}"
 log() { printf '%s offsite-sync[%s]: %s\n' "$(date -Is)" "$OFFSITE_NAME" "$*"; }
 
 fail() { log "FAILED: $*" >&2; exit 1; }
+
+# Anything set -e stops on without a fail() still leaves a FAILED line in the log.
+trap 'log "FAILED: unexpected error on line $LINENO" >&2' ERR
 
 # --- Preflight ----------------------------------------------------------------
 [[ -n "${OFFSITE_REMOTE:-}" ]] || fail "OFFSITE_REMOTE is not set in $ENV_FILE"
@@ -240,18 +244,25 @@ sync)
     exit 0
   fi
 
-  if [[ -s "$WORK/new" ]]; then
-    log "verifying $(wc -l < "$WORK/new") uploaded files ($OFFSITE_VERIFY)"
-    if [[ "$OFFSITE_VERIFY" == cryptcheck ]]; then
-      rclone cryptcheck "${RCLONE_FLAGS[@]}" --one-way --files-from "$WORK/new" "$BACKUP_DIR" "$REMOTE" \
-        || fail "verification failed: an uploaded file does not match the local copy; not pruning"
-    else
-      rclone check "${RCLONE_FLAGS[@]}" --download --one-way --files-from "$WORK/new" "$BACKUP_DIR" "$REMOTE" \
-        || fail "verification failed: an uploaded file does not match the local copy; not pruning"
-    fi
-  else
-    log "nothing new to upload"
+  # Verify this run's uploads plus any a previous run could not verify, so a
+  # bad copy is never taken for a good one just because it is already there.
+  pending="$BACKUP_DIR/.$OFFSITE_NAME-unverified"
+  cp "$WORK/new" "$WORK/verify"
+  if [[ -f "$pending" ]]; then
+    comm -12 "$WORK/local" <(sort "$pending") >> "$WORK/verify"
+    sort -u -o "$WORK/verify" "$WORK/verify"
   fi
+  [[ -s "$WORK/new" ]] || log "nothing new to upload"
+  if [[ -s "$WORK/verify" ]]; then
+    log "verifying $(wc -l < "$WORK/verify") uploaded files ($OFFSITE_VERIFY)"
+    check_cmd=(cryptcheck)
+    [[ "$OFFSITE_VERIFY" == download ]] && check_cmd=(check --download)
+    if ! rclone "${check_cmd[@]}" "${RCLONE_FLAGS[@]}" --one-way --files-from "$WORK/verify" "$BACKUP_DIR" "$REMOTE"; then
+      cp "$WORK/verify" "$pending"
+      fail "verification failed: an uploaded file does not match the local copy; not pruning (listed in $pending, re-checked next run)"
+    fi
+  fi
+  rm -f "$pending"
 
   if [[ $NO_PRUNE -eq 1 || "$OFFSITE_PRUNE" == no ]]; then
     log "prune: skipped (--no-prune / OFFSITE_PRUNE=no)"
