@@ -1044,8 +1044,8 @@ anything you actually need to survive a lost disk.)
 `scripts/offsite-sync.sh` copies every new backup to a Google shared
 drive, encrypted on this host before upload, right after `backup.sh`
 succeeds. It only ever adds copies, verifies each upload, and keeps 90
-days. The nightly account can add files but not delete them; pruning is
-a monthly, manual step with a second account. Set-up, restore and
+days. The nightly account is a Content manager, so pruned copies only go
+to the drive's trash; deleting for good needs a Manager. Set-up, restore and
 troubleshooting are in **`GDRIVE_BACKUP.md`**; once it is set up, the
 nightly line above becomes:
 

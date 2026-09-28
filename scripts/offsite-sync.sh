@@ -17,9 +17,11 @@
 # it uploaded, prunes remote copies older than OFFSITE_RETENTION_DAYS by the
 # date in their names, then touches BACKUP_DIR/.<OFFSITE_NAME>-last-ok and
 # pings OFFSITE_PING_URL. Files that fail verification are listed in
-# BACKUP_DIR/.<OFFSITE_NAME>-unverified and checked again on the next run. --prune-only runs just the prune, for a separate
-# account that may delete; --list prints what the remote holds; --fetch
-# downloads named backups for scripts/restore.sh.
+# BACKUP_DIR/.<OFFSITE_NAME>-unverified and checked again on the next run.
+# On a Google shared drive, pruned copies go to the drive's trash.
+# --prune-only runs just the prune (e.g. after lowering the retention);
+# --list prints what the remote holds; --fetch downloads named backups for
+# scripts/restore.sh.
 #
 # Settings come from the --env file (default ~/.config/i-connects/offsite.env):
 #   OFFSITE_REMOTE          rclone destination, e.g. gdrive-crypt:cossee-web-server (required)
@@ -43,7 +45,7 @@ FETCH_TO=""
 FETCH_NAMES=()
 
 usage() {
-  sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-1}"
 }
 

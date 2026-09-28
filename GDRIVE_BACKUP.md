@@ -70,16 +70,18 @@ Two copies, two retention periods:
 | `~/backups` on `cossee-web-server` | `scripts/backup.sh` | 30 days (`RETENTION_DAYS`) | bad deploy or migration, accidental deletes; the fastest restore |
 | Google shared drive, `i-connects-backups/cossee-web-server/` | `scripts/offsite-sync.sh` | 90 days (`OFFSITE_RETENTION_DAYS`) | losing the VM or its disk, host compromise, mistakes noticed late |
 
-**Who can delete what.** The nightly job's account is a **Contributor** on
-the shared drive. Contributors can add files but can't move them to the
-trash or delete them. So a compromised host can add junk, but it can't
-erase the off-site history. Pruning is done once a month, by hand, by a
-second account that is a **Content manager** (§7.1). Because the files
-belong to the shared drive, not to a person, they stay when people leave.
+**Who can delete what.** The nightly job's account is a **Content
+manager** on the shared drive, so each nightly run prunes by itself. A
+Content manager can move files to the trash, but only a **Manager** can
+delete them permanently or empty the trash. So the worst a compromised
+host can do is move every copy to the trash. From there a Manager can
+restore them for 30 days, after which Drive empties the trash. That's
+why the nightly account must never be a Manager, and why someone should
+look at the trash once a month (§7.1). Because the files belong to the
+shared drive, not to a person, they stay when people leave.
 
-Drive is not a backup of itself: someone with the Content manager's
-credential can empty the trash. VM disk snapshots (Part K) are still worth
-having.
+Drive is not a backup of itself: a Manager's credential can empty the
+trash. VM disk snapshots (Part K) are still worth having.
 
 ---
 
@@ -93,7 +95,7 @@ each answer in §2.2 as you go.
 | # | What you need | Why |
 | --- | --- | --- |
 | **P1** | **The nightly account.** In order of preference: (a) a functional Workspace account (not a person's), used for nothing but this job; (b) a service account, if the Workspace allows service-account keys and adding one to a shared drive; (c) a named person's account, with the risk written down. Don't reuse the Gmail account from Part F1. | With (c), the files are safe, but the job stops when that person leaves or is suspended, and a leaked token reaches whatever else they can open. Reusing the SMTP account would let one leaked credential reach both email and the backups. |
-| **P2** | **Roles on the shared drive:** the nightly account as **Contributor**; a second account (a person is fine) as **Content manager** for pruning; at least two **Managers** who are staying. Sharing outside the organization turned off for this drive. | This is what stops the host from deleting history (§1). With only one Manager, the drive can end up with nobody able to change its members. |
+| **P2** | **Roles on the shared drive:** the nightly account as **Content manager**, and **not** Manager; at least two **Managers** who are people staying on the team. Sharing outside the organization turned off for this drive. | A Content manager can prune, which moves files to the trash, but can't delete permanently, so a compromised host can't erase history for good (§1). With only one Manager, the drive can end up with nobody able to change its members or restore from the trash. |
 | **P3** | **Approval for the data.** The dump contains personal information (names, emails, password hashes, session data), encrypted on our side. If the drive is in UAlberta's Workspace, check the university's data classification for Google Workspace, and where the data is stored. | Encryption doesn't replace approval. Get it before the first upload. |
 | **P4** | **Enough space.** Needed ≈ one night's backups × 120 (90 days kept + 30 days in the trash). One night's size: `du -ch $(ls -t ~/backups/db-*.dump \| head -1) $(ls -t ~/backups/media-*.tar.gz \| head -1) \| tail -1`. Ask whether the drive has its own limit. | A full drive makes every upload fail (§6). |
 | **P5** | **Permission to create an OAuth client**, with an **Internal** consent screen, in a Google Cloud project in the same Workspace as the shared drive. Also ask whether the Admin console (Security → API controls) blocks unapproved apps. If it does, the admin has to allow the client ID from §3.2. | Tokens from an **External** app left in **Testing** expire after 7 days. Internal apps don't have that limit. |
@@ -108,7 +110,6 @@ passwords, client secrets or tokens.
 | Workspace that owns the shared drive | |
 | Shared drive name and ID (§3.1) | |
 | Nightly account (P1: a, b or c) | |
-| Pruning account (Content manager) | |
 | Managers of the shared drive | |
 | Data approval (P3): who, and when | |
 | Space available / estimated need (P4) | |
@@ -131,8 +132,8 @@ server, on your laptop, or in a browser.
 
 1. The Manager creates the shared drive (e.g. `i-connects backups`), or
    uses the one already decided on.
-2. **Manage members:** add the nightly account as **Contributor** and the
-   pruning account as **Content manager**, and make sure there are two
+2. **Manage members:** add the nightly account as **Content manager**
+   (not Manager), and make sure there are two
    Managers (P2). For a service account (P1 b), add its
    `…@….iam.gserviceaccount.com` address.
 3. **Drive settings** for the shared drive: turn off sharing with people
@@ -297,17 +298,14 @@ OFFSITE_REMOTE=gdrive-crypt:cossee-web-server
 OFFSITE_NAME=gdrive
 OFFSITE_RETENTION_DAYS=90
 OFFSITE_KEEP_MIN=14
-# The nightly account is a Contributor and can't delete; pruning is monthly, by hand (§7.1).
-OFFSITE_PRUNE=no
 # OFFSITE_PING_URL=https://hc-ping.com/<uuid>   # §3.11
 # OFFSITE_BWLIMIT=4M                            # optional: cap upload speed on the shared host
 EOF
 chmod 600 ~/.config/i-connects/offsite-gdrive.env
 ```
 
-If the nightly account is a Content manager after all (no P2 split),
-remove `OFFSITE_PRUNE=no`, and each nightly run prunes after it verifies.
-Note in §2.2 that the host can then delete history.
+Each nightly run prunes after its uploads verify. Pruned copies go to the
+shared drive's trash, never straight to permanent deletion.
 
 §4 lists every setting.
 
@@ -411,39 +409,13 @@ all, so both kinds of failure raise the alert.
 Test it once: comment the setting out for a night and confirm the alert
 arrives, then put it back.
 
-### 3.12 The pruning account (laptop)
-
-The monthly prune (§7.1) runs from a team member's laptop with the
-**Content manager's** credential. That credential is never stored on the
-server. Set it up once, on that laptop, in a separate config file:
-
-```bash
-git clone https://github.com/cossee-org/i-connects.git && cd i-connects
-export RCLONE_CONFIG=~/.config/rclone/i-connects-prune.conf
-rclone config        # same answers as §3.4, but sign in as the Content manager; then §3.5 with the same two passwords
-rclone config update gdrive team_drive <shared drive ID> config_refresh_token=false --non-interactive > /dev/null
-chmod 600 "$RCLONE_CONFIG"
-mkdir -p ~/.config/i-connects
-cat > ~/.config/i-connects/offsite-gdrive-prune.env <<'EOF'
-OFFSITE_REMOTE=gdrive-crypt:cossee-web-server
-OFFSITE_NAME=gdrive-prune
-BACKUP_DIR=~/.cache/i-connects-offsite
-OFFSITE_RETENTION_DAYS=90
-OFFSITE_KEEP_MIN=14
-EOF
-scripts/offsite-sync.sh --env ~/.config/i-connects/offsite-gdrive-prune.env --prune-only --dry-run
-```
-
-With `drive.file`, this second login uses **the same OAuth client** as
-§3.2. Files created through one client aren't visible to another.
-
 ---
 
 ## 4. Reference: `scripts/offsite-sync.sh`
 
 ```
 scripts/offsite-sync.sh [--env FILE] [--dry-run] [--no-prune]     nightly sync
-scripts/offsite-sync.sh [--env FILE] --prune-only [--dry-run]     prune only (the pruning account)
+scripts/offsite-sync.sh [--env FILE] --prune-only [--dry-run]     prune only, e.g. after lowering the retention
 scripts/offsite-sync.sh [--env FILE] --list                       what the remote holds
 scripts/offsite-sync.sh [--env FILE] --fetch NAME... [--to DIR]   download for a restore
 ```
@@ -453,7 +425,7 @@ scripts/offsite-sync.sh [--env FILE] --fetch NAME... [--to DIR]   download for a
 | `--env FILE` | settings file [`~/.config/i-connects/offsite.env`] |
 | `--dry-run` | show what would be uploaded or pruned; write nothing, don't touch the marker, don't ping |
 | `--no-prune` | sync without pruning, whatever `OFFSITE_PRUNE` says |
-| `--prune-only` | only the prune step, for a Content manager |
+| `--prune-only` | only the prune step: no upload, no marker, no ping |
 | `--list` | `rclone lsl` of the remote, plus counts; fails on duplicate names |
 | `--fetch NAME...` | download these backups (bare names, as `--list` shows them), decrypted, into `BACKUP_DIR` or `--to DIR`. Refuses to overwrite a local file |
 
@@ -466,7 +438,7 @@ Settings (in the `--env` file):
 | `BACKUP_DIR` | `~/backups` | local backups to copy (the same default as `backup.sh`) |
 | `OFFSITE_RETENTION_DAYS` | `90` | prune copies whose name dates are older than this |
 | `OFFSITE_KEEP_MIN` | `14` | skip the whole prune if fewer db dumps than this would remain |
-| `OFFSITE_PRUNE` | `yes` | `no`: a sync never prunes (the nightly Contributor) |
+| `OFFSITE_PRUNE` | `yes` | `no`: a sync never prunes (for an account without delete rights, e.g. a Contributor) |
 | `OFFSITE_VERIFY` | `cryptcheck` | `cryptcheck` compares with the remote's stored hashes (Drive); `download` reads each new file back (remotes without hashes, e.g. SMB) |
 | `OFFSITE_BWLIMIT` | unset | rclone `--bwlimit`, e.g. `4M` |
 | `OFFSITE_PING_URL` | unset | fetched after a fully successful sync |
@@ -539,8 +511,9 @@ rclone copy ":crypt,remote=$HOME/Downloads/enc,filename_encryption=off,password=
 ```
 
 **A copy pruned by mistake** stays in the shared drive's trash for 30
-days. A Content manager or Manager can restore it from the trash in the web
-page. The nightly Contributor account can't.
+days. A Manager, or a Content manager such as the nightly account, can
+restore it from the trash in the web page, or with
+`rclone backend untrash gdrive:i-connects-backups` on the server.
 
 ---
 
@@ -561,13 +534,13 @@ page. The nightly Contributor account can't.
 | `invalid_grant` / `Token has been expired or revoked` | an External app left in Testing (7-day expiry), a revoked token, or a suspended account | Make the app Internal or In production (§3.2), then `rclone config reconnect gdrive:` with a new `rclone authorize` on a laptop |
 | `access_denied` / `admin_policy_enforced` | the Workspace blocks the app or the scope | The admin allows the client ID (P5) |
 | `403 rateLimitExceeded` / `userRateLimitExceeded` | too many API calls, usually because `client_id` is empty and rclone's shared client is in use | rclone retries by itself; if it keeps happening, use our own client (§3.2) |
-| `403 storageQuotaExceeded` | the shared drive or the Workspace's storage is full, trash included | Empty old trash (Content manager), lower `OFFSITE_RETENTION_DAYS`, or ask the admin (P4) |
-| `insufficientFilePermissions` or `cannot delete` during a prune | the nightly Contributor tried to prune | Set `OFFSITE_PRUNE=no` in the nightly settings file (§3.6) |
+| `403 storageQuotaExceeded` | the shared drive or the Workspace's storage is full, trash included | Empty old trash (a Manager), lower `OFFSITE_RETENTION_DAYS`, or ask the admin (P4) |
+| `insufficientFilePermissions` or `could not delete` during a prune | the nightly account's role was lowered below Content manager | A Manager restores the role (P2); until then, `OFFSITE_PRUNE=no` in the settings file keeps the uploads running |
 | `notFound` / `directory not found` | wrong `team_drive` ID, the account was removed from the drive, or the folder was made by hand or by another OAuth client (§10) | Check the ID and membership; check that `client_id` matches the one in the secret store |
 | `FAILED: upload failed` with `immutable` above it | a file on Drive has a different size from the local file with the same name | **Investigate before doing anything else**: possible corruption or tampering. Don't delete either copy |
 | `FAILED: verification failed` | an uploaded file doesn't match its local copy | Same as above. The run stops before pruning and doesn't touch the marker. The file names go in `~/backups/.gdrive-unverified`, and every later run checks them again until they pass. To check everything by hand: `rclone cryptcheck --one-way ~/backups gdrive-crypt:cossee-web-server` |
 | `FAILED: unexpected error on line <n>` | a command failed where the script has no specific message | Read the lines above it; run the script by hand with the same `--env` to reproduce |
-| `FAILED: duplicate names` | an interrupted upload, or someone uploading by hand | `rclone lsl gdrive-crypt:cossee-web-server`, keep the copy that passes `cryptcheck`, and have a Content manager delete the other in the web page |
+| `FAILED: duplicate names` | an interrupted upload, or someone uploading by hand | `rclone lsl gdrive-crypt:cossee-web-server`, keep the copy that passes `cryptcheck`, and delete the other in the web page (Content manager or Manager) |
 | `FAILED: another gdrive run holds …lock` | the previous night's run is still going, or hung | `ps aux \| grep offsite-sync`; if it's hung, kill it and run once by hand |
 | `prune skipped (keep-min guard)` | fewer than `OFFSITE_KEEP_MIN` recent dumps on Drive | Expected in the first two weeks; after that, backups have been failing, so check `backup.log` |
 
@@ -575,20 +548,23 @@ page. The nightly Contributor account can't.
 
 ## 7. Routine tasks
 
-### 7.1 Monthly: prune (laptop, Content manager)
+### 7.1 Monthly: check the drive (browser + server)
 
-From the laptop set up in §3.12:
+Drive empties the trash 30 days after a file goes in, so don't let this
+slip past a month. Recent backups trashed by mistake come back by
+themselves, because the next nightly run re-uploads anything still in
+`~/backups` (the last 30 days). Older copies exist only in the trash.
 
-```bash
-cd i-connects && git pull
-export RCLONE_CONFIG=~/.config/rclone/i-connects-prune.conf
-P=~/.config/i-connects/offsite-gdrive-prune.env
-scripts/offsite-sync.sh --env $P --prune-only --dry-run   # lists "would delete …"
-scripts/offsite-sync.sh --env $P --prune-only
-```
-
-Skipping a month is harmless. The next prune catches up, and the only
-cost is space.
+- **Trash:** a Manager opens the shared drive's **Trash**. Everything in
+  it from `i-connects-backups` should match a `prune: deleted …` line in
+  `~/backups/offsite-gdrive.log` (`grep 'prune: deleted' ~/backups/offsite-gdrive.log | tail -30`).
+  Anything else, above all recent backups, means someone or something
+  with the nightly credential trashed them: restore them, and treat it as
+  a host compromise (Part M).
+- **Space:** `rclone size gdrive-crypt:cossee-web-server` against the
+  drive's limit (P4).
+- **Members:** the nightly account is still a Content manager and not a
+  Manager, and there are still two Managers (P2).
 
 ### 7.2 Quarterly: restore drill from Drive (server)
 
@@ -612,12 +588,10 @@ Add these to the team's offboarding list:
 - **A Manager of the shared drive:** add another, so there are always
   two.
 - **The nightly account, if it's a person's (P1 c):** switch to another
-  account before theirs is closed. Add the new account as Contributor, run
+  account before theirs is closed. Add the new account as Content manager, run
   `rclone config reconnect gdrive:` on the server with a new
   `rclone authorize` on a laptop, then remove the old account from the
   drive.
-- **The Content manager used for pruning:** give the role to someone else,
-  and redo §3.12 on their laptop.
 - **Whoever holds the functional account's 2-Step Verification recovery:**
   update it.
 
@@ -628,7 +602,7 @@ Add these to the team's offboarding list:
 | OAuth token (nightly) | suspected leak | Revoke it: myaccount.google.com → Security → Third-party connections, as the nightly account, or the Workspace admin console. Then `rclone config reconnect gdrive:` on the server. Files don't change |
 | OAuth client secret | suspected leak | Cloud console → Credentials → reset the secret. `rclone config update gdrive client_secret <new> config_refresh_token=false --non-interactive`, then `rclone config reconnect gdrive:`. Update the secret store |
 | Service account key | yearly, or suspected leak | Create a new key, replace the JSON file, delete the old key in the console |
-| Crypt passwords | suspected leak (treat like a `.env` leak, Part M) | Create a new `gdrive-crypt` remote with new passwords, pointed at a **new folder**, e.g. `gdrive:i-connects-backups-2`. Change `OFFSITE_REMOTE`, run a sync (it uploads everything again), and prove a restore (§3.10). Then have a Content manager delete the old folder. Update the secret store |
+| Crypt passwords | suspected leak (treat like a `.env` leak, Part M) | Create a new `gdrive-crypt` remote with new passwords, pointed at a **new folder**, e.g. `gdrive:i-connects-backups-2`. Change `OFFSITE_REMOTE`, run a sync (it uploads everything again), and prove a restore (§3.10). Then delete the old folder (the nightly account can, as a Content manager). Update the secret store |
 
 ---
 
@@ -656,7 +630,7 @@ Off-site backups are "done" (per Part K) only when every box is ticked:
 
 - [ ] §2.2 set-up record filled in and committed, including the data approval (P3)
 - [ ] Nightly account is a functional or service account, **not** a person's, or the risk is accepted in writing (P1)
-- [ ] Nightly account is a Contributor, the pruning account a Content manager, and the drive has two Managers who are staying (P2)
+- [ ] Nightly account is a Content manager, **not** a Manager, and the drive has two Managers who are staying (P2)
 - [ ] Space covers 90 days of copies plus 30 days of trash (P4)
 - [ ] OAuth consent screen is **Internal** (or External and In production)
 - [ ] Crypt passwords, OAuth client and settings file stored in the team secret store (§3.7)
@@ -665,7 +639,7 @@ Off-site backups are "done" (per Part K) only when every box is ticked:
 - [ ] A run more than 7 days after set-up still succeeds (proves the token doesn't expire)
 - [ ] Dead-man's switch set and tested once (§3.11)
 - [ ] One file restored from Drive with `restore.sh --target` and spot-checked (§3.10)
-- [ ] Monthly prune tested once from the Content manager's laptop (§3.12, §7.1)
+- [ ] `scripts/offsite-sync.sh --env … --prune-only --dry-run` runs cleanly on the server. The first real prune comes about 90 days in; then check the trash against the log (§7.1)
 - [ ] The quarterly drill (§7.2) and offboarding items (§7.3) added to the team's lists
 
 ---
@@ -702,6 +676,9 @@ Why the script works the way it does. Change these only on purpose.
   on remote modification times, and a run of failed backups can't cause
   the last good copies to be pruned. Files whose names aren't backup names
   are never touched.
-- **Contributor nightly, Content manager monthly.** The server's
-  credential can't delete, so the worst a compromised host can do to the
-  off-site history is add to it.
+- **Content manager, not Manager, nightly.** The server can prune on its
+  own, but Drive only lets it move files to the trash. Deleting for good
+  and emptying the trash need a Manager, a credential that never sits on
+  the server. The worst a compromised host can do is trash the history,
+  which a Manager can undo for 30 days. The monthly trash check (§7.1) is
+  what makes that window count.
