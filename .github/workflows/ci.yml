@@ -93,7 +93,24 @@ jobs:
           fi
 
       - name: Shell scripts parse
-        run: bash -n scripts/*.sh
+        run: bash -n scripts/*.sh scripts/tests/*.sh
+
+  offsite:
+    name: Off-site backup script
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install rclone
+        # Ubuntu's package, the same version cossee-web-server gets (GDRIVE_BACKUP.md).
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rclone
+
+      - name: Shellcheck
+        run: shellcheck -S warning scripts/*.sh scripts/tests/*.sh
+
+      - name: offsite-sync.sh against a local encrypted remote
+        run: scripts/tests/test-offsite-sync.sh
 
   image:
     name: Docker image builds
