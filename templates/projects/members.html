@@ -17,7 +17,7 @@
   {% if user_privilege == "PROJECT_MANAGER" %}
   <div class="flex flex-wrap gap-2">
     <a href="{% url 'projects:join_requests' pk=project.pk %}"
-       class="btn btn-sm btn-ghost relative">
+       class="btn btn-outline btn-primary btn-sm relative">
       Join requests
       {% if pending_join_request_count %}
         <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
@@ -26,7 +26,7 @@
       {% endif %}
     </a>
     <a href="{% url 'projects:project_invitations' pk=project.pk %}"
-       class="btn btn-sm btn-ghost relative">
+       class="btn btn-outline btn-primary btn-sm relative">
       Invitations
       {% if pending_invitation_count %}
         <span class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-coral text-white">
@@ -39,7 +39,7 @@
             hx-target="#invite-modal-body"
             hx-swap="innerHTML"
             onclick="document.getElementById('invite-modal').showModal()">
-      Invite member
+      + Invite member
     </button>
   </div>
   {% endif %}
