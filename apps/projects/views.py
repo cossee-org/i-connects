@@ -720,6 +720,20 @@ class ProjectDetailView(DetailView):
         context["has_kanban_columns"] = KanbanBoard.objects.filter(
             project=project
         ).exists()
+
+        # Wiki summary: the most recently edited pages, newest first, so the
+        # dashboard surfaces what changed rather than the alphabetical index.
+        from apps.wiki.models import WikiPage
+        from apps.wiki.utils import excerpt
+
+        wiki_qs = WikiPage.objects.filter(project=project)
+        context["wiki_page_count"] = wiki_qs.count()
+        context["wiki_rows"] = [
+            {"page": page, "excerpt": excerpt(page.content_markdown)}
+            for page in wiki_qs.select_related("updated_by").order_by(
+                "-updated_at", "id"
+            )[:20]
+        ]
         return context
 
 

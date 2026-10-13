@@ -1495,3 +1495,68 @@ def test_discover_marks_nothing_for_an_anonymous_visitor(client, user):
     response = client.get(reverse("projects:list"))
     assert response.status_code == 200
     assert [row["my_privilege"] for row in response.context["project_rows"]] == [None]
+
+
+# ---------------------------------------------------------------------------
+# Project dashboard: wiki card
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_project_dashboard_wiki_card_lists_recent_pages(client, user):
+    from apps.wiki.services import create_page, update_page
+
+    project = _make_project(user)
+    older = create_page(project=project, actor=user, title="Sampling protocol")
+    create_page(
+        project=project,
+        actor=user,
+        title="Data dictionary",
+        content_markdown="## Fields\nEvery column we collect.",
+        locked=True,
+    )
+    # Editing a page moves it to the top: the card is ordered by recency.
+    update_page(
+        page=older,
+        actor=user,
+        title=older.title,
+        content_markdown="Updated steps.",
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    assert response.status_code == 200
+    assert response.context["wiki_page_count"] == 2
+    assert [row["page"].title for row in response.context["wiki_rows"]] == [
+        "Sampling protocol",
+        "Data dictionary",
+    ]
+    content = response.content.decode()
+    assert "Wiki pages" in content
+    assert reverse("wiki:detail", kwargs={"project_pk": project.pk, "slug": older.slug}) in content
+    assert reverse("wiki:create", kwargs={"project_pk": project.pk}) in content
+    assert "Locked" in content
+
+
+@pytest.mark.django_db
+def test_project_dashboard_wiki_card_empty_state(client, user):
+    project = _make_project(user)
+    client.force_login(user)
+    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    assert response.context["wiki_page_count"] == 0
+    assert "No wiki pages yet." in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_project_dashboard_hides_wiki_from_non_members(client, user, other_user):
+    """The wiki is members-only, and so is its card on a public project."""
+    from apps.wiki.services import create_page
+
+    project = _make_project(user)
+    create_page(project=project, actor=user, title="Internal notes")
+    client.force_login(other_user)
+    content = client.get(
+        reverse("projects:detail", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Internal notes" not in content
+    assert "Wiki pages" not in content
