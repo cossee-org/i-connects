@@ -44,6 +44,28 @@
     <h2 class="text-lg font-semibold text-brand-navy">Contribution Tracking</h2>
     {% include "_components/info_popover.html" with label="Contribution Tracking" body="Credit on this project, by CRediT role. A member earns credit on a task when they mark their own part done and a lead completes the task — where the task requires review, once their submission has been reviewed." link_href="https://credit.niso.org/" link_text="What is CRediT?" %}
   </div>
+  {% comment %}
+    Downloads and a lead's "Add contribution" share the heading's row, as on
+    Tasks. The two downloads line up with the two views below: the matrix is
+    Contributions by member, the list is Every contribution. Adding is here
+    rather than inside one view so it is there in both; saving reloads the
+    page. None of it applies to a project that isn't tracking credit.
+  {% endcomment %}
+  {% if project.tracks_credit %}
+  <div class="flex flex-wrap items-center gap-2">
+    {% if matrix.totals.grand_total > 0 %}
+      {% url 'contributions:project_contributions_csv' project_pk=project.pk as csv_url %}
+      {% if is_project_manager %}
+        {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" %}
+      {% else %}
+        {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" %}
+      {% endif %}
+    {% endif %}
+    {% if is_project_manager %}
+      {% include "contributions/partials/add_button.html" %}
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 {% if not project.tracks_credit %}
   {% comment %}
@@ -60,14 +82,7 @@
 {% else %}
 
 
-  {% comment %}
-    View switcher on the left, downloads and a lead's "Add contribution" on
-    the right — the same shape the Tasks board uses for Kanban / List /
-    Calendar. The two downloads line up with the two views: the matrix is
-    Contributions by member, the list is Every contribution. Adding sits here
-    rather than inside one view so it is there in both; saving reloads the
-    page.
-  {% endcomment %}
+  {# The view switcher, as on Tasks; the actions sit up beside the heading. #}
   <div x-data class="flex flex-wrap items-center gap-2 justify-between mb-4">
     <div class="join">
       <button type="button" class="btn btn-ghost btn-sm join-item"
@@ -92,19 +107,6 @@
       </button>
     </div>
 
-    <div class="flex flex-wrap items-center gap-2">
-      {% if matrix.totals.grand_total > 0 %}
-        {% url 'contributions:project_contributions_csv' project_pk=project.pk as csv_url %}
-        {% if is_project_manager %}
-          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" %}
-        {% else %}
-          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" %}
-        {% endif %}
-      {% endif %}
-      {% if is_project_manager %}
-        {% include "contributions/partials/add_button.html" %}
-      {% endif %}
-    </div>
   </div>
 
   <div x-data>
