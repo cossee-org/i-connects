@@ -82,7 +82,8 @@
 {% else %}
 
 
-  {# The view switcher, as on Tasks; the actions sit up beside the heading. #}
+  {# The view switcher, as on Tasks, with the by-member filter at its right; #}
+  {# the actions sit up beside the heading.                                  #}
   <div x-data class="flex flex-wrap items-center gap-2 justify-between mb-4">
     <div class="join">
       <button type="button" class="btn btn-ghost btn-sm join-item"
@@ -106,14 +107,14 @@
         Every contribution
       </button>
     </div>
-
+    {% include "projects/partials/contributions_by_member_filter.html" %}
   </div>
 
   <div x-data>
     {# ── Contributions by member ── #}
     <div x-show="$store.credit.viewMode === 'by-member'" x-cloak>
       <div id="contributions-by-member-container">
-        {% include "projects/partials/contributions_by_member.html" %}
+        {% include "projects/partials/contributions_by_member.html" with in_page=True %}
       </div>
     </div>
 

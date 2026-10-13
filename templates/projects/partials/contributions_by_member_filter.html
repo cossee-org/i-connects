@@ -1,0 +1,27 @@
+{% comment %}
+  Contribution Tracking → Contributions by member: the "Only roles and
+  members with contributions" filter, in the view-switcher row.
+
+  Drawn by contribution_tracking.html on page load and re-sent out of band
+  (oob=True) by contributions_by_member.html on every swap, so its hx-vals
+  always hold the current sort. Shown only while that view is the one open.
+  A checkbox rather than a second segmented control: the switcher beside it
+  chooses a view, this narrows the one you are in.
+
+  Needs matrix, only_used, project.
+{% endcomment %}
+<div id="matrix-filter"{% if oob %} hx-swap-oob="true"{% endif %}
+     x-show="$store.credit.viewMode === 'by-member'" x-cloak>
+{% if matrix.totals.grand_total > 0 or only_used %}
+  <label class="label cursor-pointer justify-start gap-2 py-0"
+         for="matrix-only-used">
+    <input type="checkbox" id="matrix-only-used" class="checkbox checkbox-sm"
+           {% if only_used %}checked{% endif %}
+           hx-get="{% url 'projects:contributions_by_member' pk=project.pk %}"
+           hx-vals='js:{used: event.target.checked ? "1" : "0", sort: "{{ matrix.sort }}", dir: "{{ matrix.direction }}"}'
+           hx-target="#contributions-by-member-container"
+           hx-swap="innerHTML">
+    <span class="label-text text-sm text-brand-text/70">Only roles and members with contributions</span>
+  </label>
+{% endif %}
+</div>

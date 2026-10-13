@@ -1439,3 +1439,37 @@ def test_matrix_columns_use_the_same_order(client, user):
     labels = [label for _value, label in get_project_contributions_matrix(project)["types"]]
     assert labels[0] == "Conceptualization"
     assert labels[-1] == "Other"
+
+
+@pytest.mark.django_db
+def test_the_matrix_filter_sits_in_the_view_switcher_row(client, user):
+    """Drawn once, by the page, beside "Every contribution" and above the grid."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert body.count('id="matrix-filter"') == 1
+    assert "hx-swap-oob" not in body
+    assert (
+        body.index("setView('every')")
+        < body.index('id="matrix-filter"')
+        < body.index('id="contributions-by-member-container"')
+    )
+
+
+@pytest.mark.django_db
+def test_a_matrix_swap_refreshes_the_filter_with_the_current_sort(client, user):
+    """Re-sorting swaps only the grid, so it re-sends the filter out of band;
+    otherwise ticking the box afterwards would drop the new sort."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        _by_member_url(project), {"sort": "member", "dir": "desc"}
+    ).content.decode()
+    assert '<div id="matrix-filter" hx-swap-oob="true"' in body
+    assert 'sort: "member", dir: "desc"' in body
