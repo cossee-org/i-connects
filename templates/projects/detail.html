@@ -90,6 +90,13 @@
 
 {% block content %}
 {% if user_privilege %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+  <h2 class="text-lg font-semibold text-brand-navy">Project Summary</h2>
+</div>
+<p class="text-sm text-brand-text/70 mb-5 max-w-2xl">
+  This project at a glance: its tasks, recently edited wiki pages{% if is_project_manager %} and join requests waiting on a lead{% endif %}, beside what the project is about.
+</p>
+
 <div x-data="taskPaneData()"
      @open-task-pane="openPane($event.detail.url)"
      @close-task-pane.document="closePane()"
@@ -532,6 +539,13 @@
 </script>
 
 {% else %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+  <h2 class="text-lg font-semibold text-brand-navy">Project Summary</h2>
+</div>
+<p class="text-sm text-brand-text/70 mb-5 max-w-2xl">
+  What this project is about and who works on it.
+</p>
+
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
   <div class="brand-card p-6">
     <h2 class="text-lg font-semibold text-brand-navy mb-3">About</h2>

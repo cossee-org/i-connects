@@ -13,6 +13,14 @@
 {% endblock %}
 
 {% block content %}
+{% if object %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+  <h2 class="text-lg font-semibold text-brand-navy">Settings</h2>
+</div>
+<p class="text-sm text-brand-text/70 mb-5 max-w-2xl">
+  The project's name, description, status, visibility and contribution tracking, and where to archive or delete it. Only leads can see this tab.
+</p>
+{% endif %}
 <div class="max-w-2xl mx-auto space-y-5">
   <form method="post" class="brand-card p-6">
     {% csrf_token %}

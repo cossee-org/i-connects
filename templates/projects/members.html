@@ -9,8 +9,10 @@
 {% endblock %}
 
 {% block content %}
-{% if user_privilege == "PROJECT_MANAGER" %}
-  <div class="flex flex-wrap gap-2 justify-end mb-4">
+<div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+  <h2 class="text-lg font-semibold text-brand-navy">Contributors</h2>
+  {% if user_privilege == "PROJECT_MANAGER" %}
+  <div class="flex flex-wrap gap-2">
     <a href="{% url 'projects:join_requests' pk=project.pk %}"
        class="btn btn-sm btn-ghost relative">
       Join requests
@@ -37,7 +39,12 @@
       Invite member
     </button>
   </div>
-{% endif %}
+  {% endif %}
+</div>
+<p class="text-sm text-brand-text/70 mb-5 max-w-2xl">
+  Everyone on this project, with their privilege and roles. Leads run the
+  project and manage its members; members work on its tasks.
+</p>
 {% if rows %}
   <div class="brand-card overflow-hidden">
     <div class="overflow-x-auto">

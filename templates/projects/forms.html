@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Survey &mdash; {{ project.name }}{% endblock %}
+{% block title %}Surveys &mdash; {{ project.name }}{% endblock %}
 
 {% block page_header %}
   <header class="mb-6">
@@ -9,5 +9,12 @@
 {% endblock %}
 
 {% block content %}
-{% include "_components/empty_state.html" with title="Coming soon" body="Survey is on the way. Check back later." %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+  <h2 class="text-lg font-semibold text-brand-navy">Surveys</h2>
+</div>
+<p class="text-sm text-brand-text/70 mb-5 max-w-2xl">
+  Every survey created for collecting information in this project.
+</p>
+
+{% include "_components/empty_state.html" with title="Coming soon" body="Surveys are on the way. Check back later." %}
 {% endblock %}

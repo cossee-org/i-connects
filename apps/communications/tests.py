@@ -1,4 +1,4 @@
-"""Tests for the communications module and the Survey rename.
+"""Tests for the communications module and the Surveys rename.
 
 The module itself is empty, so what there is to guard is its shape: both
 surfaces answer, the project one is members-only, and the navigation names
@@ -47,7 +47,7 @@ def _project_url(project):
 # The sidebar
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-def test_the_sidebar_carries_survey_then_communication(client, user):
+def test_the_sidebar_carries_surveys_then_communications(client, user):
     client.force_login(user)
 
     content = client.get(reverse("projects:dashboard")).content.decode()
@@ -57,10 +57,13 @@ def test_the_sidebar_carries_survey_then_communication(client, user):
 
     assert reverse("forms_builder:form_list") in sidebar
     assert reverse("communications:list") in sidebar
-    # Communication sits after Survey, and no label is plural or stale.
-    assert sidebar.index("Survey") < sidebar.index("Communication")
-    assert "Surveys" not in sidebar
-    assert "Communications" not in sidebar
+    # Communications sits after Surveys, and neither label is singular or
+    # stale. "Surveys" contains "Survey", so the singular is checked as a
+    # whole label (">Survey<" with the sidebar's whitespace stripped).
+    assert sidebar.index("Surveys") < sidebar.index("Communications")
+    compact = "".join(sidebar.split())
+    assert ">Survey<" not in compact
+    assert ">Communication<" not in compact
     assert "Forms" not in sidebar
 
 
@@ -84,7 +87,7 @@ def test_the_sidebar_marks_each_module_active_on_its_own_page(client, user):
 # The module page
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-def test_the_communication_page_needs_a_signed_in_user(client):
+def test_the_communications_page_needs_a_signed_in_user(client):
     response = client.get(reverse("communications:list"))
 
     assert response.status_code == 302
@@ -92,28 +95,28 @@ def test_the_communication_page_needs_a_signed_in_user(client):
 
 
 @pytest.mark.django_db
-def test_the_communication_page_is_an_empty_state_for_now(client, user):
+def test_the_communications_page_is_an_empty_state_for_now(client, user):
     client.force_login(user)
 
     response = client.get(reverse("communications:list"))
     content = response.content.decode()
 
     assert response.status_code == 200
-    assert ">Communication</h1>" in content
-    assert ">Communications</h1>" not in content
+    assert ">Communications</h1>" in content
+    assert ">Communication</h1>" not in content
     assert "Coming soon" in content
 
 
 @pytest.mark.django_db
-def test_the_survey_page_answers_under_its_new_name(client, user):
+def test_the_surveys_page_answers_under_its_new_name(client, user):
     client.force_login(user)
 
     response = client.get(reverse("forms_builder:form_list"))
     content = response.content.decode()
 
     assert response.status_code == 200
-    assert ">Survey</h1>" in content
-    assert ">Surveys</h1>" not in content
+    assert ">Surveys</h1>" in content
+    assert ">Survey</h1>" not in content
     assert ">Forms</h1>" not in content
 
 
@@ -121,7 +124,7 @@ def test_the_survey_page_answers_under_its_new_name(client, user):
 # The project section
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-def test_a_member_sees_the_project_communication_section(client, project, pm_user):
+def test_a_member_sees_the_project_communications_section(client, project, pm_user):
     client.force_login(pm_user)
 
     response = client.get(_project_url(project))
@@ -162,10 +165,44 @@ def test_the_project_tab_strip_names_both_modules(client, project, pm_user):
     assert _project_url(project) in content
     strip = content[content.index('aria-label="Project sections"'):]
     strip = strip[: strip.index("</nav>")]
-    assert "Survey" in strip
-    assert "Communication" in strip
-    assert "Surveys" not in strip
-    assert "Communications" not in strip
+    compact = "".join(strip.split())
+    assert ">Surveys<" in compact
+    assert ">Communications<" in compact
+    assert ">Survey<" not in compact
+    assert ">Communication<" not in compact
     assert "Forms" not in strip
-    # Communication comes after Survey, and Settings stays last.
-    assert strip.index("Survey") < strip.index("Communication") < strip.index("Settings")
+    # Communications comes after Surveys, and Settings stays last.
+    assert strip.index("Surveys") < strip.index("Communications") < strip.index("Settings")
+
+
+# ---------------------------------------------------------------------------
+# Tab headings
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+def test_every_project_tab_opens_with_its_heading(client, project, pm_user):
+    """Each tab starts with an <h2> naming it, in the one shared style."""
+    client.force_login(pm_user)
+    pk = project.pk
+    pages = {
+        "Project Summary": reverse("projects:detail", kwargs={"pk": pk}),
+        "Tasks": reverse("tasks:board", kwargs={"project_pk": pk}),
+        "Contributors": reverse("projects:members", kwargs={"pk": pk}),
+        "Contribution Tracking": reverse("projects:contribution_tracking", kwargs={"pk": pk}),
+        "Wiki": reverse("wiki:list", kwargs={"project_pk": pk}),
+        "Surveys": reverse("projects:project_forms", kwargs={"pk": pk}),
+        "Communications": _project_url(project),
+        "Settings": reverse("projects:update", kwargs={"pk": pk}),
+    }
+    for title, url in pages.items():
+        response = client.get(url)
+        assert response.status_code == 200, url
+        heading = f'<h2 class="text-lg font-semibold text-brand-navy">{title}</h2>'
+        assert heading in response.content.decode(), title
+
+
+@pytest.mark.django_db
+def test_creating_a_project_has_no_settings_heading(client, pm_user):
+    """The settings form doubles as the create form, which is not a tab."""
+    client.force_login(pm_user)
+    content = client.get(reverse("projects:create")).content.decode()
+    assert ">Settings</h2>" not in content

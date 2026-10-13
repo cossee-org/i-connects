@@ -77,6 +77,13 @@
 {% endblock %}
 
 {% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+  <h2 class="text-lg font-semibold text-brand-navy">Tasks</h2>
+</div>
+<p class="text-sm text-brand-text/70 mb-5 max-w-2xl">
+  Everything the project is working on, as a Kanban board, a list or a calendar. Assignees mark their own part done, and a lead then completes the task.
+</p>
+
 <div x-data class="flex flex-wrap items-center gap-2 justify-between mb-4">
   {# View switcher sits on the left; actions stay on the right. #}
   <div class="join">
