@@ -21,7 +21,9 @@
   </div>
 </div>
 {% endif %}
-<div class="max-w-2xl mx-auto space-y-5">
+{# Settings is a project tab, so its cards span the tab like every other   #}
+{# tab's; the create form, which shares this template, stays a centred column. #}
+<div class="space-y-5{% if not object %} max-w-2xl mx-auto{% endif %}">
   <form method="post" class="brand-card p-6">
     {% csrf_token %}
 
