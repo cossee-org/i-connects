@@ -1472,4 +1472,23 @@ def test_a_matrix_swap_refreshes_the_filter_with_the_current_sort(client, user):
         _by_member_url(project), {"sort": "member", "dir": "desc"}
     ).content.decode()
     assert '<div id="matrix-filter" hx-swap-oob="true"' in body
-    assert 'sort: "member", dir: "desc"' in body
+    assert '"sort": "member", "dir": "desc"' in body
+
+
+@pytest.mark.django_db
+def test_the_matrix_filter_toggle_flips_and_says_which_way(client, user):
+    """Off: plain, and a click asks for used=1. On: solid, and a click asks
+    for used=0."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    client.force_login(user)
+
+    off = client.get(_by_member_url(project)).content.decode()
+    assert 'aria-pressed="false"' in off
+    assert '"used": "1"' in off
+    assert "btn-ghost text-brand-navy" in off
+
+    on = client.get(_by_member_url(project), {"used": "1"}).content.decode()
+    assert 'aria-pressed="true"' in on
+    assert '"used": "0"' in on
+    assert "btn btn-xs btn-primary" in on

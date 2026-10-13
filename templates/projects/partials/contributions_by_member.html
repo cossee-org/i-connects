@@ -16,7 +16,7 @@
 
   The "Only roles and members with contributions" filter lives in the page's
   view-switcher row, not here. Every time this view is swapped in (sorting,
-  filtering) it sends a fresh copy out of band, so the checkbox always carries
+  filtering) it sends a fresh copy out of band, so the toggle always carries
   the sort it should keep. On the full page, contribution_tracking.html draws
   the filter itself and passes in_page so no second copy is made.
 {% endcomment %}
@@ -26,7 +26,7 @@
 
 {% if not matrix.rows %}
   {% if only_used %}
-    {% include "_components/empty_state.html" with title="No contributions yet" body="Nothing has been credited on this project, so there is nothing to narrow to. Untick the filter to see the full grid." %}
+    {% include "_components/empty_state.html" with title="No contributions yet" body="Nothing has been credited on this project, so there is nothing to narrow to. Turn the filter off to see the full grid." %}
   {% else %}
     {% include "_components/empty_state.html" with title="Nobody on this project yet" body="Invite members and the grid will list them here, credited as tasks are completed." %}
   {% endif %}
