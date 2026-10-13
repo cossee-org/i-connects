@@ -632,7 +632,8 @@ def test_the_pages_offer_both_downloads(client, user, other_user):
     body = client.get(
         reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
     ).content.decode()
-    assert "Matrix (CSV)" in body and "List (CSV)" in body
+    # Short labels on the tab ("Matrix", "List"); the aria-labels are whole.
+    assert 'aria-label="Download the contribution matrix as CSV"' in body and 'aria-label="Download the contribution list as CSV"' in body
 
     body = client.get(reverse("contributions:contributions")).content.decode()
     assert "Matrix (CSV)" in body and "List (CSV)" in body
@@ -643,7 +644,7 @@ def test_the_pages_offer_both_downloads(client, user, other_user):
     body = client.get(
         reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
     ).content.decode()
-    assert "Matrix (CSV)" in body and "List (CSV)" not in body
+    assert 'aria-label="Download the contribution matrix as CSV"' in body and 'aria-label="Download the contribution list as CSV"' not in body
 
 
 @pytest.mark.django_db
@@ -873,7 +874,7 @@ def test_the_tracking_tab_offers_the_controls_to_a_lead_only(
 
 @pytest.mark.django_db
 def test_add_contribution_shares_the_toolbar_with_the_downloads(client, user):
-    """One row: Matrix (CSV), List (CSV), Add contribution, then the views."""
+    """One row: Matrix, List, Add contribution, then the views."""
     project, col, pm = _make_project(user)
     _credit(project, col, pm, pm, ContributionType.SOFTWARE)
 
@@ -883,8 +884,8 @@ def test_add_contribution_shares_the_toolbar_with_the_downloads(client, user):
     ).content.decode()
     assert body.count("Add contribution") == 1
     assert (
-        body.index("Matrix (CSV)")
-        < body.index("List (CSV)")
+        body.index('aria-label="Download the contribution matrix as CSV"')
+        < body.index('aria-label="Download the contribution list as CSV"')
         < body.index("Add contribution")
         < body.index('id="contributions-by-member-container"')
     )
@@ -899,7 +900,7 @@ def test_a_lead_can_add_the_first_contribution(client, user):
     body = client.get(
         reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
     ).content.decode()
-    assert "Matrix (CSV)" not in body
+    assert 'aria-label="Download the contribution matrix as CSV"' not in body
     assert "Add contribution" in body
 
 

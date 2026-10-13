@@ -62,7 +62,9 @@
 
   {% comment %}
     One row, as on Tasks: the view switcher and the by-member filter on the
-    left; downloads and a lead's "Add contribution" on the right. The two
+    left; downloads and a lead's "Add contribution" on the right. Labels are
+    kept short ("Matrix", "List", "With contributions only") so the row fits
+    a laptop screen; narrower than that, it wraps. The two
     downloads line up with the two views: the matrix is Contributions by
     member, the list is Every contribution. Adding is here rather than inside
     one view so it is there in both; saving reloads the page.
@@ -97,9 +99,9 @@
       {% if matrix.totals.grand_total > 0 %}
         {% url 'contributions:project_contributions_csv' project_pk=project.pk as csv_url %}
         {% if is_project_manager %}
-          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" %}
+          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" short=True %}
         {% else %}
-          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" %}
+          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" short=True %}
         {% endif %}
       {% endif %}
       {% if is_project_manager %}
