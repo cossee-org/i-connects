@@ -993,7 +993,8 @@ def test_the_by_member_view_renders_on_its_own(client, user, other_user):
 
     client.force_login(user)
     body = client.get(_by_member_url(project)).content.decode()
-    assert "Contributions by member" in body
+    # No heading of its own: the switcher on the page names the view.
+    assert "<h2" not in body
     assert "Software" in body
     assert "Alice" in body
     # It is the partial, not the whole page.
@@ -1007,7 +1008,9 @@ def test_the_every_contribution_view_renders_on_its_own(client, user):
 
     client.force_login(user)
     body = client.get(_every_url(project)).content.decode()
-    assert "Every contribution" in body
+    # No heading of its own: the switcher on the page names the view.
+    assert "<h2" not in body
+    assert "Software" in body
     assert "<!DOCTYPE html>" not in body
 
 

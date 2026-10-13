@@ -11,25 +11,27 @@
 {% endcomment %}
 {% load contribution_tags %}
 
-<div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-  <h2 class="text-lg font-semibold text-brand-navy">Contributions by member</h2>
-  {% if matrix.totals.grand_total > 0 or only_used %}
-    {% comment %}
-      A checkbox rather than a second segmented control: the switcher above
-      chooses a view, this narrows the one you are in.
-    {% endcomment %}
-    <label class="label cursor-pointer justify-start gap-2 py-0"
-           for="matrix-only-used">
-      <input type="checkbox" id="matrix-only-used" class="checkbox checkbox-sm"
-             {% if only_used %}checked{% endif %}
-             hx-get="{% url 'projects:contributions_by_member' pk=project.pk %}"
-             hx-vals='js:{used: event.target.checked ? "1" : "0", sort: "{{ matrix.sort }}", dir: "{{ matrix.direction }}"}'
-             hx-target="#contributions-by-member-container"
-             hx-swap="innerHTML">
-      <span class="label-text text-sm text-brand-text/70">Only roles and members with contributions</span>
-    </label>
-  {% endif %}
+{% comment %}
+  No heading: the view switcher above already names this view.
+{% endcomment %}
+{% if matrix.totals.grand_total > 0 or only_used %}
+<div class="flex flex-wrap items-center justify-end gap-3 mb-3">
+  {% comment %}
+    A checkbox rather than a second segmented control: the switcher above
+    chooses a view, this narrows the one you are in.
+  {% endcomment %}
+  <label class="label cursor-pointer justify-start gap-2 py-0"
+         for="matrix-only-used">
+    <input type="checkbox" id="matrix-only-used" class="checkbox checkbox-sm"
+           {% if only_used %}checked{% endif %}
+           hx-get="{% url 'projects:contributions_by_member' pk=project.pk %}"
+           hx-vals='js:{used: event.target.checked ? "1" : "0", sort: "{{ matrix.sort }}", dir: "{{ matrix.direction }}"}'
+           hx-target="#contributions-by-member-container"
+           hx-swap="innerHTML">
+    <span class="label-text text-sm text-brand-text/70">Only roles and members with contributions</span>
+  </label>
 </div>
+{% endif %}
 
 {% if not matrix.rows %}
   {% if only_used %}

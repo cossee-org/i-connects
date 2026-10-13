@@ -7,10 +7,14 @@
 {% endcomment %}
 {% load contribution_tags %}
 
-<div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-  <h2 class="text-lg font-semibold text-brand-navy">Every contribution</h2>
-  {% if is_project_manager %}{% include "contributions/partials/add_button.html" %}{% endif %}
+{% comment %}
+  No heading: the view switcher above already names this view.
+{% endcomment %}
+{% if is_project_manager %}
+<div class="flex flex-wrap items-center justify-end gap-3 mb-3">
+  {% include "contributions/partials/add_button.html" %}
 </div>
+{% endif %}
 
 {% if not records %}
   {% include "_components/empty_state.html" with title="No contributions yet" body="Credit appears here as tasks are completed." %}
