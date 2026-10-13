@@ -18,7 +18,7 @@
 </div>
 
 {% if wiki_page_count %}
-  <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
+  <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
     <div class="w-full sm:flex-1">
       <label class="sr-only" for="wiki-search">Search the wiki</label>
       <input type="search" name="q" id="wiki-search" value="{{ current_q }}"
@@ -31,21 +31,23 @@
              hx-include="[name='sort']"
              hx-push-url="true" />
     </div>
-    <div class="flex items-center gap-1 shrink-0" role="group" aria-label="Sort pages">
-      <input type="hidden" name="sort" value="{{ current_sort }}" />
-      <a href="?{% if current_q %}q={{ current_q|urlencode }}&amp;{% endif %}sort=title"
-         class="btn btn-xs {% if current_sort == 'title' %}btn-primary{% else %}btn-ghost text-brand-navy{% endif %}"
-         {% if current_sort == 'title' %}aria-current="true"{% endif %}>A&ndash;Z</a>
-      <a href="?{% if current_q %}q={{ current_q|urlencode }}&amp;{% endif %}sort=recent"
-         class="btn btn-xs {% if current_sort == 'recent' %}btn-primary{% else %}btn-ghost text-brand-navy{% endif %}"
-         {% if current_sort == 'recent' %}aria-current="true"{% endif %}>Recently updated</a>
-    </div>
     {# With no pages there is no search row; the empty state's "Write the  #}
     {# first page" is the way in then.                                     #}
     <a href="{% url 'wiki:create' project_pk=project.pk %}"
        class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 shrink-0 self-end sm:self-auto">
       + New page
     </a>
+  </div>
+  {# Sorting sits under the search bar, flush right. The search box picks up #}
+  {# the hidden sort field below through its hx-include.                    #}
+  <div class="flex items-center justify-end gap-1 mb-5" role="group" aria-label="Sort pages">
+    <input type="hidden" name="sort" value="{{ current_sort }}" />
+    <a href="?{% if current_q %}q={{ current_q|urlencode }}&amp;{% endif %}sort=title"
+       class="btn btn-xs {% if current_sort == 'title' %}btn-primary{% else %}btn-ghost text-brand-navy{% endif %}"
+       {% if current_sort == 'title' %}aria-current="true"{% endif %}>A&ndash;Z</a>
+    <a href="?{% if current_q %}q={{ current_q|urlencode }}&amp;{% endif %}sort=recent"
+       class="btn btn-xs {% if current_sort == 'recent' %}btn-primary{% else %}btn-ghost text-brand-navy{% endif %}"
+       {% if current_sort == 'recent' %}aria-current="true"{% endif %}>Recently updated</a>
   </div>
 {% endif %}
 
