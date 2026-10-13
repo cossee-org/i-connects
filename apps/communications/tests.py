@@ -179,8 +179,9 @@ def test_the_project_tab_strip_names_both_modules(client, project, pm_user):
 # Tab headings
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-def test_every_project_tab_opens_with_its_heading(client, project, pm_user):
-    """Each tab starts with an <h2> naming it, in the one shared style."""
+def test_every_project_tab_opens_with_its_heading_and_info(client, project, pm_user):
+    """Each tab starts with an <h2> naming it, in the one shared style, with
+    its description behind an (i) beside it rather than in a paragraph."""
     client.force_login(pm_user)
     pk = project.pk
     pages = {
@@ -197,7 +198,9 @@ def test_every_project_tab_opens_with_its_heading(client, project, pm_user):
         response = client.get(url)
         assert response.status_code == 200, url
         heading = f'<h2 class="text-lg font-semibold text-brand-navy">{title}</h2>'
-        assert heading in response.content.decode(), title
+        content = response.content.decode()
+        assert heading in content, title
+        assert f'aria-label="About {title}"' in content, title
 
 
 @pytest.mark.django_db

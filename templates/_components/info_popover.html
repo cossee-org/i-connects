@@ -5,7 +5,8 @@
     {% include "_components/info_popover.html" with label="Notifications" body="..." %}
 
   ``label`` names the page for screen readers ("About Notifications");
-  ``body`` is the note itself. Sits inside the title's flex row, nudged
+  ``body`` is the note itself. Optional ``link_href`` and ``link_text``
+  add one external link after it (opens in a new tab). Sits inside the title's flex row, nudged
   down slightly so the glyph lines up with the heading's baseline rather
   than its box.
 {% endcomment %}
@@ -22,6 +23,6 @@
        x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
        x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
        class="absolute left-0 mt-2 w-max max-w-80 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-30">
-    <p class="text-sm text-brand-text/70">{{ body }}</p>
+    <p class="text-sm text-brand-text/70">{{ body }}{% if link_href %} <a href="{{ link_href }}" target="_blank" rel="noopener noreferrer" class="text-brand-navy underline hover:text-brand-coral">{{ link_text }}</a>{% endif %}</p>
   </div>
 </div>

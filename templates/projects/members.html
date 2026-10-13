@@ -9,8 +9,11 @@
 {% endblock %}
 
 {% block content %}
-<div class="flex flex-wrap items-center justify-between gap-3 mb-2">
-  <h2 class="text-lg font-semibold text-brand-navy">Contributors</h2>
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="flex items-center gap-2">
+    <h2 class="text-lg font-semibold text-brand-navy">Contributors</h2>
+    {% include "_components/info_popover.html" with label="Contributors" body="Everyone on this project, with their privilege and roles. Leads run the project and manage its members; members work on its tasks." %}
+  </div>
   {% if user_privilege == "PROJECT_MANAGER" %}
   <div class="flex flex-wrap gap-2">
     <a href="{% url 'projects:join_requests' pk=project.pk %}"
@@ -41,10 +44,6 @@
   </div>
   {% endif %}
 </div>
-<p class="text-sm text-brand-text/70 mb-5 max-w-2xl">
-  Everyone on this project, with their privilege and roles. Leads run the
-  project and manage its members; members work on its tasks.
-</p>
 {% if rows %}
   <div class="brand-card overflow-hidden">
     <div class="overflow-x-auto">

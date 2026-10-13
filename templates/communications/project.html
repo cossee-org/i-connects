@@ -9,12 +9,12 @@
 {% endblock %}
 
 {% block content %}
-<div class="flex flex-wrap items-center justify-between gap-3 mb-2">
-  <h2 class="text-lg font-semibold text-brand-navy">Communications</h2>
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="flex items-center gap-2">
+    <h2 class="text-lg font-semibold text-brand-navy">Communications</h2>
+    {% include "_components/info_popover.html" with label="Communications" body="Messages sent to and from this project's members." %}
+  </div>
 </div>
-<p class="text-sm text-brand-text/70 mb-5 max-w-2xl">
-  Messages sent to and from this project's members.
-</p>
 
 {% include "_components/empty_state.html" with title="Coming soon" body="Communications are on the way. Check back later." %}
 {% endblock %}

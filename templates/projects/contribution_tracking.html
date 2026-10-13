@@ -39,17 +39,12 @@
 {% endblock %}
 
 {% block content %}
-<div class="flex flex-wrap items-center justify-between gap-3 mb-2">
-  <h2 class="text-lg font-semibold text-brand-navy">Contribution Tracking</h2>
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="flex items-center gap-2">
+    <h2 class="text-lg font-semibold text-brand-navy">Contribution Tracking</h2>
+    {% include "_components/info_popover.html" with label="Contribution Tracking" body="Credit on this project, by CRediT role. A member earns credit on a task when they mark their own part done and a lead completes the task — where the task requires review, once their submission has been reviewed." link_href="https://credit.niso.org/" link_text="What is CRediT?" %}
+  </div>
 </div>
-<p class="text-sm text-brand-text/70 mb-5 max-w-2xl">
-  Credit on this project, by
-  <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
-     class="text-brand-navy underline hover:text-brand-coral">CRediT</a>
-  role. A member earns credit on a task when they mark their own part done
-  and a lead completes the task &mdash; where the task requires review, once
-  their submission has been reviewed.
-</p>
 {% if not project.tracks_credit %}
   {% comment %}
     Nothing to show, and nothing that could appear later: contributions are
