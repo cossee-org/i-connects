@@ -62,12 +62,29 @@ production by mistake.
 
 ### A3. Day to day
 
+Follow the server's output, including the emails it prints (see
+[Signing up through the site](#signing-up-through-the-site)):
+
 ```bash
-docker compose logs -f web             # server output, including emails (see below)
-docker compose stop                    # stop, keeping the database
-docker compose up -d                   # start again
-docker compose exec web python manage.py migrate   # after pulling new models
+docker compose logs -f web
 ```
+
+Stop the stack, keeping the database, and start it again:
+
+```bash
+docker compose stop
+docker compose up -d
+```
+
+Apply migrations after pulling new models:
+
+```bash
+docker compose exec web python manage.py migrate
+```
+
+Copy commands one block at a time and paste them without trailing notes:
+macOS's default shell, zsh, does not treat `#` as a comment at the prompt,
+so `cmd  # note` passes `#` and `note` to the command as arguments.
 
 The `web` container mounts your checkout and serves it with `runserver`, so
 code edits take effect on save. Migrations are the exception: they run only
@@ -96,6 +113,19 @@ empty, freshly migrated instance; re-run `seed_demo` to repopulate it.
 
 Prerequisites: Python 3.12, Node 20+, Postgres 16 and Redis 7, both running
 on their default ports.
+
+**No Postgres or Redis installed?** Docker can run just those two while
+Django runs on your machine. Their ports are published and the database
+already has the role and password `.env.example` expects, so skip B1 and
+start them with:
+
+```bash
+docker compose up -d db redis
+```
+
+Whichever way they run, the `.env` change in B2 is still required. Django
+on your machine cannot see the Docker-only hostnames `db` and `redis`, and
+fails with `failed to resolve host 'db'` until they say `localhost`.
 
 ### B1. Database
 
@@ -137,14 +167,16 @@ Django reads `.env` itself, so there is nothing to `export`.
 
 ```bash
 npm install
-npm run build:css            # or: npm run watch:css in its own shell
+npm run build:css
 
 python manage.py migrate
 python manage.py seed_demo
 python manage.py runserver
 ```
 
-The site is up at <http://localhost:8000/>. Pages and sign-in work without
+To rebuild the CSS on every template change instead, run
+`npm run watch:css` in a shell of its own. The site is up at
+<http://localhost:8000/>. Pages and sign-in work without
 Celery. To also run background jobs (invitation and digest emails,
 scheduled reminders), start these in two more shells, with the virtualenv
 active:
@@ -230,6 +262,10 @@ first few seconds are expected.
 
 **The page looks unstyled.** `static/css/output.css` is missing or stale —
 run `npm install && npm run build:css`.
+
+**`failed to resolve host 'db'`** (or `'redis'`). Django is running
+outside Docker with the Docker hostnames still in `.env`; change them to
+`localhost` as in B2.
 
 **`column … does not exist`.** Migrations are behind the code; run
 `migrate` (A3 or B3).
