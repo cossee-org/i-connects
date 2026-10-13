@@ -3,22 +3,23 @@
 {% block title %}Join requests &mdash; {{ project.name }}{% endblock %}
 
 {% block page_header %}
-  <a href="{% url 'projects:members' pk=project.pk %}"
-     class="inline-flex items-center gap-1.5 text-sm text-brand-navy/70 hover:text-brand-coral font-medium mb-4">
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-         stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
-    </svg>
-    Contributors
-  </a>
   <header class="mb-6">
-    <h1 class="page-title font-semibold text-brand-navy leading-tight">
-      Pending join requests
-    </h1>
+    {% include "_components/project_header.html" %}
   </header>
 {% endblock %}
 
 {% block content %}
+{# Laid out like a Wiki sub-page: back to the tab, then the page's heading. #}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <a href="{% url 'projects:members' pk=project.pk %}"
+     class="btn btn-sm btn-ghost text-brand-navy">&larr; All contributors</a>
+</div>
+
+<h2 class="text-lg font-semibold text-brand-navy">Pending join requests</h2>
+<p class="text-sm text-brand-text/70 mt-1 mb-5 max-w-2xl">
+  People asking to join this project, oldest first. Approve one to add them at the privilege they asked for, or decline it with an optional note to the requester.
+</p>
+
 {% if join_requests %}
   <div class="brand-card overflow-hidden">
     <div class="overflow-x-auto">

@@ -1560,3 +1560,33 @@ def test_project_dashboard_hides_wiki_from_non_members(client, user, other_user)
     ).content.decode()
     assert "Internal notes" not in content
     assert "Wiki pages" not in content
+
+
+# ---------------------------------------------------------------------------
+# Contributors sub-pages: laid out like a Wiki sub-page
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "url_name, heading",
+    [
+        ("projects:join_requests", "Pending join requests"),
+        ("projects:project_invitations", "Pending invitation requests"),
+    ],
+)
+def test_contributor_subpages_look_like_wiki_subpages(client, user, url_name, heading):
+    project = _make_project(user)
+    client.force_login(user)
+    content = client.get(reverse(url_name, kwargs={"pk": project.pk})).content.decode()
+
+    # The project's own header and tab strip, with Contributors as the tab.
+    assert f">{project.name}</h1>" in content
+    strip = content[content.index('aria-label="Project sections"'):]
+    strip = strip[: strip.index("</nav>")]
+    members_url = reverse("projects:members", kwargs={"pk": project.pk})
+    assert f'href="{members_url}"\n       class="project-tab active"' in strip
+    # Back to the tab first, then the page's own heading.
+    back = f'href="{members_url}"\n     class="btn btn-sm btn-ghost text-brand-navy">&larr; All contributors</a>'
+    assert back in content
+    assert content.index(back) < content.index(f">{heading}</h2>")
