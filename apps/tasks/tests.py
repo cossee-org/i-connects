@@ -1224,10 +1224,9 @@ def test_board_page_shows_manage_columns_for_every_view(client, pm_user):
     markup = button[: button.index("</button>")]
     # No x-show gate on the button itself (the view switcher still uses one).
     assert "x-show" not in markup
-    # An icon, like the three view buttons beside it — and hidden from the
-    # accessibility tree, since the label already carries the meaning.
-    assert "<svg" in markup, "the button lost its icon"
-    assert 'aria-hidden="true"' in markup
+    # A plain text button beside "+ New task": it no longer sits in the view
+    # switcher's row, so it no longer carries an icon to match those buttons.
+    assert "<svg" not in markup
 
 
 # ---------------------------------------------------------------------------
