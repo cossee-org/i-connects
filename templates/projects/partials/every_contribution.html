@@ -8,13 +8,9 @@
 {% load contribution_tags %}
 
 {% comment %}
-  No heading: the view switcher above already names this view.
+  No heading: the view switcher above already names this view. A lead's
+  "Add contribution" sits in the page's toolbar, beside the downloads.
 {% endcomment %}
-{% if is_project_manager %}
-<div class="flex flex-wrap items-center justify-end gap-3 mb-3">
-  {% include "contributions/partials/add_button.html" %}
-</div>
-{% endif %}
 
 {% if not records %}
   {% include "_components/empty_state.html" with title="No contributions yet" body="Credit appears here as tasks are completed." %}

@@ -61,10 +61,12 @@
 
 
   {% comment %}
-    View switcher on the left, downloads on the right — the same shape the
-    Tasks board uses for Kanban / List / Calendar. The two downloads line up
-    with the two views: the matrix is Contributions by member, the list is
-    Every contribution.
+    View switcher on the left, downloads and a lead's "Add contribution" on
+    the right — the same shape the Tasks board uses for Kanban / List /
+    Calendar. The two downloads line up with the two views: the matrix is
+    Contributions by member, the list is Every contribution. Adding sits here
+    rather than inside one view so it is there in both; saving reloads the
+    page.
   {% endcomment %}
   <div x-data class="flex flex-wrap items-center gap-2 justify-between mb-4">
     <div class="join">
@@ -90,14 +92,19 @@
       </button>
     </div>
 
-    {% if matrix.totals.grand_total > 0 %}
-      {% url 'contributions:project_contributions_csv' project_pk=project.pk as csv_url %}
-      {% if is_project_manager %}
-        {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" %}
-      {% else %}
-        {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" %}
+    <div class="flex flex-wrap items-center gap-2">
+      {% if matrix.totals.grand_total > 0 %}
+        {% url 'contributions:project_contributions_csv' project_pk=project.pk as csv_url %}
+        {% if is_project_manager %}
+          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" %}
+        {% else %}
+          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" %}
+        {% endif %}
       {% endif %}
-    {% endif %}
+      {% if is_project_manager %}
+        {% include "contributions/partials/add_button.html" %}
+      {% endif %}
+    </div>
   </div>
 
   <div x-data>

@@ -872,6 +872,38 @@ def test_the_tracking_tab_offers_the_controls_to_a_lead_only(
 
 
 @pytest.mark.django_db
+def test_add_contribution_shares_the_toolbar_with_the_downloads(client, user):
+    """One row: Matrix (CSV), List (CSV), Add contribution, then the views."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert body.count("Add contribution") == 1
+    assert (
+        body.index("Matrix (CSV)")
+        < body.index("List (CSV)")
+        < body.index("Add contribution")
+        < body.index('id="contributions-by-member-container"')
+    )
+
+
+@pytest.mark.django_db
+def test_a_lead_can_add_the_first_contribution(client, user):
+    """No credit yet means no downloads, but adding is still offered."""
+    project, _col, _pm = _make_project(user)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Matrix (CSV)" not in body
+    assert "Add contribution" in body
+
+
+@pytest.mark.django_db
 def test_a_hand_entered_record_is_marked_as_such_on_the_page(
     client, user, other_user
 ):
