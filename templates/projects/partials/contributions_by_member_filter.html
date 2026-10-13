@@ -1,7 +1,8 @@
 {% comment %}
   Contribution Tracking → Contributions by member: the "With contributions
-  only" filter (only the roles and members with credit), in the
-  view-switcher row.
+  only" filter (only the roles and members with credit), on a row of its
+  own under the view switcher, flush right. The row only takes space when
+  there is a filter to show.
 
   Drawn by contribution_tracking.html on page load and re-sent out of band
   (oob=True) by contributions_by_member.html on every swap, so its hx-vals
@@ -14,6 +15,7 @@
   Needs matrix, only_used, project.
 {% endcomment %}
 <div id="matrix-filter"{% if oob %} hx-swap-oob="true"{% endif %}
+     {% if matrix.totals.grand_total > 0 or only_used %}class="flex justify-end mb-3"{% endif %}
      x-show="$store.credit.viewMode === 'by-member'" x-cloak>
 {% if matrix.totals.grand_total > 0 or only_used %}
   <button type="button" id="matrix-only-used"

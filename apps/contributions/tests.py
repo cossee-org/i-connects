@@ -1443,8 +1443,9 @@ def test_matrix_columns_use_the_same_order(client, user):
 
 
 @pytest.mark.django_db
-def test_the_matrix_filter_sits_in_the_view_switcher_row(client, user):
-    """Drawn once, by the page, beside "Every contribution" and above the grid."""
+def test_the_matrix_filter_sits_under_the_view_switcher(client, user):
+    """Drawn once, by the page, on its own row after the switcher and above
+    the grid."""
     project, col, pm = _make_project(user)
     _credit(project, col, pm, pm, ContributionType.SOFTWARE)
 
