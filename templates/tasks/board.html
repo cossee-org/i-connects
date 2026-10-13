@@ -107,7 +107,7 @@
   {# The view switcher; a lead's actions sit up beside the heading. #}
   <div class="join">
     <button type="button" class="btn btn-ghost btn-sm join-item"
-            :class="{ 'btn-active': $store.board.viewMode === 'board' }"
+            :class="{ 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15': $store.board.viewMode === 'board' }"
             @click="$store.board.setView('board')">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
@@ -116,7 +116,7 @@
       Kanban
     </button>
     <button type="button" class="btn btn-ghost btn-sm join-item"
-            :class="{ 'btn-active': $store.board.viewMode === 'list' }"
+            :class="{ 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15': $store.board.viewMode === 'list' }"
             @click="$store.board.setView('list')">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
@@ -125,7 +125,7 @@
       List
     </button>
     <button type="button" class="btn btn-ghost btn-sm join-item"
-            :class="{ 'btn-active': $store.board.viewMode === 'calendar' }"
+            :class="{ 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15': $store.board.viewMode === 'calendar' }"
             @click="$store.board.setView('calendar')">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">

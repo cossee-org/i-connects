@@ -87,7 +87,7 @@
   <div x-data class="flex flex-wrap items-center gap-2 justify-between mb-4">
     <div class="join">
       <button type="button" class="btn btn-ghost btn-sm join-item"
-              :class="{ 'btn-active': $store.credit.viewMode === 'by-member' }"
+              :class="{ 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15': $store.credit.viewMode === 'by-member' }"
               @click="$store.credit.setView('by-member')">
         {# table-cells #}
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -97,7 +97,7 @@
         Contributions by member
       </button>
       <button type="button" class="btn btn-ghost btn-sm join-item"
-              :class="{ 'btn-active': $store.credit.viewMode === 'every' }"
+              :class="{ 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15': $store.credit.viewMode === 'every' }"
               @click="$store.credit.setView('every')">
         {# list-bullet #}
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
