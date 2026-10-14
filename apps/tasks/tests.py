@@ -1704,7 +1704,8 @@ def test_delete_confirmation_markup_is_lead_only(client, user, other_user):
     surfaces = {
         "pane": reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk}),
         "detail page": reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}),
-        "project page": reverse("projects:detail", kwargs={"pk": project.pk}),
+        # The Project Summary no longer lists tasks with Edit/Delete; its
+        # pane loads the delete form with the task, covered above.
     }
     delete_url = reverse("tasks:delete", kwargs={"project_pk": project.pk, "pk": task.pk})
 

@@ -1,12 +1,10 @@
 {% comment %}
-  Project Summary → Progress: where the project stands, not what it counts.
-  The number cards above count tasks, overdue work, join requests,
-  contributors and wiki pages; this card reports completion, what is waiting
-  on a lead, what comes next, recorded credit and the last activity. A line
-  with nothing to say is left out rather than shown as a zero.
+  Project Summary → Progress: how far along the project is. Completion as a
+  bar, where the open work sits on the board, and (on a project tracking
+  CRediT) the credit recorded so far. What needs attention, what is coming
+  up and what changed lately have cards of their own on the left.
 
-  Needs project and progress (see projects.views._project_progress). Sits
-  inside the page's taskPaneData wrapper, so the next task opens in the pane.
+  Needs project and summary (see projects.views._project_summary).
 {% endcomment %}
 <section class="brand-card p-5" aria-labelledby="proj-progress-heading">
   <h2 id="proj-progress-heading" class="section-heading flex items-center gap-2 mb-4">
@@ -19,84 +17,49 @@
     Progress
   </h2>
 
-  {% if progress.total %}
+  {% if summary.total %}
     <div>
       <div class="flex items-baseline justify-between gap-2">
         <span class="text-sm text-brand-text">
-          <span class="font-semibold text-brand-navy">{{ progress.completed }}</span>
-          of {{ progress.total }} task{{ progress.total|pluralize }} completed
+          <span class="font-semibold text-brand-navy">{{ summary.completed }}</span>
+          of {{ summary.total }} task{{ summary.total|pluralize }} completed
         </span>
-        <span class="text-sm font-semibold text-brand-navy">{{ progress.percent }}%</span>
+        <span class="text-sm font-semibold text-brand-navy">{{ summary.percent }}%</span>
       </div>
       <div class="mt-2 h-2 rounded-full bg-brand-navy/10 overflow-hidden"
            role="progressbar" aria-label="Tasks completed"
-           aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress.percent }}">
-        <div class="h-full rounded-full bg-brand-navy" style="width: {{ progress.percent }}%"></div>
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ summary.percent }}">
+        <div class="h-full rounded-full bg-brand-navy" style="width: {{ summary.percent }}%"></div>
       </div>
     </div>
+
+    {% if summary.columns %}
+      <h3 class="text-xs text-brand-text/60 mt-4 mb-1">Open tasks on the board</h3>
+      <ul class="text-sm space-y-1">
+        {% for c in summary.columns %}
+          <li class="flex items-center justify-between gap-2">
+            <span class="text-brand-text truncate">{{ c.container__name }}</span>
+            <span class="font-medium text-brand-navy">{{ c.n }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
   {% else %}
     <p class="text-sm text-brand-text/60 italic">No tasks yet, so nothing to measure.</p>
   {% endif %}
 
-  {% if progress.ready_count or progress.next_task or progress.next_milestone or progress.credit or progress.last_activity %}
-  <dl class="mt-4 space-y-3 text-sm">
-    {% if progress.ready_count %}
-      <div>
-        <dt class="text-xs text-brand-text/60">Waiting on a lead</dt>
-        <dd class="text-brand-text mt-0.5">
-          {{ progress.ready_count }} task{{ progress.ready_count|pluralize }} marked done by every assignee
-        </dd>
-      </div>
-    {% endif %}
-
-    {% if progress.next_task %}
-      <div>
-        <dt class="text-xs text-brand-text/60">Next deadline</dt>
-        <dd class="mt-0.5 min-w-0">
-          <a href="{% url 'tasks:detail' project_pk=project.pk pk=progress.next_task.pk %}"
-             class="font-medium text-brand-navy hover:text-brand-coral break-words"
-             @click.prevent="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=progress.next_task.pk %}' })">{{ progress.next_task.name }}</a>
-          <span class="text-brand-text/70">&middot; {{ progress.next_task.deadline|date:"M j, Y" }}</span>
-        </dd>
-      </div>
-    {% endif %}
-
-    {% if progress.next_milestone %}
-      <div>
-        <dt class="text-xs text-brand-text/60">Next milestone</dt>
-        <dd class="text-brand-text mt-0.5 break-words">
-          <span class="font-medium text-brand-navy">{{ progress.next_milestone.name }}</span>
-          <span class="text-brand-text/70">&middot; {{ progress.next_milestone.end_date|date:"M j, Y" }}</span>
-        </dd>
-      </div>
-    {% endif %}
-
-    {% if progress.credit %}
-      <div>
-        <dt class="text-xs text-brand-text/60">Credit recorded</dt>
-        <dd class="text-brand-text mt-0.5">
-          {% if progress.credit.count %}
-            <a href="{% url 'projects:contribution_tracking' pk=project.pk %}"
-               class="hover:text-brand-coral">
-              {{ progress.credit.count }} contribution{{ progress.credit.count|pluralize }}
-              to {{ progress.credit.people }} member{{ progress.credit.people|pluralize }}
-            </a>
-          {% else %}
-            None yet &mdash; credit is recorded as tasks are completed.
-          {% endif %}
-        </dd>
-      </div>
-    {% endif %}
-
-    {% if progress.last_activity %}
-      <div>
-        <dt class="text-xs text-brand-text/60">Last activity</dt>
-        <dd class="text-brand-text mt-0.5">
-          <time datetime="{{ progress.last_activity|date:'c' }}"
-                title="{{ progress.last_activity|date:'M j, Y H:i' }}">{% if progress.last_activity_just_now %}just now{% else %}{{ progress.last_activity|timesince }} ago{% endif %}</time>
-        </dd>
-      </div>
-    {% endif %}
-  </dl>
+  {% if summary.credit %}
+    <h3 class="text-xs text-brand-text/60 mt-4 mb-1">Credit recorded</h3>
+    <p class="text-sm text-brand-text">
+      {% if summary.credit.count %}
+        <a href="{% url 'projects:contribution_tracking' pk=project.pk %}"
+           class="hover:text-brand-coral">
+          {{ summary.credit.count }} contribution{{ summary.credit.count|pluralize }}
+          to {{ summary.credit.people }} member{{ summary.credit.people|pluralize }}
+        </a>
+      {% else %}
+        None yet &mdash; credit is recorded as tasks are completed.
+      {% endif %}
+    </p>
   {% endif %}
 </section>

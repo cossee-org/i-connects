@@ -601,44 +601,128 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         return context
 
 
-def _project_progress(project, now) -> dict:
-    """What the Project Summary's Progress card reports.
+def _project_summary(project, now, *, is_project_manager: bool) -> dict:
+    """Everything the Project Summary tab reports, beyond its number cards.
 
-    The number cards above it count things (tasks, overdue, join requests,
-    contributors, wiki pages); this says where the project stands: how much
-    is done, what is waiting on a lead, what comes next, and when anyone last
-    touched it. Each value is None when there is nothing to say, so the card
-    can leave the line out instead of printing a zero.
+    The tab answers four questions, one card each:
+
+    - Needs attention: overdue tasks, tasks every assignee has marked done
+      (only a lead's completion is left) and, for a lead, join requests.
+    - Coming up: the next deadlines and milestones, in date order.
+    - Recent activity: who did what lately, across tasks and the wiki.
+    - Progress: how much is done, where the open work sits on the board,
+      and the credit recorded so far.
+
+    Each list is capped; the tabs hold the rest.
     """
-    from django.db.models import Max
+    from django.db.models import Count
+    from django.utils.timesince import timesince
 
     from apps.contributions.models import ContributionRecord
     from apps.core.enums import TaskStatus
-    from apps.tasks.models import Milestone, Task
-    from apps.wiki.models import WikiPage
+    from apps.tasks.models import Milestone, Task, TaskLog
+    from apps.wiki.models import WikiRevision
 
     tasks = Task.objects.filter(project=project)
-    total = tasks.count()
-    completed = tasks.filter(status=TaskStatus.COMPLETED).count()
     open_tasks = tasks.exclude(status=TaskStatus.COMPLETED)
+    total = tasks.count()
+    completed = total - open_tasks.count()
 
-    # Every assignee has marked their part done; only a lead's completion is
-    # left. Prefetched, so the per-task properties read from memory.
-    ready = [
+    # ── Needs attention ──
+    overdue = list(
+        open_tasks.filter(deadline__lt=now).order_by("deadline", "id")[:5]
+    )
+    # Every assignee has marked their part done. Prefetched, so the
+    # per-task properties read from memory.
+    waiting = [
         t
         for t in open_tasks.prefetch_related("assigned_members", "task_logs")
+        .order_by("-updated_at", "id")
         if t.assignee_count and t.all_assignees_done
     ]
+    join_requests = []
+    if is_project_manager:
+        join_requests = list(
+            JoinRequest.objects.filter(
+                project=project, status=JoinRequestStatus.PENDING
+            )
+            .select_related("user")
+            .order_by("created_at")[:5]
+        )
 
-    next_task = (
-        open_tasks.filter(deadline__gte=now).order_by("deadline", "id").first()
-    )
-    next_milestone = (
-        Milestone.objects.filter(project=project, end_date__gte=now)
-        .order_by("end_date", "id")
-        .first()
-    )
+    # ── Coming up ──
+    upcoming = [
+        {"kind": "task", "date": t.deadline, "task": t}
+        for t in open_tasks.filter(deadline__gte=now).order_by("deadline", "id")[:5]
+    ] + [
+        {"kind": "milestone", "date": m.end_date, "milestone": m}
+        for m in Milestone.objects.filter(project=project, end_date__gte=now)
+        .order_by("end_date", "id")[:3]
+    ]
+    upcoming.sort(key=lambda item: item["date"])
 
+    # ── Recent activity ──
+    # Drawn from what the app records today: a task's creation and its lead
+    # completion live on the task, each assignee's done mark on their current
+    # TaskLog, and every wiki save is a revision.
+    events = []
+    for t in tasks.select_related("created_by").order_by("-created_at")[:8]:
+        events.append({
+            "when": t.created_at,
+            "who": t.created_by.display_name if t.created_by else "Someone",
+            "verb": "created", "kind": "task", "task": t,
+        })
+    for log in (
+        TaskLog.objects.filter(
+            task__project=project,
+            status=TaskStatus.COMPLETED,
+            completed_at__isnull=False,
+        )
+        .select_related("task", "assigned_to")
+        .order_by("-completed_at")[:8]
+    ):
+        events.append({
+            "when": log.completed_at,
+            "who": log.assigned_to.display_name,
+            "verb": "marked their part done on", "kind": "task", "task": log.task,
+        })
+    for t in (
+        tasks.filter(closed_at__isnull=False)
+        .select_related("closed_by")
+        .order_by("-closed_at")[:8]
+    ):
+        events.append({
+            "when": t.closed_at,
+            "who": t.closed_by.display_name if t.closed_by else "A lead",
+            "verb": "completed", "kind": "task", "task": t,
+        })
+    for r in (
+        WikiRevision.objects.filter(page__project=project)
+        .select_related("page", "editor")
+        .order_by("-created_at")[:8]
+    ):
+        events.append({
+            "when": r.created_at,
+            "who": r.editor.display_name if r.editor else "Someone",
+            "verb": "created the wiki page" if r.number == 1 else "edited the wiki page",
+            "kind": "wiki", "page": r.page,
+        })
+    events.sort(key=lambda e: e["when"], reverse=True)
+    for e in events:
+        # One unit is enough for a feed ("4 hours ago", not "4 hours, 39
+        # minutes ago"); the last minute reads "just now", not "0 minutes".
+        e["ago"] = (
+            "just now"
+            if (now - e["when"]).total_seconds() < 60
+            else f"{timesince(e['when'], now, depth=1)} ago"
+        )
+
+    # ── Progress ──
+    columns = list(
+        open_tasks.values("container__name", "container__container_order")
+        .annotate(n=Count("id"))
+        .order_by("container__container_order", "container__name")
+    )
     credit = None
     if project.tracks_credit:
         records = ContributionRecord.objects.filter(project=project)
@@ -647,33 +731,18 @@ def _project_progress(project, now) -> dict:
             "people": records.values("user").distinct().count(),
         }
 
-    last_activity = max(
-        (
-            d
-            for d in (
-                tasks.aggregate(m=Max("updated_at"))["m"],
-                WikiPage.objects.filter(project=project).aggregate(
-                    m=Max("updated_at")
-                )["m"],
-            )
-            if d is not None
-        ),
-        default=None,
-    )
-
     return {
+        "overdue": overdue,
+        "waiting": waiting[:5],
+        "waiting_count": len(waiting),
+        "join_requests": join_requests,
+        "upcoming": upcoming[:6],
+        "activity": events[:8],
         "total": total,
         "completed": completed,
         "percent": round(100 * completed / total) if total else 0,
-        "ready_count": len(ready),
-        "next_task": next_task,
-        "next_milestone": next_milestone,
+        "columns": columns,
         "credit": credit,
-        "last_activity": last_activity,
-        # timesince reads "0 minutes" for the last minute; say "just now".
-        "last_activity_just_now": (
-            last_activity is not None and (now - last_activity).total_seconds() < 60
-        ),
     }
 
 
@@ -747,12 +816,6 @@ class ProjectDetailView(DetailView):
                 ).first()
             )
             if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
-                pending_jrs = list(
-                    JoinRequest.objects.filter(
-                        project=project, status=JoinRequestStatus.PENDING
-                    ).select_related("user").order_by("-created_at")[:20]
-                )
-                context["pending_join_requests"] = pending_jrs
                 context["pending_join_request_count"] = JoinRequest.objects.filter(
                     project=project, status=JoinRequestStatus.PENDING
                 ).count()
@@ -760,7 +823,6 @@ class ProjectDetailView(DetailView):
                     project=project
                 ).count()
             else:
-                context["pending_join_requests"] = []
                 context["pending_join_request_count"] = 0
                 context["pending_invitation_count"] = 0
         else:
@@ -774,43 +836,33 @@ class ProjectDetailView(DetailView):
         # Drives the project section tabs in the top bar (members only).
         context["is_project_member"] = context["user_privilege"] is not None
 
-        # Task summary — only meaningful for members, but the queries are
-        # cheap enough to run for any viewer who can see the project.
+        # The number cards are cheap enough to count for any viewer who can
+        # see the project; the summary's cards are drawn for members only.
         from apps.core.enums import TaskStatus
-        from apps.tasks.models import KanbanBoard, Task
+        from apps.tasks.models import Task
+        from apps.wiki.models import WikiPage
         from django.utils import timezone
 
         context["today"] = timezone.now()
         task_qs = Task.objects.filter(project=project)
         context["task_count"] = task_qs.count()
-        context["overdue_count"] = task_qs.filter(
-            deadline__lt=context["today"],
-        ).count()
+        # Overdue means still open past its deadline; a finished task whose
+        # deadline has passed is not late.
+        context["overdue_count"] = (
+            task_qs.exclude(status=TaskStatus.COMPLETED)
+            .filter(deadline__lt=context["today"])
+            .count()
+        )
         context["contributor_count"] = ProjectPrivilege.objects.filter(
             project=project
         ).values("user").distinct().count()
-        context["tasks"] = (
-            task_qs.select_related("container")
-            .order_by("-updated_at")[:20]
-        )
-        context["has_kanban_columns"] = KanbanBoard.objects.filter(
-            project=project
-        ).exists()
-        context["progress"] = _project_progress(project, context["today"])
-
-        # Wiki summary: the most recently edited pages, newest first, so the
-        # dashboard surfaces what changed rather than the alphabetical index.
-        from apps.wiki.models import WikiPage
-        from apps.wiki.utils import excerpt
-
-        wiki_qs = WikiPage.objects.filter(project=project)
-        context["wiki_page_count"] = wiki_qs.count()
-        context["wiki_rows"] = [
-            {"page": page, "excerpt": excerpt(page.content_markdown)}
-            for page in wiki_qs.select_related("updated_by").order_by(
-                "-updated_at", "id"
-            )[:20]
-        ]
+        context["wiki_page_count"] = WikiPage.objects.filter(project=project).count()
+        if context["is_project_member"]:
+            context["summary"] = _project_summary(
+                project,
+                context["today"],
+                is_project_manager=context["is_project_manager"],
+            )
         return context
 
 

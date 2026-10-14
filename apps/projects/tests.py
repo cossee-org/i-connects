@@ -1503,51 +1503,6 @@ def test_discover_marks_nothing_for_an_anonymous_visitor(client, user):
 
 
 @pytest.mark.django_db
-def test_project_dashboard_wiki_card_lists_recent_pages(client, user):
-    from apps.wiki.services import create_page, update_page
-
-    project = _make_project(user)
-    older = create_page(project=project, actor=user, title="Sampling protocol")
-    create_page(
-        project=project,
-        actor=user,
-        title="Data dictionary",
-        content_markdown="## Fields\nEvery column we collect.",
-        locked=True,
-    )
-    # Editing a page moves it to the top: the card is ordered by recency.
-    update_page(
-        page=older,
-        actor=user,
-        title=older.title,
-        content_markdown="Updated steps.",
-    )
-
-    client.force_login(user)
-    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
-    assert response.status_code == 200
-    assert response.context["wiki_page_count"] == 2
-    assert [row["page"].title for row in response.context["wiki_rows"]] == [
-        "Sampling protocol",
-        "Data dictionary",
-    ]
-    content = response.content.decode()
-    assert "Wiki pages" in content
-    assert reverse("wiki:detail", kwargs={"project_pk": project.pk, "slug": older.slug}) in content
-    assert reverse("wiki:create", kwargs={"project_pk": project.pk}) in content
-    assert "Locked" in content
-
-
-@pytest.mark.django_db
-def test_project_dashboard_wiki_card_empty_state(client, user):
-    project = _make_project(user)
-    client.force_login(user)
-    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
-    assert response.context["wiki_page_count"] == 0
-    assert "No wiki pages yet." in response.content.decode()
-
-
-@pytest.mark.django_db
 def test_project_dashboard_hides_wiki_from_non_members(client, user, other_user):
     """The wiki is members-only, and so is its card on a public project."""
     from apps.wiki.services import create_page
@@ -1593,29 +1548,18 @@ def test_contributor_subpages_look_like_wiki_subpages(client, user, url_name, he
 
 
 # ---------------------------------------------------------------------------
-# Project Summary: Progress card
+# Project Summary: what the tab reports
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.django_db
-def test_progress_card_on_an_empty_project(client, user):
-    project = _make_project(user)
-    client.force_login(user)
-    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
-    progress = response.context["progress"]
-    assert progress["total"] == 0 and progress["ready_count"] == 0
-    assert progress["next_task"] is None
-    assert "No tasks yet, so nothing to measure." in response.content.decode()
-
-
-@pytest.mark.django_db
-def test_progress_card_reports_completion_waiting_and_next_deadline(client, user, other_user):
+def _summary_project(user, other_user):
+    """A project with one task in each state the summary cards report."""
     from datetime import timedelta
 
     from django.utils import timezone
 
     from apps.projects.models import ContributionTracking as CT
-    from apps.tasks.models import KanbanBoard, Task
+    from apps.tasks.models import KanbanBoard, Milestone, Task
     from apps.tasks.services import close_task, mark_own_done
 
     project = _make_project(user)
@@ -1627,7 +1571,7 @@ def test_progress_card_reports_completion_waiting_and_next_deadline(client, user
     ProjectPrivilege.objects.create(
         project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
     )
-    col = KanbanBoard.objects.create(project=project, name="Todo", container_order=0)
+    col = KanbanBoard.objects.create(project=project, name="Doing", container_order=0)
 
     def task(name, **kw):
         t = Task.objects.create(
@@ -1637,27 +1581,104 @@ def test_progress_card_reports_completion_waiting_and_next_deadline(client, user
         t.assigned_members.add(helper)
         return t
 
-    soon = timezone.now() + timedelta(days=3)
-    later = timezone.now() + timedelta(days=9)
+    now = timezone.now()
     done = task("Done one")
     mark_own_done(task=done, member=helper)
-    close_task(task=done, closed_by=lead)          # completed, credited
-    waiting = task("Waiting one", deadline=later)
-    mark_own_done(task=waiting, member=helper)     # every assignee done
-    task("Next one", deadline=soon)                # nearest open deadline
-    task("Untouched")
+    close_task(task=done, closed_by=lead)                       # completed
+    waiting = task("Waiting one")
+    mark_own_done(task=waiting, member=helper)                  # ready for a lead
+    task("Late one", deadline=now - timedelta(days=2))          # overdue
+    task("Soon one", deadline=now + timedelta(days=3))          # coming up
+    Milestone.objects.create(project=project, name="Ship it", end_date=now + timedelta(days=1))
+    finished_late = task("Finished late", deadline=now - timedelta(days=5))
+    mark_own_done(task=finished_late, member=helper)
+    close_task(task=finished_late, closed_by=lead)              # not overdue
+    return project
+
+
+@pytest.mark.django_db
+def test_summary_on_an_empty_project(client, user):
+    project = _make_project(user)
+    client.force_login(user)
+    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    body = response.content.decode()
+    assert response.context["summary"]["total"] == 0
+    for empty in (
+        "Nothing needs attention right now.",
+        "No upcoming deadlines or milestones.",
+        "No tasks yet, so nothing to measure.",
+    ):
+        assert empty in body
+
+
+@pytest.mark.django_db
+def test_summary_reports_attention_coming_up_activity_and_progress(client, user, other_user):
+    from apps.projects.services import create_join_request
+
+    project = _summary_project(user, other_user)
+    newcomer = get_user_model().objects.create_user(
+        email="new@example.com", password="pw-123456789", name="Newcomer"
+    )
+    create_join_request(
+        project=project, user=newcomer, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
 
     client.force_login(user)
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
-    progress = response.context["progress"]
-    assert (progress["completed"], progress["total"], progress["percent"]) == (1, 4, 25)
-    assert progress["ready_count"] == 1
-    assert progress["next_task"].name == "Next one"
-    assert progress["credit"]["people"] == 1 and progress["credit"]["count"] >= 1
-    assert progress["last_activity"] is not None
+    summary = response.context["summary"]
+
+    # Needs attention: open and late, every assignee done, a join request.
+    assert [t.name for t in summary["overdue"]] == ["Late one"]
+    assert [t.name for t in summary["waiting"]] == ["Waiting one"]
+    assert [jr.user.email for jr in summary["join_requests"]] == ["new@example.com"]
+    # A task finished after its deadline is not overdue.
+    assert response.context["overdue_count"] == 1
+
+    # Coming up: milestone (tomorrow) before task (in three days).
+    assert [i["kind"] for i in summary["upcoming"]] == ["milestone", "task"]
+    assert summary["upcoming"][1]["task"].name == "Soon one"
+
+    # Recent activity covers completions and done marks, newest first.
+    verbs = [e["verb"] for e in summary["activity"]]
+    assert "completed" in verbs and "marked their part done on" in verbs
+    whens = [e["when"] for e in summary["activity"]]
+    assert whens == sorted(whens, reverse=True)
+    assert all(e["ago"] == "just now" for e in summary["activity"])
+
+    # Progress.
+    assert (summary["completed"], summary["total"], summary["percent"]) == (2, 5, 40)
+    assert summary["columns"] == [
+        {"container__name": "Doing", "container__container_order": 0, "n": 3}
+    ]
+    assert summary["credit"]["people"] == 1
 
     body = response.content.decode()
-    assert "of 4 tasks completed" in body
-    assert 'aria-valuenow="25"' in body
-    assert "1 task marked done by every assignee" in body
-    assert ">Next one</a>" in body
+    assert "Ready for a lead to complete" in body
+    assert "asked to join as member" in body
+    assert ">Soon one</a>" in body and "Ship it" in body
+    assert 'aria-valuenow="40"' in body
+
+
+@pytest.mark.django_db
+def test_summary_number_cards_open_their_tabs(client, user):
+    project = _make_project(user)
+    client.force_login(user)
+    body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    for url in (
+        reverse("tasks:board", kwargs={"project_pk": project.pk}),
+        reverse("projects:join_requests", kwargs={"pk": project.pk}),
+        reverse("projects:members", kwargs={"pk": project.pk}),
+        reverse("wiki:list", kwargs={"project_pk": project.pk}),
+    ):
+        assert f'<a href="{url}"\n   class="brand-card p-4' in body, url
+
+
+@pytest.mark.django_db
+def test_summary_is_a_report_not_a_workbench(client, user):
+    """Adding and editing live on the tabs; the summary only reports."""
+    project = _make_project(user)
+    client.force_login(user)
+    body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    assert reverse("tasks:create", kwargs={"project_pk": project.pk}) not in body
+    assert reverse("wiki:create", kwargs={"project_pk": project.pk}) not in body
+    assert "Delete task confirmation" not in body
