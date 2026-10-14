@@ -1293,6 +1293,9 @@ def _task_status_context(task, *, project_member, is_project_manager):
         "assignee_states": assignee_states,
         "done_count": sum(1 for s in assignee_states if s["done"]),
         "reviewed_count": sum(1 for s in assignee_states if s["reviewed"]),
+        # Parts fully through: marked done and reviewed. What "N of M
+        # complete" counts on a task under review.
+        "complete_count": sum(1 for s in assignee_states if s["done"] and s["reviewed"]),
         "assignee_count": len(assignee_states),
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),

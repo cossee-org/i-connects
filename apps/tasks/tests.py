@@ -1277,6 +1277,47 @@ def test_overdue_pill_on_task_pane_and_page_follows_close_and_reopen(client, pm_
 
 
 @pytest.mark.django_db
+def test_completion_card_separates_done_and_reviewed_progress(client, user, other_user, pm_user):
+    """Marked done and Reviewed each get a labelled bar and count, and the
+    heading says how many parts are complete (done and reviewed). A task
+    without review shows the done bar alone, and its heading counts done."""
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    third = _add_contributor(project, pm_user)
+    task.assigned_members.add(third)
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=contrib)
+    mark_own_done(task=task, member=lead)
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "1 of 3 complete" in pane
+    progress = pane[pane.index("data-progress") : pane.index("data-assignee-rows")]
+    assert progress.index("Marked done") < progress.index("2 of 3") < progress.index("Reviewed") < progress.index("1 of 3")
+    assert "bg-success" in progress and "bg-violet-600" in progress
+    # The stages read in their own colours: review violet, waiting amber.
+    assert "text-violet-600" in _row_for(pane, contrib)
+    assert "Awaiting review" in _row_for(pane, lead) and "text-amber-600" in _row_for(pane, lead)
+    detail = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+    assert "1 of 3 complete" in detail
+
+    # No review on the task: one bar, and the heading counts done.
+    task.reviewers.clear()
+    for log in task.task_logs.all():
+        log.reviewed_by = None
+        log.reviewed_at = None
+        log.save(update_fields=["reviewed_by", "reviewed_at"])
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "2 of 3 done" in pane
+    progress = pane[pane.index("data-progress") : pane.index("data-assignee-rows")]
+    assert "Marked done" in progress and "Reviewed" not in progress
+
+
+@pytest.mark.django_db
 def test_closed_by_is_a_property_row_in_the_pane_and_inline_on_the_page(client, pm_user):
     project, col1, _col2 = _make_project_with_board(pm_user)
     member = _primary_member(project, pm_user)
@@ -3103,7 +3144,10 @@ def test_reviewer_marks_a_submission_reviewed(client, user, other_user):
     assert log.reviewed_at.strftime("%b %-d, %Y") in row
     # Two checks now: the assignee's own mark and the review of it.
     assert row.count('data-mark="yes"') == 2
-    assert "1 reviewed" in pane
+    # The Reviewed bar counts it.
+    progress = pane[pane.index("data-progress") : pane.index("data-assignee-rows")]
+    reviewed = progress[progress.index("Reviewed") :]
+    assert f"1 of {task.assigned_members.count()}" in reviewed
 
 
 @pytest.mark.django_db

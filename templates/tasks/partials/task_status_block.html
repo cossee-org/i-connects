@@ -24,7 +24,7 @@
       <h3 class="text-lg font-semibold text-brand-navy">Completion</h3>
       {% endif %}
       <span class="text-xs text-brand-text/60">
-        {{ done_count }} of {{ assignee_count }} done{% if show_review %} &middot; {{ reviewed_count }} reviewed{% endif %}
+        {% if show_review %}{{ complete_count }} of {{ assignee_count }} complete{% else %}{{ done_count }} of {{ assignee_count }} done{% endif %}
       </span>
     </div>
 
@@ -76,11 +76,25 @@
 
     {% if assignee_states %}
       {% comment %}
-        How far along, as a thin bar under the count: the share of assignees
-        who have marked their part done.
+        How far along, one labelled bar per stage: Marked done (green) and,
+        on a task under review, Reviewed (violet), each with its count. The
+        heading carries the overall figure — parts both marked done and
+        reviewed — so a task without review shows the one bar and no
+        repeat of it.
       {% endcomment %}
-      <div class="mt-2 h-1.5 rounded-full bg-brand-lighter overflow-hidden" aria-hidden="true">
-        <div class="h-full rounded-full bg-success" style="width: {% widthratio done_count assignee_count 100 %}%"></div>
+      <div class="mt-3 grid grid-cols-[6.5rem_1fr_3.5rem] items-center gap-x-3 gap-y-2 text-xs" data-progress>
+        <span class="text-brand-text/80 font-medium">Marked done</span>
+        <span class="h-1.5 rounded-full bg-brand-lighter overflow-hidden" aria-hidden="true">
+          <span class="block h-full rounded-full bg-success" style="width: {% widthratio done_count assignee_count 100 %}%"></span>
+        </span>
+        <span class="text-right text-brand-text/80">{{ done_count }} of {{ assignee_count }}</span>
+        {% if show_review %}
+          <span class="text-brand-text/80 font-medium">Reviewed</span>
+          <span class="h-1.5 rounded-full bg-brand-lighter overflow-hidden" aria-hidden="true">
+            <span class="block h-full rounded-full bg-violet-600" style="width: {% widthratio reviewed_count assignee_count 100 %}%"></span>
+          </span>
+          <span class="text-right text-brand-text/80">{{ reviewed_count }} of {{ assignee_count }}</span>
+        {% endif %}
       </div>
 
       {% comment %}

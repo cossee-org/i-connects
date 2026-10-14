@@ -2,9 +2,10 @@
 {# The glyph is decoration; the words say what it means (A11Y_GUIDE #7 — never colour alone), so #}
 {# the icon is hidden from screen readers and the text carries the state. data-mark="yes|no" #}
 {# marks the state for anything that needs to read it without parsing the words. #}
+{# Pass tone="review" for the review stage, which reads in violet rather than the done stage's green. #}
 {# Pass at=<datetime> to print when it happened after the words. Entries completed before #}
 {# that was recorded have none, and show the words alone. #}
-<span class="inline-flex items-center gap-1.5 text-xs whitespace-nowrap {% if on %}text-success font-medium{% else %}text-brand-text/60{% endif %}"
+<span class="inline-flex items-center gap-1.5 text-xs whitespace-nowrap {% if on %}{% if tone == "review" %}text-violet-600{% else %}text-success{% endif %} font-medium{% else %}text-brand-text/60{% endif %}"
       data-mark="{% if on %}yes{% else %}no{% endif %}">
   {% if on %}
     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
