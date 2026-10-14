@@ -224,12 +224,15 @@
         {% for e in summary.activity %}
           <li class="flex items-start justify-between gap-3 text-sm">
             <p class="min-w-0 text-brand-text break-words">
-              <span class="font-medium">{{ e.who }}</span>
+              {# Most lines read "who verb thing"; a task its reviews finished has no #}
+              {# actor of its own and reads "thing after" instead. #}
+              {% if e.who %}<span class="font-medium">{{ e.who }}</span>{% endif %}
               {{ e.verb }}
               {% if e.kind == "task" %}
                 <a href="{% url 'tasks:detail' project_pk=project.pk pk=e.task.pk %}"
                class="font-medium text-brand-navy hover:text-brand-coral break-words"
                @click.prevent="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=e.task.pk %}' })">{{ e.task.name }}</a>
+                {% if e.after %}{{ e.after }}{% endif %}
               {% else %}
                 <a href="{{ e.page.get_absolute_url }}"
                    class="font-medium text-brand-navy hover:text-brand-coral">{{ e.page.title }}</a>
