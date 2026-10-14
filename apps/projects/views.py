@@ -706,15 +706,17 @@ def _project_summary(project, now) -> dict:
     # ── Wiki ──
     # A locked page is one a lead has marked settled (only leads can edit
     # it), which is what a project's agreements and protocols are. Those are
-    # listed in full, by title, so members always find them; the rest show
-    # as what was edited lately, a card each with a short plain-text summary.
+    # first, by title, so members always find them; the rest follow, newest
+    # edit first. One list, a card each with a short plain-text summary.
     pages = WikiPage.objects.filter(project=project).select_related("updated_by")
+    locked = list(pages.filter(locked=True).order_by("title", "id")[:10])
+    others = list(pages.filter(locked=False).order_by("-updated_at", "id")[:12])
     wiki = {
-        "key_pages": list(pages.filter(locked=True).order_by("title", "id")[:10]),
-        "recent": [
+        "pages": [
             {"page": page, "excerpt": excerpt(page.content_markdown, limit=140)}
-            for page in pages.filter(locked=False).order_by("-updated_at", "id")[:12]
+            for page in locked + others
         ],
+        "has_locked": bool(locked),
     }
 
     return {

@@ -11,8 +11,8 @@
   .proj-grid-4 {
     grid-template-columns: repeat(4, 1fr);
   }
-  /* Wiki card (projects/partials/wiki_card.html): the rail of recently
-     edited pages. It scrolls sideways and each card snaps into place; the
+  /* Wiki card (projects/partials/wiki_card.html): the rail of wiki
+     pages, locked ones first. It scrolls sideways and each card snaps into place; the
      header's arrows step it on a wide screen, a phone swipes it. */
   .wiki-rail {
     display: flex;
@@ -43,6 +43,8 @@
     transition: border-color 0.15s ease;
   }
   .wiki-rail-card:hover { border-color: #323895; }
+  /* A locked page (settled, lead-edited) is tinted as well as locked. */
+  .wiki-rail-card--locked { background: #f5f7fc; }
   .wiki-rail-nav {
     width: 2.5rem;
     height: 2.5rem;
