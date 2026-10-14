@@ -1602,33 +1602,18 @@ def test_summary_on_an_empty_project(client, user):
     client.force_login(user)
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
     body = response.content.decode()
-    for empty in (
-        "Nothing needs attention right now.",
-        "No upcoming deadlines or milestones.",
-    ):
+    for empty in ("No upcoming deadlines or milestones.",):
         assert empty in body
 
 
 @pytest.mark.django_db
-def test_summary_reports_attention_coming_up_activity_and_progress(client, user, other_user):
-    from apps.projects.services import create_join_request
-
+def test_summary_reports_coming_up_and_activity(client, user, other_user):
     project = _summary_project(user, other_user)
-    newcomer = get_user_model().objects.create_user(
-        email="new@example.com", password="pw-123456789", name="Newcomer"
-    )
-    create_join_request(
-        project=project, user=newcomer, requested_privilege=MemberPrivileges.CONTRIBUTOR
-    )
 
     client.force_login(user)
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
     summary = response.context["summary"]
 
-    # Needs attention: open and late, every assignee done, a join request.
-    assert [t.name for t in summary["overdue"]] == ["Late one"]
-    assert [t.name for t in summary["waiting"]] == ["Waiting one"]
-    assert [jr.user.email for jr in summary["join_requests"]] == ["new@example.com"]
     # A task finished after its deadline is not overdue.
     assert response.context["overdue_count"] == 1
 
@@ -1644,13 +1629,10 @@ def test_summary_reports_attention_coming_up_activity_and_progress(client, user,
     assert all(e["ago"] == "just now" for e in summary["activity"])
 
     body = response.content.decode()
-    # The overdue row carries the task views' shared Overdue pill.
-    assert body.count("Overdue: was due") == 1
-    assert "Ready for a lead to complete" in body
-    assert "asked to join as member" in body
     assert ">Soon one</a>" in body and "Ship it" in body
-    # The Progress card is gone from the Overview.
+    # The Progress and Needs attention cards are gone from the Overview.
     assert 'id="proj-progress-heading"' not in body
+    assert 'id="proj-attention-heading"' not in body
 
 
 @pytest.mark.django_db

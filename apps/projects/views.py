@@ -601,13 +601,11 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         return context
 
 
-def _project_summary(project, now, *, is_project_manager: bool) -> dict:
+def _project_summary(project, now) -> dict:
     """Everything the Project Overview tab reports, beyond its number cards.
 
-    The tab answers four questions, one card each:
+    The tab answers three questions, one card each:
 
-    - Needs attention: overdue tasks, tasks every assignee has marked done
-      (only a lead's completion is left) and, for a lead, join requests.
     - Coming up: the next deadlines and milestones, in date order.
     - Recent activity: who did what lately, across tasks and the wiki.
     - Wiki: the project's settled documents (locked pages: agreements,
@@ -624,28 +622,6 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
 
     tasks = Task.objects.filter(project=project)
     open_tasks = tasks.exclude(status=TaskStatus.COMPLETED)
-
-    # ── Needs attention ──
-    overdue = list(
-        open_tasks.filter(deadline__lt=now).order_by("deadline", "id")[:5]
-    )
-    # Every assignee has marked their part done. Prefetched, so the
-    # per-task properties read from memory.
-    waiting = [
-        t
-        for t in open_tasks.prefetch_related("assigned_members", "task_logs")
-        .order_by("-updated_at", "id")
-        if t.assignee_count and t.all_assignees_done
-    ]
-    join_requests = []
-    if is_project_manager:
-        join_requests = list(
-            JoinRequest.objects.filter(
-                project=project, status=JoinRequestStatus.PENDING
-            )
-            .select_related("user")
-            .order_by("created_at")[:5]
-        )
 
     # ── Coming up ──
     upcoming = [
@@ -751,10 +727,6 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
     }
 
     return {
-        "overdue": overdue,
-        "waiting": waiting[:5],
-        "waiting_count": len(waiting),
-        "join_requests": join_requests,
         "upcoming": upcoming[:6],
         "activity": events[:8],
         "wiki": wiki,
@@ -873,11 +845,7 @@ class ProjectDetailView(DetailView):
         ).values("user").distinct().count()
         context["wiki_page_count"] = WikiPage.objects.filter(project=project).count()
         if context["is_project_member"]:
-            context["summary"] = _project_summary(
-                project,
-                context["today"],
-                is_project_manager=context["is_project_manager"],
-            )
+            context["summary"] = _project_summary(project, context["today"])
         return context
 
 
