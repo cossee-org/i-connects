@@ -1454,10 +1454,12 @@ def test_board_page_shows_manage_columns_for_every_view(client, pm_user):
     markup = button[: button.index("</button>")]
     # No x-show gate on the button itself (the view switcher still uses one).
     assert "x-show" not in markup
-    # A bordered secondary button, set apart from the segmented view switcher
-    # so it does not read as a fifth view.
-    assert "border-gray-300" in markup
-    assert "join-item" not in markup
+    # A quiet text button, "Columns" on screen with the full name for screen
+    # readers (which contains the visible word), after a divider that keeps
+    # it from reading as a fifth view.
+    assert 'aria-label="Manage columns"' in markup
+    assert markup.rstrip().endswith("Columns")
+    assert "h-5 w-px" in content[: content.index('aria-label="Manage columns"')]
 
 
 # ---------------------------------------------------------------------------
