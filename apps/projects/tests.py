@@ -1801,6 +1801,9 @@ def test_overview_wiki_card_lists_every_page_put_on_the_overview(client, user):
     wiki_url = reverse("wiki:list", kwargs={"project_pk": project.pk})
     assert "Scratchpad" not in card
     assert f'<a href="{wiki_url}"' in card and "See more" in card
+    # A plain button at the top right, beside the title, above the list.
+    assert f'<a href="{wiki_url}" class="btn btn-sm btn-ghost">See more</a>' in card
+    assert card.index("See more") < card.index("<ul")
 
 
 def _wiki_card(body: str) -> str:
