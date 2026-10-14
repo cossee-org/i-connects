@@ -11,7 +11,7 @@
         <tr>
           {% include "tasks/partials/table_sort_header.html" with key="name" label="Task" %}
           {% include "tasks/partials/table_sort_header.html" with key="column" label="Column" %}
-          <th scope="col">Assignees</th>
+          {% include "tasks/partials/table_sort_header.html" with key="assignees" label="Assignees" %}
           {% include "tasks/partials/table_sort_header.html" with key="start" label="Start" %}
           {% include "tasks/partials/table_sort_header.html" with key="due" label="Due" %}
           {% include "tasks/partials/table_sort_header.html" with key="priority" label="Priority" %}

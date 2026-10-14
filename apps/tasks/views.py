@@ -497,7 +497,36 @@ TABLE_SORT_FIELDS = {
     ),
     "priority": (("-is_priority", "name", "id"), ("is_priority", "name", "id")),
     "status": (("status", "name", "id"), ("-status", "name", "id")),
+    # Sorted in Python by the names the cell shows (see _sort_by_assignees);
+    # board order is only the tie-break.
+    "assignees": (
+        ("container__container_order", "container_task_order", "id"),
+        ("container__container_order", "container_task_order", "id"),
+    ),
 }
+
+
+def _sort_by_assignees(tasks, *, descending: bool) -> list:
+    """Order tasks by their assignees' names, as the Table cell lists them.
+
+    A display name is derived per member (not a column), so this sorts in
+    Python. Unassigned tasks go last in both directions, like undated ones.
+    """
+    names: dict[int, str] = {}
+
+    def label(task) -> str:
+        members = task.assigned_members.all()
+        for member in members:
+            if member.pk not in names:
+                names[member.pk] = member.display_name.casefold()
+        return ", ".join(names[member.pk] for member in members)
+
+    labelled = [(label(task), task) for task in tasks]
+    assigned = [pair for pair in labelled if pair[0]]
+    unassigned = [task for text, task in labelled if not text]
+    # sorted() is stable, so equal names keep board order either way.
+    assigned.sort(key=lambda pair: pair[0], reverse=descending)
+    return [task for _text, task in assigned] + unassigned
 
 
 def _table_view_context(request, project) -> dict:
@@ -519,6 +548,8 @@ def _table_view_context(request, project) -> dict:
         .prefetch_related("assigned_members", "reviewers")
         .order_by(*ordering)
     )
+    if key == "assignees":
+        tasks = _sort_by_assignees(tasks, descending=descending)
     return {
         "table_tasks": tasks,
         "table_sort_key": key,

@@ -1289,6 +1289,38 @@ def test_board_table_sorts_by_header_and_falls_back_to_board_order(client, user)
 
 
 @pytest.mark.django_db
+def test_board_table_sorts_by_assignee_name_with_unassigned_last(client, user, other_user):
+    project, col1, _col2 = _make_project_with_board(user)
+    alice = _primary_member(project, user)
+    bob = ProjectMember.objects.create(project=project)
+    bob.users.add(other_user)
+    # Board order deliberately differs from name order.
+    nobody = Task.objects.create(
+        project=project, created_by=alice, container=col1,
+        container_task_order=0, name="Task for nobody",
+    )
+    bobs = Task.objects.create(
+        project=project, created_by=alice, container=col1,
+        container_task_order=1, name="Task for Bob",
+    )
+    bobs.assigned_members.add(bob)
+    alices = Task.objects.create(
+        project=project, created_by=alice, container=col1,
+        container_task_order=2, name="Task for Alice",
+    )
+    alices.assigned_members.add(alice)
+    names = [nobody.name, bobs.name, alices.name]
+    client.force_login(user)
+
+    content = client.get(_table_url(project), {"table_sort": "assignees"}).content.decode()
+    assert _row_order(content, names) == ["Task for Alice", "Task for Bob", "Task for nobody"]
+    assert "table_sort=-assignees" in content
+
+    content = client.get(_table_url(project), {"table_sort": "-assignees"}).content.decode()
+    assert _row_order(content, names) == ["Task for Bob", "Task for Alice", "Task for nobody"]
+
+
+@pytest.mark.django_db
 def test_board_table_empty_and_access(client, user, other_user):
     project, _col1, _col2 = _make_project_with_board(user)
     client.force_login(user)
