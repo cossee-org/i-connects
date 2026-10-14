@@ -14,7 +14,7 @@ from datetime import datetime, time
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Exists, F, Max, Min, OuterRef, ProtectedError, Q, Subquery
+from django.db.models import Exists, F, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Subquery
 from django.http import (
     Http404,
     HttpResponse,
@@ -288,6 +288,39 @@ def _fmt_short(d) -> str:
     return f"{d.strftime('%b')} {d.day}"
 
 
+# --- Overdue filter: ?overdue=1 narrows every board view --------------------
+
+
+def _overdue_only(request) -> bool:
+    """True when the board was asked for overdue tasks only (``?overdue=1``).
+
+    The Project Overview's Overdue number links here, and the board's own
+    Overdue toggle sets it. Kanban, List, Table and Calendar all honour it;
+    board.html adds it to each view's HTMX requests while it is on.
+    """
+    return request.GET.get("overdue") == "1"
+
+
+def _overdue_filter(tasks):
+    """``Task.is_overdue`` as a query: still open past its deadline."""
+    return tasks.filter(deadline__lt=timezone.now()).exclude(
+        status=TaskStatus.COMPLETED
+    )
+
+
+def _kanban_columns(request, project):
+    """The board's columns, each with its tasks prefetched (overdue only
+    while that filter is on, so a column's count matches its cards)."""
+    tasks = Task.objects.prefetch_related("assigned_members", "reviewers")
+    if _overdue_only(request):
+        tasks = _overdue_filter(tasks)
+    return (
+        KanbanBoard.objects.filter(project=project)
+        .prefetch_related(Prefetch("tasks", queryset=tasks))
+        .order_by("container_order")
+    )
+
+
 def _calendar_context(request, project) -> dict:
     view = request.GET.get("view", "month")
     if view not in CALENDAR_VIEWS:
@@ -298,6 +331,8 @@ def _calendar_context(request, project) -> dict:
         .filter(Q(deadline__isnull=False) | Q(start_date__isnull=False))
         .prefetch_related("assigned_members", "reviewers")
     )
+    if _overdue_only(request):
+        tasks = _overdue_filter(tasks)
 
     context = {
         "calendar_view": view,
@@ -392,6 +427,7 @@ def _list_view_context(request, project, columns) -> dict:
     priority = request.GET.get("priority", "")
     assignee = request.GET.get("assignee", "")
     sort = request.GET.get("sort", "")
+    overdue = _overdue_only(request)
 
     if sort not in dict(LIST_SORT_CHOICES):
         sort = "manual"
@@ -438,6 +474,8 @@ def _list_view_context(request, project, columns) -> dict:
         tasks = tasks.filter(assigned_members__isnull=True)
     elif assignee:
         tasks = tasks.filter(assigned_members__pk=assignee)
+    if overdue:
+        tasks = _overdue_filter(tasks)
 
     tasks = tasks.distinct().order_by(*_list_order_by(sort))
 
@@ -445,7 +483,7 @@ def _list_view_context(request, project, columns) -> dict:
     for task in tasks:
         by_column.setdefault(task.container_id, []).append(task)
 
-    is_filtered = bool(q or column_filter or done or priority or assignee)
+    is_filtered = bool(q or column_filter or done or priority or assignee or overdue)
     groups = []
     for column in columns:
         column_tasks = by_column.get(column.pk, [])
@@ -547,6 +585,8 @@ def _table_view_context(request, project) -> dict:
         .prefetch_related("assigned_members", "reviewers")
         .order_by(*ordering)
     )
+    if _overdue_only(request):
+        tasks = _overdue_filter(tasks)
     if key == "assignees":
         tasks = _sort_by_assignees(tasks, descending=descending)
     return {
@@ -563,12 +603,13 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        columns = (
-            KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks", "tasks__assigned_members", "tasks__reviewers")
-            .order_by("container_order")
-        )
+        columns = _kanban_columns(self.request, self.project)
         context["columns"] = columns
+        context["overdue_only"] = _overdue_only(self.request)
+        if context["overdue_only"]:
+            context["overdue_task_count"] = _overdue_filter(
+                Task.objects.filter(project=self.project)
+            ).count()
         context.update(_list_view_context(self.request, self.project, columns))
         context.update(_calendar_context(self.request, self.project))
         context.update(_table_view_context(self.request, self.project))
@@ -608,11 +649,7 @@ class BoardKanbanPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateVi
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["columns"] = (
-            KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks", "tasks__assigned_members", "tasks__reviewers")
-            .order_by("container_order")
-        )
+        context["columns"] = _kanban_columns(self.request, self.project)
         return context
 
 

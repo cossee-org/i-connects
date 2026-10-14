@@ -1247,6 +1247,73 @@ def test_overdue_indicator_shows_on_every_view(client, user):
         assert content.count("Overdue: was due") == 1, view
 
 
+def _overdue_filter_tasks(project, member, column):
+    """One overdue task, and three that are not: finished late, due later,
+    undated."""
+    now = timezone.now()
+    for order, (name, deadline, status) in enumerate((
+        ("Late task", now - timedelta(days=1), TaskStatus.NOT_COMPLETED),
+        ("Done late", now - timedelta(days=1), TaskStatus.COMPLETED),
+        ("Later task", now + timedelta(days=1), TaskStatus.NOT_COMPLETED),
+        ("Undated task", None, TaskStatus.NOT_COMPLETED),
+    )):
+        Task.objects.create(
+            project=project, created_by=member, container=column,
+            container_task_order=order, name=name, deadline=deadline, status=status,
+        )
+
+
+@pytest.mark.django_db
+def test_overdue_filter_narrows_every_view(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    _overdue_filter_tasks(project, _primary_member(project, user), col1)
+    client.force_login(user)
+    kwargs = {"project_pk": project.pk}
+    others = ("Done late", "Later task", "Undated task")
+
+    for url in (
+        reverse("tasks:board", kwargs=kwargs),
+        reverse("tasks:board_kanban", kwargs=kwargs),
+        reverse("tasks:board_list", kwargs=kwargs),
+        reverse("tasks:board_table", kwargs=kwargs),
+    ):
+        everything = client.get(url).content.decode()
+        assert all(name in everything for name in ("Late task",) + others), url
+        overdue = client.get(url, {"overdue": "1"}).content.decode()
+        assert "Late task" in overdue, url
+        assert not any(name in overdue for name in others), url
+
+    date = timezone.localdate(timezone.now() - timedelta(days=1)).isoformat()
+    calendar = reverse("tasks:board_calendar", kwargs=kwargs)
+    assert "Done late" in client.get(calendar, {"view": "day", "date": date}).content.decode()
+    overdue = client.get(calendar, {"view": "day", "date": date, "overdue": "1"}).content.decode()
+    assert "Late task" in overdue and "Done late" not in overdue
+
+
+@pytest.mark.django_db
+def test_board_overdue_toggle_and_status_line(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    _overdue_filter_tasks(project, _primary_member(project, user), col1)
+    client.force_login(user)
+    board = reverse("tasks:board", kwargs={"project_pk": project.pk})
+
+    # Off: the toolbar offers the filter; nothing is carried on HTMX requests.
+    content = client.get(board).content.decode()
+    assert f'href="{board}?overdue=1"' in content
+    assert "Overdue only" not in content
+    assert "htmx:configRequest" not in content
+
+    # On: a chip that clears it, a line saying what is shown, the filter kept
+    # on each view's own requests, and no Kanban reordering.
+    content = client.get(board, {"overdue": "1"}).content.decode()
+    assert "Overdue only" in content
+    assert "Showing 1 overdue task, still open past its deadline." in content
+    assert f'<a href="{board}" class="font-medium' in content
+    assert "evt.detail.parameters.overdue = &#x27;1&#x27;" not in content
+    assert "evt.detail.parameters.overdue = '1'" in content
+    assert "the filtered board does not reorder" in content
+
+
 @pytest.mark.django_db
 def test_overdue_pill_on_task_pane_and_page_follows_close_and_reopen(client, pm_user):
     project, col1, _col2 = _make_project_with_board(pm_user)
