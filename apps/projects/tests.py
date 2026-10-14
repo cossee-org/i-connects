@@ -1763,7 +1763,32 @@ def test_overview_wiki_card_is_one_list_locked_pages_first(client, user):
     order = [card.index(f">{t}</a>") for t in ("Data protocol", "Team agreement", "Meeting notes", "Glossary")]
     assert order == sorted(order)
     assert card.count('aria-label="Locked page"') == 2
-    assert "All 4 pages" in card
+    # Four pages all fit: no "See more", no dates, no rules between rows.
+    assert "See more" not in card
+    assert "Oct" not in card and "divide-y" not in card
+
+
+@pytest.mark.django_db
+def test_overview_wiki_card_shows_the_first_five_then_see_more(client, user):
+    from apps.wiki.services import create_page
+
+    project = _make_project(user)
+    create_page(project=project, actor=user, title="Team agreement", locked=True)
+    for title in ("One", "Two", "Three", "Four", "Five", "Six"):
+        create_page(project=project, actor=user, title=title)
+
+    client.force_login(user)
+    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    titles = [page.title for page in response.context["summary"]["wiki"]["pages"]]
+    # The locked page leads; then the newest edits, five in all.
+    assert titles == ["Team agreement", "Six", "Five", "Four", "Three"]
+
+    body = response.content.decode()
+    card = body[body.index('id="proj-wiki-heading"'):]
+    card = card[: card.index("</section>")]
+    assert ">Two</a>" not in card and ">One</a>" not in card
+    wiki_url = reverse("wiki:list", kwargs={"project_pk": project.pk})
+    assert f'<a href="{wiki_url}"' in card and "See more" in card
 
 
 @pytest.mark.django_db

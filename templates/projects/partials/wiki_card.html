@@ -2,23 +2,16 @@
   Project Overview → Wiki: the project's documents, where members see them
   first, as one list. The locked pages — a lead has marked them settled
   (agreements, protocols, data dictionaries) — lead it, by title, each with
-  a lock; the other pages follow, newest edit first. Each row is the page's
-  title and the day it was last edited.
+  a lock; the other pages follow, newest edit first. Only the first few
+  show (see projects.views._project_summary); "See more" under them opens
+  the Wiki tab while there are more.
 
   Needs project, summary (see projects.views._project_summary),
   wiki_page_count and is_project_manager.
 {% endcomment %}
 <section class="brand-card p-5" aria-labelledby="proj-wiki-heading">
   {# Headed like About: a plain title, no icon. #}
-  <div class="flex items-baseline justify-between gap-2 mb-3">
-    <h2 id="proj-wiki-heading" class="text-lg font-semibold text-brand-navy">Wiki</h2>
-    {% if wiki_page_count %}
-      <a href="{% url 'wiki:list' project_pk=project.pk %}"
-         class="text-xs font-medium text-brand-navy hover:text-brand-coral">
-        All {{ wiki_page_count }} page{{ wiki_page_count|pluralize }}
-      </a>
-    {% endif %}
-  </div>
+  <h2 id="proj-wiki-heading" class="text-lg font-semibold text-brand-navy mb-3">Wiki</h2>
 
   {% if not wiki_page_count %}
     <p class="text-sm text-brand-text/60 italic">No wiki pages yet.</p>
@@ -28,9 +21,9 @@
       Go to the Wiki &rarr;
     </a>
   {% else %}
-    <ul class="divide-y divide-brand-light/60">
+    <ul class="space-y-2">
       {% for page in summary.wiki.pages %}
-        <li class="py-2 flex items-baseline justify-between gap-3 text-sm">
+        <li class="text-sm">
           {# The lock's slot is kept on every row so the titles line up. #}
           <span class="flex items-baseline gap-2 min-w-0">
             <span class="w-3.5 shrink-0 self-center">
@@ -46,10 +39,15 @@
             <a href="{{ page.get_absolute_url }}"
                class="font-medium text-brand-navy hover:text-brand-coral break-words min-w-0">{{ page.title }}</a>
           </span>
-          <span class="text-xs text-brand-text/60 shrink-0">{{ page.updated_at|date:"M j" }}</span>
         </li>
       {% endfor %}
     </ul>
+    {% if wiki_page_count > summary.wiki.pages|length %}
+      <a href="{% url 'wiki:list' project_pk=project.pk %}"
+         class="inline-block mt-3 text-sm font-medium text-brand-navy hover:text-brand-coral">
+        See more &rarr;
+      </a>
+    {% endif %}
     {% if is_project_manager and not summary.wiki.has_locked %}
       <p class="text-xs text-brand-text/60 mt-3">
         Lock a page &mdash; an agreement, a protocol &mdash; and it leads this

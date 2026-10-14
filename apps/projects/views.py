@@ -708,9 +708,11 @@ def _project_summary(project, now) -> dict:
     # first, by title, so members always find them; the rest follow, newest
     # edit first, in one list.
     pages = WikiPage.objects.filter(project=project).select_related("updated_by")
-    locked = list(pages.filter(locked=True).order_by("title", "id")[:10])
-    others = list(pages.filter(locked=False).order_by("-updated_at", "id")[:12])
-    wiki = {"pages": locked + others, "has_locked": bool(locked)}
+    # The card shows the first few; "See more" opens the Wiki tab for the rest.
+    shown = 5
+    locked = list(pages.filter(locked=True).order_by("title", "id")[:shown])
+    others = list(pages.filter(locked=False).order_by("-updated_at", "id")[:shown])
+    wiki = {"pages": (locked + others)[:shown], "has_locked": bool(locked)}
 
     return {
         "activity": events[:8],
