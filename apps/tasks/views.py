@@ -477,6 +477,56 @@ def _list_view_context(request, project, columns) -> dict:
     }
 
 
+# --- Table view: one flat, sortable table of every task -------------------
+
+# Header key -> ordering. Each header toggles between its key and "-key";
+# dated columns keep undated tasks last in both directions, as the List does.
+TABLE_SORT_FIELDS = {
+    "name": (("name", "id"), ("-name", "id")),
+    "column": (
+        ("container__container_order", "container_task_order", "id"),
+        ("-container__container_order", "container_task_order", "id"),
+    ),
+    "start": (
+        (F("start_date").asc(nulls_last=True), "id"),
+        (F("start_date").desc(nulls_last=True), "id"),
+    ),
+    "due": (
+        (F("deadline").asc(nulls_last=True), "id"),
+        (F("deadline").desc(nulls_last=True), "id"),
+    ),
+    "priority": (("-is_priority", "name", "id"), ("is_priority", "name", "id")),
+    "status": (("status", "name", "id"), ("-status", "name", "id")),
+}
+
+
+def _table_view_context(request, project) -> dict:
+    """Every task in the project as one flat table, sorted by ``?table_sort=``.
+
+    The value is a header key, optionally prefixed with ``-`` for descending;
+    anything else falls back to board order (by column, then position in it).
+    """
+    raw = request.GET.get("table_sort", "")
+    key = raw.lstrip("-")
+    if key not in TABLE_SORT_FIELDS:
+        raw, key = "column", "column"
+    descending = raw.startswith("-")
+    ordering = TABLE_SORT_FIELDS[key][1 if descending else 0]
+
+    tasks = (
+        Task.objects.filter(project=project)
+        .select_related("container", "milestone")
+        .prefetch_related("assigned_members", "reviewers")
+        .order_by(*ordering)
+    )
+    return {
+        "table_tasks": tasks,
+        "table_sort_key": key,
+        "table_sort_desc": descending,
+        "table_now": timezone.now(),
+    }
+
+
 class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
     """Main kanban board for a project."""
 
@@ -492,6 +542,7 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context["columns"] = columns
         context.update(_list_view_context(self.request, self.project, columns))
         context.update(_calendar_context(self.request, self.project))
+        context.update(_table_view_context(self.request, self.project))
         return context
 
 
@@ -548,6 +599,17 @@ class BoardCalendarPartialView(LoginRequiredMixin, ProjectContextMixin, Template
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(_calendar_context(self.request, self.project))
+        return context
+
+
+class BoardTablePartialView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
+    """HTMX partial that renders the table view, sorted by ``?table_sort=``."""
+
+    template_name = "tasks/task_table_view.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(_table_view_context(self.request, self.project))
         return context
 
 

@@ -55,6 +55,10 @@
           htmx.ajax('GET', '{% url "tasks:board_list" project_pk=project.pk %}', {
             target: '#list-view-container', swap: 'innerHTML'
           });
+        } else if (next === 'table') {
+          htmx.ajax('GET', '{% url "tasks:board_table" project_pk=project.pk %}', {
+            target: '#table-view-container', swap: 'innerHTML'
+          });
         } else if (next === 'calendar') {
           htmx.ajax('GET', '{% url "tasks:board_calendar" project_pk=project.pk %}', {
             target: '#calendar-view-container', swap: 'innerHTML'
@@ -80,7 +84,7 @@
 <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
   <div class="flex items-center gap-2">
     <h2 class="text-lg font-semibold text-brand-navy">Tasks</h2>
-    {% include "_components/info_popover.html" with label="Tasks" body="Everything the project is working on, as a Kanban board, a list or a calendar. Assignees mark their own part done, and a lead then completes the task." %}
+    {% include "_components/info_popover.html" with label="Tasks" body="Everything the project is working on, as a Kanban board, a list, a table or a calendar. Assignees mark their own part done, and a lead then completes the task." %}
   </div>
 </div>
 
@@ -93,7 +97,8 @@
 
     On a phone the left group dissolves (contents) so its pieces wrap with
     New task: the views on one line, Manage columns and New task on the
-    next, at either end. The divider only makes sense on one line.
+    next, at either end. The divider only makes sense on one line. The
+    view icons drop out on a phone so all four views fit on that line.
   {% endcomment %}
   <div class="contents sm:flex sm:flex-wrap sm:items-center sm:gap-2">
     <div class="join">
@@ -101,7 +106,7 @@
               :class="{ 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15': $store.board.viewMode === 'board' }"
               @click="$store.board.setView('board')">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+             stroke-width="1.8" stroke="currentColor" class="hidden sm:block w-4 h-4 shrink-0" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z" />
         </svg>
         Kanban Board
@@ -110,16 +115,25 @@
               :class="{ 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15': $store.board.viewMode === 'list' }"
               @click="$store.board.setView('list')">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+             stroke-width="1.8" stroke="currentColor" class="hidden sm:block w-4 h-4 shrink-0" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
         </svg>
         List
       </button>
       <button type="button" class="btn btn-ghost btn-sm join-item"
+              :class="{ 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15': $store.board.viewMode === 'table' }"
+              @click="$store.board.setView('table')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+             stroke-width="1.8" stroke="currentColor" class="hidden sm:block w-4 h-4 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 1.5v-1.5m0 0c0-.621.504-1.125 1.125-1.125m0 0h7.5" />
+        </svg>
+        Table
+      </button>
+      <button type="button" class="btn btn-ghost btn-sm join-item"
               :class="{ 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15': $store.board.viewMode === 'calendar' }"
               @click="$store.board.setView('calendar')">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+             stroke-width="1.8" stroke="currentColor" class="hidden sm:block w-4 h-4 shrink-0" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5M12 12.75h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm-2.25-2.25h.008v.008H9.75v-.008ZM9.75 15h.008v.008H9.75V15Zm4.5-2.25h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Z" />
         </svg>
         Calendar
@@ -193,6 +207,13 @@
   <div x-show="$store.board.viewMode === 'list'" x-cloak>
     <div id="list-view-container">
       {% include "tasks/task_list_view.html" %}
+    </div>
+  </div>
+
+  {# ── Table view ── #}
+  <div x-show="$store.board.viewMode === 'table'" x-cloak>
+    <div id="table-view-container">
+      {% include "tasks/task_table_view.html" %}
     </div>
   </div>
 
@@ -433,6 +454,8 @@
           if (badge) badge.textContent = colList.children.length;
         }
       }
+      var tableRow = document.querySelector('#table-view-container [data-task-id="' + id + '"]');
+      if (tableRow) tableRow.remove();
       var row = document.querySelector('.task-list-tbody [data-task-id="' + id + '"]');
       if (row) {
         var tbody = row.closest('[data-list-column-id]');

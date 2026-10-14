@@ -1188,6 +1188,116 @@ def test_board_list_drag_handle_only_shows_in_unfiltered_board_order(client, pm_
     assert "task-drag-handle" not in filtered
 
 
+# ---------------------------------------------------------------------------
+# Table view
+# ---------------------------------------------------------------------------
+
+
+def _table_url(project):
+    return reverse("tasks:board_table", kwargs={"project_pk": project.pk})
+
+
+@pytest.mark.django_db
+def test_board_page_offers_the_table_view(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Tabled task",
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("tasks:board", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    assert "setView('table')" in content
+    assert 'id="table-view-container"' in content
+    assert "<table" in content
+
+
+@pytest.mark.django_db
+def test_board_table_lists_every_task_with_its_column(client, user):
+    project, col1, col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    first = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="First task",
+    )
+    first.assigned_members.add(member)
+    Task.objects.create(
+        project=project, created_by=member, container=col2,
+        container_task_order=0, name="Second task", is_priority=True,
+        status=TaskStatus.COMPLETED,
+    )
+    client.force_login(user)
+
+    response = client.get(_table_url(project))
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "First task" in content
+    assert "Second task" in content
+    assert col1.name in content
+    assert col2.name in content
+    assert "Alice" in content
+    assert "High priority" in content
+    assert "Complete" in content
+    assert 'scope="col"' in content
+
+
+@pytest.mark.django_db
+def test_board_table_sorts_by_header_and_falls_back_to_board_order(client, user):
+    project, col1, col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=member, container=col2,
+        container_task_order=0, name="Alpha",
+        deadline=datetime(2026, 3, 5, tzinfo=dt_timezone.utc),
+    )
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Gamma",
+    )
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=1, name="Beta",
+        deadline=datetime(2026, 3, 1, tzinfo=dt_timezone.utc),
+    )
+    names = ["Alpha", "Beta", "Gamma"]
+    client.force_login(user)
+
+    content = client.get(_table_url(project)).content.decode()
+    assert _row_order(content, names) == ["Gamma", "Beta", "Alpha"]
+
+    content = client.get(_table_url(project), {"table_sort": "name"}).content.decode()
+    assert _row_order(content, names) == ["Alpha", "Beta", "Gamma"]
+    assert 'aria-sort="ascending"' in content
+    # The active header flips to descending on the next click.
+    assert "table_sort=-name" in content
+
+    content = client.get(_table_url(project), {"table_sort": "-name"}).content.decode()
+    assert _row_order(content, names) == ["Gamma", "Beta", "Alpha"]
+    assert 'aria-sort="descending"' in content
+
+    # Undated tasks sort last in both directions.
+    content = client.get(_table_url(project), {"table_sort": "due"}).content.decode()
+    assert _row_order(content, names) == ["Beta", "Alpha", "Gamma"]
+    content = client.get(_table_url(project), {"table_sort": "-due"}).content.decode()
+    assert _row_order(content, names) == ["Alpha", "Beta", "Gamma"]
+
+    content = client.get(_table_url(project), {"table_sort": "bogus"}).content.decode()
+    assert _row_order(content, names) == ["Gamma", "Beta", "Alpha"]
+
+
+@pytest.mark.django_db
+def test_board_table_empty_and_access(client, user, other_user):
+    project, _col1, _col2 = _make_project_with_board(user)
+    client.force_login(user)
+    assert "No tasks yet" in client.get(_table_url(project)).content.decode()
+
+    client.force_login(other_user)
+    assert client.get(_table_url(project)).status_code == 403
+
+
 @pytest.mark.django_db
 def test_board_list_reports_no_matches_and_ignores_unknown_params(client, user):
     project, col1, _col2 = _make_project_with_board(user)
