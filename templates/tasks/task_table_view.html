@@ -44,11 +44,12 @@
             </td>
             <td class="text-xs whitespace-nowrap">
               {% if task.deadline %}
-                {# The date first so the column's dates line up; the pill keeps a plain title #}
-                {# here, since the table's horizontal scroll box would clip the styled bubble. #}
+                {# The date first so the column's dates line up, then the Overdue icon. It #}
+                {# keeps a plain title here, since the table's horizontal scroll box would #}
+                {# clip the styled bubble. #}
                 <span class="inline-flex items-center gap-2">
                   <span class="text-brand-text/80">{{ task.deadline|date:"M j, Y" }}</span>
-                  {% include "_components/overdue_badge.html" with task=task %}
+                  {% include "_components/overdue_badge.html" with task=task icon_only=True %}
                 </span>
               {% else %}
                 <span class="text-brand-text/40">&mdash;</span>

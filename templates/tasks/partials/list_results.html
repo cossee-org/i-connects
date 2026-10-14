@@ -56,8 +56,7 @@
                     <span class="font-medium text-brand-navy text-sm group-hover:text-brand-coral transition-colors leading-tight block truncate">{{ task.name }}</span>
                   </div>
 
-                  {# Dates, led by the overdue pill (which stays on mobile, where the dates drop out) #}
-                  {% include "_components/overdue_badge.html" with task=task tooltip=True %}
+                  {# Dates (they drop out on mobile; the Overdue icon at the row's end stays) #}
                   {% include "_components/task_dates.html" with task=task hide_on_mobile=True tooltip=True %}
 
                   {# Assignee and reviewer counts #}
@@ -72,13 +71,8 @@
                     </svg>
                   {% endif %}
 
-                  {# Priority flag and completed check, paired at the row's end. #}
-                  {% if task.is_priority or task.status == "COMPLETED" %}
-                    <span class="flex items-center gap-1 shrink-0">
-                      {% if task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True tooltip=True %}{% endif %}
-                      {% include "_components/completion_check.html" with task=task tooltip=True %}
-                    </span>
-                  {% endif %}
+                  {# The task's state icons, together at the row's end. #}
+                  {% include "_components/task_flags.html" with task=task %}
 
                 </div>
               </li>

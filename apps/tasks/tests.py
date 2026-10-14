@@ -1339,6 +1339,40 @@ def test_board_filter_menu(client, user):
 
 
 @pytest.mark.django_db
+def test_overdue_is_an_icon_beside_the_flags_on_every_view(client, user):
+    """Not a pill: an icon, named for screen readers, among the task's state
+    icons (High priority, Overdue, Completed) — and in the Table, beside the
+    due date."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    yesterday = timezone.now() - timedelta(days=1)
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Late task", deadline=yesterday, is_priority=True,
+    )
+    client.force_login(user)
+    kwargs = {"project_pk": project.pk}
+    pill = "rounded px-1.5 py-0.5 bg-error/10"
+    date = timezone.localdate(yesterday).isoformat()
+
+    for url, params in (
+        (reverse("tasks:board_kanban", kwargs=kwargs), {}),
+        (reverse("tasks:board_list", kwargs=kwargs), {}),
+        (reverse("tasks:board_calendar", kwargs=kwargs), {"view": "day", "date": date}),
+    ):
+        content = client.get(url, params).content.decode()
+        assert pill not in content, url
+        assert content.count('role="img" aria-label="Overdue"') == 1, url
+        # In the same row as the High priority flag, right after it.
+        flag = content.index('aria-label="High priority"')
+        assert flag < content.index('aria-label="Overdue"') < flag + 1500, url
+
+    table = client.get(reverse("tasks:board_table", kwargs=kwargs)).content.decode()
+    assert pill not in table
+    assert table.count('role="img" aria-label="Overdue"') == 1
+
+
+@pytest.mark.django_db
 def test_overdue_pill_on_task_pane_and_page_follows_close_and_reopen(client, pm_user):
     project, col1, _col2 = _make_project_with_board(pm_user)
     member = _primary_member(project, pm_user)
