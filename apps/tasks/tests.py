@@ -2325,13 +2325,9 @@ def test_pane_self_mark_button_survives_the_status_block_swap(client, user, othe
 
 
 @pytest.mark.django_db
-def test_a_full_task_page_shows_no_project_section_tabs(client, user):
-    """A task is a leaf reached from a section, not a section of its own.
-
-    The strip would light up Tasks while the reader is off the board. It also
-    drew the rule between the page's chrome and its content, so the header has
-    to carry one of its own once the strip is gone.
-    """
+def test_a_full_task_page_is_laid_out_like_a_wiki_page(client, user):
+    """The project's header and tabs stay, with Tasks lit; the way back to
+    the board sits first in the content; then the task's own heading."""
     project, col1, _col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
     task = Task.objects.create(
@@ -2343,30 +2339,27 @@ def test_a_full_task_page_shows_no_project_section_tabs(client, user):
     detail = client.get(
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
-    assert 'aria-label="Project sections"' not in detail
-    # ...the markup, not the rule: base.html styles .project-subnav on every page.
-    assert 'class="project-subnav"' not in detail
-    # The page's own header, not base.html's topbar — which happens to carry
-    # the same border classes.
-    start = detail.index('<header class="mb-6')
-    header = detail[start : detail.index("</header>", start)]
-    assert "border-b border-brand-light" in header, "the header lost the strip's rule"
-
-    # The board is a section, and keeps them.
-    board = client.get(
-        reverse("tasks:board", kwargs={"project_pk": project.pk})
-    ).content.decode()
-    assert 'aria-label="Project sections"' in board
+    # The project's header and its tab strip, Tasks as the current tab.
+    assert f">{project.name}</h1>" in detail
+    assert 'aria-label="Project sections"' in detail
+    strip = detail[detail.index('aria-label="Project sections"'):]
+    strip = strip[: strip.index("</nav>")]
+    board_url = reverse("tasks:board", kwargs={"project_pk": project.pk})
+    assert f'href="{board_url}"\n       class="project-tab active"' in strip
+    # Back to the board first, then the task's heading.
+    back = f'href="{board_url}"\n       class="btn btn-sm btn-ghost text-brand-navy">&larr; All tasks</a>'
+    assert back in detail
+    assert detail.index(back) < detail.index('id="task-summary"') < detail.index(">Leaf</h2>")
 
 
 @pytest.mark.django_db
 def test_full_task_page_orders_its_sections_like_the_pane(client, user, other_user):
-    """Summary in the heading, then the actions, then the pane's card order.
+    """Summary in the task's heading, then the actions, then the pane's cards.
 
-    The pane opens with a summary card — name, tags, dates, author — because it
-    has no page heading of its own. The page reads the same things out of the
-    heading it already had, puts the pane's top bar in a row of its own below
-    it, and then runs the same cards in the same order.
+    The pane opens with a summary card — name, tags, dates, author. The page
+    reads the same things out of the task's heading (under the project's own
+    header and tabs), puts the pane's top bar in a row of its own below it,
+    and then runs the same cards in the same order.
     """
     from datetime import datetime, timezone as dt_tz
 
@@ -2386,12 +2379,12 @@ def test_full_task_page_orders_its_sections_like_the_pane(client, user, other_us
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
 
-    start = detail.index('<header class="mb-6')
-    header = detail[start : detail.index("</header>", start)]
+    start = detail.index('id="task-summary"')
+    header = detail[start : detail.index("</section>", start)]
     for piece in ("Moded", "High priority", "Not Complete", "Start date", "Due date", "Created by"):
         assert piece in header, f"the heading is missing {piece}"
 
-    body = detail[detail.index("</header>", start) :]
+    body = detail[detail.index("</section>", start) :]
     assert (
         body.index('id="task-completion-button"')   # the action row
         < body.index(">Description<")
@@ -2659,10 +2652,14 @@ def test_pane_status_is_a_dot_and_text_not_a_pill(client, user):
     detail = client.get(
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
-    assert "px-2.5 py-0.5 rounded-full" not in detail, "the page's status is still a pill"
-    assert 'viewBox="0 0 8 8"' in detail, "no status dot"
-    assert "High priority" in detail
-    assert "Not Complete" in detail
+    # Only the task's own heading: the project header above it badges the
+    # project, with pills, as every project page does.
+    start = detail.index('id="task-summary"')
+    summary = detail[start : detail.index("</section>", start)]
+    assert "px-2.5 py-0.5 rounded-full" not in summary, "the page's status is still a pill"
+    assert 'viewBox="0 0 8 8"' in summary, "no status dot"
+    assert "High priority" in summary
+    assert "Not Complete" in summary
 
     # The pill lives on where a *project* is badged, which is what it was for.
     project_page = client.get(
