@@ -1773,7 +1773,7 @@ def test_overview_wiki_card_lists_the_pages_put_on_the_overview(client, user):
 
 
 @pytest.mark.django_db
-def test_overview_wiki_card_shows_the_first_five_then_see_more(client, user):
+def test_overview_wiki_card_lists_every_page_put_on_the_overview(client, user):
     from apps.wiki.services import create_page
 
     project = _make_project(user)
@@ -1784,16 +1784,22 @@ def test_overview_wiki_card_shows_the_first_five_then_see_more(client, user):
         create_page(project=project, actor=user, title=title, show_on_overview=True)
 
     client.force_login(user)
-    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    url = reverse("projects:detail", kwargs={"pk": project.pk})
+    response = client.get(url)
     titles = [page.title for page in response.context["summary"]["wiki"]["pages"]]
-    # The locked page leads; then the newest edits, five in all.
-    assert titles == ["Team agreement", "Six", "Five", "Four", "Three"]
+    # No cap: the locked page leads, then every other one, newest edit first.
+    assert titles == ["Team agreement", "Six", "Five", "Four", "Three", "Two", "One"]
 
-    body = response.content.decode()
-    card = body[body.index('id="proj-wiki-heading"'):]
-    card = card[: card.index("</section>")]
-    assert ">Two</a>" not in card and ">One</a>" not in card
+    card = _wiki_card(response.content.decode())
+    assert all(f">{t}</a>" in card for t in titles)
+    # Every page in the wiki is already listed: nothing more to see.
+    assert "See more" not in card
+
+    # A page not on the Overview: "See more" opens the Wiki for it.
+    create_page(project=project, actor=user, title="Scratchpad")
+    card = _wiki_card(client.get(url).content.decode())
     wiki_url = reverse("wiki:list", kwargs={"project_pk": project.pk})
+    assert "Scratchpad" not in card
     assert f'<a href="{wiki_url}"' in card and "See more" in card
 
 
