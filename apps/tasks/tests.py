@@ -3862,17 +3862,19 @@ def test_the_swap_that_closes_the_task_comes_back_saying_so(client, user, other_
     assert "<span>Complete</span>" in closed, "the chip lagged the click"
     assert "Mark Not Complete" in closed, "the Lead's toggle lagged the click"
     assert "Mark Completed" not in closed
-    # Closed by the reviews, so the verdict is still there to withdraw.
-    assert "Mark not reviewed" in closed
-    assert "marks and reviews are locked" not in closed
+    # Completed, so locked like any completed task: no row actions.
+    assert "Mark not reviewed" not in closed
+    assert "marks and reviews are locked" in closed
 
+    # The Lead's toggle is the way back.
     reopened = client.post(
-        _review_url(task, _current_log(task, contrib)),
-        {"reviewed": "0", "pane_mode": "1"},
+        reverse("tasks:reopen", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
         HTTP_HX_REQUEST="true",
     ).content.decode()
     assert "<span>Not Complete</span>" in reopened
     assert "Mark Completed" in reopened
+    assert "Mark not reviewed" in reopened
 
 
 @pytest.mark.django_db
@@ -3905,13 +3907,13 @@ def test_reviewing_one_of_two_submissions_leaves_the_task_open(client, user, oth
 
 
 @pytest.mark.django_db
-def test_withdrawing_the_verdict_that_closed_the_task_reopens_it(client, user, other_user):
-    """Completion follows the reviews, so it follows them back.
+def test_a_task_its_reviews_closed_is_locked_like_any_completed_task(client, user, other_user):
+    """Completed is completed, however it got there.
 
-    And the verdict stays withdrawable while it stands: locking a
-    review-closed task would delete "withdraw my review" outright for the
-    one-assignee tasks that are most of them, since the last sign-off would
-    seal itself.
+    The last review closes the task, and from then on its marks and reviews
+    are frozen like those of a task a Lead closed by hand: the rows offer no
+    actions and the endpoints refuse them. A Lead marking it Not Complete is
+    the way back, after which the verdict can be withdrawn.
     """
     from apps.tasks.services import mark_own_done
 
@@ -3926,11 +3928,20 @@ def test_withdrawing_the_verdict_that_closed_the_task_reopens_it(client, user, o
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
 
-    # Completed, but not locked: the row still offers the way back.
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "marks and reviews are locked" not in pane
-    assert "Mark not reviewed" in pane
+    assert "marks and reviews are locked" in pane
+    assert "Mark not reviewed" not in pane
+    assert "Mark not done" not in pane
 
+    refused = client.post(
+        _review_url(task, _current_log(task, contrib)),
+        {"reviewed": "0", "pane_mode": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    assert refused.status_code == 403
+    assert _current_log(task, contrib).is_reviewed
+
+    client.post(reverse("tasks:reopen", kwargs={"pk": task.pk}), {"pane_mode": "1"}, HTTP_HX_REQUEST="true")
     response = client.post(
         _review_url(task, _current_log(task, contrib)),
         {"reviewed": "0", "pane_mode": "1"},
@@ -3943,11 +3954,12 @@ def test_withdrawing_the_verdict_that_closed_the_task_reopens_it(client, user, o
 
 
 @pytest.mark.django_db
-def test_undoing_the_done_mark_under_a_verdict_reopens_the_task(client, user, other_user):
-    """The other way to unpick it: the assignee takes their submission back.
+def test_a_task_its_reviews_closed_locks_the_done_marks_too(client, user, other_user):
+    """A completed task freezes the Lead's per-row mark as well.
 
-    Reverting a mark clears the review standing on it, so the task that those
-    reviews closed has to reopen with it.
+    Clearing the mark under a verdict is refused while the task is completed;
+    once a Lead reopens it, clearing the mark works and takes the review
+    standing on it with it.
     """
     from apps.tasks.services import mark_own_done
 
@@ -3962,11 +3974,15 @@ def test_undoing_the_done_mark_under_a_verdict_reopens_the_task(client, user, ot
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
 
-    # The Lead clears the mark from the matrix row.
+    refused = client.post(
+        _done_url(task, contrib), {"done": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    )
+    assert refused.status_code == 403
+    assert _current_log(task, contrib).status == TaskStatus.COMPLETED
+
+    client.post(reverse("tasks:reopen", kwargs={"pk": task.pk}), {"pane_mode": "1"}, HTTP_HX_REQUEST="true")
     client.post(
-        _done_url(task, contrib),
-        {"done": "0", "pane_mode": "1"},
-        HTTP_HX_REQUEST="true",
+        _done_url(task, contrib), {"done": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
     )
     task.refresh_from_db()
     assert task.status == TaskStatus.NOT_COMPLETED
@@ -4159,6 +4175,12 @@ def test_a_reviewer_can_withdraw_their_own_review(client, user, other_user):
     log.refresh_from_db()
     assert log.reviewed_by == first
 
+    # That review closed the task, which locks it: a Lead reopens it first.
+    from apps.tasks.services import reopen_task
+
+    task.refresh_from_db()
+    reopen_task(task=task)
+
     pane = client.get(_pane_url(project, task)).content.decode()
     assert "Mark not reviewed" in pane
 
@@ -4198,8 +4220,14 @@ def test_a_lead_can_withdraw_any_review(client, user, other_user):
     """A Lead is not held to the author rule."""
     from apps.tasks.services import mark_reviewed
 
+    from apps.tasks.services import reopen_task
+
     project, task, log, _first, second = _two_reviewer_task(user, other_user)
     mark_reviewed(task_log=log, reviewer=second)
+    # That review closed the task, which locks it; reopened, the review
+    # still stands and can be withdrawn.
+    task.refresh_from_db()
+    reopen_task(task=task)
 
     client.force_login(user)  # the Lead, and not the reviewer who signed it
     pane = client.get(_pane_url(project, task)).content.decode()
@@ -4219,8 +4247,12 @@ def test_a_review_left_by_a_deleted_member_is_the_leads_to_clear(client, user, o
     """With no author left to withdraw it, only a Lead can."""
     from apps.tasks.services import mark_reviewed
 
+    from apps.tasks.services import reopen_task
+
     project, task, log, first, second = _two_reviewer_task(user, other_user)
     mark_reviewed(task_log=log, reviewer=second)
+    task.refresh_from_db()
+    reopen_task(task=task)  # the review closed it; a completed task is locked
     second.delete()  # hard delete nulls reviewed_by; the review still stands
     log.refresh_from_db()
     assert log.is_reviewed and log.reviewed_by is None

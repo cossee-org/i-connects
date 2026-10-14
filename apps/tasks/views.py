@@ -68,7 +68,6 @@ from apps.tasks.mixins import (
 )
 from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
 from apps.tasks.services import (
-    all_submissions_reviewed,
     approve_completion,
     clear_review,
     close_task,
@@ -1181,21 +1180,16 @@ _LOCKED_MESSAGE = (
 )
 
 def _marks_locked(task) -> bool:
-    """True when a Lead's judgement closed the task, freezing every per-member
+    """True once the task is marked completed, freezing every per-member
     action.
 
-    Marking done, undoing a mark and reviewing all stop there — for assignees,
-    reviewers and Leads alike. A Lead who needs to change one marks the task
-    Not Complete first, which is the only action such a task still offers.
-
-    A task the reviews closed is *not* locked, even though it is completed:
-    its completion is the sum of those verdicts rather than a decision over
-    them, so each one stays withdrawable and taking one back reopens the task
-    (see services.clear_review). Locking there would delete "withdraw my
-    review" outright for the single-assignee tasks that are most of them —
-    the last sign-off would seal itself.
+    Marking done, undoing a mark, reviewing and withdrawing a review all stop
+    there — for assignees, reviewers and Leads alike, and however the task
+    came to be completed: by a Lead's click, or by its last review closing it.
+    A Lead who needs to change one marks the task Not Complete first, which
+    is the only action a completed task still offers.
     """
-    return task.status == TaskStatus.COMPLETED and not all_submissions_reviewed(task)
+    return task.status == TaskStatus.COMPLETED
 
 
 def _task_status_context(task, *, project_member, is_project_manager):
