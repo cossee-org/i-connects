@@ -9,6 +9,7 @@
      title="{{ bar.task.name }} ({{ dates.full }})"
      @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=bar.task.pk %}' })">
   {% include "_components/completion_check.html" with task=bar.task compact=True %}
+  {% include "_components/overdue_badge.html" with task=bar.task icon_only=True compact=True %}
   <span class="truncate">{{ bar.task.name }}</span>
 </div>
 {% endwith %}

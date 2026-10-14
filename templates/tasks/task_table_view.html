@@ -44,7 +44,7 @@
             </td>
             <td class="text-xs whitespace-nowrap">
               {% if task.deadline %}
-                {% if task.deadline < table_now and task.status != "COMPLETED" %}
+                {% if task.is_overdue %}
                   <span class="text-error font-medium">{{ task.deadline|date:"M j, Y" }} (overdue)</span>
                 {% else %}
                   <span class="text-brand-text/80">{{ task.deadline|date:"M j, Y" }}</span>

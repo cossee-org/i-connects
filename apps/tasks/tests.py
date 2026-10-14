@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone as dt_timezone
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 
 import pytest
 from django.urls import reverse
@@ -1186,6 +1186,64 @@ def test_board_list_drag_handle_only_shows_in_unfiltered_board_order(client, pm_
 
     filtered = client.get(_list_url(project), {"q": "Drag"}).content.decode()
     assert "task-drag-handle" not in filtered
+
+
+# ---------------------------------------------------------------------------
+# Overdue indicator
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_task_is_overdue_only_when_open_past_its_deadline(user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    past = timezone.now() - timedelta(days=1)
+    future = timezone.now() + timedelta(days=1)
+
+    def make(**kwargs):
+        return Task.objects.create(
+            project=project, created_by=member, container=col1,
+            container_task_order=0, name="T", **kwargs,
+        )
+
+    assert make(deadline=past).is_overdue
+    assert not make(deadline=future).is_overdue
+    assert not make().is_overdue
+    assert not make(deadline=past, status=TaskStatus.COMPLETED).is_overdue
+
+
+@pytest.mark.django_db
+def test_overdue_indicator_shows_on_kanban_list_and_calendar(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    yesterday = timezone.now() - timedelta(days=1)
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Late task", deadline=yesterday,
+    )
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=1, name="Done late", deadline=yesterday,
+        status=TaskStatus.COMPLETED,
+    )
+    client.force_login(user)
+    kwargs = {"project_pk": project.pk}
+
+    for url in (
+        reverse("tasks:board_kanban", kwargs=kwargs),
+        reverse("tasks:board_list", kwargs=kwargs),
+    ):
+        content = client.get(url).content.decode()
+        # One pill, for the open task only — the completed one is not late.
+        assert content.count("Overdue: was due") == 1
+
+    date = timezone.localdate(yesterday).isoformat()
+    for view in ("month", "week", "day"):
+        content = client.get(
+            reverse("tasks:board_calendar", kwargs=kwargs),
+            {"view": view, "date": date},
+        ).content.decode()
+        assert content.count("Overdue: was due") == 1, view
 
 
 # ---------------------------------------------------------------------------

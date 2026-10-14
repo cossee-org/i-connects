@@ -554,7 +554,6 @@ def _table_view_context(request, project) -> dict:
         "table_tasks": tasks,
         "table_sort_key": key,
         "table_sort_desc": descending,
-        "table_now": timezone.now(),
     }
 
 
