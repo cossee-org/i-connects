@@ -1402,6 +1402,48 @@ def test_overdue_pill_on_task_pane_and_page_follows_close_and_reopen(client, pm_
 
 
 @pytest.mark.django_db
+def test_parts_done_and_all_reviewed_icons_on_every_view(client, user, other_user):
+    """One person with a check once every assignee has marked their part
+    done; two people with a check once every submission is reviewed."""
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    client.force_login(user)
+    kwargs = {"project_pk": project.pk}
+    views = (
+        reverse("tasks:board_kanban", kwargs=kwargs),
+        reverse("tasks:board_list", kwargs=kwargs),
+    )
+    done = 'aria-label="All assignees marked their parts done"'
+    reviewed = 'aria-label="All submissions reviewed"'
+
+    def shown():
+        pages = [client.get(url).content.decode() for url in views]
+        return [(done in page, reviewed in page) for page in pages]
+
+    # One of two parts done: neither icon.
+    mark_own_done(task=task, member=contrib)
+    assert shown() == [(False, False)] * 2
+    # Both done, none reviewed: the one-person icon.
+    mark_own_done(task=task, member=lead)
+    assert shown() == [(True, False)] * 2
+    # One reviewed: still only that.
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+    assert shown() == [(True, False)] * 2
+    # Every submission reviewed: both.
+    mark_reviewed(task_log=_current_log(task, lead), reviewer=lead)
+    assert shown() == [(True, True)] * 2
+
+    # A task nobody is assigned to shows neither.
+    nobody = Task.objects.create(
+        project=project, created_by=lead, container=task.container,
+        container_task_order=1, name="Unassigned",
+    )
+    assert nobody.all_parts_done is False and nobody.all_reviewed is False
+
+
+@pytest.mark.django_db
 def test_completion_card_separates_done_and_reviewed_progress(client, user, other_user, pm_user):
     """Marked done and Reviewed each get a labelled bar and count, and the
     heading says how many parts are complete (done and reviewed). A task

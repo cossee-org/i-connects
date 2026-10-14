@@ -332,7 +332,7 @@ def _kanban_columns(request, project):
     """The board's columns, each with its tasks prefetched (narrowed by the
     board filter, so a column's count matches its cards)."""
     tasks = _apply_board_filter(
-        Task.objects.prefetch_related("assigned_members", "reviewers"),
+        Task.objects.prefetch_related("assigned_members", "reviewers", "task_logs"),
         _board_filter(request),
     )
     return (
@@ -350,7 +350,7 @@ def _calendar_context(request, project) -> dict:
     tasks = (
         Task.objects.filter(project=project)
         .filter(Q(deadline__isnull=False) | Q(start_date__isnull=False))
-        .prefetch_related("assigned_members", "reviewers")
+        .prefetch_related("assigned_members", "reviewers", "task_logs")
     )
     tasks = _apply_board_filter(tasks, _board_filter(request))
 
@@ -470,7 +470,7 @@ def _list_view_context(request, project, columns) -> dict:
         assignee = ""
 
     tasks = Task.objects.filter(project=project).prefetch_related(
-        "assigned_members", "reviewers"
+        "assigned_members", "reviewers", "task_logs"
     )
 
     if q:
@@ -601,7 +601,7 @@ def _table_view_context(request, project) -> dict:
     tasks = (
         Task.objects.filter(project=project)
         .select_related("container")
-        .prefetch_related("assigned_members", "reviewers")
+        .prefetch_related("assigned_members", "reviewers", "task_logs")
         .order_by(*ordering)
     )
     tasks = _apply_board_filter(tasks, _board_filter(request))
