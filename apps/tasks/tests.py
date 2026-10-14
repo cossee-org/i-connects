@@ -1276,6 +1276,41 @@ def test_overdue_pill_on_task_pane_and_page_follows_close_and_reopen(client, pm_
     assert "Overdue: was due" in reopened
 
 
+@pytest.mark.django_db
+def test_closed_by_is_a_property_row_in_the_pane_and_inline_on_the_page(client, pm_user):
+    project, col1, _col2 = _make_project_with_board(pm_user)
+    member = _primary_member(project, pm_user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Closable",
+    )
+    client.force_login(pm_user)
+    htmx = {"HTTP_HX_REQUEST": "true"}
+    close_url = reverse("tasks:close", kwargs={"pk": task.pk})
+
+    # Closed from the pane (which sends surface=pane): the out-of-band line
+    # comes back as a dt/dd row for the pane's property list.
+    closed = client.post(close_url, {"pane_mode": "1", "surface": "pane"}, **htmx).content.decode()
+    meta = closed[closed.index('id="task-closed-by-meta"') - 5 :]
+    assert meta.startswith("<div ")
+    assert "<dt" in meta and "Closed by" in meta and member.display_name in meta
+
+    # The pane's days-left hint goes with the same swap: none once closed.
+    assert 'id="task-due-hint" class="text-brand-text/60" hx-swap-oob="true"></span>' in closed
+
+    # The pane's own render puts it inside the property list, after Created by.
+    pane = client.get(_pane_url(project, task)).content.decode()
+    dl = pane[pane.index("<dl") : pane.index("</dl>")]
+    assert dl.index("Created by") < dl.index("Closed by")
+
+    # Reopened, then closed from the full page (no surface): the inline item.
+    client.post(reverse("tasks:reopen", kwargs={"pk": task.pk}), {"pane_mode": "1"}, **htmx)
+    closed = client.post(close_url, {"pane_mode": "1"}, **htmx).content.decode()
+    meta = closed[closed.index('id="task-closed-by-meta"') - 6 :]
+    assert meta.startswith("<span ")
+    assert "<dt" not in meta[: meta.index("</span></span>")]
+
+
 # ---------------------------------------------------------------------------
 # Table view
 # ---------------------------------------------------------------------------

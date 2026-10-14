@@ -1338,6 +1338,10 @@ def _respond_status_block(request, task, *, project_member, is_project_manager):
             task, project_member=project_member, is_project_manager=is_project_manager
         )
         ctx["pane_mode"] = pane_mode
+        # The side pane sends surface=pane with every request made inside it
+        # (an inherited hx-vals on its root), so pieces that are laid out
+        # differently there come back in the pane's shape.
+        ctx["surface"] = request.POST.get("surface", "")
         # A swap response: the chip and the two action-bar buttons sit outside
         # the block on every surface that renders it, so they come back out of
         # band with it. First renders leave this off — the markup around the
@@ -1358,6 +1362,7 @@ class TaskStatusBlockView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             is_project_manager=self.is_project_manager,
         )
         ctx["pane_mode"] = pane_mode
+        ctx["surface"] = request.GET.get("surface", "")  # see _respond_status_block
         ctx["oob"] = True  # a swap response — see _respond_status_block
         return render(request, "tasks/partials/task_status_block.html", ctx)
 

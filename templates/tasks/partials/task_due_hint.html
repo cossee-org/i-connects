@@ -1,0 +1,5 @@
+{% load task_tags %}
+{# "· 4 days left" beside the pane's Dates value — empty once the task is completed or past due. #}
+{# The completion toggle re-renders it out of band (pass oob=True), so completing a task drops #}
+{# the hint without a reload, and reopening it brings the hint back. #}
+<span id="task-due-hint" class="text-brand-text/60"{% if oob %} hx-swap-oob="true"{% endif %}>{% with hint=task|due_hint %}{% if hint %}&middot; {{ hint }}{% endif %}{% endwith %}</span>

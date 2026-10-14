@@ -1,7 +1,8 @@
 {# Side-pane partial — no {% extends %}. Injected via HTMX into #task-pane-body. #}
 {% load static task_tags %}
 
-<div>
+{# surface=pane rides along on every request made inside the pane (htmx inherits hx-vals). #}
+<div hx-vals='{"surface": "pane"}'>
 
   {# ── Header ── #}
   <div class="sticky top-0 z-10 bg-white flex flex-wrap items-center justify-between px-4 py-3 border-b border-brand-light/60 gap-2">
@@ -63,7 +64,7 @@
         left out rather than shown empty.
       {% endcomment %}
       <dl class="mt-3 grid grid-cols-[7.5rem_1fr] gap-x-3 gap-y-2 text-sm">
-        {% with dates=task|task_dates hint=task|due_hint %}
+        {% with dates=task|task_dates %}
           {% if dates.full %}
             <dt class="flex items-center gap-2 text-brand-text/60">
               {# calendar #}
@@ -74,7 +75,7 @@
               Dates
             </dt>
             <dd class="text-brand-text">
-              {{ dates.full }}{% if hint %} <span class="text-brand-text/60">&middot; {{ hint }}</span>{% endif %}
+              {{ dates.full }} {% include "tasks/partials/task_due_hint.html" with task=task %}
             </dd>
           {% endif %}
         {% endwith %}
@@ -101,9 +102,9 @@
         <dd class="text-brand-text">
           {{ task.created_by.display_name }} <span class="text-brand-text/60">&middot; {{ task.created_at|date:"M j, Y" }}</span>
         </dd>
+        {# Who closed it, when it is closed; the completion toggle swaps this row out of band. #}
+        {% include "tasks/partials/task_closed_by_meta.html" with task=task layout="pane" %}
       </dl>
-      {# Who closed it, when it is closed; the completion toggle swaps this line out of band. #}
-      <div class="text-sm text-brand-text/70 mt-2 empty:hidden">{% include "tasks/partials/task_closed_by_meta.html" with task=task %}</div>
 
       {% comment %}
         Description, under a hairline, clamped to three lines behind a See

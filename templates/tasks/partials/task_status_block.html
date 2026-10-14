@@ -182,7 +182,9 @@
     naming them has to move with the same swap — otherwise a task just
     closed sits there unattributed until the page is reloaded.
   {% endcomment %}
-  {% include "tasks/partials/task_closed_by_meta.html" with task=task oob=True %}
+  {% include "tasks/partials/task_closed_by_meta.html" with task=task oob=True layout=surface %}
+  {# The pane's "N days left" beside its dates goes with the same toggle. #}
+  {% if surface == "pane" %}{% include "tasks/partials/task_due_hint.html" with task=task oob=True %}{% endif %}
   {% comment %}
     And the Lead's Delete / Edit pair, which a completed task does not
     offer — leaving them up would hand a Lead two buttons their endpoints
