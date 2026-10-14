@@ -1975,7 +1975,8 @@ def test_pane_completion_button_is_lead_only(client, user, other_user):
 
 @pytest.mark.django_db
 def test_pane_pills_share_one_row_above_the_dates(client, user):
-    """Priority, completion and column status read left to right, over the dates."""
+    """Priority and completion read left to right, over the dates; the
+    Kanban column is a property row after them, not a pill."""
     project, col1, _col2 = _make_project_with_board(user)
     lead = _primary_member(project, user)
     task = Task.objects.create(
@@ -1994,14 +1995,16 @@ def test_pane_pills_share_one_row_above_the_dates(client, user):
     assert (
         pane.index("High priority")
         < pane.index("Not Complete")
-        < pane.index(col1.name)
         < pane.index("Mar 10, 2026 – Mar 12, 2026")
-    ), "expected High priority, completion, status, then the dates"
+        < pane.index("Kanban column")
+    ), "expected High priority, completion, the dates, then the Kanban column row"
+    if project.tracks_credit:
+        assert pane.index("Task type") < pane.index("Kanban column")
 
 
 @pytest.mark.django_db
 def test_pane_pill_row_drops_the_flag_when_not_priority(client, user):
-    """The flag is conditional; the other two pills still lead the row."""
+    """The flag is conditional; the completion chip still leads the row."""
     project, col1, _col2 = _make_project_with_board(user)
     lead = _primary_member(project, user)
     task = Task.objects.create(
@@ -2016,7 +2019,7 @@ def test_pane_pill_row_drops_the_flag_when_not_priority(client, user):
     pane = client.get(_pane_url(project, task)).content.decode()
 
     assert "High priority" not in pane
-    assert pane.index("Not Complete") < pane.index(col1.name) < pane.index("Due Mar 12, 2026")
+    assert pane.index("Not Complete") < pane.index("Due Mar 12, 2026") < pane.index("Kanban column")
 
 
 @pytest.mark.django_db
@@ -3135,12 +3138,11 @@ def test_completion_card_survives_its_own_swap(client, user, other_user):
 
 
 @pytest.mark.django_db
-def test_pane_status_is_a_dot_and_text_not_a_pill(client, user):
-    """In the pane the status matches the priority flag and completion chip.
-
-    All three are icon-plus-plain-text in the status colour, with no filled
-    pill behind them. Other surfaces keep the pill.
-    """
+def test_pane_column_is_a_plain_kanban_column_row(client, user):
+    """The column is no tag at all in the pane or on the task page: it is a
+    "Kanban column" row of the property list, its name in plain text with no
+    colour or dot. The two tags (flag, completion) stay chrome-free; a
+    project's own badges elsewhere keep the pill."""
     project, col1, _col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
     task = Task.objects.create(
@@ -3154,14 +3156,12 @@ def test_pane_status_is_a_dot_and_text_not_a_pill(client, user):
     client.force_login(user)
 
     pane = client.get(_pane_url(project, task)).content.decode()
+    row = f'Kanban column\n    </dt>\n    <dd class="text-brand-text">{col1.name}</dd>'
     assert "px-2.5 py-0.5 rounded-full" not in pane, "the pane's status is still a pill"
-    # The column name, its dot, and the two tags it now matches.
-    assert col1.name in pane
-    assert 'viewBox="0 0 8 8"' in pane, "no status dot"
+    assert row in pane
+    assert 'viewBox="0 0 8 8"' not in pane, "the column still has its status dot"
     assert "High priority" in pane
     assert "Not Complete" in pane
-    # Same shape for all three: inline-flex, text-xs, font-medium, no chrome.
-    assert pane.count("inline-flex items-center") >= 3
 
     # The full task page reads the same as the pane, tag for tag.
     detail = client.get(
@@ -3172,7 +3172,8 @@ def test_pane_status_is_a_dot_and_text_not_a_pill(client, user):
     start = detail.index('id="task-summary"')
     summary = detail[start : detail.index("</section>", start)]
     assert "px-2.5 py-0.5 rounded-full" not in summary, "the page's status is still a pill"
-    assert 'viewBox="0 0 8 8"' in summary, "no status dot"
+    assert row in summary
+    assert 'viewBox="0 0 8 8"' not in summary, "the column still has its status dot"
     assert "High priority" in summary
     assert "Not Complete" in summary
 
@@ -3203,10 +3204,9 @@ def test_pane_body_text_is_one_size(client, user, other_user):
     pane = client.get(_pane_url(project, task)).content.decode()
     # The property list (dates, task type, created by).
     assert "gap-x-3 gap-y-2 text-sm" in pane
-    # The three tags: flag, completion chip, status.
+    # The two tags: flag, completion chip.
     assert 'gap-1 text-sm font-medium shrink-0 text-error' in pane
     assert "inline-flex items-center gap-1.5 text-sm font-medium" in pane
-    assert "font-medium text-sm gap-1.5" in pane
     # Nothing in the pill row is left at text-xs.
     pill_row = pane[pane.index("flex flex-wrap items-center gap-2") : pane.index("<dl")]
     assert "text-xs" not in pill_row
