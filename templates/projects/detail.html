@@ -86,7 +86,7 @@
 <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
   <div class="flex items-center gap-2">
     <h2 class="text-lg font-semibold text-brand-navy">Project Overview</h2>
-    {% include "_components/info_popover.html" with label="Project Overview" body="Where this project stands: what needs attention, what is coming up and what changed lately, beside what the project is about and how far along it is. Each number opens its tab." %}
+    {% include "_components/info_popover.html" with label="Project Overview" body="Where this project stands: what needs attention, what is coming up and what changed lately, beside what the project is about, its key wiki pages and how far along it is. Each number opens its tab." %}
   </div>
 </div>
 
@@ -296,6 +296,9 @@
         <p class="text-sm text-brand-text/60">No description yet.</p>
       {% endif %}
   </section>
+
+  {# ── Wiki: key pages and recent edits ── #}
+  {% include "projects/partials/wiki_card.html" %}
 
   {# ── Progress ── #}
   {% include "projects/partials/progress_card.html" %}

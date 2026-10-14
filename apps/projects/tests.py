@@ -1682,3 +1682,55 @@ def test_summary_is_a_report_not_a_workbench(client, user):
     assert reverse("tasks:create", kwargs={"project_pk": project.pk}) not in body
     assert reverse("wiki:create", kwargs={"project_pk": project.pk}) not in body
     assert "Delete task confirmation" not in body
+
+
+@pytest.mark.django_db
+def test_overview_wiki_card_lists_locked_pages_then_recent_ones(client, user):
+    """Locked pages (agreements, protocols) are always listed, by title;
+    the other pages show as recently updated."""
+    from apps.wiki.services import create_page, update_page
+
+    project = _make_project(user)
+    create_page(project=project, actor=user, title="Team agreement", locked=True)
+    create_page(project=project, actor=user, title="Data protocol", locked=True)
+    notes = create_page(project=project, actor=user, title="Meeting notes")
+    create_page(project=project, actor=user, title="Glossary")
+    update_page(page=notes, actor=user, title=notes.title, content_markdown="Updated.")
+
+    client.force_login(user)
+    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    wiki = response.context["summary"]["wiki"]
+    assert [p.title for p in wiki["key_pages"]] == ["Data protocol", "Team agreement"]
+    assert [p.title for p in wiki["recent"]] == ["Meeting notes", "Glossary"]
+
+    body = response.content.decode()
+    card = body[body.index('id="proj-wiki-heading"'):]
+    card = card[: card.index("</section>")]
+    assert card.index("Key pages") < card.index("Data protocol") < card.index("Recently updated")
+    assert "All 4 pages" in card
+
+
+@pytest.mark.django_db
+def test_overview_wiki_card_when_nothing_is_locked_or_written(client, user, other_user):
+    from apps.wiki.services import create_page
+
+    project = _make_project(user)
+    client.force_login(user)
+    body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    assert "No wiki pages yet." in body and "Go to the Wiki" in body
+
+    # Pages but none locked: a lead is told how to keep one here; a member
+    # sees only the recent list.
+    create_page(project=project, actor=user, title="Notes")
+    lead_body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    assert "Lock a page" in lead_body
+
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(other_user)
+    member_body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    assert "Lock a page" not in member_body
+    assert ">Notes</a>" in member_body

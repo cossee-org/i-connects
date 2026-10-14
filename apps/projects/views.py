@@ -610,6 +610,8 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
       (only a lead's completion is left) and, for a lead, join requests.
     - Coming up: the next deadlines and milestones, in date order.
     - Recent activity: who did what lately, across tasks and the wiki.
+    - Wiki: the project's settled documents (locked pages: agreements,
+      protocols, data dictionaries) always in view, then what changed lately.
     - Progress: how much is done, where the open work sits on the board,
       and the credit recorded so far.
 
@@ -621,7 +623,7 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
     from apps.contributions.models import ContributionRecord
     from apps.core.enums import TaskStatus
     from apps.tasks.models import Milestone, Task, TaskLog
-    from apps.wiki.models import WikiRevision
+    from apps.wiki.models import WikiPage, WikiRevision
 
     tasks = Task.objects.filter(project=project)
     open_tasks = tasks.exclude(status=TaskStatus.COMPLETED)
@@ -731,6 +733,17 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
             "people": records.values("user").distinct().count(),
         }
 
+    # ── Wiki ──
+    # A locked page is one a lead has marked settled (only leads can edit
+    # it), which is what a project's agreements and protocols are. Those are
+    # listed in full, by title, so members always find them; the rest show
+    # as what was edited lately.
+    pages = WikiPage.objects.filter(project=project).select_related("updated_by")
+    wiki = {
+        "key_pages": list(pages.filter(locked=True).order_by("title", "id")[:10]),
+        "recent": list(pages.filter(locked=False).order_by("-updated_at", "id")[:4]),
+    }
+
     return {
         "overdue": overdue,
         "waiting": waiting[:5],
@@ -743,6 +756,7 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
         "percent": round(100 * completed / total) if total else 0,
         "columns": columns,
         "credit": credit,
+        "wiki": wiki,
     }
 
 
