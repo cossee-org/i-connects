@@ -26,7 +26,7 @@
     .proj-columns {
       grid-template-columns: 1fr;
     }
-    /* Stacked, what the project is (About, Wiki) reads first. */
+    /* Stacked, the Wiki reads first. */
     .proj-columns > :last-child {
       order: -1;
     }
@@ -113,7 +113,59 @@
     {% include "projects/partials/stat_card.html" with href=wiki_url label="Wiki pages" value=wiki_page_count %}
   </div>
 
-  {# ── What is happening on the left (2/3), what the project is on the right (1/3) ── #}
+  {# ── About, the full width ── #}
+  <section class="brand-card p-6 mb-4" aria-labelledby="proj-about-heading">
+    <h2 id="proj-about-heading" class="text-lg font-semibold text-brand-navy mb-3">About</h2>
+      {% if project.abstract %}
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-2">Abstract</h3>
+        <p class="whitespace-pre-line text-sm text-brand-text mt-1">{{ project.abstract }}</p>
+      {% endif %}
+      {% if project.description %}
+        <div class="mt-4" id="proj-desc-wrapper">
+          <p class="whitespace-pre-line text-sm text-brand-text line-clamp-3" id="proj-desc-text">{{ project.description }}</p>
+          <button type="button"
+                  id="proj-desc-toggle"
+                  class="text-brand-text/50 hover:text-brand-text hover:underline text-sm mt-1 hidden"
+                  onclick="(function(){
+                    var p = document.getElementById('proj-desc-text');
+                    var btn = document.getElementById('proj-desc-toggle');
+                    if (p.classList.contains('line-clamp-3')) {
+                      p.classList.remove('line-clamp-3');
+                      btn.textContent = 'Show less';
+                    } else {
+                      p.classList.add('line-clamp-3');
+                      btn.textContent = 'Read more';
+                    }
+                  })()">Read more</button>
+        </div>
+        <script>
+          (function () {
+            var p = document.getElementById('proj-desc-text');
+            var btn = document.getElementById('proj-desc-toggle');
+            // Re-measured once the web font lands and on resize: text that
+            // fits in three lines of the fallback font can overflow once
+            // Inter swaps in, and the card narrows with the window.
+            function sync() {
+              if (!p.classList.contains('line-clamp-3')) return;  // expanded
+              btn.classList.toggle('hidden', p.scrollHeight <= p.clientHeight);
+            }
+            sync();
+            if (document.fonts && document.fonts.ready) document.fonts.ready.then(sync);
+            window.addEventListener('load', sync);
+            window.addEventListener('resize', sync);
+          })();
+        </script>
+      {% endif %}
+      {% if project.keywords %}
+        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Keywords</h3>
+        <p class="text-sm text-brand-text/80 mt-1">{{ project.keywords }}</p>
+      {% endif %}
+      {% if not project.abstract and not project.description and not project.keywords %}
+        <p class="text-sm text-brand-text/60">No description yet.</p>
+      {% endif %}
+  </section>
+
+  {# ── What is happening on the left (2/3), the wiki on the right (1/3) ── #}
   <div class="proj-columns grid gap-4 items-start">
 
   <div class="flex flex-col gap-4 min-w-0">
@@ -159,58 +211,6 @@
   </div>{# end left column #}
 
   <div class="flex flex-col gap-4 min-w-0">
-
-  {# ── About ── #}
-  <section class="brand-card p-6" aria-labelledby="proj-about-heading">
-    <h2 id="proj-about-heading" class="text-lg font-semibold text-brand-navy mb-3">About</h2>
-      {% if project.abstract %}
-        <h3 class="text-sm font-semibold text-brand-navy/80 mt-2">Abstract</h3>
-        <p class="whitespace-pre-line text-sm text-brand-text mt-1">{{ project.abstract }}</p>
-      {% endif %}
-      {% if project.description %}
-        <div class="mt-4" id="proj-desc-wrapper">
-          <p class="whitespace-pre-line text-sm text-brand-text line-clamp-3" id="proj-desc-text">{{ project.description }}</p>
-          <button type="button"
-                  id="proj-desc-toggle"
-                  class="text-brand-text/50 hover:text-brand-text hover:underline text-sm mt-1 hidden"
-                  onclick="(function(){
-                    var p = document.getElementById('proj-desc-text');
-                    var btn = document.getElementById('proj-desc-toggle');
-                    if (p.classList.contains('line-clamp-3')) {
-                      p.classList.remove('line-clamp-3');
-                      btn.textContent = 'Show less';
-                    } else {
-                      p.classList.add('line-clamp-3');
-                      btn.textContent = 'Read more';
-                    }
-                  })()">Read more</button>
-        </div>
-        <script>
-          (function () {
-            var p = document.getElementById('proj-desc-text');
-            var btn = document.getElementById('proj-desc-toggle');
-            // Re-measured once the web font lands and on resize: in the
-            // narrow right-hand column, text that fits in three lines of the
-            // fallback font can overflow once Inter swaps in.
-            function sync() {
-              if (!p.classList.contains('line-clamp-3')) return;  // expanded
-              btn.classList.toggle('hidden', p.scrollHeight <= p.clientHeight);
-            }
-            sync();
-            if (document.fonts && document.fonts.ready) document.fonts.ready.then(sync);
-            window.addEventListener('load', sync);
-            window.addEventListener('resize', sync);
-          })();
-        </script>
-      {% endif %}
-      {% if project.keywords %}
-        <h3 class="text-sm font-semibold text-brand-navy/80 mt-4">Keywords</h3>
-        <p class="text-sm text-brand-text/80 mt-1">{{ project.keywords }}</p>
-      {% endif %}
-      {% if not project.abstract and not project.description and not project.keywords %}
-        <p class="text-sm text-brand-text/60">No description yet.</p>
-      {% endif %}
-  </section>
 
   {# ── Wiki: key pages and recent edits ── #}
   {% include "projects/partials/wiki_card.html" %}
