@@ -24,7 +24,7 @@
       <h3 class="text-lg font-semibold text-brand-navy">Completion</h3>
       {% endif %}
       <span class="text-xs text-brand-text/60">
-        {{ done_count }} / {{ assignee_count }} done{% if show_review and reviewed_count %} &middot; {{ reviewed_count }} reviewed{% endif %}
+        {{ done_count }} of {{ assignee_count }} done{% if show_review %} &middot; {{ reviewed_count }} reviewed{% endif %}
       </span>
     </div>
 
@@ -75,42 +75,49 @@
     {% endif %}
 
     {% if assignee_states %}
-      <div class="mt-3 overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-xs uppercase tracking-wider text-brand-text/70">
-              <th scope="col" class="text-left font-semibold pb-1.5">Assignee</th>
-              <th scope="col" class="text-left font-semibold pb-1.5 px-2 whitespace-nowrap">Marked Done</th>
-              {% if show_review %}
-                <th scope="col" class="text-left font-semibold pb-1.5 whitespace-nowrap">Reviewed</th>
-              {% endif %}
-            </tr>
-          </thead>
-          {% comment %}
-            Past the third row the matrix waits behind See more: a task with a
-            dozen assignees would otherwise be a wall of names above the
-            reviewers and the comments. ``rowsExpanded`` comes from an x-data
-            wrapper *outside* this block, which the surrounding template owns —
-            this element is an HTMX swap target, so state kept inside it would
-            snap back to collapsed on every mark and review, taking the row
-            you had just acted on with it.
-          {% endcomment %}
-          <tbody class="divide-y divide-brand-light/60">
-            {% for s in assignee_states %}
-              <tr{% if forloop.counter > 3 %} x-show="rowsExpanded" x-cloak{% endif %}>
-                <th scope="row" class="text-left font-normal text-brand-navy py-1.5 pr-2">{{ s.member.display_name }}</th>
-                <td class="py-1.5 px-2">{% include "tasks/partials/task_done_cell.html" with s=s task=task %}</td>
-                {% if show_review %}
-                  <td class="py-1.5">{% include "tasks/partials/task_review_cell.html" with s=s task=task %}</td>
-                {% endif %}
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      {% comment %}
+        How far along, as a thin bar under the count: the share of assignees
+        who have marked their part done.
+      {% endcomment %}
+      <div class="mt-2 h-1.5 rounded-full bg-brand-lighter overflow-hidden" aria-hidden="true">
+        <div class="h-full rounded-full bg-success" style="width: {% widthratio done_count assignee_count 100 %}%"></div>
       </div>
+
+      {% comment %}
+        One row per assignee: their initial and name, their own mark, then
+        (on a task under review) the reviewer's verdict, each in words — the
+        rows carry no column headings. Rows come from the task's current
+        assignees, so the list follows people being added to or taken off
+        the task without any extra bookkeeping.
+
+        Past the third row the list waits behind See more: a task with a
+        dozen assignees would otherwise be a wall of names above the
+        comments. ``rowsExpanded`` comes from an x-data wrapper *outside*
+        this block, which the surrounding template owns — this element is an
+        HTMX swap target, so state kept inside it would snap back to
+        collapsed on every mark and review, taking the row you had just
+        acted on with it.
+      {% endcomment %}
+      <ul class="mt-2 divide-y divide-brand-light/50" data-assignee-rows>
+        {% for s in assignee_states %}
+          <li class="flex items-start gap-3 py-2.5" data-assignee-row="{{ s.member.pk }}"{% if forloop.counter > 3 %} x-show="rowsExpanded" x-cloak{% endif %}>
+            <span class="w-6 h-6 mt-px rounded-full bg-brand-navy/80 text-white text-[11px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
+            {# The name on its own line, then the done and review states on one that wraps as the pane narrows. #}
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-brand-navy" data-assignee-name>{{ s.member.display_name }}</div>
+              <div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                <div data-done-cell>{% include "tasks/partials/task_done_cell.html" with s=s task=task %}</div>
+                {% if show_review %}
+                  <div data-review-cell>{% include "tasks/partials/task_review_cell.html" with s=s task=task %}</div>
+                {% endif %}
+              </div>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
       {% if assignee_count > 3 %}
         <button type="button"
-                class="mt-2 text-xs font-medium text-brand-navy hover:underline"
+                class="mt-1 text-xs font-medium text-brand-navy hover:underline"
                 :aria-expanded="rowsExpanded"
                 @click="rowsExpanded = !rowsExpanded"
                 x-text="rowsExpanded ? 'See less' : 'See more'">See more</button>
@@ -120,16 +127,16 @@
     {% endif %}
 
     {% comment %}
-      Who the Reviewed column is waiting on — and gone with that column on a
-      task that asks for no review. It belongs to this card rather than a
-      section of its own: reviewers exist here to produce that column, and
-      sitting inside the swap target means adding or removing one shows up
-      with the next refresh. h4 under the card's h3, not a second h3.
+      Who reviews, on one line under the rows — and gone on a task that asks
+      for no review. It belongs to this card rather than a section of its
+      own: reviewers exist here to produce the rows' verdicts, and sitting
+      inside the swap target means adding or removing one shows up with the
+      next refresh. h4 under the card's h3, not a second h3.
     {% endcomment %}
     {% if reviewers %}
-      <div class="mt-3 pt-3 border-t border-brand-light/60">
-        <h4 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-1">Reviewers</h4>
-        <p class="text-sm text-brand-navy">
+      <div class="mt-2 pt-2.5 border-t border-brand-light/50 flex flex-wrap items-baseline gap-x-2 text-sm">
+        <h4 class="text-xs text-brand-text/60 font-medium">Reviewers</h4>
+        <p class="text-brand-navy">
           {% for reviewer in reviewers %}{{ reviewer.display_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
         </p>
       </div>

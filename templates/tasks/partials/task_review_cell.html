@@ -24,9 +24,12 @@
   button at once, and at the table's text-sm that wraps in a narrow pane.
 {% endcomment %}
 <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-  {% include "tasks/partials/task_matrix_cell.html" with on=s.reviewed at=s.reviewed_at %}
-
+  {% comment %}
+    Only a part that has been marked done has a review state to show: before
+    that there is nothing to review, and the row says so in its done state.
+  {% endcomment %}
   {% if s.reviewed %}
+    {% include "tasks/partials/task_matrix_cell.html" with on=True at=s.reviewed_at on_text="Reviewed" %}
     <span class="text-xs text-brand-text/60 whitespace-nowrap">
       {% if s.reviewed_by %}
         by {{ s.reviewed_by.display_name }}
