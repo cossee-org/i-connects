@@ -1618,14 +1618,15 @@ def test_board_page_shows_manage_columns_for_every_view(client, pm_user):
     markup = button[: button.index("</button>")]
     # No x-show gate on the button itself (the view switcher still uses one).
     assert "x-show" not in markup
-    # An outlined button, as Contribution Tracking's Matrix and List, that
-    # says "Manage columns" in full.
-    assert 'class="btn btn-outline btn-primary btn-sm"' in markup
+    # Plain text, as Join requests and Invitations on Contributors, saying
+    # "Manage columns" in full, with no icon.
+    assert 'class="btn btn-sm btn-ghost"' in markup
+    assert "<svg" not in markup
     assert markup.rstrip().endswith("Manage columns")
     # Right of the views, then Filter, then New task.
     toolbar = content[content.index('aria-label="Task views"'):]
     order = [toolbar.index(x) for x in (
-        "Calendar", "btn btn-outline btn-primary btn-sm", 'aria-haspopup="true"', "New task",
+        "Calendar", 'class="btn btn-sm btn-ghost"', 'aria-haspopup="true"', "New task",
     )]
     assert order == sorted(order)
 
