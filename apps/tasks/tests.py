@@ -1560,7 +1560,8 @@ def test_board_page_offers_the_table_view(client, user):
 
 
 @pytest.mark.django_db
-def test_board_table_lists_every_task_with_its_column(client, user):
+def test_board_table_lists_every_task_with_its_counts(client, user):
+    """No Column column; Assignees and Reviewers are counts, not names."""
     project, col1, col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
     first = Task.objects.create(
@@ -1580,9 +1581,13 @@ def test_board_table_lists_every_task_with_its_column(client, user):
     content = response.content.decode()
     assert "First task" in content
     assert "Second task" in content
-    assert col1.name in content
-    assert col2.name in content
-    assert "Alice" in content
+    assert ">Column<" not in content and "table_sort=column" not in content
+    assert "table_sort=reviewers" in content and "table_sort=assignees" in content
+    assert col1.name not in content and col2.name not in content
+    assert "Alice" not in content
+    assert 'aria-label="1 assigned member"' in content
+    assert 'aria-label="0 assigned members"' in content
+    assert content.count('aria-label="0 reviewers"') == 2
     assert "High priority" in content
     assert "Complete" in content
     assert 'scope="col"' in content
@@ -1633,35 +1638,42 @@ def test_board_table_sorts_by_header_and_falls_back_to_board_order(client, user)
 
 
 @pytest.mark.django_db
-def test_board_table_sorts_by_assignee_name_with_unassigned_last(client, user, other_user):
+def test_board_table_sorts_by_assignee_and_reviewer_counts(client, user, other_user):
+    """Assignees and Reviewers sort by how many; board order breaks ties."""
     project, col1, _col2 = _make_project_with_board(user)
     alice = _primary_member(project, user)
     bob = ProjectMember.objects.create(project=project)
     bob.users.add(other_user)
-    # Board order deliberately differs from name order.
+    # Board order deliberately differs from count order.
+    two = Task.objects.create(
+        project=project, created_by=alice, container=col1,
+        container_task_order=0, name="Two people",
+    )
+    two.assigned_members.add(alice, bob)
     nobody = Task.objects.create(
         project=project, created_by=alice, container=col1,
-        container_task_order=0, name="Task for nobody",
+        container_task_order=1, name="Nobody",
     )
-    bobs = Task.objects.create(
+    nobody.reviewers.add(alice, bob)
+    one = Task.objects.create(
         project=project, created_by=alice, container=col1,
-        container_task_order=1, name="Task for Bob",
+        container_task_order=2, name="One person",
     )
-    bobs.assigned_members.add(bob)
-    alices = Task.objects.create(
-        project=project, created_by=alice, container=col1,
-        container_task_order=2, name="Task for Alice",
-    )
-    alices.assigned_members.add(alice)
-    names = [nobody.name, bobs.name, alices.name]
+    one.assigned_members.add(alice)
+    one.reviewers.add(alice)
+    names = [two.name, nobody.name, one.name]
     client.force_login(user)
 
-    content = client.get(_table_url(project), {"table_sort": "assignees"}).content.decode()
-    assert _row_order(content, names) == ["Task for Alice", "Task for Bob", "Task for nobody"]
-    assert "table_sort=-assignees" in content
+    def order(sort):
+        content = client.get(_table_url(project), {"table_sort": sort}).content.decode()
+        return _row_order(content, names)
 
-    content = client.get(_table_url(project), {"table_sort": "-assignees"}).content.decode()
-    assert _row_order(content, names) == ["Task for Bob", "Task for Alice", "Task for nobody"]
+    assert order("assignees") == ["Nobody", "One person", "Two people"]
+    assert order("-assignees") == ["Two people", "One person", "Nobody"]
+    assert order("reviewers") == ["Two people", "One person", "Nobody"]
+    assert order("-reviewers") == ["Nobody", "One person", "Two people"]
+    content = client.get(_table_url(project), {"table_sort": "reviewers"}).content.decode()
+    assert "table_sort=-reviewers" in content
 
 
 @pytest.mark.django_db

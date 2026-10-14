@@ -1,7 +1,6 @@
 {# Table view partial — included in board.html inside x-show="$store.board.viewMode === 'table'", #}
 {# and rendered alone by BoardTablePartialView when a header re-sorts it. #}
 {# Context comes from views._table_view_context. #}
-{% load task_tags %}
 
 {% if table_tasks %}
   <div class="brand-card overflow-x-auto">
@@ -10,8 +9,8 @@
       <thead class="bg-brand-lighter text-brand-navy">
         <tr>
           {% include "tasks/partials/table_sort_header.html" with key="name" label="Task" %}
-          {% include "tasks/partials/table_sort_header.html" with key="column" label="Column" %}
           {% include "tasks/partials/table_sort_header.html" with key="assignees" label="Assignees" %}
+          {% include "tasks/partials/table_sort_header.html" with key="reviewers" label="Reviewers" %}
           {% include "tasks/partials/table_sort_header.html" with key="start" label="Start" %}
           {% include "tasks/partials/table_sort_header.html" with key="due" label="Due" %}
           {% include "tasks/partials/table_sort_header.html" with key="priority" label="Priority" %}
@@ -29,16 +28,9 @@
               <button type="button" class="text-left hover:text-brand-coral transition-colors line-clamp-2"
                       @click.stop="$dispatch('open-task-pane', { url: '{{ pane_url }}' })">{{ task.name }}</button>
             </th>
-            <td class="text-xs whitespace-nowrap text-brand-text/80">{{ task.container.name }}</td>
-            <td class="text-xs text-brand-text/80">
-              {% with assignees=task.assigned_members.all|member_name_summary %}
-                {% if assignees.short %}
-                  <span title="{{ assignees.full }}">{{ assignees.short }}</span>
-                {% else %}
-                  <span class="text-brand-text/40">Unassigned</span>
-                {% endif %}
-              {% endwith %}
-            </td>
+            {# How many, not who: the names are in the side pane. #}
+            <td>{% include "_components/assignee_count.html" with count=task.n_assignees %}</td>
+            <td>{% include "_components/reviewer_count.html" with count=task.n_reviewers %}</td>
             <td class="text-xs whitespace-nowrap text-brand-text/80">
               {% if task.start_date %}{{ task.start_date|date:"M j, Y" }}{% else %}<span class="text-brand-text/40">&mdash;</span>{% endif %}
             </td>
