@@ -5,14 +5,6 @@
 
 {% block extra_head %}
 <style>
-  .section-heading {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: rgb(31 41 99 / 0.8);
-  }
-
   .proj-grid-5 {
     grid-template-columns: repeat(5, 1fr);
   }
@@ -162,13 +154,8 @@
 
   {# ── Recent activity ── #}
   <section class="brand-card p-5" aria-labelledby="proj-activity-heading">
-    <h2 id="proj-activity-heading" class="section-heading flex items-center gap-2 mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-      </svg>
-      Recent activity
-    </h2>
+    {# Headed like About: a plain title, no icon. #}
+    <h2 id="proj-activity-heading" class="text-lg font-semibold text-brand-navy mb-3">Recent activity</h2>
     {% if summary.activity %}
       <ul class="space-y-3">
         {% for e in summary.activity %}
