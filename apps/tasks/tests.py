@@ -1430,10 +1430,9 @@ def test_overdue_pill_on_task_pane_and_page_follows_close_and_reopen(client, pm_
 
 
 @pytest.mark.django_db
-def test_parts_done_and_all_reviewed_icons_on_every_view(client, user, other_user):
-    """A green check once every assignee has marked their part done, a
-    purple one once every submission is reviewed, and a blue one once the
-    task is marked completed."""
+def test_task_cards_show_only_the_blue_completed_check(client, user, other_user):
+    """Every part marked done and every submission reviewed add no icon to
+    a card or row; the task marked completed shows the blue check."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -1444,40 +1443,17 @@ def test_parts_done_and_all_reviewed_icons_on_every_view(client, user, other_use
         reverse("tasks:board_kanban", kwargs=kwargs),
         reverse("tasks:board_list", kwargs=kwargs),
     )
-    done = 'aria-label="All assignees marked their parts done"'
-    reviewed = 'aria-label="All submissions reviewed"'
 
-    def shown():
-        pages = [client.get(url).content.decode() for url in views]
-        return [(done in page, reviewed in page) for page in pages]
-
-    # One of two parts done: neither icon.
     mark_own_done(task=task, member=contrib)
-    assert shown() == [(False, False)] * 2
-    # Both done, none reviewed: the one-person icon.
     mark_own_done(task=task, member=lead)
-    assert shown() == [(True, False)] * 2
-    # One reviewed: still only that.
     mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
-    assert shown() == [(True, False)] * 2
-    # Every submission reviewed: both — and the last review completed the task.
-    mark_reviewed(task_log=_current_log(task, lead), reviewer=lead)
-    assert shown() == [(True, True)] * 2
-    page = client.get(views[0]).content.decode()
-    for colour, label in (
-        ("text-success", "All assignees marked their parts done"),
-        ("text-violet-600", "All submissions reviewed"),
-        ("text-blue-600", "Complete"),
-    ):
-        icon = page[page.rindex("<span", 0, page.index(f'aria-label="{label}"')):]
-        assert colour in icon[: icon.index(">")], label
-
-    # A task nobody is assigned to shows neither.
-    nobody = Task.objects.create(
-        project=project, created_by=lead, container=task.container,
-        container_task_order=1, name="Unassigned",
-    )
-    assert nobody.all_parts_done is False and nobody.all_reviewed is False
+    mark_reviewed(task_log=_current_log(task, lead), reviewer=lead)  # completes it
+    for url in views:
+        page = client.get(url).content.decode()
+        assert "All assignees marked their parts done" not in page, url
+        assert "All submissions reviewed" not in page, url
+        check = page[page.rindex("<span", 0, page.index('aria-label="Complete"')):]
+        assert "text-blue-600" in check[: check.index(">")], url
 
 
 @pytest.mark.django_db

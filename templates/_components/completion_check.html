@@ -2,9 +2,9 @@
 {# Renders a check circle on completed tasks and nothing at all on the rest, so the #}
 {# browsing views (Kanban, List, Calendar) can drop it in unconditionally. The icon #}
 {# stands alone in those views, so it carries its own accessible name and tooltip #}
-{# rather than relying on the colour (A11Y_GUIDE #7). Blue: green is every part #}
-{# marked done and purple every submission reviewed (_components/task_flags.html). #}
-{# Pass compact=True for the smaller calendar pills. #}
+{# rather than relying on the colour (A11Y_GUIDE #7). Blue, so it is not read as #}
+{# the green of a part marked done in the side pane. Pass compact=True for the #}
+{# smaller calendar pills. #}
 {% if task.status == "COMPLETED" %}
   <span class="inline-flex shrink-0 text-blue-600{% if tooltip %} hover-tooltip{% endif %}" role="img" aria-label="Complete"
         {% if tooltip %}data-tooltip="Task marked complete"{% else %}title="Complete"{% endif %}>

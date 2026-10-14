@@ -267,27 +267,6 @@ class Task(models.Model):
         return self.assignees_done_count >= self.assignee_count
 
     @property
-    def all_parts_done(self) -> bool:
-        """The task has assignees and every one has marked their part done.
-
-        Unlike ``all_assignees_done``, false for a task nobody is assigned
-        to: there is no part there to have been done. The browsing views
-        show it as an icon; prefetch ``assigned_members`` and ``task_logs``.
-        """
-        return self.assignee_count > 0 and self.all_assignees_done
-
-    @property
-    def all_reviewed(self) -> bool:
-        """Every assignee's submission has been reviewed (the task asks for
-        review, has assignees, and each marked their part done and had it
-        signed off). See ``services.all_submissions_reviewed``; prefetch
-        ``assigned_members``, ``reviewers`` and ``task_logs``.
-        """
-        from apps.tasks.services import all_submissions_reviewed
-
-        return all_submissions_reviewed(self)
-
-    @property
     def assignees_reviewed_count(self) -> int:
         """Number of assignees whose current TaskLog carries a review."""
         current = self._current_logs_by_member()

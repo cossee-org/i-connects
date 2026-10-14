@@ -1,35 +1,13 @@
 {# A task's state, as a row of icons — {% include "_components/task_flags.html" with task=task %}. #}
 {# Shared by the browsing views that list tasks as cards or rows (Kanban, List, the Calendar's day #}
-{# list), at the card's or row's end: High priority, Overdue, then three checks — green when #}
-{# every assignee has marked their part done, purple when every submission is reviewed, blue #}
-{# when the task is marked completed (the side pane's done and review rows use the same green #}
-{# and purple). #}
-{# Each icon carries its own accessible name and tooltip (A11Y_GUIDE #7), and the row renders #}
-{# nothing when no icon applies. The green and purple checks read assigned_members, reviewers and #}
-{# task_logs: prefetch them. Pass top=True where the row sits beside a name that may wrap (the #}
-{# Kanban card), so the icons stay level with its first line. #}
-{% if task.is_priority or task.is_overdue or task.all_parts_done or task.all_reviewed or task.status == "COMPLETED" %}
+{# list), at the card's or row's end: High priority, Overdue, then the blue check of a task #}
+{# marked completed. Each icon carries its own accessible name and tooltip (A11Y_GUIDE #7), and #}
+{# the row renders nothing when no icon applies. Pass top=True where the row sits beside a name #}
+{# that may wrap (the Kanban card), so the icons stay level with its first line. #}
+{% if task.is_priority or task.is_overdue or task.status == "COMPLETED" %}
   <span class="flex {% if top %}items-start{% else %}items-center{% endif %} gap-1 shrink-0">
     {% if task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True tooltip=True %}{% endif %}
     {% include "_components/overdue_badge.html" with task=task icon_only=True tooltip=True %}
-    {% if task.all_parts_done %}
-      <span class="inline-flex shrink-0 text-success hover-tooltip"
-            role="img" aria-label="All assignees marked their parts done"
-            data-tooltip="All assignees marked their parts done">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="w-4 h-4" fill="currentColor" aria-hidden="true">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm4.7-9.3a1 1 0 0 0-1.4-1.4L9 11.6 6.7 9.3a1 1 0 0 0-1.4 1.4l3 3a1 1 0 0 0 1.4 0l5-5Z" clip-rule="evenodd" />
-        </svg>
-      </span>
-    {% endif %}
-    {% if task.all_reviewed %}
-      <span class="inline-flex shrink-0 text-violet-600 hover-tooltip"
-            role="img" aria-label="All submissions reviewed"
-            data-tooltip="All submissions reviewed">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="w-4 h-4" fill="currentColor" aria-hidden="true">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm4.7-9.3a1 1 0 0 0-1.4-1.4L9 11.6 6.7 9.3a1 1 0 0 0-1.4 1.4l3 3a1 1 0 0 0 1.4 0l5-5Z" clip-rule="evenodd" />
-        </svg>
-      </span>
-    {% endif %}
     {% include "_components/completion_check.html" with task=task tooltip=True %}
   </span>
 {% endif %}
