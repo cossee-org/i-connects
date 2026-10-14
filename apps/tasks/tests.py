@@ -1213,7 +1213,7 @@ def test_task_is_overdue_only_when_open_past_its_deadline(user):
 
 
 @pytest.mark.django_db
-def test_overdue_indicator_shows_on_kanban_list_and_calendar(client, user):
+def test_overdue_indicator_shows_on_every_view(client, user):
     project, col1, _col2 = _make_project_with_board(user)
     member = _primary_member(project, user)
     yesterday = timezone.now() - timedelta(days=1)
@@ -1232,6 +1232,7 @@ def test_overdue_indicator_shows_on_kanban_list_and_calendar(client, user):
     for url in (
         reverse("tasks:board_kanban", kwargs=kwargs),
         reverse("tasks:board_list", kwargs=kwargs),
+        reverse("tasks:board_table", kwargs=kwargs),
     ):
         content = client.get(url).content.decode()
         # One pill, for the open task only — the completed one is not late.
