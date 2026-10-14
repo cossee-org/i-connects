@@ -4604,6 +4604,38 @@ def test_the_task_form_carries_the_require_review_tickbox(client, user):
 
 
 @pytest.mark.django_db
+def test_task_form_layout_flag_button_review_panel_and_one_picker_style(client, user):
+    project, col1, _col2 = _make_project_with_board(user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    client.force_login(user)
+    body = client.get(
+        reverse("tasks:create", kwargs={"project_pk": project.pk})
+    ).content.decode()
+
+    # High priority: the real checkbox, hidden inside a flag toggle button
+    # that sits on the task name's row.
+    flag = body[body.rindex("<label", 0, body.index('name="is_priority"')):]
+    flag = flag[: flag.index("</label>")]
+    assert 'class="sr-only"' in flag and "High priority" in flag
+    assert body.index('name="name"') < body.index('name="is_priority"') < body.index('name="description"')
+
+    # Require review: a switch in a panel under Assignees, Reviewers inside it.
+    assert 'class="toggle toggle-sm toggle-primary' in body
+    assert body.index('name="assigned_members"') < body.index('name="requires_review"') < body.index('name="reviewers"')
+
+    # One picker style: Kanban column is a plain select, and the member
+    # pickers no longer draw a second chevron over the select's own arrow.
+    assert '<select name="container"' in body
+    assert "m19.5 8.25-7.5 7.5-7.5-7.5" not in body
+
+    # The CRediT link sits on the Task type label line; the help text stays
+    # on the page as the select's description.
+    assert "CRediT roles" in body
+    assert 'id="id_contribution_type_helptext"' in body
+
+
+@pytest.mark.django_db
 def test_reviewing_is_refused_on_a_task_that_asks_for_none(client, user, other_user):
     """No reviewers means no Reviewed column — and no endpoint behind it."""
     from apps.tasks.services import mark_own_done

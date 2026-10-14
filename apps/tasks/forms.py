@@ -79,9 +79,6 @@ class MemberMultiSelect(forms.SelectMultiple):
             'cursor-pointer text-left font-normal">'
             '<span x-text="ids.length ? (ids.length === allIds.length ? '
             "'All members' : ids.length + ' selected') : 'Select members'\">Select members</span>"
-            '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-60 pointer-events-none" '
-            'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
-            '<path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>'
             "</summary>"
             '<div class="dropdown-content absolute left-0 bottom-full z-30 bg-base-100 rounded-box shadow '
             'border border-base-300 w-full mb-1 p-2 max-h-64 overflow-y-auto">'
@@ -170,11 +167,13 @@ class TaskForm(forms.ModelForm):
             "container": forms.Select(attrs={"class": _daisy_select}),
             "assigned_members": MemberMultiSelect(),
             "reviewers": MemberMultiSelect(),
+            # Drawn as a switch in the Review panel (task_form.html).
             "requires_review": forms.CheckboxInput(
-                attrs={"class": "checkbox checkbox-sm", "x-model": "requiresReview"}
+                attrs={"class": "toggle toggle-sm toggle-primary mt-0.5", "x-model": "requiresReview"}
             ),
             "contribution_type": forms.Select(attrs={"class": _daisy_select}),
-            "is_priority": forms.CheckboxInput(attrs={"class": "checkbox checkbox-sm"}),
+            # Visually hidden: task_form.html draws it as a flag toggle button.
+            "is_priority": forms.CheckboxInput(attrs={"class": "sr-only"}),
         }
 
     def __init__(self, *args, project=None, **kwargs):
