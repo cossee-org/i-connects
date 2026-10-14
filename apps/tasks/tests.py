@@ -3767,7 +3767,7 @@ def test_completed_task_says_why_the_row_actions_are_gone(client, user, other_us
     mark_own_done(task=task, member=contrib)
     client.force_login(user)
 
-    note = "marks and reviews are locked"
+    note = "Completed: Marks and reviews are locked."
     assert note not in client.get(_pane_url(project, task)).content.decode()
 
     # The swap the Lead gets back from Mark Completed carries it...
@@ -3864,7 +3864,7 @@ def test_the_swap_that_closes_the_task_comes_back_saying_so(client, user, other_
     assert "Mark Completed" not in closed
     # Completed, so locked like any completed task: no row actions.
     assert "Mark not reviewed" not in closed
-    assert "marks and reviews are locked" in closed
+    assert "Completed: Marks and reviews are locked." in closed
 
     # The Lead's toggle is the way back.
     reopened = client.post(
@@ -3929,7 +3929,7 @@ def test_a_task_its_reviews_closed_is_locked_like_any_completed_task(client, use
     assert task.status == TaskStatus.COMPLETED
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "marks and reviews are locked" in pane
+    assert "Completed: Marks and reviews are locked." in pane
     assert "Mark not reviewed" not in pane
     assert "Mark not done" not in pane
 
@@ -4006,7 +4006,7 @@ def test_a_lead_closed_task_is_not_reopened_by_the_review_rule(client, user, oth
     client.force_login(user)
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "marks and reviews are locked" in pane
+    assert "Completed: Marks and reviews are locked." in pane
 
     # Every per-member action is refused, in both directions.
     for url, data in (
