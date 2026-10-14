@@ -2626,12 +2626,11 @@ def test_a_full_task_page_is_laid_out_like_a_wiki_page(client, user):
 
 @pytest.mark.django_db
 def test_full_task_page_orders_its_sections_like_the_pane(client, user, other_user):
-    """Summary in the task's heading, then the actions, then the pane's cards.
+    """The pane's top bar as an action row, then the pane's three cards.
 
-    The pane opens with a summary card — name, tags, dates, author. The page
-    reads the same things out of the task's heading (under the project's own
-    header and tabs), puts the pane's top bar in a row of its own below it,
-    and then runs the same cards in the same order.
+    The task's card carries the same things as the pane's (name, tags, the
+    property list, the description), then Completion, then Comments.
+    Milestone and GitHub are not shown, as in the pane.
     """
     from datetime import datetime, timezone as dt_tz
 
@@ -2640,7 +2639,7 @@ def test_full_task_page_orders_its_sections_like_the_pane(client, user, other_us
     project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     task.description = "Some description."
     task.github_url = "https://github.com/x/y/pull/1"
-    task.milestone = Milestone.objects.create(project=project, name="M1")
+    task.milestone = Milestone.objects.create(project=project, name="Milestone one")
     task.start_date = datetime(2026, 3, 10, tzinfo=dt_tz.utc)
     task.deadline = datetime(2026, 3, 12, tzinfo=dt_tz.utc)
     task.is_priority = True
@@ -2652,21 +2651,22 @@ def test_full_task_page_orders_its_sections_like_the_pane(client, user, other_us
     ).content.decode()
 
     start = detail.index('id="task-summary"')
-    header = detail[start : detail.index("</section>", start)]
-    for piece in ("Moded", "High priority", "Not Complete", "Start date", "Due date", "Created by"):
-        assert piece in header, f"the heading is missing {piece}"
+    card = detail[start : detail.index("</section>", start)]
+    for piece in ("Moded", "High priority", "Not Complete", "Mar 10, 2026 – Mar 12, 2026",
+                  "Created by", "Some description."):
+        assert piece in card, f"the task's card is missing {piece}"
 
-    body = detail[detail.index("</section>", start) :]
     assert (
-        body.index('id="task-completion-button"')   # the action row
-        < body.index(">Description<")
-        < body.index(">Completion<")
-        < body.index(">Milestone<")
-        < body.index(">GitHub<")
-        < body.index("Comments")
+        detail.index('id="task-completion-button"')   # the action row
+        < start                                       # the task's card
+        < detail.index(">Completion<")
+        < detail.index("Comments")
     )
-    # The dates are read in the heading, so no card repeats them.
-    assert "Start date" not in body
+    assert "Milestone one" not in detail
+    assert "github.com/x/y" not in detail
+    # Same card as the pane, shared rather than copied.
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert 'id="task-summary"' in pane
 
 
 def _task_surfaces(project, task):

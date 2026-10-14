@@ -53,7 +53,7 @@ def test_parse_github_url_malformed_returns_none():
 
 
 @pytest.mark.django_db
-def test_task_detail_renders_github_link(client, user):
+def test_task_detail_does_not_show_the_github_link(client, user):
     project, col = _make_project_with_board(user)
     member = ProjectMember.objects.filter(project=project, users=user).first()
     task = Task.objects.create(
@@ -71,4 +71,8 @@ def test_task_detail_renders_github_link(client, user):
     )
 
     assert response.status_code == 200
-    assert b"octo/hello#42" in response.content
+    # The task page mirrors the side pane, which does not show the GitHub
+    # link; the link stays on the task.
+    assert b"octo/hello#42" not in response.content
+    task.refresh_from_db()
+    assert task.github_url == "https://github.com/octo/hello/issues/42"
