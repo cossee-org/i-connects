@@ -228,8 +228,19 @@ class TaskForm(forms.ModelForm):
             "when it is completed."
         )
         current = self.instance.contribution_type if self.instance.pk else None
-        field.choices = [("", "No task type")] + credit_role_choices(current)
+        choices = credit_role_choices(current)
+        # "Other" is ours rather than CRediT's, but a task that fits none of
+        # the 14 roles needs somewhere to go, so it is always offered — last,
+        # where the app's ordering puts the catch-all.
+        if ContributionType.OTHER not in {value for value, _label in choices}:
+            choices.append((ContributionType.OTHER, ContributionType.OTHER.label))
+        field.choices = [("", "No task type")] + choices
         field.required = False
+        # A new task still opens on "No task type". The field inherits the
+        # model default, "Other", which is now in the list and would
+        # otherwise come up preselected; both save as "Other".
+        if not self.instance.pk and "contribution_type" not in self.initial:
+            field.initial = ""
 
     def clean_contribution_type(self):
         """An unpicked task type falls back to the model's own default."""

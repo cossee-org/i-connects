@@ -4310,10 +4310,13 @@ def test_task_form_offers_the_credit_roles(user):
     assert field.label == "Task type"
     values = [value for value, _label in field.choices]
     assert values[0] == ""  # "No task type"
-    assert set(values[1:]) == set(CREDIT_ROLES)
-    # Ours rather than CRediT's, so not offered on a fresh task.
-    assert ContributionType.OTHER not in values
+    # The 14 CRediT roles, then "Other" as the last option.
+    assert set(values[1:-1]) == set(CREDIT_ROLES)
+    assert values[-1] == ContributionType.OTHER
+    # The legacy type stays off a fresh task.
     assert ContributionType.WRITING not in values
+    # A new task opens on "No task type", not on "Other".
+    assert 'value="" selected' in str(form["contribution_type"])
 
 
 @pytest.mark.django_db
@@ -4333,7 +4336,17 @@ def test_task_form_keeps_a_task_off_the_taxonomy_in_its_choices(user):
 
     form = TaskForm(project=project, instance=task)
     values = [value for value, _label in form.fields["contribution_type"].choices]
-    assert ContributionType.OTHER in values
+    # Offered once, still last.
+    assert values.count(ContributionType.OTHER) == 1
+    assert values[-1] == ContributionType.OTHER
+
+    # A legacy type is kept too, and "Other" still closes the list.
+    task.contribution_type = ContributionType.WRITING
+    task.save(update_fields=["contribution_type"])
+    form = TaskForm(project=project, instance=task)
+    values = [value for value, _label in form.fields["contribution_type"].choices]
+    assert ContributionType.WRITING in values
+    assert values[-1] == ContributionType.OTHER
 
 
 @pytest.mark.django_db
