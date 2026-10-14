@@ -621,7 +621,6 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         columns = _kanban_columns(self.request, self.project)
         context["columns"] = columns
         context["board_filter"] = _board_filter(self.request)
-        context["board_filter_label"] = dict(BOARD_FILTERS)[context["board_filter"]]
         context["board_filters"] = BOARD_FILTERS
         context.update(_list_view_context(self.request, self.project, columns))
         context.update(_calendar_context(self.request, self.project))

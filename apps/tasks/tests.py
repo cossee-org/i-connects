@@ -1322,10 +1322,11 @@ def test_board_filter_menu(client, user):
     assert 'aria-current="true">All</a>' in menu
     assert "htmx:configRequest" not in content
 
-    # Filtered: the button names it, the menu marks it, each view's requests
-    # keep it, and Kanban does not reorder.
+    # Filtered: the button still reads just "Filter", as the sidebar's
+    # dropdowns do; the menu marks the choice, each view's requests keep
+    # it, and Kanban does not reorder.
     content = client.get(board, {"filter": "completed"}).content.decode()
-    assert 'Filter: <span class="font-semibold text-brand-navy">Completed</span>' in content
+    assert "<span>Filter</span>" in content and "Filter: " not in content
     assert 'aria-current="true">Completed</a>' in content
     assert "evt.detail.parameters.filter = 'completed'" in content
     assert "a filtered board does not reorder" in content

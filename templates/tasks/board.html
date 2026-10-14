@@ -170,7 +170,7 @@
     {% comment %}
       Filter: All, Overdue, Completed or Not Completed, in every view. Drawn
       like the dropdowns on the Tasks page in the sidebar: a white button
-      that names the filter, and a menu with the current choice in bold.
+      that always reads "Filter", and a menu with the current choice in bold.
       Each choice is a link, so a filtered board has its own address (the
       Project Overview's Overdue number opens ?filter=overdue).
     {% endcomment %}
@@ -180,7 +180,7 @@
       <button type="button" @click="open = !open" :aria-expanded="open.toString()"
               aria-haspopup="true"
               class="inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
-        <span>Filter{% if board_filter %}: <span class="font-semibold text-brand-navy">{{ board_filter_label }}</span>{% endif %}</span>
+        <span>Filter</span>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0" aria-hidden="true">
           <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
         </svg>
