@@ -1590,3 +1590,74 @@ def test_contributor_subpages_look_like_wiki_subpages(client, user, url_name, he
     back = f'href="{members_url}"\n     class="btn btn-sm btn-ghost text-brand-navy">&larr; All contributors</a>'
     assert back in content
     assert content.index(back) < content.index(f">{heading}</h2>")
+
+
+# ---------------------------------------------------------------------------
+# Project Summary: Progress card
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_progress_card_on_an_empty_project(client, user):
+    project = _make_project(user)
+    client.force_login(user)
+    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    progress = response.context["progress"]
+    assert progress["total"] == 0 and progress["ready_count"] == 0
+    assert progress["next_task"] is None
+    assert "No tasks yet, so nothing to measure." in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_progress_card_reports_completion_waiting_and_next_deadline(client, user, other_user):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.projects.models import ContributionTracking as CT
+    from apps.tasks.models import KanbanBoard, Task
+    from apps.tasks.services import close_task, mark_own_done
+
+    project = _make_project(user)
+    project.contribution_tracking = CT.CREDIT
+    project.save()
+    lead = ProjectMember.objects.filter(project=project, users=user).first()
+    helper = ProjectMember.objects.create(project=project)
+    helper.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    col = KanbanBoard.objects.create(project=project, name="Todo", container_order=0)
+
+    def task(name, **kw):
+        t = Task.objects.create(
+            project=project, created_by=lead, container=col,
+            container_task_order=Task.objects.count(), name=name, **kw,
+        )
+        t.assigned_members.add(helper)
+        return t
+
+    soon = timezone.now() + timedelta(days=3)
+    later = timezone.now() + timedelta(days=9)
+    done = task("Done one")
+    mark_own_done(task=done, member=helper)
+    close_task(task=done, closed_by=lead)          # completed, credited
+    waiting = task("Waiting one", deadline=later)
+    mark_own_done(task=waiting, member=helper)     # every assignee done
+    task("Next one", deadline=soon)                # nearest open deadline
+    task("Untouched")
+
+    client.force_login(user)
+    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    progress = response.context["progress"]
+    assert (progress["completed"], progress["total"], progress["percent"]) == (1, 4, 25)
+    assert progress["ready_count"] == 1
+    assert progress["next_task"].name == "Next one"
+    assert progress["credit"]["people"] == 1 and progress["credit"]["count"] >= 1
+    assert progress["last_activity"] is not None
+
+    body = response.content.decode()
+    assert "of 4 tasks completed" in body
+    assert 'aria-valuenow="25"' in body
+    assert "1 task marked done by every assignee" in body
+    assert ">Next one</a>" in body

@@ -601,6 +601,82 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         return context
 
 
+def _project_progress(project, now) -> dict:
+    """What the Project Summary's Progress card reports.
+
+    The number cards above it count things (tasks, overdue, join requests,
+    contributors, wiki pages); this says where the project stands: how much
+    is done, what is waiting on a lead, what comes next, and when anyone last
+    touched it. Each value is None when there is nothing to say, so the card
+    can leave the line out instead of printing a zero.
+    """
+    from django.db.models import Max
+
+    from apps.contributions.models import ContributionRecord
+    from apps.core.enums import TaskStatus
+    from apps.tasks.models import Milestone, Task
+    from apps.wiki.models import WikiPage
+
+    tasks = Task.objects.filter(project=project)
+    total = tasks.count()
+    completed = tasks.filter(status=TaskStatus.COMPLETED).count()
+    open_tasks = tasks.exclude(status=TaskStatus.COMPLETED)
+
+    # Every assignee has marked their part done; only a lead's completion is
+    # left. Prefetched, so the per-task properties read from memory.
+    ready = [
+        t
+        for t in open_tasks.prefetch_related("assigned_members", "task_logs")
+        if t.assignee_count and t.all_assignees_done
+    ]
+
+    next_task = (
+        open_tasks.filter(deadline__gte=now).order_by("deadline", "id").first()
+    )
+    next_milestone = (
+        Milestone.objects.filter(project=project, end_date__gte=now)
+        .order_by("end_date", "id")
+        .first()
+    )
+
+    credit = None
+    if project.tracks_credit:
+        records = ContributionRecord.objects.filter(project=project)
+        credit = {
+            "count": records.count(),
+            "people": records.values("user").distinct().count(),
+        }
+
+    last_activity = max(
+        (
+            d
+            for d in (
+                tasks.aggregate(m=Max("updated_at"))["m"],
+                WikiPage.objects.filter(project=project).aggregate(
+                    m=Max("updated_at")
+                )["m"],
+            )
+            if d is not None
+        ),
+        default=None,
+    )
+
+    return {
+        "total": total,
+        "completed": completed,
+        "percent": round(100 * completed / total) if total else 0,
+        "ready_count": len(ready),
+        "next_task": next_task,
+        "next_milestone": next_milestone,
+        "credit": credit,
+        "last_activity": last_activity,
+        # timesince reads "0 minutes" for the last minute; say "just now".
+        "last_activity_just_now": (
+            last_activity is not None and (now - last_activity).total_seconds() < 60
+        ),
+    }
+
+
 class ProjectDetailView(DetailView):
     """Project overview page.
 
@@ -720,6 +796,7 @@ class ProjectDetailView(DetailView):
         context["has_kanban_columns"] = KanbanBoard.objects.filter(
             project=project
         ).exists()
+        context["progress"] = _project_progress(project, context["today"])
 
         # Wiki summary: the most recently edited pages, newest first, so the
         # dashboard surfaces what changed rather than the alphabetical index.
