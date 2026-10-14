@@ -1,61 +1,22 @@
 {% comment %}
   Project Overview → Wiki: the project's documents, where members see them
-  first, as one rail of cards (title, a short summary, who edited it when).
-  The locked pages — a lead has marked them settled (agreements, protocols,
-  data dictionaries) — lead it, by title, each with a lock; the other pages
-  follow, newest edit first. The rail scrolls sideways: the arrows in the
-  header on a wide screen, a swipe on a phone. The arrows only show while
-  the rail holds more than fits. Its CSS is in detail.html.
+  first, as one list. The locked pages — a lead has marked them settled
+  (agreements, protocols, data dictionaries) — lead it, by title, each with
+  a lock; the other pages follow, newest edit first. Each row is the page's
+  title and the day it was last edited.
 
   Needs project, summary (see projects.views._project_summary),
   wiki_page_count and is_project_manager.
 {% endcomment %}
-<section class="brand-card p-5" aria-labelledby="proj-wiki-heading"
-         x-data="{
-           atStart: true,
-           atEnd: true,
-           refresh() {
-             const el = this.$refs.rail;
-             if (!el) return;
-             const max = el.scrollWidth - el.clientWidth;
-             this.atStart = el.scrollLeft <= 1;
-             this.atEnd = el.scrollLeft >= max - 1;
-           },
-           step(dir) {
-             const el = this.$refs.rail;
-             el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' });
-           }
-         }"
-         x-init="$nextTick(() => refresh())"
-         @resize.window="refresh()">
+<section class="brand-card p-5" aria-labelledby="proj-wiki-heading">
   {# Headed like About: a plain title, no icon. #}
-  <div class="flex items-center justify-between gap-2 mb-3">
+  <div class="flex items-baseline justify-between gap-2 mb-3">
     <h2 id="proj-wiki-heading" class="text-lg font-semibold text-brand-navy">Wiki</h2>
     {% if wiki_page_count %}
-      <div class="flex items-center gap-3">
-        <a href="{% url 'wiki:list' project_pk=project.pk %}"
-           class="text-xs font-medium text-brand-navy hover:text-brand-coral">
-          All {{ wiki_page_count }} page{{ wiki_page_count|pluralize }}
-        </a>
-        {% if summary.wiki.pages %}
-          <div class="flex items-center gap-2" x-show="!(atStart && atEnd)" x-cloak>
-            <button type="button" class="wiki-rail-nav" aria-label="Previous wiki pages"
-                    :disabled="atStart" @click="step(-1)">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                   stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-              </svg>
-            </button>
-            <button type="button" class="wiki-rail-nav" aria-label="Next wiki pages"
-                    :disabled="atEnd" @click="step(1)">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                   stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-              </svg>
-            </button>
-          </div>
-        {% endif %}
-      </div>
+      <a href="{% url 'wiki:list' project_pk=project.pk %}"
+         class="text-xs font-medium text-brand-navy hover:text-brand-coral">
+        All {{ wiki_page_count }} page{{ wiki_page_count|pluralize }}
+      </a>
     {% endif %}
   </div>
 
@@ -67,32 +28,25 @@
       Go to the Wiki &rarr;
     </a>
   {% else %}
-    <ul class="wiki-rail" x-ref="rail" @scroll.debounce.50ms="refresh()"
-        aria-label="Wiki pages">
-      {% for row in summary.wiki.pages %}
-        <li class="wiki-rail-item">
-          <a href="{{ row.page.get_absolute_url }}"
-             class="wiki-rail-card{% if row.page.locked %} wiki-rail-card--locked{% endif %}">
-            <span class="flex items-start gap-2 font-semibold text-brand-navy break-words">
-              {% if row.page.locked %}
+    <ul class="divide-y divide-brand-light/60">
+      {% for page in summary.wiki.pages %}
+        <li class="py-2 flex items-baseline justify-between gap-3 text-sm">
+          {# The lock's slot is kept on every row so the titles line up. #}
+          <span class="flex items-baseline gap-2 min-w-0">
+            <span class="w-3.5 shrink-0 self-center">
+              {% if page.locked %}
                 {# lock-closed: settled, lead-edited #}
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                     stroke-width="2" stroke="currentColor" class="w-4 h-4 mt-0.5 shrink-0 text-brand-text/60"
+                     stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 text-brand-text/60"
                      aria-label="Locked page" role="img">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                 </svg>
               {% endif %}
-              <span class="min-w-0">{{ row.page.title }}</span>
             </span>
-            {% if row.excerpt %}
-              <span class="text-sm text-brand-text/80 line-clamp-3">{{ row.excerpt }}</span>
-            {% else %}
-              <span class="text-sm text-brand-text/60 italic">No text yet.</span>
-            {% endif %}
-            <span class="mt-auto text-xs text-brand-text/60">
-              {% if row.page.updated_by %}Edited by {{ row.page.updated_by.display_name }} &middot; {% endif %}{{ row.page.updated_at|date:"M j" }}
-            </span>
-          </a>
+            <a href="{{ page.get_absolute_url }}"
+               class="font-medium text-brand-navy hover:text-brand-coral break-words min-w-0">{{ page.title }}</a>
+          </span>
+          <span class="text-xs text-brand-text/60 shrink-0">{{ page.updated_at|date:"M j" }}</span>
         </li>
       {% endfor %}
     </ul>

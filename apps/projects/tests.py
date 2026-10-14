@@ -1735,8 +1735,8 @@ def test_summary_is_a_report_not_a_workbench(client, user):
 
 
 @pytest.mark.django_db
-def test_overview_wiki_card_is_one_rail_locked_pages_first(client, user):
-    """Every page in one rail: the locked ones (agreements, protocols) first,
+def test_overview_wiki_card_is_one_list_locked_pages_first(client, user):
+    """Every page in one list: the locked ones (agreements, protocols) first,
     by title and each with a lock, then the others, newest edit first."""
     from apps.wiki.services import create_page, update_page
 
@@ -1750,23 +1750,19 @@ def test_overview_wiki_card_is_one_rail_locked_pages_first(client, user):
     client.force_login(user)
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
     wiki = response.context["summary"]["wiki"]
-    assert [row["page"].title for row in wiki["pages"]] == [
+    assert [page.title for page in wiki["pages"]] == [
         "Data protocol", "Team agreement", "Meeting notes", "Glossary",
     ]
-    assert wiki["pages"][2]["excerpt"] == "Updated."
 
     body = response.content.decode()
     card = body[body.index('id="proj-wiki-heading"'):]
     card = card[: card.index("</section>")]
     assert "Key pages" not in card and "Recently updated" not in card
-    # One list: a single rail, nothing listed above it.
-    assert card.count("<ul") == 1 and 'class="wiki-rail"' in card
-    rail = card[card.index('class="wiki-rail"'):]
-    order = [rail.index(f">{t}</span>") for t in ("Data protocol", "Team agreement", "Meeting notes", "Glossary")]
+    # One plain list, no rail.
+    assert card.count("<ul") == 1 and "wiki-rail" not in card
+    order = [card.index(f">{t}</a>") for t in ("Data protocol", "Team agreement", "Meeting notes", "Glossary")]
     assert order == sorted(order)
-    assert rail.count('aria-label="Locked page"') == 2
-    assert rail.count("wiki-rail-card--locked") == 2
-    assert "Edited by Alice" in rail and "No text yet." in rail
+    assert card.count('aria-label="Locked page"') == 2
     assert "All 4 pages" in card
 
 
@@ -1793,4 +1789,4 @@ def test_overview_wiki_card_when_nothing_is_locked_or_written(client, user, othe
     client.force_login(other_user)
     member_body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
     assert "Lock a page" not in member_body
-    assert ">Notes</span>" in member_body
+    assert ">Notes</a>" in member_body
