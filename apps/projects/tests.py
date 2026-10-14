@@ -1734,3 +1734,43 @@ def test_overview_wiki_card_when_nothing_is_locked_or_written(client, user, othe
     member_body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
     assert "Lock a page" not in member_body
     assert ">Notes</a>" in member_body
+
+
+@pytest.mark.django_db
+def test_overview_contributions_card_counts_credit(client, user, other_user):
+    project = _summary_project(user, other_user)   # two tasks completed, credited
+    client.force_login(user)
+    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    credit = response.context["summary"]["credit"]
+    from apps.contributions.models import ContributionRecord
+
+    assert credit["count"] == ContributionRecord.objects.filter(project=project).count() > 0
+    assert credit["people"] == 1
+    assert sum(r["n"] for r in credit["top_roles"]) <= credit["count"]
+    assert [p["n"] for p in credit["top_people"]] == [credit["count"]]
+
+    body = response.content.decode()
+    card = body[body.index('id="proj-contributions-heading"'):]
+    card = card[: card.index("</section>")]
+    assert f'>{credit["count"]}</span>' in card
+    assert "Top roles" in card and "By member" in card
+    # Credit lives on its own card now, not in Progress.
+    progress = body[body.index('id="proj-progress-heading"'):]
+    assert "Credit recorded" not in progress[: progress.index("</section>")]
+
+
+@pytest.mark.django_db
+def test_overview_contributions_card_without_tracking_or_credit(client, user):
+    project = _make_project(user)   # tracking off by default
+    client.force_login(user)
+    url = reverse("projects:detail", kwargs={"pk": project.pk})
+    body = client.get(url).content.decode()
+    assert "This project isn't tracking contributions." in body
+    assert "Turn on CRediT in Settings" in body
+
+    from apps.projects.models import ContributionTracking as CT
+
+    project.contribution_tracking = CT.CREDIT
+    project.save()
+    body = client.get(url).content.decode()
+    assert "No credit yet" in body

@@ -612,8 +612,9 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
     - Recent activity: who did what lately, across tasks and the wiki.
     - Wiki: the project's settled documents (locked pages: agreements,
       protocols, data dictionaries) always in view, then what changed lately.
-    - Progress: how much is done, where the open work sits on the board,
-      and the credit recorded so far.
+    - Progress: how much is done and where the open work sits on the board.
+    - Contributions: on a project tracking CRediT, how much credit has been
+      recorded, in which roles, and to whom.
 
     Each list is capped; the tabs hold the rest.
     """
@@ -725,12 +726,37 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
         .annotate(n=Count("id"))
         .order_by("container__container_order", "container__name")
     )
+    # ── Contributions ──
     credit = None
     if project.tracks_credit:
+        from django.contrib.auth import get_user_model
+
+        from apps.core.enums import ContributionType
+
         records = ContributionRecord.objects.filter(project=project)
+        by_role = list(
+            records.values("contribution_type")
+            .annotate(n=Count("id"))
+            .order_by("-n", "contribution_type")
+        )
+        by_user = list(
+            records.values("user").annotate(n=Count("id")).order_by("-n", "user")[:5]
+        )
+        users = get_user_model().objects.in_bulk([row["user"] for row in by_user])
+        labels = dict(ContributionType.choices)
         credit = {
             "count": records.count(),
             "people": records.values("user").distinct().count(),
+            "role_count": len(by_role),
+            "top_roles": [
+                {"label": labels.get(r["contribution_type"], r["contribution_type"]), "n": r["n"]}
+                for r in by_role[:4]
+            ],
+            "top_people": [
+                {"name": users[r["user"]].display_name, "n": r["n"]}
+                for r in by_user
+                if r["user"] in users
+            ],
         }
 
     # ── Wiki ──

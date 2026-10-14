@@ -1,8 +1,8 @@
 {% comment %}
   Project Overview → Progress: how far along the project is. Completion as a
-  bar, where the open work sits on the board, and (on a project tracking
-  CRediT) the credit recorded so far. What needs attention, what is coming
-  up and what changed lately have cards of their own on the left.
+  bar and where the open work sits on the board. Credit has its own card
+  (contributions_card.html); what needs attention, what is coming up and
+  what changed lately have cards of their own on the left.
 
   Needs project and summary (see projects.views._project_summary).
 {% endcomment %}
@@ -48,18 +48,4 @@
     <p class="text-sm text-brand-text/60 italic">No tasks yet, so nothing to measure.</p>
   {% endif %}
 
-  {% if summary.credit %}
-    <h3 class="text-xs text-brand-text/60 mt-4 mb-1">Credit recorded</h3>
-    <p class="text-sm text-brand-text">
-      {% if summary.credit.count %}
-        <a href="{% url 'projects:contribution_tracking' pk=project.pk %}"
-           class="hover:text-brand-coral">
-          {{ summary.credit.count }} contribution{{ summary.credit.count|pluralize }}
-          to {{ summary.credit.people }} member{{ summary.credit.people|pluralize }}
-        </a>
-      {% else %}
-        None yet &mdash; credit is recorded as tasks are completed.
-      {% endif %}
-    </p>
-  {% endif %}
 </section>
