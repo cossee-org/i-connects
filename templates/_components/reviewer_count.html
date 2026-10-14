@@ -1,11 +1,11 @@
 {# Reviewer count — {% include "_components/reviewer_count.html" with count=task.reviewers.all|length %}. #}
-{# The eye glyph plus how many reviewers a task has; renders nothing when it has none, #}
-{# so callers can drop it in unconditionally beside assignee_count.html. Same contract #}
+{# The eye glyph plus how many reviewers a task has, 0 included: a card always says how #}
+{# many, so callers drop it in unconditionally beside assignee_count.html. Same contract #}
 {# as that partial: the count is passed in rather than derived here so the surrounding #}
 {# row can test the same value, and callers should prefetch reviewers to keep this off #}
 {# the per-task query path. A bare number needs naming for assistive tech, hence #}
 {# role="img" plus a spelt-out label — the glyph alone would not say what it counts. #}
-{% if count %}
+{% with count=count|default:0 %}
   <span class="inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0{% if tooltip %} hover-tooltip{% endif %}"
         role="img" aria-label="{{ count }} reviewer{{ count|pluralize }}"
         {% if tooltip %}data-tooltip="{{ count }} reviewer{{ count|pluralize }}"{% else %}title="{{ count }} reviewer{{ count|pluralize }}"{% endif %}>
@@ -17,4 +17,4 @@
     </svg>
     {{ count }}
   </span>
-{% endif %}
+{% endwith %}

@@ -16,7 +16,7 @@
 
   {# No status pill here — the column heading the card sits under already names it. #}
   {% with assignees=task.assigned_members.all|length reviewers=task.reviewers.all|length %}
-  {% if task.github_url or task.deadline or task.start_date or assignees or reviewers %}
+  {# Always shown: dates (or "No date"), then the assignee and reviewer counts, 0 included. #}
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0 mt-2">
       {% if task.github_url %}
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="w-3.5 h-3.5 shrink-0 text-brand-text/60" aria-label="Linked to GitHub" role="img" fill="currentColor">
@@ -27,6 +27,5 @@
       {% include "_components/assignee_count.html" with count=assignees tooltip=True %}
       {% include "_components/reviewer_count.html" with count=reviewers tooltip=True %}
     </div>
-  {% endif %}
   {% endwith %}
 </li>

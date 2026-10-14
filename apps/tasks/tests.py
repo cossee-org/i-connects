@@ -2236,7 +2236,7 @@ def _assignee_count_views(project):
 
 @pytest.mark.django_db
 def test_browsing_views_show_the_assignee_count(client, user, other_user):
-    """Each view reports how many members a task has, and stays quiet at zero."""
+    """Each view reports how many members a task has, zero included."""
     project, col1, _col2 = _make_project_with_board(user)
     lead = _primary_member(project, user)
     contrib = _add_contributor(project, other_user)
@@ -2262,15 +2262,15 @@ def test_browsing_views_show_the_assignee_count(client, user, other_user):
         content = client.get(url, params).content.decode()
         assert "Nobody" in content, f"{name} view lost the unassigned task"
         # Singular and plural for the two staffed tasks, once each; the third
-        # task is unassigned and gets no marker at all.
+        # task is unassigned and says so: 0.
         assert content.count('aria-label="1 assigned member"') == 1, (
             f"{name} view missed the single assignee"
         )
         assert content.count('aria-label="2 assigned members"') == 1, (
             f"{name} view missed the pair"
         )
-        assert content.count('aria-label="0 assigned') == 0, (
-            f"{name} view labelled an unassigned task"
+        assert content.count('aria-label="0 assigned members"') == 1, (
+            f"{name} view hid the unassigned task's count"
         )
         # The count is a number, not a roll-call: names stay in the side pane.
         assert contrib.display_name not in content, f"{name} view named an assignee"
@@ -3648,8 +3648,30 @@ def test_pane_reviewer_list_follows_the_task(client, user, other_user):
 
 
 @pytest.mark.django_db
+def test_task_cards_say_no_date_when_a_task_has_none(client, user):
+    """A card or row always carries its dates: "No date" when it has none."""
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    Task.objects.create(
+        project=project, created_by=lead, container=col1, container_task_order=0,
+        name="Undated",
+    )
+    client.force_login(user)
+    kwargs = {"project_pk": project.pk}
+    for url in (
+        reverse("tasks:board_kanban", kwargs=kwargs),
+        reverse("tasks:board_list", kwargs=kwargs),
+    ):
+        content = client.get(url).content.decode()
+        assert 'data-tooltip="No start or due date"' in content, url
+        assert "No date" in content, url
+        assert 'aria-label="0 assigned members"' in content, url
+        assert 'aria-label="0 reviewers"' in content, url
+
+
+@pytest.mark.django_db
 def test_browsing_views_show_the_reviewer_count(client, user, other_user, pm_user):
-    """Kanban, List and Calendar Day each count reviewers, and stay quiet at zero."""
+    """Kanban, List and Calendar Day each count reviewers, zero included."""
     project, col1, _col2 = _make_project_with_board(user)
     lead = _primary_member(project, user)
     contrib = _add_contributor(project, other_user)
@@ -3666,7 +3688,7 @@ def test_browsing_views_show_the_reviewer_count(client, user, other_user, pm_use
         name="TwoReviewers", deadline=due,
     )
     two.reviewers.add(contrib, third)
-    # Assigned but unreviewed: the people count shows, the reviewer count does not.
+    # Assigned but unreviewed: the reviewer count says 0.
     Task.objects.create(
         project=project, created_by=lead, container=col1, container_task_order=2,
         name="NoReviewer", deadline=due,
@@ -3682,8 +3704,8 @@ def test_browsing_views_show_the_reviewer_count(client, user, other_user, pm_use
         assert content.count('aria-label="2 reviewers"') == 1, (
             f"{name} view missed the pair"
         )
-        assert content.count('aria-label="0 reviewer') == 0, (
-            f"{name} view marked a task with no reviewers"
+        assert content.count('aria-label="0 reviewers"') == 1, (
+            f"{name} view hid the unreviewed task's count"
         )
         # A count, not a roll-call: names stay in the side pane.
         assert contrib.display_name not in content, f"{name} view named a reviewer"
