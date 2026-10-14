@@ -1303,12 +1303,12 @@ def test_board_overdue_toggle_and_status_line(client, user):
     assert "Overdue only" not in content
     assert "htmx:configRequest" not in content
 
-    # On: a chip that clears it, a line saying what is shown, the filter kept
-    # on each view's own requests, and no Kanban reordering.
+    # On: a chip that clears it, the filter kept on each view's own
+    # requests, and no Kanban reordering. No status line under the toolbar.
     content = client.get(board, {"overdue": "1"}).content.decode()
     assert "Overdue only" in content
-    assert "Showing 1 overdue task, still open past its deadline." in content
-    assert f'<a href="{board}" class="font-medium' in content
+    assert "overdue task, still open past" not in content
+    assert "Show all tasks</a>" not in content
     assert "evt.detail.parameters.overdue = &#x27;1&#x27;" not in content
     assert "evt.detail.parameters.overdue = '1'" in content
     assert "the filtered board does not reorder" in content

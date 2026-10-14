@@ -606,10 +606,6 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         columns = _kanban_columns(self.request, self.project)
         context["columns"] = columns
         context["overdue_only"] = _overdue_only(self.request)
-        if context["overdue_only"]:
-            context["overdue_task_count"] = _overdue_filter(
-                Task.objects.filter(project=self.project)
-            ).count()
         context.update(_list_view_context(self.request, self.project, columns))
         context.update(_calendar_context(self.request, self.project))
         context.update(_table_view_context(self.request, self.project))

@@ -189,16 +189,6 @@
     </button>
   {% endif %}
 </div>
-{% if overdue_only %}
-  <p class="text-sm text-brand-text/80 mb-4" role="status">
-    {% if overdue_task_count %}
-      Showing {{ overdue_task_count }} overdue task{{ overdue_task_count|pluralize }}, still open past {{ overdue_task_count|pluralize:"its,their" }} deadline.
-    {% else %}
-      No tasks are overdue.
-    {% endif %}
-    <a href="{% url 'tasks:board' project_pk=project.pk %}" class="font-medium text-brand-navy hover:text-brand-coral">Show all tasks</a>
-  </p>
-{% endif %}
 <div x-data="taskPaneData()"
      @open-task-pane="if (!_dragging) openPane($event.detail.url)"
      @close-task-pane.document="closePane()"
