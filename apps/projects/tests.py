@@ -1698,7 +1698,7 @@ def test_summary_number_cards_open_their_tabs(client, user):
     board = reverse("tasks:board", kwargs={"project_pk": project.pk})
     for url in (
         board,                                  # Tasks
-        f"{board}?overdue=1",                   # Overdue: the board, overdue only
+        f"{board}?filter=overdue",              # Overdue: the board, overdue only
         reverse("projects:join_requests", kwargs={"pk": project.pk}),
         reverse("projects:members", kwargs={"pk": project.pk}),
         reverse("wiki:list", kwargs={"project_pk": project.pk}),

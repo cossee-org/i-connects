@@ -1264,12 +1264,20 @@ def _overdue_filter_tasks(project, member, column):
 
 
 @pytest.mark.django_db
-def test_overdue_filter_narrows_every_view(client, user):
+def test_board_filter_narrows_every_view(client, user):
+    """All, Overdue, Completed and Not Completed, in every view."""
     project, col1, _col2 = _make_project_with_board(user)
     _overdue_filter_tasks(project, _primary_member(project, user), col1)
     client.force_login(user)
     kwargs = {"project_pk": project.pk}
-    others = ("Done late", "Later task", "Undated task")
+    every = {"Late task", "Done late", "Later task", "Undated task"}
+    expected = {
+        "": every,
+        "overdue": {"Late task"},
+        "completed": {"Done late"},
+        "not_completed": {"Late task", "Later task", "Undated task"},
+        "nonsense": every,  # an unknown filter shows every task
+    }
 
     for url in (
         reverse("tasks:board", kwargs=kwargs),
@@ -1277,41 +1285,50 @@ def test_overdue_filter_narrows_every_view(client, user):
         reverse("tasks:board_list", kwargs=kwargs),
         reverse("tasks:board_table", kwargs=kwargs),
     ):
-        everything = client.get(url).content.decode()
-        assert all(name in everything for name in ("Late task",) + others), url
-        overdue = client.get(url, {"overdue": "1"}).content.decode()
-        assert "Late task" in overdue, url
-        assert not any(name in overdue for name in others), url
+        for value, names in expected.items():
+            content = client.get(url, {"filter": value} if value else {}).content.decode()
+            shown = {name for name in every if name in content}
+            assert shown == names, (url, value)
 
     date = timezone.localdate(timezone.now() - timedelta(days=1)).isoformat()
     calendar = reverse("tasks:board_calendar", kwargs=kwargs)
-    assert "Done late" in client.get(calendar, {"view": "day", "date": date}).content.decode()
-    overdue = client.get(calendar, {"view": "day", "date": date, "overdue": "1"}).content.decode()
+    day = {"view": "day", "date": date}
+    assert "Done late" in client.get(calendar, day).content.decode()
+    overdue = client.get(calendar, {**day, "filter": "overdue"}).content.decode()
     assert "Late task" in overdue and "Done late" not in overdue
+    completed = client.get(calendar, {**day, "filter": "completed"}).content.decode()
+    assert "Done late" in completed and "Late task" not in completed
 
 
 @pytest.mark.django_db
-def test_board_overdue_toggle_and_status_line(client, user):
+def test_board_filter_menu(client, user):
     project, col1, _col2 = _make_project_with_board(user)
     _overdue_filter_tasks(project, _primary_member(project, user), col1)
     client.force_login(user)
     board = reverse("tasks:board", kwargs={"project_pk": project.pk})
 
-    # Off: the toolbar offers the filter; nothing is carried on HTMX requests.
+    # All: a "Filter" button whose menu links each choice, All in bold; nothing
+    # is carried on the views' HTMX requests.
     content = client.get(board).content.decode()
-    assert f'href="{board}?overdue=1"' in content
-    assert "Overdue only" not in content
+    menu = content[content.index('aria-haspopup="true"'):]
+    links = [menu.index(f'href="{board}{q}"') for q in (
+        "", "?filter=overdue", "?filter=completed", "?filter=not_completed",
+    )]
+    assert links == sorted(links)
+    for label in (">All</a>", ">Overdue</a>", ">Completed</a>", ">Not Completed</a>"):
+        assert label in menu
+    assert 'aria-current="true">All</a>' in menu
     assert "htmx:configRequest" not in content
 
-    # On: a chip that clears it, the filter kept on each view's own
-    # requests, and no Kanban reordering. No status line under the toolbar.
-    content = client.get(board, {"overdue": "1"}).content.decode()
-    assert "Overdue only" in content
-    assert "overdue task, still open past" not in content
-    assert "Show all tasks</a>" not in content
-    assert "evt.detail.parameters.overdue = &#x27;1&#x27;" not in content
-    assert "evt.detail.parameters.overdue = '1'" in content
-    assert "the filtered board does not reorder" in content
+    # Filtered: the button names it, the menu marks it, each view's requests
+    # keep it, and Kanban does not reorder.
+    content = client.get(board, {"filter": "completed"}).content.decode()
+    assert 'Filter: <span class="font-semibold text-brand-navy">Completed</span>' in content
+    assert 'aria-current="true">Completed</a>' in content
+    assert "evt.detail.parameters.filter = 'completed'" in content
+    assert "a filtered board does not reorder" in content
+    # The old Overdue chip is gone.
+    assert "Overdue only" not in content
 
 
 @pytest.mark.django_db

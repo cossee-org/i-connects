@@ -82,7 +82,7 @@
   <div class="proj-grid {% if is_project_manager %}proj-grid-5{% else %}proj-grid-4{% endif %} grid gap-4 mb-4">
     {% url 'tasks:board' project_pk=project.pk as board_url %}
     {% include "projects/partials/stat_card.html" with href=board_url label="Tasks" value=task_count %}
-    {% with overdue_url=board_url|add:"?overdue=1" %}
+    {% with overdue_url=board_url|add:"?filter=overdue" %}
       {% include "projects/partials/stat_card.html" with href=overdue_url label="Overdue" value=overdue_count alert=overdue_count %}
     {% endwith %}
     {% if is_project_manager %}

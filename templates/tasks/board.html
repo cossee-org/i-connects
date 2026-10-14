@@ -44,12 +44,12 @@
   [x-cloak] { display: none !important; }
 </style>
 <script>
-  {% if overdue_only %}
-  // Overdue only: each view's HTMX requests (switching views, the calendar's
-  // navigation, the table's sort headers) keep the filter.
+  {% if board_filter %}
+  // While filtered, each view's HTMX requests (switching views, the
+  // calendar's navigation, the table's sort headers) keep the filter.
   document.addEventListener('htmx:configRequest', function (evt) {
     if (evt.detail.verb === 'get' && evt.detail.path.indexOf('{% url "tasks:board" project_pk=project.pk %}') === 0) {
-      evt.detail.parameters.overdue = '1';
+      evt.detail.parameters.filter = '{{ board_filter }}';
     }
   });
   {% endif %}
@@ -174,35 +174,35 @@
       </button>
     {% endif %}
     {% comment %}
-      Overdue: shows only tasks still open past their deadline, in every
-      view. A link, so the filtered board has its own address (the Project
-      Overview's Overdue number opens it); on, it reads as a red chip whose
-      click shows every task again.
+      Filter: All, Overdue, Completed or Not Completed, in every view. Drawn
+      like the dropdowns on the Tasks page in the sidebar: a white button
+      that names the filter, and a menu with the current choice in bold.
+      Each choice is a link, so a filtered board has its own address (the
+      Project Overview's Overdue number opens ?filter=overdue).
     {% endcomment %}
     <span class="hidden sm:block h-5 w-px bg-brand-light" aria-hidden="true"></span>
-    {% if overdue_only %}
-      <a href="{% url 'tasks:board' project_pk=project.pk %}"
-         class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-error/10 text-sm font-semibold text-error hover:bg-error/15 transition-colors"
-         aria-label="Overdue only: show all tasks" title="Show all tasks">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd" />
+    {% url 'tasks:board' project_pk=project.pk as board_url %}
+    <div x-data="{ open: false }" class="relative w-fit"
+         @keydown.escape="open = false" @click.outside="open = false">
+      <button type="button" @click="open = !open" :aria-expanded="open.toString()"
+              aria-haspopup="true"
+              class="inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+        <span>Filter{% if board_filter %}: <span class="font-semibold text-brand-navy">{{ board_filter_label }}</span>{% endif %}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
         </svg>
-        Overdue only
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
-          <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-        </svg>
-      </a>
-    {% else %}
-      <a href="{% url 'tasks:board' project_pk=project.pk %}?overdue=1"
-         class="inline-flex items-center gap-1.5 px-2 py-1.5 -mx-2 rounded-md text-sm font-medium text-brand-navy hover:bg-brand-navy/5 transition-colors"
-         title="Show only overdue tasks">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-        </svg>
-        Overdue
-      </a>
-    {% endif %}
+      </button>
+      <div x-cloak x-show="open"
+           x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+           class="absolute left-0 mt-1 w-40 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+        {% for value, label in board_filters %}
+          <a href="{{ board_url }}{% if value %}?filter={{ value }}{% endif %}"
+             class="block w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap {% if value == board_filter %}font-semibold bg-gray-50{% else %}font-normal{% endif %}"
+             {% if value == board_filter %}aria-current="true"{% endif %}>{{ label }}</a>
+        {% endfor %}
+      </div>
+    </div>
   </div>
   {% if is_project_manager %}
     <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
@@ -446,9 +446,9 @@
     }
 
     function initKanbanSortable() {
-      {% if overdue_only %}
-      // A drop position among the overdue cards alone is not a position in
-      // the column, so the filtered board does not reorder.
+      {% if board_filter %}
+      // A drop position among the filtered cards alone is not a position in
+      // the column, so a filtered board does not reorder.
       return;
       {% endif %}
       document.querySelectorAll('.kanban-column-list').forEach(function (el) {
