@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from datetime import date, datetime, timedelta, timezone as dt_timezone
 
 import pytest
@@ -1610,16 +1612,21 @@ def test_board_page_shows_manage_columns_for_every_view(client, pm_user):
     response = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk}))
     content = response.content.decode()
     assert "Manage columns" in content
-    button = content[content.rindex("<button", 0, content.index("Manage columns")):]
+    label_at = re.search(r"Manage columns\s*</button>", content).start()
+    button = content[content.rindex("<button", 0, label_at):]
     markup = button[: button.index("</button>")]
     # No x-show gate on the button itself (the view switcher still uses one).
     assert "x-show" not in markup
-    # A quiet text button, "Columns" on screen with the full name for screen
-    # readers (which contains the visible word), after a divider that keeps
-    # it from reading as a fifth view.
-    assert 'aria-label="Manage columns"' in markup
-    assert markup.rstrip().endswith("Columns")
-    assert "h-5 w-px" in content[: content.index('aria-label="Manage columns"')]
+    # An outlined button, as Contribution Tracking's Matrix and List, that
+    # says "Manage columns" in full.
+    assert 'class="btn btn-outline btn-primary btn-sm"' in markup
+    assert markup.rstrip().endswith("Manage columns")
+    # Right of the views, then Filter, then New task.
+    toolbar = content[content.index('aria-label="Task views"'):]
+    order = [toolbar.index(x) for x in (
+        "Calendar", "btn btn-outline btn-primary btn-sm", 'aria-haspopup="true"', "New task",
+    )]
+    assert order == sorted(order)
 
 
 # ---------------------------------------------------------------------------
@@ -5024,9 +5031,8 @@ def test_a_closer_whose_membership_is_gone_is_still_reported(client, user, other
 
 @pytest.mark.django_db
 def test_board_toolbar_groups_views_with_columns_and_ends_with_new_task(client, pm_user, user):
-    """Left: the views and Manage columns (how the board is seen and laid
-    out). Right: New task, the page's one primary action. A member sees the
-    views only."""
+    """Left: the views. Right: Manage columns, Filter, then New task, the
+    page's one primary action. A member sees no Manage columns or New task."""
     project, _col1, _col2 = _make_project_with_board(pm_user)
     url = reverse("tasks:board", kwargs={"project_pk": project.pk})
 
