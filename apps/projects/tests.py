@@ -1836,3 +1836,51 @@ def test_overview_wiki_card_when_nothing_is_on_the_overview_or_written(client, u
         page=notes, actor=user, title=notes.title, content_markdown="", show_on_overview=True
     )
     assert ">Notes</a>" in _wiki_card(client.get(url).content.decode())
+
+
+@pytest.mark.django_db
+def test_overview_wiki_follows_who_can_see_each_page(client, user, other_user):
+    """A leads-only page is on a lead's Overview only — not on the card, in
+    Recent activity or in the Wiki count for anyone else — and a visitor to
+    a public project sees just the public pages put on the Overview."""
+    from apps.wiki.models import WikiVisibility
+    from apps.wiki.services import create_page
+
+    project = _make_project(user)
+    project.is_public = True
+    project.save()
+    on = {"show_on_overview": True}
+    create_page(project=project, actor=user, title="Budget", visibility=WikiVisibility.LEADS, **on)
+    create_page(project=project, actor=user, title="Protocol", **on)
+    create_page(project=project, actor=user, title="About us", visibility=WikiVisibility.PUBLIC, **on)
+    create_page(project=project, actor=user, title="Press kit", visibility=WikiVisibility.PUBLIC)
+    url = reverse("projects:detail", kwargs={"pk": project.pk})
+
+    client.force_login(user)
+    lead = client.get(url)
+    assert {p.title for p in lead.context["summary"]["wiki"]["pages"]} == {
+        "Budget", "Protocol", "About us",
+    }
+    assert lead.context["wiki_page_count"] == 4
+
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(other_user)
+    contributor = client.get(url)
+    assert {p.title for p in contributor.context["summary"]["wiki"]["pages"]} == {
+        "Protocol", "About us",
+    }
+    assert contributor.context["wiki_page_count"] == 3
+    assert "Budget" not in contributor.content.decode()  # not in Recent activity either
+
+    # A visitor: not a member of this public project.
+    member.delete()
+    ProjectPrivilege.objects.filter(project=project, user=other_user).delete()
+    visitor = client.get(url)
+    assert [p.title for p in visitor.context["public_wiki_pages"]] == ["About us"]
+    body = visitor.content.decode()
+    assert 'id="proj-public-wiki-heading"' in body and ">About us</a>" in body
+    assert "Protocol" not in body and "Budget" not in body and "Press kit" not in body

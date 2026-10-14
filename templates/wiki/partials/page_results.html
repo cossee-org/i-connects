@@ -31,6 +31,11 @@
                     Locked
                   </span>
                 {% endif %}
+                {% if row.page.visibility != "members" %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">
+                    {{ row.page.get_visibility_display }}
+                  </span>
+                {% endif %}
               </div>
               {% if row.excerpt %}
                 <p class="text-sm text-brand-text/70 mt-1 line-clamp-2 break-words">{{ row.excerpt }}</p>

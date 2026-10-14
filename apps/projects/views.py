@@ -601,16 +601,18 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         return context
 
 
-def _project_summary(project, now) -> dict:
-    """Everything the Project Overview tab reports, beyond its number cards.
+def _project_summary(project, now, *, is_lead: bool) -> dict:
+    """Everything the Project Overview tab reports to a member, beyond its
+    number cards.
 
     The tab answers two questions, one card each:
 
     - Recent activity: who did what lately, across tasks and the wiki.
-    - Wiki: the project's settled documents (locked pages: agreements,
-      protocols, data dictionaries) always in view, then what changed lately.
+    - Wiki: the pages a lead put on the Overview, settled ones first.
 
-    Each list is capped; the tabs hold the rest.
+    Wiki pages follow their "Who can see it": a leads-only page is neither
+    listed nor named in the activity for anyone but a lead. Each list is
+    capped; the tabs hold the rest.
     """
     from django.utils.timesince import timesince
 
@@ -620,6 +622,9 @@ def _project_summary(project, now) -> dict:
     from apps.wiki.models import WikiPage, WikiRevision
 
     tasks = Task.objects.filter(project=project)
+    readable_pages = WikiPage.objects.filter(project=project).visible_to(
+        is_lead=is_lead, is_member=True
+    )
 
     # ── Recent activity ──
     # Drawn from what the app records today: a task's creation and its
@@ -682,7 +687,7 @@ def _project_summary(project, now) -> dict:
                 "verb": "completed", "kind": "task", "task": t,
             })
     for r in (
-        WikiRevision.objects.filter(page__project=project)
+        WikiRevision.objects.filter(page__in=readable_pages)
         .select_related("page", "editor")
         .order_by("-created_at")[:8]
     ):
@@ -707,7 +712,7 @@ def _project_summary(project, now) -> dict:
     # the project treats as settled: agreements, protocols) come first, by
     # title; the rest follow, newest edit first. The card shows the first
     # few; "See more" opens the Wiki tab for the rest.
-    pages = WikiPage.objects.filter(project=project, show_on_overview=True)
+    pages = readable_pages.filter(show_on_overview=True)
     shown = 5
     locked = list(pages.filter(locked=True).order_by("title", "id")[:shown])
     others = list(pages.filter(locked=False).order_by("-updated_at", "id")[:shown])
@@ -829,9 +834,24 @@ class ProjectDetailView(DetailView):
         context["contributor_count"] = ProjectPrivilege.objects.filter(
             project=project
         ).values("user").distinct().count()
-        context["wiki_page_count"] = WikiPage.objects.filter(project=project).count()
+        # Wiki pages count and show as the viewer may read them. Anyone but a
+        # member only gets this far on a public project, where the pages a
+        # lead made public and put on the Overview are listed for them.
+        readable_pages = WikiPage.objects.filter(project=project).visible_to(
+            is_lead=context["is_project_manager"],
+            is_member=context["is_project_member"],
+        )
+        context["wiki_page_count"] = readable_pages.count()
         if context["is_project_member"]:
-            context["summary"] = _project_summary(project, context["today"])
+            context["summary"] = _project_summary(
+                project, context["today"], is_lead=context["is_project_manager"]
+            )
+        else:
+            context["public_wiki_pages"] = list(
+                readable_pages.filter(show_on_overview=True).order_by(
+                    "-locked", "title", "id"
+                )[:5]
+            )
         return context
 
 

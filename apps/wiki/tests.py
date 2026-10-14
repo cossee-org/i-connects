@@ -15,7 +15,7 @@ from apps.audit.models import AuditAction, AuditLog
 from apps.core.enums import MemberPrivileges, ProjectStatus
 from apps.projects.models import ProjectMember, ProjectPrivilege
 from apps.projects.services import create_project_with_owner
-from apps.wiki.models import WikiPage, WikiRevision
+from apps.wiki.models import WikiPage, WikiRevision, WikiVisibility
 from apps.wiki.services import (
     EditConflict,
     create_page,
@@ -878,3 +878,117 @@ def test_a_revision_number_that_does_not_exist_is_a_404(client, project, pm_user
     response = client.get(_url("revision", project, slug=page.slug, number=99))
 
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Who can see a page
+# ---------------------------------------------------------------------------
+
+
+def _pages_by_visibility(project, lead):
+    """One page at each visibility, keyed by it."""
+    return {
+        visibility: create_page(
+            project=project, actor=lead, title=f"{visibility} page",
+            content_markdown=f"{visibility} text", visibility=visibility,
+        )
+        for visibility in (
+            WikiVisibility.LEADS, WikiVisibility.MEMBERS, WikiVisibility.PUBLIC
+        )
+    }
+
+
+@pytest.mark.django_db
+def test_a_lead_reads_every_page_and_a_contributor_all_but_leads_only(
+    client, project, pm_user, contributor
+):
+    pages = _pages_by_visibility(project, pm_user)
+    leads_only = pages[WikiVisibility.LEADS]
+
+    client.force_login(pm_user)
+    index = client.get(_url("list", project)).content.decode()
+    assert all(page.title in index for page in pages.values())
+    assert client.get(_url("detail", project, slug=leads_only.slug)).status_code == 200
+    assert "Leads only" in index
+
+    client.force_login(contributor)
+    index = client.get(_url("list", project)).content.decode()
+    assert leads_only.title not in index
+    assert pages[WikiVisibility.MEMBERS].title in index
+    assert pages[WikiVisibility.PUBLIC].title in index
+    # Not there at all for them: 404 on every route, never "forbidden".
+    for name in ("detail", "update", "history", "delete"):
+        assert client.get(_url(name, project, slug=leads_only.slug)).status_code == 404, name
+
+
+@pytest.mark.django_db
+def test_anyone_who_can_see_a_public_project_reads_its_public_pages(
+    client, project, pm_user, other_user
+):
+    pages = _pages_by_visibility(project, pm_user)
+    public = pages[WikiVisibility.PUBLIC]
+
+    for viewer in (other_user, None):  # a signed-in non-member, then signed out
+        client.logout()
+        if viewer:
+            client.force_login(viewer)
+        response = client.get(_url("detail", project, slug=public.slug))
+        assert response.status_code == 200
+        body = response.content.decode()
+        assert "public text" in body
+        # Read-only, with none of the wiki around it.
+        assert _url("update", project, slug=public.slug) not in body
+        assert _url("history", project, slug=public.slug) not in body
+        assert "All wiki pages" not in body
+        # Every other page, and the rest of the wiki, stay closed.
+        for hidden in (pages[WikiVisibility.MEMBERS], pages[WikiVisibility.LEADS]):
+            assert client.get(_url("detail", project, slug=hidden.slug)).status_code in (302, 403, 404)
+        assert client.get(_url("history", project, slug=public.slug)).status_code in (302, 403)
+        assert client.get(_url("list", project)).status_code in (302, 403)
+
+
+@pytest.mark.django_db
+def test_a_public_page_of_a_private_project_is_for_its_members(
+    client, project, pm_user, other_user
+):
+    project.is_public = False
+    project.save()
+    public = _pages_by_visibility(project, pm_user)[WikiVisibility.PUBLIC]
+
+    client.force_login(other_user)
+    assert client.get(_url("detail", project, slug=public.slug)).status_code == 403
+
+
+@pytest.mark.django_db
+def test_only_a_lead_sets_who_can_see_a_page(client, project, pm_user, contributor):
+    client.force_login(pm_user)
+    client.post(
+        _url("create", project),
+        {"title": "Budget", "content_markdown": "v1", "visibility": "leads"},
+    )
+    page = WikiPage.objects.get(project=project, title="Budget")
+    assert page.visibility == WikiVisibility.LEADS
+
+    # A lead's edit without the field keeps the setting.
+    client.post(
+        _url("update", project, slug=page.slug),
+        {"title": "Budget", "content_markdown": "v2", "base_revision": 1},
+    )
+    page.refresh_from_db()
+    assert page.visibility == WikiVisibility.LEADS
+
+    # A contributor's form has no such field, and their new page gets the default.
+    page.visibility = WikiVisibility.MEMBERS
+    page.save()
+    client.force_login(contributor)
+    form = client.get(_url("update", project, slug=page.slug)).content.decode()
+    assert 'name="visibility"' not in form
+    client.post(
+        _url("update", project, slug=page.slug),
+        {"title": "Budget", "content_markdown": "v3", "base_revision": 2,
+         "visibility": "public"},
+    )
+    page.refresh_from_db()
+    assert page.visibility == WikiVisibility.MEMBERS
+    client.post(_url("create", project), {"title": "Notes", "content_markdown": "x", "visibility": "leads"})
+    assert WikiPage.objects.get(project=project, title="Notes").visibility == WikiVisibility.MEMBERS

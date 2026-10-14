@@ -1,8 +1,11 @@
 """Views for the wiki app.
 
-Read access is project membership, enforced by ``ProjectContextMixin`` (403
-for anyone else, including on a public project — the wiki is the project's
-working documentation, not its public face).
+Read access follows each page's "Who can see it" (``WikiPage.visibility``):
+a lead reads every page, any other member every page but the leads-only
+ones. The wiki itself — its index, history and editing — is for members,
+enforced by ``ProjectContextMixin``; the one way in for anyone else is a
+public page of a public project, which they may read (``WikiPageDetailView``).
+A page a viewer may not read is a 404, not a 403, so its title stays hidden.
 
 Write access:
   * any member may create a page and edit an unlocked one;
@@ -22,10 +25,11 @@ from django.urls import reverse
 from django.views.generic import ListView, TemplateView, View
 from django.views.generic.edit import FormView
 
+from apps.projects.models import Project
 from apps.tasks.mixins import ProjectContextMixin
 
 from .forms import WikiPageForm
-from .models import WikiPage, WikiRevision
+from .models import WikiPage, WikiRevision, WikiVisibility
 from .services import (
     EditConflict,
     create_page,
@@ -48,27 +52,38 @@ DEFAULT_SORT = "title"
 class WikiAccessMixin(LoginRequiredMixin, ProjectContextMixin):
     """Project membership plus the wiki's own permission questions."""
 
+    #: True only while a non-member reads a public page (WikiPageDetailView).
+    public_reader = False
+
     def can_edit(self, page: WikiPage) -> bool:
+        if self.public_reader:
+            return False
         return self.is_project_manager or not page.locked
 
     def can_delete(self, page: WikiPage) -> bool:
+        if self.public_reader:
+            return False
         return self.is_project_manager or (
             page.created_by_id is not None
             and page.created_by_id == self.request.user.pk
         )
 
+    def visible_pages(self):
+        """This project's pages the viewer may read."""
+        return WikiPage.objects.filter(project=self.project).visible_to(
+            is_lead=self.is_project_manager, is_member=not self.public_reader
+        )
+
     def get_page(self) -> WikiPage:
         return get_object_or_404(
-            WikiPage.objects.select_related("created_by", "updated_by"),
-            project=self.project,
+            self.visible_pages().select_related("created_by", "updated_by"),
             slug=self.kwargs["slug"],
         )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["wiki_page_count"] = WikiPage.objects.filter(
-            project=self.project
-        ).count()
+        context["wiki_page_count"] = self.visible_pages().count()
+        context["public_reader"] = self.public_reader
         return context
 
 
@@ -84,9 +99,7 @@ class WikiPageListView(WikiAccessMixin, ListView):
         self.sort = self.request.GET.get("sort")
         if self.sort not in SORTS:
             self.sort = DEFAULT_SORT
-        queryset = WikiPage.objects.filter(project=self.project).select_related(
-            "updated_by"
-        )
+        queryset = self.visible_pages().select_related("updated_by")
         if self.query:
             queryset = queryset.filter(
                 Q(title__icontains=self.query)
@@ -112,7 +125,33 @@ class WikiPageListView(WikiAccessMixin, ListView):
 
 
 class WikiPageDetailView(WikiAccessMixin, TemplateView):
+    """A page. Members read it as its visibility allows; anyone who can see
+    a public project — signed in or not — may also read its public pages,
+    read-only and without the rest of the wiki."""
+
     template_name = "wiki/detail.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        project = get_object_or_404(Project, pk=kwargs.get(self.project_url_kwarg))
+        is_member = (
+            ProjectContextMixin._resolve_member(request.user, project) is not None
+            or ProjectContextMixin._is_project_manager(request.user, project)
+        )
+        is_public_page = (
+            project.is_public
+            and WikiPage.objects.filter(
+                project=project, slug=kwargs["slug"], visibility=WikiVisibility.PUBLIC
+            ).exists()
+        )
+        if is_member or not is_public_page:
+            # The usual way in: sign in, then membership.
+            return super().dispatch(request, *args, **kwargs)
+        self.project = project
+        self.project_member = None
+        self.is_project_manager = False
+        self.public_reader = True
+        # Past the sign-in and membership checks, straight to the handler.
+        return TemplateView.dispatch(self, request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -171,6 +210,7 @@ class WikiPageCreateView(WikiPageFormViewBase):
             summary=form.cleaned_data.get("summary") or "",
             locked=bool(form.cleaned_data.get("locked")),
             show_on_overview=bool(form.cleaned_data.get("show_on_overview")),
+            visibility=form.cleaned_data.get("visibility") or WikiVisibility.MEMBERS,
         )
         messages.success(self.request, f"Created “{page.title}”.")
         return HttpResponseRedirect(page.get_absolute_url())
@@ -231,6 +271,11 @@ class WikiPageUpdateView(WikiPageFormViewBase):
                 ),
                 show_on_overview=(
                     bool(form.cleaned_data.get("show_on_overview"))
+                    if self.is_project_manager
+                    else None
+                ),
+                visibility=(
+                    (form.cleaned_data.get("visibility") or None)
                     if self.is_project_manager
                     else None
                 ),
