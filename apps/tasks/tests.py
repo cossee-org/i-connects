@@ -1247,6 +1247,35 @@ def test_overdue_indicator_shows_on_every_view(client, user):
         assert content.count("Overdue: was due") == 1, view
 
 
+@pytest.mark.django_db
+def test_overdue_pill_on_task_pane_and_page_follows_close_and_reopen(client, pm_user):
+    project, col1, _col2 = _make_project_with_board(pm_user)
+    member = _primary_member(project, pm_user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Late task",
+        deadline=timezone.now() - timedelta(days=1),
+    )
+    client.force_login(pm_user)
+    kwargs = {"project_pk": project.pk, "pk": task.pk}
+
+    for url in (reverse("tasks:detail_pane", kwargs=kwargs), reverse("tasks:detail", kwargs=kwargs)):
+        content = client.get(url).content.decode()
+        # Inside the completion chip, so the out-of-band chip swap carries it.
+        chip = content[content.index('id="task-completion-chip"'):]
+        assert chip.index("Overdue: was due") < chip.index("Due date"), url
+
+    # Closing re-renders the chip out of band without the pill; reopening
+    # brings it back. (The completion buttons post pane_mode on both surfaces.)
+    htmx = {"HTTP_HX_REQUEST": "true"}
+    closed = client.post(reverse("tasks:close", kwargs={"pk": task.pk}), {"pane_mode": "1"}, **htmx).content.decode()
+    assert 'id="task-completion-chip" hx-swap-oob="true"' in closed
+    assert "Overdue: was due" not in closed
+    reopened = client.post(reverse("tasks:reopen", kwargs={"pk": task.pk}), {"pane_mode": "1"}, **htmx).content.decode()
+    assert 'id="task-completion-chip" hx-swap-oob="true"' in reopened
+    assert "Overdue: was due" in reopened
+
+
 # ---------------------------------------------------------------------------
 # Table view
 # ---------------------------------------------------------------------------

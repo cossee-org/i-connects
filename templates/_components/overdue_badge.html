@@ -4,12 +4,13 @@
 {# alone (A11Y_GUIDE #7). Pass icon_only=True where the word will not fit (the calendar's chips): #}
 {# the wording moves to role="img" + aria-label. Pass compact=True for the calendar's smaller glyph, #}
 {# and tooltip=True for the styled bubble on surfaces that can afford it; otherwise a plain title. #}
+{# Pass text_size="text-sm" to match the task pane and page summary, whose tags all run at text-sm. #}
 {% if task.is_overdue %}
-  <span class="{% if icon_only %}inline-flex{% else %}inline-flex items-center gap-1 rounded px-1.5 py-0.5 bg-error/10 text-[11px] font-semibold leading-none whitespace-nowrap{% endif %} shrink-0 text-error{% if tooltip %} hover-tooltip{% endif %}"
+  <span class="{% if icon_only %}inline-flex{% else %}inline-flex items-center gap-1 rounded px-1.5 py-0.5 bg-error/10 {{ text_size|default:"text-[11px]" }} font-semibold leading-none whitespace-nowrap{% endif %} shrink-0 text-error{% if tooltip %} hover-tooltip{% endif %}"
         {% if icon_only %}role="img" aria-label="Overdue"{% endif %}
         {% if tooltip %}data-tooltip="Overdue: was due {{ task.deadline|date:"M j, Y" }}"{% else %}title="Overdue: was due {{ task.deadline|date:"M j, Y" }}"{% endif %}>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-         class="{% if compact %}w-3 h-3{% elif icon_only %}w-4 h-4{% else %}w-3 h-3{% endif %} shrink-0" aria-hidden="true">
+         class="{% if compact %}w-3 h-3{% elif icon_only %}w-4 h-4{% elif text_size %}w-3.5 h-3.5{% else %}w-3 h-3{% endif %} shrink-0" aria-hidden="true">
       <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd" />
     </svg>
     {% if not icon_only %}Overdue{% endif %}
