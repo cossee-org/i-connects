@@ -612,15 +612,11 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
     - Recent activity: who did what lately, across tasks and the wiki.
     - Wiki: the project's settled documents (locked pages: agreements,
       protocols, data dictionaries) always in view, then what changed lately.
-    - Progress: how much is done, where the open work sits on the board,
-      and the credit recorded so far.
 
     Each list is capped; the tabs hold the rest.
     """
-    from django.db.models import Count
     from django.utils.timesince import timesince
 
-    from apps.contributions.models import ContributionRecord
     from apps.core.enums import TaskStatus
     from apps.tasks.models import Milestone, Task, TaskLog
     from apps.tasks.services import all_submissions_reviewed
@@ -628,8 +624,6 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
 
     tasks = Task.objects.filter(project=project)
     open_tasks = tasks.exclude(status=TaskStatus.COMPLETED)
-    total = tasks.count()
-    completed = total - open_tasks.count()
 
     # ── Needs attention ──
     overdue = list(
@@ -745,20 +739,6 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
             else f"{timesince(e['when'], now, depth=1)} ago"
         )
 
-    # ── Progress ──
-    columns = list(
-        open_tasks.values("container__name", "container__container_order")
-        .annotate(n=Count("id"))
-        .order_by("container__container_order", "container__name")
-    )
-    credit = None
-    if project.tracks_credit:
-        records = ContributionRecord.objects.filter(project=project)
-        credit = {
-            "count": records.count(),
-            "people": records.values("user").distinct().count(),
-        }
-
     # ── Wiki ──
     # A locked page is one a lead has marked settled (only leads can edit
     # it), which is what a project's agreements and protocols are. Those are
@@ -777,11 +757,6 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
         "join_requests": join_requests,
         "upcoming": upcoming[:6],
         "activity": events[:8],
-        "total": total,
-        "completed": completed,
-        "percent": round(100 * completed / total) if total else 0,
-        "columns": columns,
-        "credit": credit,
         "wiki": wiki,
     }
 

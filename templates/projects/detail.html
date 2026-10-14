@@ -86,7 +86,7 @@
 <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
   <div class="flex items-center gap-2">
     <h2 class="text-lg font-semibold text-brand-navy">Project Overview</h2>
-    {% include "_components/info_popover.html" with label="Project Overview" body="Where this project stands: how far along it is, what needs attention, what is coming up and what changed lately, beside what the project is about and its key wiki pages. Each number opens its tab." %}
+    {% include "_components/info_popover.html" with label="Project Overview" body="Where this project stands: what needs attention, what is coming up and what changed lately, beside what the project is about and its key wiki pages. Each number opens its tab." %}
   </div>
 </div>
 
@@ -117,9 +117,6 @@
   <div class="proj-columns grid gap-4 items-start">
 
   <div class="flex flex-col gap-4 min-w-0">
-
-  {# ── Progress ── #}
-  {% include "projects/partials/progress_card.html" %}
 
   {# ── Needs attention ── #}
   <section class="brand-card p-5" aria-labelledby="proj-attention-heading">

@@ -1602,11 +1602,9 @@ def test_summary_on_an_empty_project(client, user):
     client.force_login(user)
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
     body = response.content.decode()
-    assert response.context["summary"]["total"] == 0
     for empty in (
         "Nothing needs attention right now.",
         "No upcoming deadlines or milestones.",
-        "No tasks yet, so nothing to measure.",
     ):
         assert empty in body
 
@@ -1645,20 +1643,14 @@ def test_summary_reports_attention_coming_up_activity_and_progress(client, user,
     assert whens == sorted(whens, reverse=True)
     assert all(e["ago"] == "just now" for e in summary["activity"])
 
-    # Progress.
-    assert (summary["completed"], summary["total"], summary["percent"]) == (2, 5, 40)
-    assert summary["columns"] == [
-        {"container__name": "Doing", "container__container_order": 0, "n": 3}
-    ]
-    assert summary["credit"]["people"] == 1
-
     body = response.content.decode()
     # The overdue row carries the task views' shared Overdue pill.
     assert body.count("Overdue: was due") == 1
     assert "Ready for a lead to complete" in body
     assert "asked to join as member" in body
     assert ">Soon one</a>" in body and "Ship it" in body
-    assert 'aria-valuenow="40"' in body
+    # The Progress card is gone from the Overview.
+    assert 'id="proj-progress-heading"' not in body
 
 
 @pytest.mark.django_db
