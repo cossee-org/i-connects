@@ -57,23 +57,6 @@
     people being added to or taken off the task without any extra bookkeeping.
   {% endcomment %}
   {% if pane_mode %}
-    {% comment %}
-      Why the row buttons are gone. Without this a reviewer opening a
-      completed task just finds their actions missing; the Lead's Mark Not
-      Complete in the top bar is what hands them back.
-    {% endcomment %}
-    {% if marks_locked %}
-      <p class="mt-2 text-xs text-brand-text/60">
-        {% if needs_review %}
-          Completed: Marks and reviews are locked. Mark the task not
-          complete to change them.
-        {% else %}
-          Completed: Marks are locked. Mark the task not complete to
-          change them.
-        {% endif %}
-      </p>
-    {% endif %}
-
     {% if assignee_states %}
       {% comment %}
         How far along, one labelled bar per stage: Marked done (green) and,

@@ -3988,8 +3988,9 @@ def test_lead_cannot_mark_a_non_assignee_done(client, user, other_user):
 
 
 @pytest.mark.django_db
-def test_completed_task_says_why_the_row_actions_are_gone(client, user, other_user):
-    """The note has to reach both render paths: the pane and the HTMX swap."""
+def test_completed_task_has_no_locked_note(client, user, other_user):
+    """A completed task's row actions go without a note saying so, on both
+    render paths (the pane and the HTMX swap); reopening brings them back."""
     from apps.tasks.services import mark_own_done
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -3997,18 +3998,19 @@ def test_completed_task_says_why_the_row_actions_are_gone(client, user, other_us
     mark_own_done(task=task, member=contrib)
     client.force_login(user)
 
-    note = "Completed: Marks and reviews are locked."
+    note = "Marks and reviews are locked"
     assert note not in client.get(_pane_url(project, task)).content.decode()
 
-    # The swap the Lead gets back from Mark Completed carries it...
+    # Neither the swap the Lead gets back from Mark Completed...
     closed = client.post(
         reverse("tasks:close", kwargs={"pk": task.pk}),
         {"pane_mode": "1"},
         headers={"hx-request": "true"},
     ).content.decode()
-    assert note in closed
-    # ... and so does a fresh open of the pane.
-    assert note in client.get(_pane_url(project, task)).content.decode()
+    assert note not in closed and "Mark not done" not in closed
+    # ... nor a fresh open of the pane.
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert note not in pane and "Mark not done" not in pane
 
     reopened = client.post(
         reverse("tasks:reopen", kwargs={"pk": task.pk}),
@@ -4094,7 +4096,7 @@ def test_the_swap_that_closes_the_task_comes_back_saying_so(client, user, other_
     assert "Mark Completed" not in closed
     # Completed, so locked like any completed task: no row actions.
     assert "Mark not reviewed" not in closed
-    assert "Completed: Marks and reviews are locked." in closed
+    assert "Marks and reviews are locked" not in closed
 
     # The Lead's toggle is the way back.
     reopened = client.post(
@@ -4159,7 +4161,7 @@ def test_a_task_its_reviews_closed_is_locked_like_any_completed_task(client, use
     assert task.status == TaskStatus.COMPLETED
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Completed: Marks and reviews are locked." in pane
+    assert "Marks and reviews are locked" not in pane
     assert "Mark not reviewed" not in pane
     assert "Mark not done" not in pane
 
@@ -4236,7 +4238,7 @@ def test_a_lead_closed_task_is_not_reopened_by_the_review_rule(client, user, oth
     client.force_login(user)
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Completed: Marks and reviews are locked." in pane
+    assert "Marks and reviews are locked" not in pane
 
     # Every per-member action is refused, in both directions.
     for url, data in (
