@@ -1250,24 +1250,25 @@ def test_overdue_indicator_shows_on_every_view(client, user):
 
 
 def _overdue_filter_tasks(project, member, column):
-    """One overdue task, and three that are not: finished late, due later,
-    undated."""
+    """One overdue task, and three that are not: finished late, due later
+    (and high priority), undated."""
     now = timezone.now()
-    for order, (name, deadline, status) in enumerate((
-        ("Late task", now - timedelta(days=1), TaskStatus.NOT_COMPLETED),
-        ("Done late", now - timedelta(days=1), TaskStatus.COMPLETED),
-        ("Later task", now + timedelta(days=1), TaskStatus.NOT_COMPLETED),
-        ("Undated task", None, TaskStatus.NOT_COMPLETED),
+    for order, (name, deadline, status, priority) in enumerate((
+        ("Late task", now - timedelta(days=1), TaskStatus.NOT_COMPLETED, False),
+        ("Done late", now - timedelta(days=1), TaskStatus.COMPLETED, False),
+        ("Later task", now + timedelta(days=1), TaskStatus.NOT_COMPLETED, True),
+        ("Undated task", None, TaskStatus.NOT_COMPLETED, False),
     )):
         Task.objects.create(
             project=project, created_by=member, container=column,
             container_task_order=order, name=name, deadline=deadline, status=status,
+            is_priority=priority,
         )
 
 
 @pytest.mark.django_db
 def test_board_filter_narrows_every_view(client, user):
-    """All, Overdue, Completed and Not Completed, in every view."""
+    """All, Overdue, High Priority, Completed and Not Completed, in every view."""
     project, col1, _col2 = _make_project_with_board(user)
     _overdue_filter_tasks(project, _primary_member(project, user), col1)
     client.force_login(user)
@@ -1276,6 +1277,7 @@ def test_board_filter_narrows_every_view(client, user):
     expected = {
         "": every,
         "overdue": {"Late task"},
+        "high_priority": {"Later task"},
         "completed": {"Done late"},
         "not_completed": {"Late task", "Later task", "Undated task"},
         "nonsense": every,  # an unknown filter shows every task
@@ -1314,10 +1316,12 @@ def test_board_filter_menu(client, user):
     content = client.get(board).content.decode()
     menu = content[content.index('aria-haspopup="true"'):]
     links = [menu.index(f'href="{board}{q}"') for q in (
-        "", "?filter=overdue", "?filter=completed", "?filter=not_completed",
+        "", "?filter=overdue", "?filter=high_priority", "?filter=completed",
+        "?filter=not_completed",
     )]
     assert links == sorted(links)
-    for label in (">All</a>", ">Overdue</a>", ">Completed</a>", ">Not Completed</a>"):
+    for label in (">All</a>", ">Overdue</a>", ">High Priority</a>", ">Completed</a>",
+                  ">Not Completed</a>"):
         assert label in menu
     assert 'aria-current="true">All</a>' in menu
     assert "htmx:configRequest" not in content

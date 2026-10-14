@@ -294,6 +294,7 @@ def _fmt_short(d) -> str:
 BOARD_FILTERS = (
     ("", "All"),
     ("overdue", "Overdue"),
+    ("high_priority", "High Priority"),
     ("completed", "Completed"),
     ("not_completed", "Not Completed"),
 )
@@ -318,6 +319,8 @@ def _apply_board_filter(tasks, value: str):
         return tasks.filter(deadline__lt=timezone.now()).exclude(
             status=TaskStatus.COMPLETED
         )
+    if value == "high_priority":
+        return tasks.filter(is_priority=True)
     if value == "completed":
         return tasks.filter(status=TaskStatus.COMPLETED)
     if value == "not_completed":
