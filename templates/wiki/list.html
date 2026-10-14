@@ -9,23 +9,13 @@
 {% endblock %}
 
 {% block content %}
-<div class="flex flex-wrap items-center justify-between gap-3 mb-2">
-  <div class="flex items-center gap-3">
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="flex items-center gap-2">
     <h2 class="text-lg font-semibold text-brand-navy">Wiki</h2>
+    {% include "_components/info_popover.html" with label="Wiki" body="The project's shared documentation — protocols, decisions, onboarding notes. Every member can read the wiki and write a page; each save keeps the previous version, so nothing is lost to an edit. Link one page to another by writing its title in double brackets, like [[Sampling protocol]]." %}
     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ wiki_page_count }}</span>
   </div>
-  <a href="{% url 'wiki:create' project_pk=project.pk %}"
-     class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-    New page
-  </a>
 </div>
-
-<p class="text-sm text-brand-text/70 mb-5 max-w-2xl">
-  The project's shared documentation — protocols, decisions, onboarding notes.
-  Every member can read the wiki and write a page; each save keeps the previous
-  version, so nothing is lost to an edit. Link one page to another by writing
-  its title in double brackets: <code class="text-xs bg-brand-lighter px-1 py-0.5 rounded">[[Sampling protocol]]</code>.
-</p>
 
 {% if wiki_page_count %}
   <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
@@ -50,6 +40,12 @@
          class="btn btn-xs {% if current_sort == 'recent' %}btn-primary{% else %}btn-ghost text-brand-navy{% endif %}"
          {% if current_sort == 'recent' %}aria-current="true"{% endif %}>Recently updated</a>
     </div>
+    {# With no pages there is no search row; the empty state's "Write the  #}
+    {# first page" is the way in then.                                     #}
+    <a href="{% url 'wiki:create' project_pk=project.pk %}"
+       class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 shrink-0 self-end sm:self-auto">
+      New page
+    </a>
   </div>
 {% endif %}
 

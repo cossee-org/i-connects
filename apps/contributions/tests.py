@@ -632,7 +632,8 @@ def test_the_pages_offer_both_downloads(client, user, other_user):
     body = client.get(
         reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
     ).content.decode()
-    assert "Matrix (CSV)" in body and "List (CSV)" in body
+    # Short labels on the tab ("Matrix", "List"); the aria-labels are whole.
+    assert 'aria-label="Download the contribution matrix as CSV"' in body and 'aria-label="Download the contribution list as CSV"' in body
 
     body = client.get(reverse("contributions:contributions")).content.decode()
     assert "Matrix (CSV)" in body and "List (CSV)" in body
@@ -643,7 +644,7 @@ def test_the_pages_offer_both_downloads(client, user, other_user):
     body = client.get(
         reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
     ).content.decode()
-    assert "Matrix (CSV)" in body and "List (CSV)" not in body
+    assert 'aria-label="Download the contribution matrix as CSV"' in body and 'aria-label="Download the contribution list as CSV"' not in body
 
 
 @pytest.mark.django_db
@@ -872,6 +873,38 @@ def test_the_tracking_tab_offers_the_controls_to_a_lead_only(
 
 
 @pytest.mark.django_db
+def test_add_contribution_shares_the_toolbar_with_the_downloads(client, user):
+    """One row: Matrix, List, Add contribution, then the views."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert body.count("Add contribution") == 1
+    assert (
+        body.index('aria-label="Download the contribution matrix as CSV"')
+        < body.index('aria-label="Download the contribution list as CSV"')
+        < body.index("Add contribution")
+        < body.index('id="contributions-by-member-container"')
+    )
+
+
+@pytest.mark.django_db
+def test_a_lead_can_add_the_first_contribution(client, user):
+    """No credit yet means no downloads, but adding is still offered."""
+    project, _col, _pm = _make_project(user)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert 'aria-label="Download the contribution matrix as CSV"' not in body
+    assert "Add contribution" in body
+
+
+@pytest.mark.django_db
 def test_a_hand_entered_record_is_marked_as_such_on_the_page(
     client, user, other_user
 ):
@@ -993,7 +1026,8 @@ def test_the_by_member_view_renders_on_its_own(client, user, other_user):
 
     client.force_login(user)
     body = client.get(_by_member_url(project)).content.decode()
-    assert "Contributions by member" in body
+    # No heading of its own: the switcher on the page names the view.
+    assert "<h2" not in body
     assert "Software" in body
     assert "Alice" in body
     # It is the partial, not the whole page.
@@ -1007,7 +1041,9 @@ def test_the_every_contribution_view_renders_on_its_own(client, user):
 
     client.force_login(user)
     body = client.get(_every_url(project)).content.decode()
-    assert "Every contribution" in body
+    # No heading of its own: the switcher on the page names the view.
+    assert "<h2" not in body
+    assert "Software" in body
     assert "<!DOCTYPE html>" not in body
 
 
@@ -1404,3 +1440,56 @@ def test_matrix_columns_use_the_same_order(client, user):
     labels = [label for _value, label in get_project_contributions_matrix(project)["types"]]
     assert labels[0] == "Conceptualization"
     assert labels[-1] == "Other"
+
+
+@pytest.mark.django_db
+def test_the_matrix_filter_sits_in_the_view_switcher_row(client, user):
+    """Drawn once, by the page, beside "Every contribution" and above the grid."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert body.count('id="matrix-filter"') == 1
+    assert "hx-swap-oob" not in body
+    assert (
+        body.index("setView('every')")
+        < body.index('id="matrix-filter"')
+        < body.index('id="contributions-by-member-container"')
+    )
+
+
+@pytest.mark.django_db
+def test_a_matrix_swap_refreshes_the_filter_with_the_current_sort(client, user):
+    """Re-sorting swaps only the grid, so it re-sends the filter out of band;
+    otherwise ticking the box afterwards would drop the new sort."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        _by_member_url(project), {"sort": "member", "dir": "desc"}
+    ).content.decode()
+    assert '<div id="matrix-filter" hx-swap-oob="true"' in body
+    assert '"sort": "member", "dir": "desc"' in body
+
+
+@pytest.mark.django_db
+def test_the_matrix_filter_toggle_flips_and_says_which_way(client, user):
+    """Off: plain, and a click asks for used=1. On: solid, and a click asks
+    for used=0."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    client.force_login(user)
+
+    off = client.get(_by_member_url(project)).content.decode()
+    assert 'aria-pressed="false"' in off
+    assert '"used": "1"' in off
+    assert "btn-ghost text-brand-navy" in off
+
+    on = client.get(_by_member_url(project), {"used": "1"}).content.decode()
+    assert 'aria-pressed="true"' in on
+    assert '"used": "0"' in on
+    assert "btn btn-xs btn-primary" in on

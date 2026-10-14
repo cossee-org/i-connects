@@ -15,7 +15,8 @@ password ``demopass``.
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from apps.core.enums import (
     ContributionType,
@@ -84,6 +85,12 @@ class Command(BaseCommand):
                 user.set_password(DEMO_PASSWORD)
                 user.save()
                 self.stdout.write(f"  + created user {email}")
+            # Sign-in refuses an unconfirmed address, and a demo inbox
+            # receives nothing. Confirming here also repairs demo users
+            # seeded before confirmation was required.
+            if user.email_confirmed_at is None:
+                user.email_confirmed_at = timezone.now()
+                user.save(update_fields=["email_confirmed_at"])
             users_by_email[email] = user
 
         alice = users_by_email["alice@iconnects.test"]

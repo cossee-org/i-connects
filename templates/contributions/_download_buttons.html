@@ -3,6 +3,8 @@
 
   Requires `matrix_url` and, when the caller may take it, `list_url` —
   both already carrying any query string the page is filtered by.
+  `short` drops "(CSV)" from the visible labels where room is tight; the
+  download icon and the aria-labels still say what the buttons do.
 {% endcomment %}
 <div class="flex flex-wrap gap-2">
   <a href="{{ matrix_url }}" class="btn btn-outline btn-primary btn-sm"
@@ -12,7 +14,7 @@
       <path stroke-linecap="round" stroke-linejoin="round"
             d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
     </svg>
-    Matrix (CSV)
+    Matrix{% if not short %} (CSV){% endif %}
   </a>
   {% if list_url %}
     <a href="{{ list_url }}" class="btn btn-outline btn-primary btn-sm"
@@ -22,7 +24,7 @@
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
       </svg>
-      List (CSV)
+      List{% if not short %} (CSV){% endif %}
     </a>
   {% endif %}
 </div>

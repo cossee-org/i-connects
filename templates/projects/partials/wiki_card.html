@@ -1,0 +1,73 @@
+{% comment %}
+  Project Overview → Wiki: the project's documents, where members see them
+  first. Key pages are the locked ones — a lead has marked them settled
+  (agreements, protocols, data dictionaries) — listed in full by title;
+  under them, the other pages edited most recently.
+
+  Needs project, summary (see projects.views._project_summary),
+  wiki_page_count and is_project_manager.
+{% endcomment %}
+<section class="brand-card p-5" aria-labelledby="proj-wiki-heading">
+  <div class="flex items-center justify-between gap-2 mb-4">
+    <h2 id="proj-wiki-heading" class="section-heading flex items-center gap-2">
+      {# book-open, as on the Wiki tab #}
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+      </svg>
+      Wiki
+    </h2>
+    {% if wiki_page_count %}
+      <a href="{% url 'wiki:list' project_pk=project.pk %}"
+         class="text-xs font-medium text-brand-navy hover:text-brand-coral">
+        All {{ wiki_page_count }} page{{ wiki_page_count|pluralize }}
+      </a>
+    {% endif %}
+  </div>
+
+  {% if not wiki_page_count %}
+    <p class="text-sm text-brand-text/60 italic">No wiki pages yet.</p>
+    {# The Overview reports; writing starts on the Wiki tab. #}
+    <a href="{% url 'wiki:list' project_pk=project.pk %}"
+       class="inline-block mt-2 text-sm font-medium text-brand-navy hover:text-brand-coral">
+      Go to the Wiki &rarr;
+    </a>
+  {% else %}
+    {% if summary.wiki.key_pages %}
+      <h3 class="text-xs text-brand-text/60 mb-1">Key pages</h3>
+      <ul class="space-y-1.5 mb-4">
+        {% for page in summary.wiki.key_pages %}
+          <li class="flex items-start gap-2 text-sm">
+            {# lock-closed: settled, lead-edited #}
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                 stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 mt-0.5 shrink-0 text-brand-text/50"
+                 aria-label="Locked page" role="img">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+            </svg>
+            <a href="{{ page.get_absolute_url }}"
+               class="font-medium text-brand-navy hover:text-brand-coral break-words min-w-0">{{ page.title }}</a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% elif is_project_manager %}
+      <p class="text-xs text-brand-text/60 mb-4">
+        Lock a page &mdash; an agreement, a protocol &mdash; and it stays listed
+        here for every member.
+      </p>
+    {% endif %}
+
+    {% if summary.wiki.recent %}
+      <h3 class="text-xs text-brand-text/60 mb-1">Recently updated</h3>
+      <ul class="space-y-1.5">
+        {% for page in summary.wiki.recent %}
+          <li class="flex items-baseline justify-between gap-2 text-sm">
+            <a href="{{ page.get_absolute_url }}"
+               class="text-brand-navy hover:text-brand-coral break-words min-w-0">{{ page.title }}</a>
+            <span class="text-xs text-brand-text/60 shrink-0">{{ page.updated_at|date:"M j" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endif %}
+</section>

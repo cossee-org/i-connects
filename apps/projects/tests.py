@@ -1495,3 +1495,242 @@ def test_discover_marks_nothing_for_an_anonymous_visitor(client, user):
     response = client.get(reverse("projects:list"))
     assert response.status_code == 200
     assert [row["my_privilege"] for row in response.context["project_rows"]] == [None]
+
+
+# ---------------------------------------------------------------------------
+# Project dashboard: wiki card
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_project_dashboard_hides_wiki_from_non_members(client, user, other_user):
+    """The wiki is members-only, and so is its card on a public project."""
+    from apps.wiki.services import create_page
+
+    project = _make_project(user)
+    create_page(project=project, actor=user, title="Internal notes")
+    client.force_login(other_user)
+    content = client.get(
+        reverse("projects:detail", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert "Internal notes" not in content
+    assert "Wiki pages" not in content
+
+
+# ---------------------------------------------------------------------------
+# Contributors sub-pages: laid out like a Wiki sub-page
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "url_name, heading",
+    [
+        ("projects:join_requests", "Pending join requests"),
+        ("projects:project_invitations", "Pending invitation requests"),
+    ],
+)
+def test_contributor_subpages_look_like_wiki_subpages(client, user, url_name, heading):
+    project = _make_project(user)
+    client.force_login(user)
+    content = client.get(reverse(url_name, kwargs={"pk": project.pk})).content.decode()
+
+    # The project's own header and tab strip, with Contributors as the tab.
+    assert f">{project.name}</h1>" in content
+    strip = content[content.index('aria-label="Project sections"'):]
+    strip = strip[: strip.index("</nav>")]
+    members_url = reverse("projects:members", kwargs={"pk": project.pk})
+    assert f'href="{members_url}"\n       class="project-tab active"' in strip
+    # Back to the tab first, then the page's own heading.
+    back = f'href="{members_url}"\n     class="btn btn-sm btn-ghost text-brand-navy">&larr; All contributors</a>'
+    assert back in content
+    assert content.index(back) < content.index(f">{heading}</h2>")
+
+
+# ---------------------------------------------------------------------------
+# Project Overview: what the tab reports
+# ---------------------------------------------------------------------------
+
+
+def _summary_project(user, other_user):
+    """A project with one task in each state the summary cards report."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.projects.models import ContributionTracking as CT
+    from apps.tasks.models import KanbanBoard, Milestone, Task
+    from apps.tasks.services import close_task, mark_own_done
+
+    project = _make_project(user)
+    project.contribution_tracking = CT.CREDIT
+    project.save()
+    lead = ProjectMember.objects.filter(project=project, users=user).first()
+    helper = ProjectMember.objects.create(project=project)
+    helper.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    col = KanbanBoard.objects.create(project=project, name="Doing", container_order=0)
+
+    def task(name, **kw):
+        t = Task.objects.create(
+            project=project, created_by=lead, container=col,
+            container_task_order=Task.objects.count(), name=name, **kw,
+        )
+        t.assigned_members.add(helper)
+        return t
+
+    now = timezone.now()
+    done = task("Done one")
+    mark_own_done(task=done, member=helper)
+    close_task(task=done, closed_by=lead)                       # completed
+    waiting = task("Waiting one")
+    mark_own_done(task=waiting, member=helper)                  # ready for a lead
+    task("Late one", deadline=now - timedelta(days=2))          # overdue
+    task("Soon one", deadline=now + timedelta(days=3))          # coming up
+    Milestone.objects.create(project=project, name="Ship it", end_date=now + timedelta(days=1))
+    finished_late = task("Finished late", deadline=now - timedelta(days=5))
+    mark_own_done(task=finished_late, member=helper)
+    close_task(task=finished_late, closed_by=lead)              # not overdue
+    return project
+
+
+@pytest.mark.django_db
+def test_summary_on_an_empty_project(client, user):
+    project = _make_project(user)
+    client.force_login(user)
+    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    body = response.content.decode()
+    assert response.context["summary"]["total"] == 0
+    for empty in (
+        "Nothing needs attention right now.",
+        "No upcoming deadlines or milestones.",
+        "No tasks yet, so nothing to measure.",
+    ):
+        assert empty in body
+
+
+@pytest.mark.django_db
+def test_summary_reports_attention_coming_up_activity_and_progress(client, user, other_user):
+    from apps.projects.services import create_join_request
+
+    project = _summary_project(user, other_user)
+    newcomer = get_user_model().objects.create_user(
+        email="new@example.com", password="pw-123456789", name="Newcomer"
+    )
+    create_join_request(
+        project=project, user=newcomer, requested_privilege=MemberPrivileges.CONTRIBUTOR
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    summary = response.context["summary"]
+
+    # Needs attention: open and late, every assignee done, a join request.
+    assert [t.name for t in summary["overdue"]] == ["Late one"]
+    assert [t.name for t in summary["waiting"]] == ["Waiting one"]
+    assert [jr.user.email for jr in summary["join_requests"]] == ["new@example.com"]
+    # A task finished after its deadline is not overdue.
+    assert response.context["overdue_count"] == 1
+
+    # Coming up: milestone (tomorrow) before task (in three days).
+    assert [i["kind"] for i in summary["upcoming"]] == ["milestone", "task"]
+    assert summary["upcoming"][1]["task"].name == "Soon one"
+
+    # Recent activity covers completions and done marks, newest first.
+    verbs = [e["verb"] for e in summary["activity"]]
+    assert "completed" in verbs and "marked their part done on" in verbs
+    whens = [e["when"] for e in summary["activity"]]
+    assert whens == sorted(whens, reverse=True)
+    assert all(e["ago"] == "just now" for e in summary["activity"])
+
+    # Progress.
+    assert (summary["completed"], summary["total"], summary["percent"]) == (2, 5, 40)
+    assert summary["columns"] == [
+        {"container__name": "Doing", "container__container_order": 0, "n": 3}
+    ]
+    assert summary["credit"]["people"] == 1
+
+    body = response.content.decode()
+    assert "Ready for a lead to complete" in body
+    assert "asked to join as member" in body
+    assert ">Soon one</a>" in body and "Ship it" in body
+    assert 'aria-valuenow="40"' in body
+
+
+@pytest.mark.django_db
+def test_summary_number_cards_open_their_tabs(client, user):
+    project = _make_project(user)
+    client.force_login(user)
+    body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    for url in (
+        reverse("tasks:board", kwargs={"project_pk": project.pk}),
+        reverse("projects:join_requests", kwargs={"pk": project.pk}),
+        reverse("projects:members", kwargs={"pk": project.pk}),
+        reverse("wiki:list", kwargs={"project_pk": project.pk}),
+    ):
+        assert f'<a href="{url}"\n   class="brand-card p-4' in body, url
+
+
+@pytest.mark.django_db
+def test_summary_is_a_report_not_a_workbench(client, user):
+    """Adding and editing live on the tabs; the summary only reports."""
+    project = _make_project(user)
+    client.force_login(user)
+    body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    assert reverse("tasks:create", kwargs={"project_pk": project.pk}) not in body
+    assert reverse("wiki:create", kwargs={"project_pk": project.pk}) not in body
+    assert "Delete task confirmation" not in body
+
+
+@pytest.mark.django_db
+def test_overview_wiki_card_lists_locked_pages_then_recent_ones(client, user):
+    """Locked pages (agreements, protocols) are always listed, by title;
+    the other pages show as recently updated."""
+    from apps.wiki.services import create_page, update_page
+
+    project = _make_project(user)
+    create_page(project=project, actor=user, title="Team agreement", locked=True)
+    create_page(project=project, actor=user, title="Data protocol", locked=True)
+    notes = create_page(project=project, actor=user, title="Meeting notes")
+    create_page(project=project, actor=user, title="Glossary")
+    update_page(page=notes, actor=user, title=notes.title, content_markdown="Updated.")
+
+    client.force_login(user)
+    response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
+    wiki = response.context["summary"]["wiki"]
+    assert [p.title for p in wiki["key_pages"]] == ["Data protocol", "Team agreement"]
+    assert [p.title for p in wiki["recent"]] == ["Meeting notes", "Glossary"]
+
+    body = response.content.decode()
+    card = body[body.index('id="proj-wiki-heading"'):]
+    card = card[: card.index("</section>")]
+    assert card.index("Key pages") < card.index("Data protocol") < card.index("Recently updated")
+    assert "All 4 pages" in card
+
+
+@pytest.mark.django_db
+def test_overview_wiki_card_when_nothing_is_locked_or_written(client, user, other_user):
+    from apps.wiki.services import create_page
+
+    project = _make_project(user)
+    client.force_login(user)
+    body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    assert "No wiki pages yet." in body and "Go to the Wiki" in body
+
+    # Pages but none locked: a lead is told how to keep one here; a member
+    # sees only the recent list.
+    create_page(project=project, actor=user, title="Notes")
+    lead_body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    assert "Lock a page" in lead_body
+
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(other_user)
+    member_body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    assert "Lock a page" not in member_body
+    assert ">Notes</a>" in member_body

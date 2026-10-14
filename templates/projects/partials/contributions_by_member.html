@@ -7,33 +7,26 @@
   that trims it to what has been earned is offered, not assumed.
 
   Swapped into #contributions-by-member-container. Needs matrix, only_used,
-  project.
+  project; in_page when included by the full page.
 {% endcomment %}
 {% load contribution_tags %}
 
-<div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-  <h2 class="text-lg font-semibold text-brand-navy">Contributions by member</h2>
-  {% if matrix.totals.grand_total > 0 or only_used %}
-    {% comment %}
-      A checkbox rather than a second segmented control: the switcher above
-      chooses a view, this narrows the one you are in.
-    {% endcomment %}
-    <label class="label cursor-pointer justify-start gap-2 py-0"
-           for="matrix-only-used">
-      <input type="checkbox" id="matrix-only-used" class="checkbox checkbox-sm"
-             {% if only_used %}checked{% endif %}
-             hx-get="{% url 'projects:contributions_by_member' pk=project.pk %}"
-             hx-vals='js:{used: event.target.checked ? "1" : "0", sort: "{{ matrix.sort }}", dir: "{{ matrix.direction }}"}'
-             hx-target="#contributions-by-member-container"
-             hx-swap="innerHTML">
-      <span class="label-text text-sm text-brand-text/70">Only roles and members with contributions</span>
-    </label>
-  {% endif %}
-</div>
+{% comment %}
+  No heading: the view switcher above already names this view.
+
+  The "With contributions only" filter lives in the page's
+  view-switcher row, not here. Every time this view is swapped in (sorting,
+  filtering) it sends a fresh copy out of band, so the toggle always carries
+  the sort it should keep. On the full page, contribution_tracking.html draws
+  the filter itself and passes in_page so no second copy is made.
+{% endcomment %}
+{% if not in_page %}
+  {% include "projects/partials/contributions_by_member_filter.html" with oob=True %}
+{% endif %}
 
 {% if not matrix.rows %}
   {% if only_used %}
-    {% include "_components/empty_state.html" with title="No contributions yet" body="Nothing has been credited on this project, so there is nothing to narrow to. Untick the filter to see the full grid." %}
+    {% include "_components/empty_state.html" with title="No contributions yet" body="Nothing has been credited on this project, so there is nothing to narrow to. Turn the filter off to see the full grid." %}
   {% else %}
     {% include "_components/empty_state.html" with title="Nobody on this project yet" body="Invite members and the grid will list them here, credited as tasks are completed." %}
   {% endif %}

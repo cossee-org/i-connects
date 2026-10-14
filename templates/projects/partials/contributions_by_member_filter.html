@@ -1,0 +1,28 @@
+{% comment %}
+  Contribution Tracking → Contributions by member: the "With contributions
+  only" filter (only the roles and members with credit), in the
+  view-switcher row.
+
+  Drawn by contribution_tracking.html on page load and re-sent out of band
+  (oob=True) by contributions_by_member.html on every swap, so its hx-vals
+  always hold the current sort and the opposite of the current filter.
+  Shown only while that view is the one open.
+
+  A single on/off toggle in the style of the Wiki's "Recently updated":
+  solid when on, plain navy text when off. aria-pressed says which.
+
+  Needs matrix, only_used, project.
+{% endcomment %}
+<div id="matrix-filter"{% if oob %} hx-swap-oob="true"{% endif %}
+     x-show="$store.credit.viewMode === 'by-member'" x-cloak>
+{% if matrix.totals.grand_total > 0 or only_used %}
+  <button type="button" id="matrix-only-used"
+          class="btn btn-xs {% if only_used %}btn-primary{% else %}btn-ghost text-brand-navy{% endif %}"
+          aria-pressed="{% if only_used %}true{% else %}false{% endif %}"
+          hx-get="{% url 'projects:contributions_by_member' pk=project.pk %}"
+          hx-vals='{"used": "{% if only_used %}0{% else %}1{% endif %}", "sort": "{{ matrix.sort }}", "dir": "{{ matrix.direction }}"}'
+          hx-target="#contributions-by-member-container"
+          title="Show only the roles and members with contributions"
+          hx-swap="innerHTML">With contributions only</button>
+{% endif %}
+</div>
