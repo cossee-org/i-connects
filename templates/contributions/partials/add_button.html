@@ -1,9 +1,9 @@
 {# Opens the correction modal on the hand-entry form. Needs `project`.   #}
-{# Styled as the page's primary action, like "+ New task" on Tasks.     #}
+{# Styled as the page's primary action, like "New task" on Tasks.       #}
 <button type="button" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
         hx-get="{% url 'contributions:contribution_add' project_pk=project.pk %}"
         hx-target="#contribution-modal-body"
         hx-swap="innerHTML"
         onclick="document.getElementById('contribution-modal').showModal()">
-  + Add contribution
+  Add contribution
 </button>

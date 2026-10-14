@@ -1224,7 +1224,7 @@ def test_board_page_shows_manage_columns_for_every_view(client, pm_user):
     markup = button[: button.index("</button>")]
     # No x-show gate on the button itself (the view switcher still uses one).
     assert "x-show" not in markup
-    # A plain text button beside "+ New task": it no longer sits in the view
+    # A plain text button beside "New task": it no longer sits in the view
     # switcher's row, so it no longer carries an icon to match those buttons.
     assert "<svg" not in markup
 
