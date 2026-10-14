@@ -1695,13 +1695,18 @@ def test_summary_number_cards_open_their_tabs(client, user):
     project = _make_project(user)
     client.force_login(user)
     body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    board = reverse("tasks:board", kwargs={"project_pk": project.pk})
     for url in (
-        reverse("tasks:board", kwargs={"project_pk": project.pk}),
+        board,                                  # Tasks
+        f"{board}?overdue=1",                   # Overdue: the board, overdue only
         reverse("projects:join_requests", kwargs={"pk": project.pk}),
         reverse("projects:members", kwargs={"pk": project.pk}),
         reverse("wiki:list", kwargs={"project_pk": project.pk}),
     ):
         assert f'<a href="{url}"\n   class="brand-card p-4' in body, url
+    # The wiki's number is labelled "Wiki", not "Wiki pages".
+    assert ">Wiki pages</span>" not in body
+    assert ">Wiki</span>" in body
 
 
 @pytest.mark.django_db

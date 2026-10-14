@@ -90,7 +90,9 @@
   <div class="proj-grid {% if is_project_manager %}proj-grid-5{% else %}proj-grid-4{% endif %} grid gap-4 mb-4">
     {% url 'tasks:board' project_pk=project.pk as board_url %}
     {% include "projects/partials/stat_card.html" with href=board_url label="Tasks" value=task_count %}
-    {% include "projects/partials/stat_card.html" with href=board_url label="Overdue" value=overdue_count alert=overdue_count %}
+    {% with overdue_url=board_url|add:"?overdue=1" %}
+      {% include "projects/partials/stat_card.html" with href=overdue_url label="Overdue" value=overdue_count alert=overdue_count %}
+    {% endwith %}
     {% if is_project_manager %}
       {% url 'projects:join_requests' pk=project.pk as join_url %}
       {% include "projects/partials/stat_card.html" with href=join_url label="Join requests" value=pending_join_request_count %}
@@ -98,7 +100,7 @@
     {% url 'projects:members' pk=project.pk as members_url %}
     {% include "projects/partials/stat_card.html" with href=members_url label="Contributors" value=contributor_count %}
     {% url 'wiki:list' project_pk=project.pk as wiki_url %}
-    {% include "projects/partials/stat_card.html" with href=wiki_url label="Wiki pages" value=wiki_page_count %}
+    {% include "projects/partials/stat_card.html" with href=wiki_url label="Wiki" value=wiki_page_count %}
   </div>
 
   {# ── About, the full width ── #}
