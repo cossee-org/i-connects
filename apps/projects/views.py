@@ -604,9 +604,8 @@ class MyProjectListView(LoginRequiredMixin, ListView):
 def _project_summary(project, now) -> dict:
     """Everything the Project Overview tab reports, beyond its number cards.
 
-    The tab answers three questions, one card each:
+    The tab answers two questions, one card each:
 
-    - Coming up: the next deadlines and milestones, in date order.
     - Recent activity: who did what lately, across tasks and the wiki.
     - Wiki: the project's settled documents (locked pages: agreements,
       protocols, data dictionaries) always in view, then what changed lately.
@@ -616,23 +615,11 @@ def _project_summary(project, now) -> dict:
     from django.utils.timesince import timesince
 
     from apps.core.enums import TaskStatus
-    from apps.tasks.models import Milestone, Task, TaskLog
+    from apps.tasks.models import Task, TaskLog
     from apps.tasks.services import all_submissions_reviewed
     from apps.wiki.models import WikiPage, WikiRevision
 
     tasks = Task.objects.filter(project=project)
-    open_tasks = tasks.exclude(status=TaskStatus.COMPLETED)
-
-    # ── Coming up ──
-    upcoming = [
-        {"kind": "task", "date": t.deadline, "task": t}
-        for t in open_tasks.filter(deadline__gte=now).order_by("deadline", "id")[:5]
-    ] + [
-        {"kind": "milestone", "date": m.end_date, "milestone": m}
-        for m in Milestone.objects.filter(project=project, end_date__gte=now)
-        .order_by("end_date", "id")[:3]
-    ]
-    upcoming.sort(key=lambda item: item["date"])
 
     # ── Recent activity ──
     # Drawn from what the app records today: a task's creation and its
@@ -727,7 +714,6 @@ def _project_summary(project, now) -> dict:
     }
 
     return {
-        "upcoming": upcoming[:6],
         "activity": events[:8],
         "wiki": wiki,
     }

@@ -1602,12 +1602,11 @@ def test_summary_on_an_empty_project(client, user):
     client.force_login(user)
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
     body = response.content.decode()
-    for empty in ("No upcoming deadlines or milestones.",):
-        assert empty in body
+    assert "Nothing has happened here yet." in body
 
 
 @pytest.mark.django_db
-def test_summary_reports_coming_up_and_activity(client, user, other_user):
+def test_summary_reports_activity(client, user, other_user):
     project = _summary_project(user, other_user)
 
     client.force_login(user)
@@ -1617,10 +1616,6 @@ def test_summary_reports_coming_up_and_activity(client, user, other_user):
     # A task finished after its deadline is not overdue.
     assert response.context["overdue_count"] == 1
 
-    # Coming up: milestone (tomorrow) before task (in three days).
-    assert [i["kind"] for i in summary["upcoming"]] == ["milestone", "task"]
-    assert summary["upcoming"][1]["task"].name == "Soon one"
-
     # Recent activity covers completions and done marks, newest first.
     verbs = [e["verb"] for e in summary["activity"]]
     assert "completed" in verbs and "marked their part done on" in verbs
@@ -1629,10 +1624,9 @@ def test_summary_reports_coming_up_and_activity(client, user, other_user):
     assert all(e["ago"] == "just now" for e in summary["activity"])
 
     body = response.content.decode()
-    assert ">Soon one</a>" in body and "Ship it" in body
-    # The Progress and Needs attention cards are gone from the Overview.
-    assert 'id="proj-progress-heading"' not in body
-    assert 'id="proj-attention-heading"' not in body
+    # The Progress, Needs attention and Coming up cards are gone.
+    for heading in ("proj-progress-heading", "proj-attention-heading", "proj-upcoming-heading"):
+        assert f'id="{heading}"' not in body
 
 
 @pytest.mark.django_db
