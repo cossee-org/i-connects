@@ -1756,7 +1756,8 @@ def test_overview_wiki_card_lists_locked_pages_then_recent_ones(client, user):
     body = response.content.decode()
     card = body[body.index('id="proj-wiki-heading"'):]
     card = card[: card.index("</section>")]
-    assert card.index("Key pages") < card.index("Data protocol") < card.index("Recently updated")
+    assert "Key pages" not in card
+    assert card.index("Data protocol") < card.index("Team agreement") < card.index("Recently updated")
     assert "All 4 pages" in card
 
 
