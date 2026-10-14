@@ -4547,3 +4547,29 @@ def test_a_closer_whose_membership_is_gone_is_still_reported(client, user, other
     ).content.decode()
     assert "Closed by" in body
     assert "a former member" in body
+
+
+@pytest.mark.django_db
+def test_board_toolbar_groups_views_with_columns_and_ends_with_new_task(client, pm_user, user):
+    """Left: the views and Manage columns (how the board is seen and laid
+    out). Right: New task, the page's one primary action. A member sees the
+    views only."""
+    project, _col1, _col2 = _make_project_with_board(pm_user)
+    url = reverse("tasks:board", kwargs={"project_pk": project.pk})
+
+    client.force_login(pm_user)
+    html = client.get(url).content.decode()
+    toolbar = html[html.index("setView('board')") :]
+    order = [toolbar.index(x) for x in ("Kanban", "List", "Calendar", "Manage columns", "New task")]
+    assert order == sorted(order)
+    # The divider separates the views from Manage columns, inside the left group.
+    assert toolbar.index("h-5 w-px") < toolbar.index("Manage columns")
+
+    _add_contributor(project, user)
+    client.force_login(user)
+    member = client.get(url).content.decode()
+    # The buttons, not the words: the columns dialog's own aria-label still
+    # says "Manage columns".
+    assert "document.getElementById('columns-modal').showModal()" not in member
+    create_url = reverse("tasks:create", kwargs={"project_pk": project.pk})
+    assert f'hx-get="{create_url}"' not in member
