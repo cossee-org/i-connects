@@ -1477,9 +1477,10 @@ def test_completion_card_separates_done_and_reviewed_progress(client, user, othe
     progress = pane[pane.index("data-progress") : pane.index("data-assignee-rows")]
     assert progress.index("Marked done") < progress.index("2 of 3") < progress.index("Reviewed") < progress.index("1 of 3")
     assert "bg-success" in progress and "bg-violet-600" in progress
-    # The stages read in their own colours: review violet, waiting amber.
-    assert "text-violet-600" in _row_for(pane, contrib)
-    assert "Awaiting review" in _row_for(pane, lead) and "text-amber-600" in _row_for(pane, lead)
+    # The stages read in their own colours under the name: done green,
+    # review violet. A part done but not reviewed shows the done line alone.
+    assert "text-success" in _row_for(pane, contrib) and "text-violet-600" in _row_for(pane, contrib)
+    assert "data-done-line" in _row_for(pane, lead) and "data-review-line" not in _row_for(pane, lead)
     detail = client.get(
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
@@ -2097,7 +2098,9 @@ def test_pane_completion_button_is_live_with_assignees_outstanding(client, user,
         pane = client.get(_pane_url(project, task)).content.decode()
         assert "Mark Completed" in pane, f"{done} done: button missing"
         assert close_url in pane, f"{done} done: button not wired to close"
-        assert "disabled" not in pane, f"{done} done: button disabled"
+        button = pane[pane.index('id="task-completion-button"'):]
+        button = button[: button.index("</span>")]
+        assert "disabled" not in button, f"{done} done: button disabled"
 
 
 # ---------------------------------------------------------------------------
@@ -2564,8 +2567,9 @@ def test_pane_completion_matrix_reports_marks_and_reviews(client, user, other_us
     # part done, so their row shows that and has no review state yet.
     assert pane.count('data-mark="yes"') == 2
     assert pane.count('data-mark="no"') == 1
-    assert "Done" in _row_for(pane, lead) and "Reviewed" in _row_for(pane, lead)
-    assert "Not done yet" in _row_for(pane, contrib)
+    assert "data-done-line" in _row_for(pane, lead) and "data-review-line" in _row_for(pane, lead)
+    assert "data-done-line" not in _row_for(pane, contrib)
+    assert f"Mark {contrib.display_name}'s part done" in _row_for(pane, contrib)
 
 
 @pytest.mark.django_db
@@ -2582,7 +2586,8 @@ def test_pane_matrix_treats_an_unreviewed_mark_as_not_reviewed(client, user, oth
 
     assert pane.count('data-mark="yes"') == 1  # the lead's mark, nothing more
     assert pane.count('data-mark="no"') == 1  # the contributor has not marked done
-    assert "Reviewed" not in _row_for(pane, lead)
+    assert pane.count('data-mark="pending"') == 1  # the lead's part awaits review
+    assert "data-review-line" not in _row_for(pane, lead)
 
 
 @pytest.mark.django_db
@@ -2796,46 +2801,59 @@ def test_pane_matrix_survives_the_lead_closing_the_task(client, user, other_user
 
 
 @pytest.mark.django_db
-def test_pane_top_bar_carries_both_completion_actions(client, user, other_user):
-    """A Lead who is also an assignee gets both buttons, in the bar, with icons."""
-    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+def test_pane_top_bar_carries_mark_completed_and_the_own_row_the_self_mark(client, user, other_user):
+    """A Lead who is also an assignee closes the task from the bar and marks
+    their own part from the tick box in their own Completion row."""
+    project, task, lead, _contrib = _two_assignee_task(user, other_user)
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
 
     assert 'id="task-completion-button"' in pane
-    assert 'id="task-self-mark-button"' in pane
-    # Both sit in the bar, before the task name.
-    assert pane.index("Mark Completed") < pane.index("Mark my part done") < pane.index("Moded")
-    # Both carry an icon.
+    assert 'id="task-self-mark-button"' not in pane
+    # Mark Completed sits in the bar, before the task name, with its icon.
+    assert pane.index("Mark Completed") < pane.index("Moded")
     bar = pane[: pane.index("Moded")]
-    assert bar.count("<svg") >= 6  # 2 completion + trash + pencil + expand + close
+    assert bar.count("<svg") >= 5  # completion + trash + pencil + expand + close
+    # The Lead ticks their own part from their row, which says it is theirs.
+    row = _row_for(pane, lead)
+    assert "(you)" in row
+    assert "data-done-cell" in row and "completion-tick-done" in row
 
 
 @pytest.mark.django_db
-def test_pane_self_mark_button_survives_the_status_block_swap(client, user, other_user):
-    """It lives outside the block, so the swap must refresh it out of band."""
-    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+def test_an_assignee_ticks_and_unticks_their_own_part(client, user, other_user):
+    """An assignee who is not a Lead ticks their own Done box to mark their
+    part and unticks it to undo; the swap brings the box back in its new state.
+    Other people's boxes stay read-only to them, and closing the task freezes
+    their own box too."""
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    client.force_login(other_user)
+    complete_url = reverse("tasks:complete", kwargs={"pk": task.pk})
+    undo_url = reverse("tasks:undo", kwargs={"pk": task.pk})
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    own = _row_for(pane, contrib)
+    assert "(you)" in own and "Mark your part done" in own and complete_url in own
+    other = _row_for(pane, lead)
+    assert "hx-post" not in other and "disabled" in other
+
+    marked = client.post(complete_url, {"pane_mode": "1"}, headers={"hx-request": "true"}).content.decode()
+    own = _row_for(marked, contrib)
+    assert "Mark your part not done" in own and undo_url in own and " checked" in own
+    assert "data-done-line" in own
+
+    unmarked = client.post(undo_url, {"pane_mode": "1"}, headers={"hx-request": "true"}).content.decode()
+    own = _row_for(unmarked, contrib)
+    assert "Mark your part done" in own and "data-done-line" not in own
+
+    client.post(complete_url, {"pane_mode": "1"}, headers={"hx-request": "true"})
     client.force_login(user)
-
-    marked = client.post(
-        reverse("tasks:complete", kwargs={"pk": task.pk}),
-        {"pane_mode": "1"},
-        headers={"hx-request": "true"},
-    ).content.decode()
-    assert 'id="task-self-mark-button" hx-swap-oob="true"' in marked
-    assert "Undo my mark" in marked
-
-    # Closing the task hides the self-mark action; the wrapper still comes back
-    # so the swap has something to replace, otherwise a stale button would sit
-    # in the bar with nothing to clear it.
-    closed = client.post(
-        reverse("tasks:close", kwargs={"pk": task.pk}),
-        {"pane_mode": "1"},
-        headers={"hx-request": "true"},
-    ).content.decode()
-    assert 'id="task-self-mark-button" hx-swap-oob="true"' in closed
-    assert "Undo my mark" not in closed
-    assert "Mark my part done" not in closed
+    client.post(reverse("tasks:close", kwargs={"pk": task.pk}), {"pane_mode": "1"}, headers={"hx-request": "true"})
+    client.force_login(other_user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    own = _row_for(pane, contrib)
+    assert "Mark your part" not in own and "hx-post" not in own
+    assert "disabled" in own and " checked" in own
 
 
 @pytest.mark.django_db
@@ -3052,9 +3070,9 @@ def test_a_short_matrix_gets_no_see_more(client, user, other_user):
 
 @pytest.mark.django_db
 def test_task_surfaces_carry_one_copy_of_each_action_bar_control(client, user, other_user):
-    """The page took the pane's action bar: the same three, once each.
+    """The page took the pane's action bar: the same two, once each.
 
-    Once each is the point. The completion block re-renders all three out of
+    Once each is the point. The completion block re-renders both out of
     band alongside its own swap, because they sit outside it — so a *first*
     render that emitted them too would leave a second copy of each sitting in
     the markup, discarded unseen in the pane but plainly visible on a page the
@@ -3072,11 +3090,10 @@ def test_task_surfaces_carry_one_copy_of_each_action_bar_control(client, user, o
     controls = (
         'id="task-completion-chip"',
         'id="task-completion-button"',
-        'id="task-self-mark-button"',
     )
     for name, url in surfaces.items():
         html = client.get(url).content.decode()
-        assert "Mark my part done" in html, f"{name} lost the assignee's own mark"
+        assert "Mark your part done" in html, f"{name} lost the assignee's own mark"
         assert "Mark Completed" in html, f"{name} lost the Lead's toggle"
         for control in controls:
             assert html.count(control) == 1, f"{name} has {html.count(control)}x {control}"
@@ -3223,7 +3240,7 @@ def test_priority_flag_keeps_its_smaller_size_off_the_task_surfaces(client, user
 
 @pytest.mark.django_db
 def test_matrix_shows_when_an_assignee_marked_done(client, user, other_user):
-    """The check in Marked Done carries the date the assignee set it."""
+    """The row's Done line carries the date the assignee set it."""
     from apps.tasks.services import mark_own_done
 
     project, task, _lead, contrib = _two_assignee_task(user, other_user)
@@ -3233,11 +3250,12 @@ def test_matrix_shows_when_an_assignee_marked_done(client, user, other_user):
 
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    stamped = log.completed_at.strftime("%b %-d, %Y")
-    assert stamped in pane
-    # In the Marked Done cell, right after that row's check.
+    stamped = log.completed_at.strftime("%b %-d")
+    # Under the assignee's name, in the green Done line, beside a ticked box.
     row = _row_for(pane, contrib)
-    assert row.index('data-mark="yes"') < row.index(stamped)
+    line = row[row.index("data-done-line") :]
+    assert f"Done {stamped}" in line[: line.index("</span>")]
+    assert 'data-mark="yes"' in row
 
 
 @pytest.mark.django_db
@@ -3300,10 +3318,19 @@ def _review_url(task, log):
     return reverse("tasks:review_log", kwargs={"pk": task.pk, "log_pk": log.pk})
 
 
+# The Completion table's live tick boxes, by their accessible names. Done and
+# Reviewed boxes for someone else's part read "Mark <name>'s part …"; on the
+# viewer's own row they read "Mark your part …". The review pair matches both.
+MARK_DONE = "'s part done\""
+MARK_NOT_DONE = "'s part not done\""
+MARK_REVIEWED = ' part reviewed"'
+MARK_NOT_REVIEWED = ' part not reviewed"'
+
+
 def _rows(pane):
-    """The Completion card's list of assignee rows in the rendered pane."""
+    """The Completion card's table of assignee rows in the rendered pane."""
     start = pane.index("data-assignee-rows")
-    return pane[start : pane.index("</ul>", start)]
+    return pane[start : pane.index("</table>", start)]
 
 
 def _row_for(pane, member):
@@ -3315,7 +3342,7 @@ def _row_for(pane, member):
     body = _rows(pane)
     # The row's own name label, not a "by <name>" note in someone else's row.
     start = body.index(f"data-assignee-name>{member.display_name}<")
-    return body[body.rindex("<li", 0, start) : body.index("</li>", start)]
+    return body[body.rindex("<tr", 0, start) : body.index("</tr>", start)]
 
 
 @pytest.mark.django_db
@@ -3326,7 +3353,7 @@ def test_reviewer_marks_a_submission_reviewed(client, user, other_user):
 
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark reviewed" in pane
+    assert MARK_REVIEWED in pane
 
     response = client.post(_review_url(task, log), {"reviewed": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true")
     assert response.status_code == 200
@@ -3339,7 +3366,7 @@ def test_reviewer_marks_a_submission_reviewed(client, user, other_user):
     pane = client.get(_pane_url(project, task)).content.decode()
     row = _row_for(pane, contrib)
     assert f"by {lead.display_name}" in row
-    assert log.reviewed_at.strftime("%b %-d, %Y") in row
+    assert log.reviewed_at.strftime("%b %-d") in row
     # Two checks now: the assignee's own mark and the review of it.
     assert row.count('data-mark="yes"') == 2
     # The Reviewed bar counts it.
@@ -3357,7 +3384,7 @@ def test_review_waits_on_the_assignees_own_mark(client, user, other_user):
 
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark reviewed" not in pane
+    assert MARK_REVIEWED not in pane
 
     response = client.post(_review_url(task, log), {"reviewed": "1"}, HTTP_HX_REQUEST="true")
     assert response.status_code == 400
@@ -3382,8 +3409,8 @@ def test_only_a_reviewer_or_lead_can_review(client, user, other_user):
     # ``contrib`` is an assignee but not a reviewer, and not a Lead.
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark reviewed" not in pane
-    assert "Awaiting review" in pane  # they can see it is waiting on someone
+    assert MARK_REVIEWED not in pane
+    assert "awaiting review" in pane  # they can see it is waiting on someone
 
     response = client.post(
         _review_url(task, lead_log), {"reviewed": "1"}, HTTP_HX_REQUEST="true"
@@ -3419,8 +3446,8 @@ def test_a_reviewer_may_review_their_own_row(client, user, other_user):
 
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark reviewed" in _row_for(pane, lead)
-    assert "Mark reviewed" in _row_for(pane, contrib)
+    assert MARK_REVIEWED in _row_for(pane, lead)
+    assert MARK_REVIEWED in _row_for(pane, contrib)
 
     response = client.post(
         _review_url(task, own_log),
@@ -3443,7 +3470,7 @@ def test_reviewer_can_mark_a_submission_not_reviewed(client, user, other_user):
 
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark not reviewed" in pane
+    assert MARK_NOT_REVIEWED in pane
 
     response = client.post(_review_url(task, log), {"reviewed": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true")
     assert response.status_code == 200
@@ -3502,13 +3529,13 @@ def test_reviewer_changes_move_the_buttons(client, user, other_user):
     )
 
     client.force_login(other_user)
-    assert "Mark reviewed" not in client.get(_pane_url(project, task)).content.decode()
+    assert MARK_REVIEWED not in client.get(_pane_url(project, task)).content.decode()
 
     task.reviewers.add(contrib)
-    assert "Mark reviewed" in client.get(_pane_url(project, task)).content.decode()
+    assert MARK_REVIEWED in client.get(_pane_url(project, task)).content.decode()
 
     task.reviewers.remove(contrib)
-    assert "Mark reviewed" not in client.get(_pane_url(project, task)).content.decode()
+    assert MARK_REVIEWED not in client.get(_pane_url(project, task)).content.decode()
 
 
 @pytest.mark.django_db
@@ -3560,7 +3587,7 @@ def test_a_new_assignee_starts_unreviewed(client, user, other_user, pm_user):
     pane = client.get(_pane_url(project, task)).content.decode()
     row = _row_for(pane, late)
     assert row.count('aria-label="Yes"') == 0
-    assert "Mark reviewed" not in row  # they have not marked their part done
+    assert MARK_REVIEWED not in row  # they have not marked their part done
     assert task.assignees_reviewed_count == 1
 
 
@@ -3638,7 +3665,7 @@ def test_a_task_with_no_reviewers_has_no_review_column_at_all(client, user, othe
     pane = client.get(_pane_url(project, task)).content.decode()
     assert "Reviewers</h4>" not in pane
     assert "data-review-cell" not in pane
-    assert "Awaiting review" not in pane
+    assert "awaiting review" not in pane
     # The assignees and their own marks are all still there.
     assert "data-done-cell" in pane
 
@@ -3802,8 +3829,8 @@ def test_completed_task_freezes_the_assignees_own_actions(client, user, other_us
 
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark my part done" not in pane
-    assert "Undo my mark" not in pane
+    assert "Mark your part done" not in pane
+    assert "Mark your part not done" not in pane
 
     undo = client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
     assert undo.status_code == 403
@@ -3833,10 +3860,10 @@ def test_completed_task_freezes_the_reviewers_actions(client, user, other_user):
     client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark reviewed" not in pane
-    assert "Mark not reviewed" not in pane
+    assert MARK_REVIEWED not in pane
+    assert MARK_NOT_REVIEWED not in pane
     # Nothing is "awaiting" a review that can no longer happen.
-    assert "Awaiting review" not in pane
+    assert "awaiting review" not in pane
     # The review already recorded is still reported, name and date included.
     assert f"by {lead.display_name}" in _row_for(pane, contrib)
 
@@ -3860,7 +3887,7 @@ def test_lead_can_mark_another_members_part_done(client, user, other_user):
 
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark done" in _row_for(pane, contrib)
+    assert MARK_DONE in _row_for(pane, contrib)
 
     response = client.post(
         _done_url(task, contrib), {"done": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
@@ -3875,7 +3902,7 @@ def test_lead_can_mark_another_members_part_done(client, user, other_user):
     assert task.status == TaskStatus.NOT_COMPLETED  # a mark is not a closure
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark not done" in _row_for(pane, contrib)
+    assert MARK_NOT_DONE in _row_for(pane, contrib)
 
 
 @pytest.mark.django_db
@@ -3914,10 +3941,10 @@ def test_only_a_lead_gets_the_per_row_done_action(client, user, other_user):
 
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark done" not in pane
-    assert "Mark not done" not in pane
+    assert MARK_DONE not in pane
+    assert MARK_NOT_DONE not in pane
     # Their own action is still there, in the bar.
-    assert "Mark my part done" in pane
+    assert "Mark your part done" in pane
 
     response = client.post(
         _done_url(task, lead), {"done": "1"}, HTTP_HX_REQUEST="true"
@@ -3941,7 +3968,7 @@ def test_completed_task_freezes_the_leads_per_row_actions(client, user, other_us
     client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark done" not in pane and "Mark not done" not in pane
+    assert MARK_DONE not in pane and MARK_NOT_DONE not in pane
     # The one action a completed task still offers.
     assert "Mark Not Complete" in pane
 
@@ -3954,7 +3981,7 @@ def test_completed_task_freezes_the_leads_per_row_actions(client, user, other_us
     # Reopening the task hands the actions back.
     client.post(reverse("tasks:reopen", kwargs={"pk": task.pk}))
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark not done" in _row_for(pane, contrib)
+    assert MARK_NOT_DONE in _row_for(pane, contrib)
     assert client.post(
         _done_url(task, contrib), {"done": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
     ).status_code == 200
@@ -3996,7 +4023,7 @@ def test_lead_can_mark_an_assignee_who_has_no_log_entry_done(client, user, other
 
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark done" in _row_for(pane, contrib)
+    assert MARK_DONE in _row_for(pane, contrib)
 
     response = client.post(
         _done_url(task, contrib), {"done": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
@@ -4041,10 +4068,10 @@ def test_completed_task_has_no_locked_note(client, user, other_user):
         {"pane_mode": "1"},
         headers={"hx-request": "true"},
     ).content.decode()
-    assert note not in closed and "Mark not done" not in closed
+    assert note not in closed and MARK_NOT_DONE not in closed
     # ... nor a fresh open of the pane.
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert note not in pane and "Mark not done" not in pane
+    assert note not in pane and MARK_NOT_DONE not in pane
 
     reopened = client.post(
         reverse("tasks:reopen", kwargs={"pk": task.pk}),
@@ -4052,7 +4079,7 @@ def test_completed_task_has_no_locked_note(client, user, other_user):
         headers={"hx-request": "true"},
     ).content.decode()
     assert note not in reopened
-    assert "Mark not done" in reopened
+    assert MARK_NOT_DONE in reopened
 
 
 def _sole_assignee_task(user, other_user, *, name="Reviewed to done"):
@@ -4129,7 +4156,7 @@ def test_the_swap_that_closes_the_task_comes_back_saying_so(client, user, other_
     assert "Mark Not Complete" in closed, "the Lead's toggle lagged the click"
     assert "Mark Completed" not in closed
     # Completed, so locked like any completed task: no row actions.
-    assert "Mark not reviewed" not in closed
+    assert MARK_NOT_REVIEWED not in closed
     assert "Marks and reviews are locked" not in closed
 
     # The Lead's toggle is the way back.
@@ -4140,7 +4167,7 @@ def test_the_swap_that_closes_the_task_comes_back_saying_so(client, user, other_
     ).content.decode()
     assert "<span>Not Complete</span>" in reopened
     assert "Mark Completed" in reopened
-    assert "Mark not reviewed" in reopened
+    assert MARK_NOT_REVIEWED in reopened
 
 
 @pytest.mark.django_db
@@ -4196,8 +4223,8 @@ def test_a_task_its_reviews_closed_is_locked_like_any_completed_task(client, use
 
     pane = client.get(_pane_url(project, task)).content.decode()
     assert "Marks and reviews are locked" not in pane
-    assert "Mark not reviewed" not in pane
-    assert "Mark not done" not in pane
+    assert MARK_NOT_REVIEWED not in pane
+    assert MARK_NOT_DONE not in pane
 
     refused = client.post(
         _review_url(task, _current_log(task, contrib)),
@@ -4299,10 +4326,10 @@ def test_a_reviewer_who_is_not_assigned_gets_every_row(client, user, other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
     # No row of their own, and no assignee actions.
     assert reviewer.display_name not in _rows(pane)
-    assert "Mark my part done" not in pane
-    assert "Mark done" not in pane  # setting marks is the Lead's
+    assert "Mark your part done" not in pane
+    assert MARK_DONE not in pane  # setting marks is the Lead's
     # But the review action on the submission that is ready for it.
-    assert "Mark reviewed" in _row_for(pane, contrib)
+    assert MARK_REVIEWED in _row_for(pane, contrib)
 
     response = client.post(
         _review_url(task, log), {"reviewed": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
@@ -4318,11 +4345,12 @@ def test_a_reviewer_who_is_not_assigned_gets_every_row(client, user, other_user)
 
 
 def _done_cell(row):
-    """The done part of a Completion row, without the name beside it or the
-    review part that follows it where the task has one."""
-    first = row.index("data-done-cell")
-    end = row.find("data-review-cell", first)
-    return row[first : end if end != -1 else len(row)]
+    """The green Done line under a Completion row's name ("Done <date> · by
+    <name>"), or an empty string on a row whose part is not marked done."""
+    first = row.find("data-done-line")
+    if first == -1:
+        return ""
+    return row[first : row.index("</span>", first)]
 
 
 @pytest.mark.django_db
@@ -4341,12 +4369,12 @@ def test_matrix_names_the_lead_who_marked_an_assignee_done(client, user, other_u
     assert f"by {lead.display_name}" in done_cell
     # The date comes first, then who set it.
     log = _current_log(task, contrib)
-    assert done_cell.index(log.completed_at.strftime("%b %-d, %Y")) < done_cell.index("by ")
+    assert done_cell.index(log.completed_at.strftime("%b %-d")) < done_cell.index("by ")
 
 
 @pytest.mark.django_db
-def test_matrix_does_not_name_an_assignee_on_their_own_mark(client, user, other_user):
-    """A self-mark needs no name: the row's first column already has it."""
+def test_matrix_names_an_assignee_on_their_own_mark(client, user, other_user):
+    """A self-mark names the assignee, as every Done line names its setter."""
     project, task, _lead, contrib = _two_assignee_task(user, other_user)
 
     client.force_login(other_user)
@@ -4355,10 +4383,7 @@ def test_matrix_does_not_name_an_assignee_on_their_own_mark(client, user, other_
     client.force_login(user)
     row = _row_for(client.get(_pane_url(project, task)).content.decode(), contrib)
     done_cell = _done_cell(row)
-    # No provenance note at all — not even their own name. (They are still
-    # named in the Lead's button label, which is what it is labelling.)
-    assert "by " not in done_cell
-    assert f"by {contrib.display_name}" not in done_cell
+    assert f"by {contrib.display_name}" in done_cell
 
 
 @pytest.mark.django_db
@@ -4397,7 +4422,8 @@ def test_a_cleared_mark_takes_its_setters_name_with_it(client, user, other_user)
     client.force_login(user)
     row = _row_for(client.get(_pane_url(project, task)).content.decode(), contrib)
     done_cell = _done_cell(row)
-    assert "by " not in done_cell
+    assert f"by {contrib.display_name}" in done_cell
+    assert lead.display_name not in done_cell
 
 
 # ---------------------------------------------------------------------------
@@ -4448,7 +4474,7 @@ def test_a_reviewer_can_withdraw_their_own_review(client, user, other_user):
     reopen_task(task=task)
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark not reviewed" in pane
+    assert MARK_NOT_REVIEWED in pane
 
     response = client.post(
         _review_url(task, log), {"reviewed": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
@@ -4469,7 +4495,7 @@ def test_a_reviewer_cannot_withdraw_another_reviewers_review(client, user, other
     # ``other_user`` is ``first``: a reviewer on this task, but not this one's.
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark not reviewed" not in pane
+    assert MARK_NOT_REVIEWED not in pane
     # They can still see the verdict and who gave it.
     assert f"by {second.display_name}" in pane
 
@@ -4497,7 +4523,7 @@ def test_a_lead_can_withdraw_any_review(client, user, other_user):
 
     client.force_login(user)  # the Lead, and not the reviewer who signed it
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark not reviewed" in pane
+    assert MARK_NOT_REVIEWED in pane
 
     response = client.post(
         _review_url(task, log), {"reviewed": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
@@ -4524,13 +4550,13 @@ def test_a_review_left_by_a_deleted_member_is_the_leads_to_clear(client, user, o
     assert log.is_reviewed and log.reviewed_by is None
 
     client.force_login(other_user)  # ``first``, a reviewer on the task
-    assert "Mark not reviewed" not in client.get(_pane_url(project, task)).content.decode()
+    assert MARK_NOT_REVIEWED not in client.get(_pane_url(project, task)).content.decode()
     assert client.post(
         _review_url(task, log), {"reviewed": "0"}, HTTP_HX_REQUEST="true"
     ).status_code == 403
 
     client.force_login(user)
-    assert "Mark not reviewed" in client.get(_pane_url(project, task)).content.decode()
+    assert MARK_NOT_REVIEWED in client.get(_pane_url(project, task)).content.decode()
     assert client.post(
         _review_url(task, log), {"reviewed": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
     ).status_code == 200
@@ -4543,7 +4569,7 @@ def test_making_a_review_is_still_open_to_every_reviewer(client, user, other_use
 
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark reviewed" in pane
+    assert MARK_REVIEWED in pane
 
     assert client.post(
         _review_url(task, log), {"reviewed": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
@@ -5017,7 +5043,7 @@ def test_a_standing_verdict_survives_the_last_reviewer_leaving(client, user, oth
     assert "data-review-cell" in pane
     assert f"by {lead.display_name}" in pane
     assert "Reviewers</h4>" not in pane
-    assert "Mark not reviewed" not in pane
+    assert MARK_NOT_REVIEWED not in pane
 
 
 @pytest.mark.django_db

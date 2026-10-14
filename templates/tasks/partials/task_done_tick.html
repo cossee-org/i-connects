@@ -1,0 +1,33 @@
+{% comment %}
+  The Done tick box of one completion-table row — ticked when the assignee's
+  part is marked done, unticked when not. Ticking marks it; unticking undoes
+  it. Expects ``s`` (one entry of views._task_status_context's
+  assignee_states) and ``task``; it swaps #task-status-block, the target every
+  completion action uses.
+
+  Who may tick it is who could before: a Lead, for anyone (``s.can_mark_done``,
+  posting by member so a row with no entry yet still works), and an assignee
+  for their own part (``s.is_viewer``, through the self-mark endpoints).
+  Everyone else sees it read-only, as does everyone once the task is marked
+  completed and its marks freeze.
+{% endcomment %}
+{% if s.can_mark_done %}
+  <input type="checkbox" class="completion-tick completion-tick-done"{% if s.done %} checked{% endif %}
+         hx-post="{% url 'tasks:member_done' pk=task.pk member_pk=s.member.pk %}"
+         hx-vals='{"done": "{% if s.done %}0{% else %}1{% endif %}", "pane_mode": "1"}'
+         hx-target="#task-status-block"
+         hx-swap="outerHTML"
+         aria-label="Mark {% if s.is_viewer %}your{% else %}{{ s.member.display_name }}'s{% endif %} part {% if s.done %}not done{% else %}done{% endif %}"
+         title="{% if s.done %}Untick to undo{% else %}Tick to mark done{% endif %}">
+{% elif s.is_viewer and not marks_locked %}
+  <input type="checkbox" class="completion-tick completion-tick-done"{% if s.done %} checked{% endif %}
+         hx-post="{% if s.done %}{% url 'tasks:undo' pk=task.pk %}{% else %}{% url 'tasks:complete' pk=task.pk %}{% endif %}"
+         hx-vals='{"pane_mode": "1"}'
+         hx-target="#task-status-block"
+         hx-swap="outerHTML"
+         aria-label="{% if s.done %}Mark your part not done{% else %}Mark your part done{% endif %}"
+         title="{% if s.done %}Untick to undo{% else %}Tick to mark your part done{% endif %}">
+{% else %}
+  <input type="checkbox" class="completion-tick completion-tick-done" disabled{% if s.done %} checked{% endif %}
+         aria-label="{{ s.member.display_name }}: {% if s.done %}done{% else %}not done yet{% endif %}">
+{% endif %}

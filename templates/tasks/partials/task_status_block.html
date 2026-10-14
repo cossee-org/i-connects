@@ -81,43 +81,100 @@
       </div>
 
       {% comment %}
-        One row per assignee: their initial and name, their own mark, then
-        (on a task under review) the reviewer's verdict, each in words — the
-        rows carry no column headings. Rows come from the task's current
-        assignees, so the list follows people being added to or taken off
+        One table row per assignee, under Assignee / Done / Reviewed (the
+        last only on a task under review). The Assignee cell names them and,
+        under the name, what has happened to their part: "Done Oct 14 · by …"
+        in green, "Reviewed Oct 14 · by …" in purple. Done and Reviewed are
+        tick boxes — tick to mark, untick to undo — live only for whoever may
+        make that change (task_done_tick.html, task_review_tick.html), and
+        read-only for everyone else. Each tick cell carries its state as
+        ``data-mark`` (yes / no for Done; yes / pending / none for Reviewed).
+        Rows come from the task's current
+        assignees, so the table follows people being added to or taken off
         the task without any extra bookkeeping.
 
-        Past the third row the list waits behind See more: a task with a
-        dozen assignees would otherwise be a wall of names above the
-        comments. ``rowsExpanded`` comes from an x-data wrapper *outside*
-        this block, which the surrounding template owns — this element is an
-        HTMX swap target, so state kept inside it would snap back to
-        collapsed on every mark and review, taking the row you had just
-        acted on with it.
+        Past the third row the rest wait behind See more: a task with a dozen
+        assignees would otherwise be a wall of names above the comments.
+        ``rowsExpanded`` comes from an x-data wrapper *outside* this block,
+        which the surrounding template owns — this element is an HTMX swap
+        target, so state kept inside it would snap back to collapsed on every
+        mark and review, taking the row you had just acted on with it.
+
+        The table's look is set here rather than in the compiled stylesheet:
+        it is drawn by this block alone, which both the pane and the full
+        task page render.
       {% endcomment %}
-      <ul class="mt-2 divide-y divide-brand-light/50" data-assignee-rows>
-        {% for s in assignee_states %}
-          <li class="flex items-start gap-3 py-2.5" data-assignee-row="{{ s.member.pk }}"{% if forloop.counter > 3 %} x-show="rowsExpanded" x-cloak{% endif %}>
-            <span class="w-6 h-6 mt-px rounded-full bg-brand-navy/80 text-white text-[11px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
-            {# The name on its own line, then the done and review states on one that wraps as the pane narrows. #}
-            <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium text-brand-navy" data-assignee-name>{{ s.member.display_name }}</div>
-              <div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                <div data-done-cell>{% include "tasks/partials/task_done_cell.html" with s=s task=task %}</div>
-                {% if show_review %}
-                  <div data-review-cell>{% include "tasks/partials/task_review_cell.html" with s=s task=task %}</div>
+      <style>
+        .completion-table { width: 100%; margin-top: 0.75rem; border-collapse: collapse; table-layout: fixed; font-size: 0.875rem; }
+        .completion-table th, .completion-table td { border: 1px solid rgb(189 203 232 / 0.9); padding: 0.5rem 0.625rem; vertical-align: top; }
+        .completion-table thead th { background: #eaeff8; font-size: 0.75rem; font-weight: 600; color: rgb(51 51 51 / 0.75); text-align: left; }
+        .completion-table .completion-tick-cell { text-align: center; padding-left: 0.25rem; padding-right: 0.25rem; }
+        .completion-table col.completion-tick-col { width: 76px; }
+        .completion-history { display: flex; flex-direction: column; gap: 2px; margin: 0.25rem 0 0 2rem; font-size: 0.75rem; font-weight: 500; }
+        .completion-tick { appearance: none; -webkit-appearance: none; margin: 0; width: 22px; height: 22px; border-radius: 6px; border: 2px solid #9aa3c7; background: #fff; position: relative; cursor: pointer; vertical-align: middle; }
+        .completion-tick:checked::after { content: ""; position: absolute; left: 6px; top: 2px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+        .completion-tick-done:checked { background: #16a34a; border-color: #16a34a; }
+        .completion-tick-review:checked { background: #7c3aed; border-color: #7c3aed; }
+        .completion-tick:disabled { cursor: default; }
+        .completion-tick:disabled:not(:checked) { opacity: 0.45; }
+        .completion-tick:focus-visible { outline: 2px solid #f03d30; outline-offset: 2px; }
+      </style>
+      <table class="completion-table" data-assignee-rows>
+        <colgroup>
+          <col>
+          <col class="completion-tick-col">
+          {% if show_review %}<col class="completion-tick-col">{% endif %}
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col">Assignee</th>
+            <th scope="col" class="completion-tick-cell">Done</th>
+            {% if show_review %}<th scope="col" class="completion-tick-cell">Reviewed</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in assignee_states %}
+            <tr data-assignee-row="{{ s.member.pk }}"{% if forloop.counter > 3 %} x-show="rowsExpanded" x-cloak{% endif %}>
+              <td>
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="w-6 h-6 rounded-full bg-brand-navy/80 text-white text-[11px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
+                  <span class="text-sm font-medium text-brand-navy break-words min-w-0" data-assignee-name>{{ s.member.display_name }}</span>
+                  {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
+                </div>
+                {% if s.done or s.reviewed %}
+                  <div class="completion-history">
+                    {% if s.done %}
+                      <span class="text-success" data-done-line>
+                        Done{% if s.done_at %} {{ s.done_at|date:"M j" }}{% endif %} &middot;
+                        by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}
+                      </span>
+                    {% endif %}
+                    {% if s.reviewed %}
+                      <span class="text-violet-600" data-review-line>
+                        Reviewed{% if s.reviewed_at %} {{ s.reviewed_at|date:"M j" }}{% endif %} &middot;
+                        by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}
+                      </span>
+                    {% endif %}
+                  </div>
                 {% endif %}
-              </div>
-            </div>
-          </li>
-        {% endfor %}
-      </ul>
+              </td>
+              <td class="completion-tick-cell" data-done-cell data-mark="{% if s.done %}yes{% else %}no{% endif %}">{% include "tasks/partials/task_done_tick.html" with s=s task=task %}</td>
+              {% if show_review %}
+                <td class="completion-tick-cell" data-review-cell data-mark="{% if s.reviewed %}yes{% elif s.done %}pending{% else %}none{% endif %}">{% include "tasks/partials/task_review_tick.html" with s=s task=task %}</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
       {% if assignee_count > 3 %}
         <button type="button"
                 class="mt-1 text-xs font-medium text-brand-navy hover:underline"
                 :aria-expanded="rowsExpanded"
                 @click="rowsExpanded = !rowsExpanded"
                 x-text="rowsExpanded ? 'See less' : 'See more'">See more</button>
+      {% endif %}
+      {% if not marks_locked %}
+        <p class="mt-2 text-xs text-brand-text/60">Tick to mark, untick to undo.</p>
       {% endif %}
     {% else %}
       <p class="mt-3 text-sm text-brand-text/60">Nobody is assigned to this task yet.</p>
@@ -160,8 +217,9 @@
 </div>
 
 {% comment %}
-  Keep the chip and the two action-bar buttons in sync with this swap: all
-  three sit outside #task-status-block, so the swap cannot reach them in place.
+  Keep the chip and the action bar's completion button in sync with this
+  swap: both sit outside #task-status-block, so the swap cannot reach them in
+  place.
 
   Only on a swap response, which is what ``oob`` marks — the views that render
   one set it. A first render (the pane's fragment, the full task page) already
@@ -173,7 +231,6 @@
 {% if pane_mode and oob %}
   {% include "tasks/partials/task_completion_chip.html" with task=task oob=True %}
   {% include "tasks/partials/task_completion_button.html" with task=task is_project_manager=is_project_manager oob=True %}
-  {% include "tasks/partials/task_self_mark_button.html" with task=task is_assignee=is_assignee my_done=my_done oob=True %}
   {% comment %}
     Closing and reopening are what write and clear the closer, so the line
     naming them has to move with the same swap — otherwise a task just

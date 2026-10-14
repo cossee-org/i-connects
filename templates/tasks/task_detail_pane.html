@@ -6,10 +6,9 @@
 
   {# ── Header ── #}
   <div class="sticky top-0 z-10 bg-white flex flex-wrap items-center justify-between px-4 py-3 border-b border-brand-light/60 gap-2">
-    {# Completion actions on the left: the Lead's task-level toggle, then the assignee's own mark. #}
+    {# The Lead's task-level toggle on the left; an assignee marks their own part from the Completion table. #}
     <div class="flex items-center gap-1 min-w-0">
       {% include "tasks/partials/task_completion_button.html" with task=task is_project_manager=is_project_manager %}
-      {% include "tasks/partials/task_self_mark_button.html" with task=task is_assignee=status_block.is_assignee my_done=status_block.my_done %}
     </div>
     <div class="flex items-center gap-1 shrink-0">
       <a href="{{ full_page_url }}"

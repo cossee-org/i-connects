@@ -1290,6 +1290,9 @@ def _task_status_context(task, *, project_member, is_project_manager):
                     )
                 ),
                 "can_mark_done": is_project_manager and not locked,
+                # The viewer's own row: they tick their own part done (and
+                # untick it) from it, while the task is open.
+                "is_viewer": bool(project_member and member.id == project_member.id),
                 # The entry the review buttons act on. None until the member
                 # has one seeded, in which case there is nothing to review.
                 "log": log,

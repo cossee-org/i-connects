@@ -40,16 +40,14 @@
   <div class="space-y-3 [&_.brand-card]:shadow-none" hx-vals='{"surface": "pane"}'>
 
     {% comment %}
-      The pane's top bar: the Lead's task-level toggle and the assignee's own
-      mark on the left, Edit and the ⋯ menu on the right. The first two live
-      outside #task-status-block, so the block's swap refreshes them out of
-      band — which is also why the self-mark wrapper renders even for someone
-      who has no mark to make: the swap needs something to replace.
+      The pane's top bar: the Lead's task-level toggle on the left, Edit and
+      the ⋯ menu on the right. The toggle lives outside #task-status-block, so
+      the block's swap refreshes it out of band. An assignee marks their own
+      part from their row's Done box in the Completion table.
     {% endcomment %}
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="flex items-center gap-1 min-w-0">
         {% include "tasks/partials/task_completion_button.html" with task=task is_project_manager=is_project_manager %}
-        {% include "tasks/partials/task_self_mark_button.html" with task=task is_assignee=status_block.is_assignee my_done=status_block.my_done %}
       </div>
       {% include "tasks/partials/task_lead_actions.html" with task=task project=project is_project_manager=is_project_manager %}
     </div>
