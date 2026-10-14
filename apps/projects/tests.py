@@ -1548,7 +1548,7 @@ def test_contributor_subpages_look_like_wiki_subpages(client, user, url_name, he
 
 
 # ---------------------------------------------------------------------------
-# Project Summary: what the tab reports
+# Project Overview: what the tab reports
 # ---------------------------------------------------------------------------
 
 

@@ -1704,7 +1704,7 @@ def test_delete_confirmation_markup_is_lead_only(client, user, other_user):
     surfaces = {
         "pane": reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk}),
         "detail page": reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}),
-        # The Project Summary no longer lists tasks with Edit/Delete; its
+        # The Project Overview no longer lists tasks with Edit/Delete; its
         # pane loads the delete form with the task, covered above.
     }
     delete_url = reverse("tasks:delete", kwargs={"project_pk": project.pk, "pk": task.pk})
@@ -4560,7 +4560,7 @@ def test_board_toolbar_groups_views_with_columns_and_ends_with_new_task(client, 
     client.force_login(pm_user)
     html = client.get(url).content.decode()
     toolbar = html[html.index("setView('board')") :]
-    order = [toolbar.index(x) for x in ("Kanban", "List", "Calendar", "Manage columns", "New task")]
+    order = [toolbar.index(x) for x in ("Kanban Board", "List", "Calendar", "Manage columns", "New task")]
     assert order == sorted(order)
     # The divider separates the views from Manage columns, inside the left group.
     assert toolbar.index("h-5 w-px") < toolbar.index("Manage columns")

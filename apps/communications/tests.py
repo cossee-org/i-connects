@@ -185,7 +185,7 @@ def test_every_project_tab_opens_with_its_heading_and_info(client, project, pm_u
     client.force_login(pm_user)
     pk = project.pk
     pages = {
-        "Project Summary": reverse("projects:detail", kwargs={"pk": pk}),
+        "Project Overview": reverse("projects:detail", kwargs={"pk": pk}),
         "Tasks": reverse("tasks:board", kwargs={"project_pk": pk}),
         "Contributors": reverse("projects:members", kwargs={"pk": pk}),
         "Contribution Tracking": reverse("projects:contribution_tracking", kwargs={"pk": pk}),

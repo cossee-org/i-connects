@@ -602,7 +602,7 @@ class MyProjectListView(LoginRequiredMixin, ListView):
 
 
 def _project_summary(project, now, *, is_project_manager: bool) -> dict:
-    """Everything the Project Summary tab reports, beyond its number cards.
+    """Everything the Project Overview tab reports, beyond its number cards.
 
     The tab answers four questions, one card each:
 
