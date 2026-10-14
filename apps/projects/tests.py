@@ -1751,13 +1751,18 @@ def test_overview_wiki_card_lists_locked_pages_then_recent_ones(client, user):
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
     wiki = response.context["summary"]["wiki"]
     assert [p.title for p in wiki["key_pages"]] == ["Data protocol", "Team agreement"]
-    assert [p.title for p in wiki["recent"]] == ["Meeting notes", "Glossary"]
+    assert [row["page"].title for row in wiki["recent"]] == ["Meeting notes", "Glossary"]
+    assert wiki["recent"][0]["excerpt"] == "Updated."
 
     body = response.content.decode()
     card = body[body.index('id="proj-wiki-heading"'):]
     card = card[: card.index("</section>")]
     assert "Key pages" not in card
-    assert card.index("Data protocol") < card.index("Team agreement") < card.index("Recently updated")
+    # Locked pages by title, then the rail of the others, newest edit first.
+    assert card.index("Data protocol") < card.index("Team agreement") < card.index('class="wiki-rail"')
+    rail = card[card.index('class="wiki-rail"'):]
+    assert rail.index(">Meeting notes<") < rail.index(">Glossary<")
+    assert "Edited by Alice" in rail and "No text yet." in rail
     assert "All 4 pages" in card
 
 

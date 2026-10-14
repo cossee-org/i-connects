@@ -618,6 +618,7 @@ def _project_summary(project, now) -> dict:
     from apps.tasks.models import Task, TaskLog
     from apps.tasks.services import all_submissions_reviewed
     from apps.wiki.models import WikiPage, WikiRevision
+    from apps.wiki.utils import excerpt
 
     tasks = Task.objects.filter(project=project)
 
@@ -706,11 +707,14 @@ def _project_summary(project, now) -> dict:
     # A locked page is one a lead has marked settled (only leads can edit
     # it), which is what a project's agreements and protocols are. Those are
     # listed in full, by title, so members always find them; the rest show
-    # as what was edited lately.
+    # as what was edited lately, a card each with a short plain-text summary.
     pages = WikiPage.objects.filter(project=project).select_related("updated_by")
     wiki = {
         "key_pages": list(pages.filter(locked=True).order_by("title", "id")[:10]),
-        "recent": list(pages.filter(locked=False).order_by("-updated_at", "id")[:4]),
+        "recent": [
+            {"page": page, "excerpt": excerpt(page.content_markdown, limit=140)}
+            for page in pages.filter(locked=False).order_by("-updated_at", "id")[:12]
+        ],
     }
 
     return {

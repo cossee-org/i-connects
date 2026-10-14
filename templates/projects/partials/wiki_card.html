@@ -2,20 +2,60 @@
   Project Overview → Wiki: the project's documents, where members see them
   first. The locked pages — a lead has marked them settled (agreements,
   protocols, data dictionaries) — come first, by title, each with a lock;
-  under them, the other pages edited most recently.
+  under them, the other pages edited most recently, as a rail of cards
+  (title, a short summary, who edited it when) that scrolls sideways: the
+  arrows in the header on a wide screen, a swipe on a phone. The arrows only
+  show while the rail holds more than fits. Its CSS is in detail.html.
 
   Needs project, summary (see projects.views._project_summary),
   wiki_page_count and is_project_manager.
 {% endcomment %}
-<section class="brand-card p-5" aria-labelledby="proj-wiki-heading">
+<section class="brand-card p-5" aria-labelledby="proj-wiki-heading"
+         x-data="{
+           atStart: true,
+           atEnd: true,
+           refresh() {
+             const el = this.$refs.rail;
+             if (!el) return;
+             const max = el.scrollWidth - el.clientWidth;
+             this.atStart = el.scrollLeft <= 1;
+             this.atEnd = el.scrollLeft >= max - 1;
+           },
+           step(dir) {
+             const el = this.$refs.rail;
+             el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' });
+           }
+         }"
+         x-init="$nextTick(() => refresh())"
+         @resize.window="refresh()">
   {# Headed like About: a plain title, no icon. #}
-  <div class="flex items-baseline justify-between gap-2 mb-3">
+  <div class="flex items-center justify-between gap-2 mb-3">
     <h2 id="proj-wiki-heading" class="text-lg font-semibold text-brand-navy">Wiki</h2>
     {% if wiki_page_count %}
-      <a href="{% url 'wiki:list' project_pk=project.pk %}"
-         class="text-xs font-medium text-brand-navy hover:text-brand-coral">
-        All {{ wiki_page_count }} page{{ wiki_page_count|pluralize }}
-      </a>
+      <div class="flex items-center gap-3">
+        <a href="{% url 'wiki:list' project_pk=project.pk %}"
+           class="text-xs font-medium text-brand-navy hover:text-brand-coral">
+          All {{ wiki_page_count }} page{{ wiki_page_count|pluralize }}
+        </a>
+        {% if summary.wiki.recent %}
+          <div class="flex items-center gap-2" x-show="!(atStart && atEnd)" x-cloak>
+            <button type="button" class="wiki-rail-nav" aria-label="Previous wiki pages"
+                    :disabled="atStart" @click="step(-1)">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                   stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+            <button type="button" class="wiki-rail-nav" aria-label="Next wiki pages"
+                    :disabled="atEnd" @click="step(1)">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                   stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
+          </div>
+        {% endif %}
+      </div>
     {% endif %}
   </div>
 
@@ -50,13 +90,21 @@
     {% endif %}
 
     {% if summary.wiki.recent %}
-      <h3 class="text-xs text-brand-text/60 mb-1">Recently updated</h3>
-      <ul class="space-y-1.5">
-        {% for page in summary.wiki.recent %}
-          <li class="flex items-baseline justify-between gap-2 text-sm">
-            <a href="{{ page.get_absolute_url }}"
-               class="text-brand-navy hover:text-brand-coral break-words min-w-0">{{ page.title }}</a>
-            <span class="text-xs text-brand-text/60 shrink-0">{{ page.updated_at|date:"M j" }}</span>
+      <ul class="wiki-rail" x-ref="rail" @scroll.debounce.50ms="refresh()"
+          aria-label="Recently updated wiki pages">
+        {% for row in summary.wiki.recent %}
+          <li class="wiki-rail-item">
+            <a href="{{ row.page.get_absolute_url }}" class="wiki-rail-card">
+              <span class="font-semibold text-brand-navy break-words">{{ row.page.title }}</span>
+              {% if row.excerpt %}
+                <span class="text-sm text-brand-text/80 line-clamp-3">{{ row.excerpt }}</span>
+              {% else %}
+                <span class="text-sm text-brand-text/60 italic">No text yet.</span>
+              {% endif %}
+              <span class="mt-auto text-xs text-brand-text/60">
+                {% if row.page.updated_by %}Edited by {{ row.page.updated_by.display_name }} &middot; {% endif %}{{ row.page.updated_at|date:"M j" }}
+              </span>
+            </a>
           </li>
         {% endfor %}
       </ul>
