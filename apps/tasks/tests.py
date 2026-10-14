@@ -1366,9 +1366,10 @@ def test_board_page_shows_manage_columns_for_every_view(client, pm_user):
     markup = button[: button.index("</button>")]
     # No x-show gate on the button itself (the view switcher still uses one).
     assert "x-show" not in markup
-    # A plain text button beside "New task": it no longer sits in the view
-    # switcher's row, so it no longer carries an icon to match those buttons.
-    assert "<svg" not in markup
+    # A bordered secondary button, set apart from the segmented view switcher
+    # so it does not read as a fifth view.
+    assert "border-gray-300" in markup
+    assert "join-item" not in markup
 
 
 # ---------------------------------------------------------------------------
@@ -4702,10 +4703,14 @@ def test_board_toolbar_groups_views_with_columns_and_ends_with_new_task(client, 
     client.force_login(pm_user)
     html = client.get(url).content.decode()
     toolbar = html[html.index("setView('board')") :]
-    order = [toolbar.index(x) for x in ("Kanban Board", "List", "Calendar", "Manage columns", "New task")]
+    order = [
+        toolbar.index(x)
+        for x in ("Kanban", "List", "Table", "Calendar", "Manage columns", "New task")
+    ]
     assert order == sorted(order)
-    # The divider separates the views from Manage columns, inside the left group.
-    assert toolbar.index("h-5 w-px") < toolbar.index("Manage columns")
+    # The views share one segmented-control track; Manage columns sits after it.
+    assert 'aria-label="Task views"' in html
+    assert html.index('aria-label="Task views"') < html.index("setView('board')")
 
     _add_contributor(project, user)
     client.force_login(user)
