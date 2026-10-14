@@ -1431,8 +1431,9 @@ def test_overdue_pill_on_task_pane_and_page_follows_close_and_reopen(client, pm_
 
 @pytest.mark.django_db
 def test_parts_done_and_all_reviewed_icons_on_every_view(client, user, other_user):
-    """One person with a check once every assignee has marked their part
-    done; two people with a check once every submission is reviewed."""
+    """A green check once every assignee has marked their part done, a
+    purple one once every submission is reviewed, and a blue one once the
+    task is marked completed."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -1459,9 +1460,17 @@ def test_parts_done_and_all_reviewed_icons_on_every_view(client, user, other_use
     # One reviewed: still only that.
     mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
     assert shown() == [(True, False)] * 2
-    # Every submission reviewed: both.
+    # Every submission reviewed: both — and the last review completed the task.
     mark_reviewed(task_log=_current_log(task, lead), reviewer=lead)
     assert shown() == [(True, True)] * 2
+    page = client.get(views[0]).content.decode()
+    for colour, label in (
+        ("text-success", "All assignees marked their parts done"),
+        ("text-violet-600", "All submissions reviewed"),
+        ("text-blue-600", "Complete"),
+    ):
+        icon = page[page.rindex("<span", 0, page.index(f'aria-label="{label}"')):]
+        assert colour in icon[: icon.index(">")], label
 
     # A task nobody is assigned to shows neither.
     nobody = Task.objects.create(
