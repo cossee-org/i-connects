@@ -53,32 +53,77 @@
     }
   });
   {% endif %}
+  // Each view: the container it renders into and the partial that fills it.
+  var BOARD_VIEWS = {
+    board: { target: 'board-view-container', url: '{% url "tasks:board_kanban" project_pk=project.pk %}' },
+    list: { target: 'list-view-container', url: '{% url "tasks:board_list" project_pk=project.pk %}' },
+    table: { target: 'table-view-container', url: '{% url "tasks:board_table" project_pk=project.pk %}' },
+    calendar: { target: 'calendar-view-container', url: '{% url "tasks:board_calendar" project_pk=project.pk %}' }
+  };
+
   document.addEventListener('alpine:init', function () {
     Alpine.store('board', {
       viewMode: localStorage.getItem('boardViewMode') || 'board',
+      // True once something was changed from the side pane (a mark, a
+      // review, completing or reopening, an edit, a comment): the cards
+      // behind it are out of date until the view is fetched again.
+      stale: false,
+      // The last address each view was fetched from, so a refresh keeps
+      // the calendar's date and range, the table's sort and the filter.
+      paths: {},
+      load: function (mode) {
+        var view = BOARD_VIEWS[mode] || BOARD_VIEWS.board;
+        htmx.ajax('GET', this.paths[mode] || view.url, {
+          target: '#' + view.target, swap: 'innerHTML'
+        });
+      },
       setView: function (next) {
         if (next === this.viewMode) return;
         this.viewMode = next;
         localStorage.setItem('boardViewMode', next);
-        if (next === 'list') {
-          htmx.ajax('GET', '{% url "tasks:board_list" project_pk=project.pk %}', {
-            target: '#list-view-container', swap: 'innerHTML'
-          });
-        } else if (next === 'table') {
-          htmx.ajax('GET', '{% url "tasks:board_table" project_pk=project.pk %}', {
-            target: '#table-view-container', swap: 'innerHTML'
-          });
-        } else if (next === 'calendar') {
-          htmx.ajax('GET', '{% url "tasks:board_calendar" project_pk=project.pk %}', {
-            target: '#calendar-view-container', swap: 'innerHTML'
-          });
-        } else {
-          htmx.ajax('GET', '{% url "tasks:board_kanban" project_pk=project.pk %}', {
-            target: '#board-view-container', swap: 'innerHTML'
-          });
-        }
+        // Switching fetches the view afresh, so it is never stale.
+        this.load(next);
+      },
+      refresh: function () {
+        this.stale = false;
+        this.load(this.viewMode);
       }
     });
+  });
+
+  // Remember where each view was last fetched from.
+  document.addEventListener('htmx:afterRequest', function (evt) {
+    var d = evt.detail;
+    if (!d || !d.successful || !d.target || !d.pathInfo) return;
+    for (var mode in BOARD_VIEWS) {
+      if (BOARD_VIEWS[mode].target === d.target.id) {
+        Alpine.store('board').paths[mode] = d.pathInfo.finalRequestPath || d.pathInfo.requestPath;
+      }
+    }
+  });
+
+  // Anything the side pane or the task dialog sends that is not a plain
+  // read changes the task, so the board behind them needs fetching again.
+  // Checked as the request leaves: by the time it returns, the swap may
+  // have replaced the button that sent it.
+  document.addEventListener('htmx:beforeRequest', function (evt) {
+    var d = evt.detail;
+    var verb = d && d.requestConfig && d.requestConfig.verb;
+    if (!verb || verb.toLowerCase() === 'get') return;
+    var pane = document.getElementById('task-pane-body');
+    var dialog = document.getElementById('task-modal');
+    if ((pane && pane.contains(d.elt)) || (dialog && dialog.contains(d.elt))) {
+      Alpine.store('board').stale = true;
+    }
+  });
+  document.addEventListener('task-updated', function () {
+    if (window.Alpine) Alpine.store('board').stale = true;
+  });
+
+  // Back from the full task page: the browser may show the board as it was
+  // left, from its cache. Fetch the current view again.
+  window.addEventListener('pageshow', function (evt) {
+    if (evt.persisted && window.Alpine) Alpine.store('board').refresh();
   });
 </script>
 {% endblock %}
@@ -361,6 +406,8 @@
       },
       closePane() {
         this.paneOpen = false;
+        // Back on the board: show what was changed from the pane, icons and all.
+        if (this.$store.board.stale) this.$store.board.refresh();
       },
       toggleRangeSelect() {
         this.rangeSelect = !this.rangeSelect;
