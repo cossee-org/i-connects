@@ -47,6 +47,14 @@ class WikiPage(models.Model):
         help_text="Only project leads can edit a locked page.",
     )
 
+    # A lead puts a page on the Project Overview's Wiki card, where members
+    # see it first: the agreements and protocols everyone should read. Only
+    # these pages are listed there.
+    show_on_overview = models.BooleanField(
+        default=False,
+        help_text="Listed on the Project Overview's Wiki card.",
+    )
+
     # SET_NULL so a page survives the account that wrote it being removed;
     # authorship attribution degrades to "unknown" rather than taking the
     # documentation with it.

@@ -170,6 +170,7 @@ class WikiPageCreateView(WikiPageFormViewBase):
             content_markdown=form.cleaned_data.get("content_markdown") or "",
             summary=form.cleaned_data.get("summary") or "",
             locked=bool(form.cleaned_data.get("locked")),
+            show_on_overview=bool(form.cleaned_data.get("show_on_overview")),
         )
         messages.success(self.request, f"Created “{page.title}”.")
         return HttpResponseRedirect(page.get_absolute_url())
@@ -225,6 +226,11 @@ class WikiPageUpdateView(WikiPageFormViewBase):
                 summary=form.cleaned_data.get("summary") or "",
                 locked=(
                     bool(form.cleaned_data.get("locked"))
+                    if self.is_project_manager
+                    else None
+                ),
+                show_on_overview=(
+                    bool(form.cleaned_data.get("show_on_overview"))
                     if self.is_project_manager
                     else None
                 ),

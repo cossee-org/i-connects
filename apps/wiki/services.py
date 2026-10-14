@@ -134,6 +134,7 @@ def create_page(
     content_markdown: str = "",
     summary: str = "",
     locked: bool = False,
+    show_on_overview: bool = False,
 ) -> WikiPage:
     """Create a page, its first revision, and the audit entry, atomically."""
     page = WikiPage.objects.create(
@@ -142,6 +143,7 @@ def create_page(
         slug=unique_slug(project, title),
         content_markdown=content_markdown or "",
         locked=locked,
+        show_on_overview=show_on_overview,
         created_by=actor if getattr(actor, "pk", None) else None,
         updated_by=actor if getattr(actor, "pk", None) else None,
     )
@@ -165,14 +167,16 @@ def update_page(
     content_markdown: str,
     summary: str = "",
     locked: bool | None = None,
+    show_on_overview: bool | None = None,
     expected_revision: int | None = None,
 ) -> tuple[WikiPage, bool]:
     """Save an edit. Returns ``(page, a_revision_was_written)``.
 
     A save that changes neither the title nor the body writes no revision —
     an "Update" button pressed twice should not fill the history with
-    identical snapshots. Changing only the lock still counts as a change to
-    the page (and is audit-logged), just not to its text.
+    identical snapshots. Changing only a setting (the lock, being on the
+    Project Overview) still counts as a change to the page (and is
+    audit-logged), just not to its text. ``None`` leaves a setting as is.
 
     ``expected_revision`` is the revision the editor loaded. If the page has
     moved on since, this raises :class:`EditConflict` instead of overwriting
@@ -189,14 +193,18 @@ def update_page(
     new_title = title.strip()
     new_body = content_markdown or ""
     text_changed = new_title != page.title or new_body != page.content_markdown
-    lock_changed = locked is not None and locked != page.locked
-    if not text_changed and not lock_changed:
+    settings_changed = (locked is not None and locked != page.locked) or (
+        show_on_overview is not None and show_on_overview != page.show_on_overview
+    )
+    if not text_changed and not settings_changed:
         return page, False
 
     page.title = new_title
     page.content_markdown = new_body
     if locked is not None:
         page.locked = locked
+    if show_on_overview is not None:
+        page.show_on_overview = show_on_overview
     if getattr(actor, "pk", None):
         page.updated_by = actor
     page.save()
@@ -213,6 +221,7 @@ def update_page(
             "slug": page.slug,
             "text_changed": text_changed,
             "locked": page.locked,
+            "show_on_overview": page.show_on_overview,
         },
     )
     return page, text_changed

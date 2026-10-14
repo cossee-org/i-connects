@@ -49,6 +49,13 @@
           {% endif %}
         </p>
       </div>
+      {% if page.locked or page.show_on_overview %}
+      <span class="flex flex-wrap gap-2 shrink-0">
+      {% if page.show_on_overview %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">
+          On Project Overview
+        </span>
+      {% endif %}
       {% if page.locked %}
         <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-light/50 text-brand-text shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3" aria-hidden="true">
@@ -56,6 +63,8 @@
           </svg>
           Locked &mdash; leads only
         </span>
+      {% endif %}
+      </span>
       {% endif %}
     </div>
 

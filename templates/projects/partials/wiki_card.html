@@ -1,10 +1,10 @@
 {% comment %}
-  Project Overview → Wiki: the project's documents, where members see them
-  first, as one list. The locked pages — a lead has marked them settled
-  (agreements, protocols, data dictionaries) — lead it, by title, each with
-  a lock; the other pages follow, newest edit first. Only the first few
-  show (see projects.views._project_summary); "See more" under them opens
-  the Wiki tab while there are more.
+  Project Overview → Wiki: the pages a lead has put on the Overview (the
+  page's "Show on Project Overview" setting), as one list. The locked ones
+  (agreements, protocols, data dictionaries) lead it, by title, each with a
+  lock; the others follow, newest edit first. Only the first few show (see
+  projects.views._project_summary); "See more" under them opens the Wiki
+  tab while the wiki holds more.
 
   Needs project, summary (see projects.views._project_summary),
   wiki_page_count and is_project_manager.
@@ -16,6 +16,17 @@
   {% if not wiki_page_count %}
     <p class="text-sm text-brand-text/60 italic">No wiki pages yet.</p>
     {# The Overview reports; writing starts on the Wiki tab. #}
+    <a href="{% url 'wiki:list' project_pk=project.pk %}"
+       class="inline-block mt-2 text-sm font-medium text-brand-navy hover:text-brand-coral">
+      Go to the Wiki &rarr;
+    </a>
+  {% elif not summary.wiki.pages %}
+    <p class="text-sm text-brand-text/60 italic">No wiki pages are on the Overview yet.</p>
+    {% if is_project_manager %}
+      <p class="text-xs text-brand-text/60 mt-1">
+        Edit a page and tick &ldquo;Show on Project Overview&rdquo; to list it here.
+      </p>
+    {% endif %}
     <a href="{% url 'wiki:list' project_pk=project.pk %}"
        class="inline-block mt-2 text-sm font-medium text-brand-navy hover:text-brand-coral">
       Go to the Wiki &rarr;
@@ -47,12 +58,6 @@
          class="inline-block mt-3 text-sm font-medium text-brand-navy hover:text-brand-coral">
         See more &rarr;
       </a>
-    {% endif %}
-    {% if is_project_manager and not summary.wiki.has_locked %}
-      <p class="text-xs text-brand-text/60 mt-3">
-        Lock a page &mdash; an agreement, a protocol &mdash; and it leads this
-        list for every member.
-      </p>
     {% endif %}
   {% endif %}
 </section>

@@ -77,6 +77,20 @@
       </div>
     {% endif %}
 
+    {% if form.show_on_overview %}
+      <div class="form-control w-full mb-4">
+        <label class="label cursor-pointer justify-start gap-2 pb-1" for="{{ form.show_on_overview.id_for_label }}">
+          {{ form.show_on_overview }}
+          <span class="label-text text-brand-navy font-medium">{{ form.show_on_overview.label }}</span>
+        </label>
+        <label class="label pt-0">
+          <span class="label-text-alt text-brand-text/60">
+            Lists this page on the Project Overview's Wiki card, where members see it first.
+          </span>
+        </label>
+      </div>
+    {% endif %}
+
     {% if page %}
       <p class="text-xs text-brand-text/60">
         Saving keeps the current text as revision {{ page.latest_revision_number }} in the

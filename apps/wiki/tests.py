@@ -637,6 +637,49 @@ def test_a_contributors_edit_leaves_the_lead_lock_alone(
 
 
 @pytest.mark.django_db
+def test_putting_a_page_on_the_overview_is_a_change_without_a_new_revision(
+    project, pm_user
+):
+    page = create_page(project=project, actor=pm_user, title="Protocol", content_markdown="t")
+
+    page, wrote_revision = update_page(
+        page=page, actor=pm_user, title="Protocol", content_markdown="t",
+        show_on_overview=True,
+    )
+
+    assert page.show_on_overview is True
+    assert wrote_revision is False
+    assert page.revisions.count() == 1
+
+
+@pytest.mark.django_db
+def test_only_a_lead_puts_a_page_on_the_overview(client, project, pm_user, contributor):
+    """A lead ticks the box; a contributor's form has no box, so their edit
+    leaves the setting as the lead left it."""
+    client.force_login(pm_user)
+    client.post(
+        _url("create", project),
+        {"title": "Agreement", "content_markdown": "v1", "show_on_overview": "on"},
+    )
+    page = WikiPage.objects.get(project=project, title="Agreement")
+    assert page.show_on_overview is True
+    detail = client.get(_url("detail", project, slug=page.slug)).content.decode()
+    assert "On Project Overview" in detail
+
+    client.force_login(contributor)
+    form = client.get(_url("update", project, slug=page.slug)).content.decode()
+    assert 'name="show_on_overview"' not in form
+    client.post(
+        _url("update", project, slug=page.slug),
+        {"title": "Agreement", "content_markdown": "v2", "base_revision": 1,
+         "show_on_overview": ""},
+    )
+    page.refresh_from_db()
+    assert page.content_markdown == "v2"
+    assert page.show_on_overview is True
+
+
+@pytest.mark.django_db
 def test_a_conflicting_save_is_refused_with_an_explanation(
     client, project, pm_user, contributor
 ):

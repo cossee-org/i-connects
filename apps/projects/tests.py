@@ -1735,16 +1735,19 @@ def test_summary_is_a_report_not_a_workbench(client, user):
 
 
 @pytest.mark.django_db
-def test_overview_wiki_card_is_one_list_locked_pages_first(client, user):
-    """Every page in one list: the locked ones (agreements, protocols) first,
-    by title and each with a lock, then the others, newest edit first."""
+def test_overview_wiki_card_lists_the_pages_put_on_the_overview(client, user):
+    """Only the pages a lead put on the Overview, in one list: the locked ones
+    first, by title and each with a lock, then the others, newest edit first."""
     from apps.wiki.services import create_page, update_page
 
     project = _make_project(user)
-    create_page(project=project, actor=user, title="Team agreement", locked=True)
-    create_page(project=project, actor=user, title="Data protocol", locked=True)
-    notes = create_page(project=project, actor=user, title="Meeting notes")
-    create_page(project=project, actor=user, title="Glossary")
+    on = {"show_on_overview": True}
+    create_page(project=project, actor=user, title="Team agreement", locked=True, **on)
+    create_page(project=project, actor=user, title="Data protocol", locked=True, **on)
+    notes = create_page(project=project, actor=user, title="Meeting notes", **on)
+    create_page(project=project, actor=user, title="Glossary", **on)
+    create_page(project=project, actor=user, title="Scratchpad")          # not on it
+    create_page(project=project, actor=user, title="Old rules", locked=True)  # nor this
     update_page(page=notes, actor=user, title=notes.title, content_markdown="Updated.")
 
     client.force_login(user)
@@ -1763,9 +1766,10 @@ def test_overview_wiki_card_is_one_list_locked_pages_first(client, user):
     order = [card.index(f">{t}</a>") for t in ("Data protocol", "Team agreement", "Meeting notes", "Glossary")]
     assert order == sorted(order)
     assert card.count('aria-label="Locked page"') == 2
-    # Four pages all fit: no "See more", no dates, no rules between rows.
-    assert "See more" not in card
+    assert "Scratchpad" not in card and "Old rules" not in card
+    # No dates, no rules between rows; the wiki holds more, so "See more".
     assert "Oct" not in card and "divide-y" not in card
+    assert "See more" in card
 
 
 @pytest.mark.django_db
@@ -1773,9 +1777,11 @@ def test_overview_wiki_card_shows_the_first_five_then_see_more(client, user):
     from apps.wiki.services import create_page
 
     project = _make_project(user)
-    create_page(project=project, actor=user, title="Team agreement", locked=True)
+    create_page(
+        project=project, actor=user, title="Team agreement", locked=True, show_on_overview=True
+    )
     for title in ("One", "Two", "Three", "Four", "Five", "Six"):
-        create_page(project=project, actor=user, title=title)
+        create_page(project=project, actor=user, title=title, show_on_overview=True)
 
     client.force_login(user)
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
@@ -1791,20 +1797,29 @@ def test_overview_wiki_card_shows_the_first_five_then_see_more(client, user):
     assert f'<a href="{wiki_url}"' in card and "See more" in card
 
 
+def _wiki_card(body: str) -> str:
+    """The Overview's Wiki card alone, out of the whole page."""
+    card = body[body.index('id="proj-wiki-heading"'):]
+    return card[: card.index("</section>")]
+
+
 @pytest.mark.django_db
-def test_overview_wiki_card_when_nothing_is_locked_or_written(client, user, other_user):
-    from apps.wiki.services import create_page
+def test_overview_wiki_card_when_nothing_is_on_the_overview_or_written(client, user, other_user):
+    from apps.wiki.services import create_page, update_page
 
     project = _make_project(user)
+    url = reverse("projects:detail", kwargs={"pk": project.pk})
     client.force_login(user)
-    body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    body = client.get(url).content.decode()
     assert "No wiki pages yet." in body and "Go to the Wiki" in body
 
-    # Pages but none locked: a lead is told how to keep one first; a member
-    # sees only the pages.
-    create_page(project=project, actor=user, title="Notes")
-    lead_body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
-    assert "Lock a page" in lead_body
+    # Pages, none on the Overview: the card says so, and a lead is told how
+    # to put one there; a member is not.
+    notes = create_page(project=project, actor=user, title="Notes")
+    lead_body = client.get(url).content.decode()
+    assert "No wiki pages are on the Overview yet." in lead_body
+    assert "Show on Project Overview" in lead_body
+    assert ">Notes</a>" not in _wiki_card(lead_body)
 
     member = ProjectMember.objects.create(project=project)
     member.users.add(other_user)
@@ -1812,6 +1827,12 @@ def test_overview_wiki_card_when_nothing_is_locked_or_written(client, user, othe
         project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
     )
     client.force_login(other_user)
-    member_body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
-    assert "Lock a page" not in member_body
-    assert ">Notes</a>" in member_body
+    member_body = client.get(url).content.decode()
+    assert "No wiki pages are on the Overview yet." in member_body
+    assert "Show on Project Overview" not in member_body
+
+    # A lead puts it on the Overview: every member now sees it listed.
+    update_page(
+        page=notes, actor=user, title=notes.title, content_markdown="", show_on_overview=True
+    )
+    assert ">Notes</a>" in _wiki_card(client.get(url).content.decode())
