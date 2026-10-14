@@ -24,9 +24,12 @@
   button at once, and at the table's text-sm that wraps in a narrow pane.
 {% endcomment %}
 <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-  {% include "tasks/partials/task_matrix_cell.html" with on=s.reviewed at=s.reviewed_at %}
-
+  {% comment %}
+    Only a part that has been marked done has a review state to show: before
+    that there is nothing to review, and the row says so in its done state.
+  {% endcomment %}
   {% if s.reviewed %}
+    {% include "tasks/partials/task_matrix_cell.html" with on=True at=s.reviewed_at on_text="Reviewed" tone="review" %}
     <span class="text-xs text-brand-text/60 whitespace-nowrap">
       {% if s.reviewed_by %}
         by {{ s.reviewed_by.display_name }}
@@ -52,6 +55,20 @@
       </button>
     {% endif %}
   {% elif s.awaiting_review and s.log %}
+    {% comment %}
+      Waiting on a reviewer, in amber with a clock, so a part stuck at review
+      stands out — but only while it really is: a completed task takes
+      reviewing off the table. A reviewer gets the button beside it.
+    {% endcomment %}
+    {% if not marks_locked %}
+      <span class="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 whitespace-nowrap">
+        {# clock #}
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd" />
+        </svg>
+        Awaiting review
+      </span>
+    {% endif %}
     {% if s.can_review %}
       <button type="button"
               class="btn btn-primary btn-xs gap-1"
@@ -67,12 +84,6 @@
         </svg>
         Mark reviewed
       </button>
-    {% elif not marks_locked %}
-      {% comment %}
-        Everyone else just sees that it is waiting on a reviewer — but only
-        while it really is: a completed task takes reviewing off the table.
-      {% endcomment %}
-      <span class="text-xs text-brand-text/60 whitespace-nowrap">Awaiting review</span>
     {% endif %}
   {% endif %}
 </div>

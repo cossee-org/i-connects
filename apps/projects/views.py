@@ -623,6 +623,7 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
     from apps.contributions.models import ContributionRecord
     from apps.core.enums import TaskStatus
     from apps.tasks.models import Milestone, Task, TaskLog
+    from apps.tasks.services import all_submissions_reviewed
     from apps.wiki.models import WikiPage, WikiRevision
 
     tasks = Task.objects.filter(project=project)
@@ -664,9 +665,9 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
     upcoming.sort(key=lambda item: item["date"])
 
     # ── Recent activity ──
-    # Drawn from what the app records today: a task's creation and its lead
-    # completion live on the task, each assignee's done mark on their current
-    # TaskLog, and every wiki save is a revision.
+    # Drawn from what the app records today: a task's creation and its
+    # completion live on the task, each assignee's done mark and its review
+    # on their current TaskLog, and every wiki save is a revision.
     events = []
     for t in tasks.select_related("created_by").order_by("-created_at")[:8]:
         events.append({
@@ -688,16 +689,41 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
             "who": log.assigned_to.display_name,
             "verb": "marked their part done on", "kind": "task", "task": log.task,
         })
+    for log in (
+        TaskLog.objects.filter(task__project=project, reviewed_at__isnull=False)
+        .select_related("task", "assigned_to", "reviewed_by")
+        .order_by("-reviewed_at")[:8]
+    ):
+        own = log.reviewed_by_id == log.assigned_to_id
+        part = "their own part" if own else f"{log.assigned_to.display_name}'s part"
+        events.append({
+            "when": log.reviewed_at,
+            "who": log.reviewed_by.display_name if log.reviewed_by else "Someone",
+            "verb": f"reviewed {part} on", "kind": "task", "task": log.task,
+        })
     for t in (
         tasks.filter(closed_at__isnull=False)
         .select_related("closed_by")
+        .prefetch_related("reviewers", "assigned_members", "task_logs")
         .order_by("-closed_at")[:8]
     ):
-        events.append({
-            "when": t.closed_at,
-            "who": t.closed_by.display_name if t.closed_by else "A lead",
-            "verb": "completed", "kind": "task", "task": t,
-        })
+        # The last sign-off closes a reviewed task by itself (mark_reviewed),
+        # so it reads as the task finishing, not as the reviewer's own click
+        # — the review just before it already names them. Completed with
+        # every part reviewed is the same test clear_review uses to tell a
+        # task its reviews closed from one a Lead closed by hand.
+        if all_submissions_reviewed(t):
+            events.append({
+                "when": t.closed_at, "who": "", "verb": "",
+                "after": "was marked done: every part reviewed",
+                "kind": "task", "task": t,
+            })
+        else:
+            events.append({
+                "when": t.closed_at,
+                "who": t.closed_by.display_name if t.closed_by else "A lead",
+                "verb": "completed", "kind": "task", "task": t,
+            })
     for r in (
         WikiRevision.objects.filter(page__project=project)
         .select_related("page", "editor")

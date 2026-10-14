@@ -79,9 +79,6 @@ class MemberMultiSelect(forms.SelectMultiple):
             'cursor-pointer text-left font-normal">'
             '<span x-text="ids.length ? (ids.length === allIds.length ? '
             "'All members' : ids.length + ' selected') : 'Select members'\">Select members</span>"
-            '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-60 pointer-events-none" '
-            'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
-            '<path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>'
             "</summary>"
             '<div class="dropdown-content absolute left-0 bottom-full z-30 bg-base-100 rounded-box shadow '
             'border border-base-300 w-full mb-1 p-2 max-h-64 overflow-y-auto">'
@@ -170,11 +167,13 @@ class TaskForm(forms.ModelForm):
             "container": forms.Select(attrs={"class": _daisy_select}),
             "assigned_members": MemberMultiSelect(),
             "reviewers": MemberMultiSelect(),
+            # Drawn as a switch in the Review panel (task_form.html).
             "requires_review": forms.CheckboxInput(
-                attrs={"class": "checkbox checkbox-sm", "x-model": "requiresReview"}
+                attrs={"class": "toggle toggle-sm toggle-primary mt-0.5", "x-model": "requiresReview"}
             ),
             "contribution_type": forms.Select(attrs={"class": _daisy_select}),
-            "is_priority": forms.CheckboxInput(attrs={"class": "checkbox checkbox-sm"}),
+            # Visually hidden: task_form.html draws it as a flag toggle button.
+            "is_priority": forms.CheckboxInput(attrs={"class": "sr-only"}),
         }
 
     def __init__(self, *args, project=None, **kwargs):
@@ -228,8 +227,19 @@ class TaskForm(forms.ModelForm):
             "when it is completed."
         )
         current = self.instance.contribution_type if self.instance.pk else None
-        field.choices = [("", "No task type")] + credit_role_choices(current)
+        choices = credit_role_choices(current)
+        # "Other" is ours rather than CRediT's, but a task that fits none of
+        # the 14 roles needs somewhere to go, so it is always offered — last,
+        # where the app's ordering puts the catch-all.
+        if ContributionType.OTHER not in {value for value, _label in choices}:
+            choices.append((ContributionType.OTHER, ContributionType.OTHER.label))
+        field.choices = [("", "No task type")] + choices
         field.required = False
+        # A new task still opens on "No task type". The field inherits the
+        # model default, "Other", which is now in the list and would
+        # otherwise come up preselected; both save as "Other".
+        if not self.instance.pk and "contribution_type" not in self.initial:
+            field.initial = ""
 
     def clean_contribution_type(self):
         """An unpicked task type falls back to the model's own default."""

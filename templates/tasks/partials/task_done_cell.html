@@ -18,7 +18,7 @@
   freezes until a Lead marks it not complete again.
 {% endcomment %}
 <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-  {% include "tasks/partials/task_matrix_cell.html" with on=s.done at=s.done_at %}
+  {% include "tasks/partials/task_matrix_cell.html" with on=s.done at=s.done_at on_text="Done" off_text="Not done yet" %}
 
   {% comment %}
     Who set the mark, named only when it was not the assignee themselves —

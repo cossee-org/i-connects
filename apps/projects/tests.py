@@ -1653,10 +1653,73 @@ def test_summary_reports_attention_coming_up_activity_and_progress(client, user,
     assert summary["credit"]["people"] == 1
 
     body = response.content.decode()
+    # The overdue row carries the task views' shared Overdue pill.
+    assert body.count("Overdue: was due") == 1
     assert "Ready for a lead to complete" in body
     assert "asked to join as member" in body
     assert ">Soon one</a>" in body and "Ship it" in body
     assert 'aria-valuenow="40"' in body
+
+
+@pytest.mark.django_db
+def test_summary_activity_lists_reviews_and_a_task_its_reviews_finished(client, user, other_user):
+    from apps.tasks.models import KanbanBoard, Task
+    from apps.tasks.services import close_task, mark_own_done, mark_reviewed
+
+    project = _make_project(user)
+    lead = ProjectMember.objects.filter(project=project, users=user).first()  # Alice
+    bob = ProjectMember.objects.create(project=project)
+    bob.users.add(other_user)
+    carol_user = get_user_model().objects.create_user(
+        email="carol@example.com", password="pw-123456789", name="Carol"
+    )
+    carol = ProjectMember.objects.create(project=project)
+    carol.users.add(carol_user)
+    col = KanbanBoard.objects.create(project=project, name="Doing", container_order=0)
+
+    reviewed = Task.objects.create(
+        project=project, created_by=lead, container=col,
+        container_task_order=0, name="Reviewed one",
+    )
+    reviewed.assigned_members.add(bob, carol)
+    reviewed.reviewers.add(lead)
+    bob_log = mark_own_done(task=reviewed, member=bob)
+    carol_log = mark_own_done(task=reviewed, member=carol)
+
+    by_hand = Task.objects.create(
+        project=project, created_by=lead, container=col,
+        container_task_order=1, name="Closed by hand",
+    )
+    close_task(task=by_hand, closed_by=lead)
+
+    url = reverse("projects:detail", kwargs={"pk": project.pk})
+    client.force_login(user)
+
+    # One of two parts reviewed: a review line, and the task is still open.
+    mark_reviewed(task_log=bob_log, reviewer=lead)
+    activity = client.get(url).context["summary"]["activity"]
+    assert ("Alice", "reviewed Bob's part on", "Reviewed one") in [
+        (e["who"], e["verb"], e["task"].name) for e in activity if e["kind"] == "task"
+    ]
+    assert not any(e.get("after") for e in activity)
+
+    # The last sign-off finishes the task: its own line, above the review,
+    # and no "Alice completed" as though a lead had closed it by hand.
+    mark_reviewed(task_log=carol_log, reviewer=lead)
+    response = client.get(url)
+    lines = [
+        (e["who"], e["verb"], e["task"].name, e.get("after", ""))
+        for e in response.context["summary"]["activity"] if e["kind"] == "task"
+    ]
+    assert lines[0] == ("", "", "Reviewed one", "was marked done: every part reviewed")
+    assert lines[1] == ("Alice", "reviewed Carol's part on", "Reviewed one", "")
+    assert ("Alice", "completed", "Reviewed one", "") not in lines
+    # A task a lead closed by hand still reads as theirs.
+    assert ("Alice", "completed", "Closed by hand", "") in lines
+
+    body = response.content.decode()
+    assert "reviewed Bob&#x27;s part on" in body
+    assert "was marked done: every part reviewed" in body
 
 
 @pytest.mark.django_db

@@ -36,6 +36,11 @@ urlpatterns = [
         views.BoardCalendarPartialView.as_view(),
         name="board_calendar",
     ),
+    path(
+        "projects/<int:project_pk>/board/table/",
+        views.BoardTablePartialView.as_view(),
+        name="board_table",
+    ),
     # Task CRUD (project-scoped)
     path(
         "projects/<int:project_pk>/tasks/new/",

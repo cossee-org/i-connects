@@ -68,7 +68,6 @@ from apps.tasks.mixins import (
 )
 from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
 from apps.tasks.services import (
-    all_submissions_reviewed,
     approve_completion,
     clear_review,
     close_task,
@@ -477,6 +476,86 @@ def _list_view_context(request, project, columns) -> dict:
     }
 
 
+# --- Table view: one flat, sortable table of every task -------------------
+
+# Header key -> ordering. Each header toggles between its key and "-key";
+# dated columns keep undated tasks last in both directions, as the List does.
+TABLE_SORT_FIELDS = {
+    "name": (("name", "id"), ("-name", "id")),
+    "column": (
+        ("container__container_order", "container_task_order", "id"),
+        ("-container__container_order", "container_task_order", "id"),
+    ),
+    "start": (
+        (F("start_date").asc(nulls_last=True), "id"),
+        (F("start_date").desc(nulls_last=True), "id"),
+    ),
+    "due": (
+        (F("deadline").asc(nulls_last=True), "id"),
+        (F("deadline").desc(nulls_last=True), "id"),
+    ),
+    "priority": (("-is_priority", "name", "id"), ("is_priority", "name", "id")),
+    "status": (("status", "name", "id"), ("-status", "name", "id")),
+    # Sorted in Python by the names the cell shows (see _sort_by_assignees);
+    # board order is only the tie-break.
+    "assignees": (
+        ("container__container_order", "container_task_order", "id"),
+        ("container__container_order", "container_task_order", "id"),
+    ),
+}
+
+
+def _sort_by_assignees(tasks, *, descending: bool) -> list:
+    """Order tasks by their assignees' names, as the Table cell lists them.
+
+    A display name is derived per member (not a column), so this sorts in
+    Python. Unassigned tasks go last in both directions, like undated ones.
+    """
+    names: dict[int, str] = {}
+
+    def label(task) -> str:
+        members = task.assigned_members.all()
+        for member in members:
+            if member.pk not in names:
+                names[member.pk] = member.display_name.casefold()
+        return ", ".join(names[member.pk] for member in members)
+
+    labelled = [(label(task), task) for task in tasks]
+    assigned = [pair for pair in labelled if pair[0]]
+    unassigned = [task for text, task in labelled if not text]
+    # sorted() is stable, so equal names keep board order either way.
+    assigned.sort(key=lambda pair: pair[0], reverse=descending)
+    return [task for _text, task in assigned] + unassigned
+
+
+def _table_view_context(request, project) -> dict:
+    """Every task in the project as one flat table, sorted by ``?table_sort=``.
+
+    The value is a header key, optionally prefixed with ``-`` for descending;
+    anything else falls back to board order (by column, then position in it).
+    """
+    raw = request.GET.get("table_sort", "")
+    key = raw.lstrip("-")
+    if key not in TABLE_SORT_FIELDS:
+        raw, key = "column", "column"
+    descending = raw.startswith("-")
+    ordering = TABLE_SORT_FIELDS[key][1 if descending else 0]
+
+    tasks = (
+        Task.objects.filter(project=project)
+        .select_related("container")
+        .prefetch_related("assigned_members", "reviewers")
+        .order_by(*ordering)
+    )
+    if key == "assignees":
+        tasks = _sort_by_assignees(tasks, descending=descending)
+    return {
+        "table_tasks": tasks,
+        "table_sort_key": key,
+        "table_sort_desc": descending,
+    }
+
+
 class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
     """Main kanban board for a project."""
 
@@ -492,6 +571,7 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context["columns"] = columns
         context.update(_list_view_context(self.request, self.project, columns))
         context.update(_calendar_context(self.request, self.project))
+        context.update(_table_view_context(self.request, self.project))
         return context
 
 
@@ -548,6 +628,17 @@ class BoardCalendarPartialView(LoginRequiredMixin, ProjectContextMixin, Template
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(_calendar_context(self.request, self.project))
+        return context
+
+
+class BoardTablePartialView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
+    """HTMX partial that renders the table view, sorted by ``?table_sort=``."""
+
+    template_name = "tasks/task_table_view.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(_table_view_context(self.request, self.project))
         return context
 
 
@@ -1089,21 +1180,16 @@ _LOCKED_MESSAGE = (
 )
 
 def _marks_locked(task) -> bool:
-    """True when a Lead's judgement closed the task, freezing every per-member
+    """True once the task is marked completed, freezing every per-member
     action.
 
-    Marking done, undoing a mark and reviewing all stop there — for assignees,
-    reviewers and Leads alike. A Lead who needs to change one marks the task
-    Not Complete first, which is the only action such a task still offers.
-
-    A task the reviews closed is *not* locked, even though it is completed:
-    its completion is the sum of those verdicts rather than a decision over
-    them, so each one stays withdrawable and taking one back reopens the task
-    (see services.clear_review). Locking there would delete "withdraw my
-    review" outright for the single-assignee tasks that are most of them —
-    the last sign-off would seal itself.
+    Marking done, undoing a mark, reviewing and withdrawing a review all stop
+    there — for assignees, reviewers and Leads alike, and however the task
+    came to be completed: by a Lead's click, or by its last review closing it.
+    A Lead who needs to change one marks the task Not Complete first, which
+    is the only action a completed task still offers.
     """
-    return task.status == TaskStatus.COMPLETED and not all_submissions_reviewed(task)
+    return task.status == TaskStatus.COMPLETED
 
 
 def _task_status_context(task, *, project_member, is_project_manager):
@@ -1207,6 +1293,9 @@ def _task_status_context(task, *, project_member, is_project_manager):
         "assignee_states": assignee_states,
         "done_count": sum(1 for s in assignee_states if s["done"]),
         "reviewed_count": sum(1 for s in assignee_states if s["reviewed"]),
+        # Parts fully through: marked done and reviewed. What "N of M
+        # complete" counts on a task under review.
+        "complete_count": sum(1 for s in assignee_states if s["done"] and s["reviewed"]),
         "assignee_count": len(assignee_states),
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
@@ -1246,6 +1335,10 @@ def _respond_status_block(request, task, *, project_member, is_project_manager):
             task, project_member=project_member, is_project_manager=is_project_manager
         )
         ctx["pane_mode"] = pane_mode
+        # The side pane sends surface=pane with every request made inside it
+        # (an inherited hx-vals on its root), so pieces that are laid out
+        # differently there come back in the pane's shape.
+        ctx["surface"] = request.POST.get("surface", "")
         # A swap response: the chip and the two action-bar buttons sit outside
         # the block on every surface that renders it, so they come back out of
         # band with it. First renders leave this off — the markup around the
@@ -1266,6 +1359,7 @@ class TaskStatusBlockView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             is_project_manager=self.is_project_manager,
         )
         ctx["pane_mode"] = pane_mode
+        ctx["surface"] = request.GET.get("surface", "")  # see _respond_status_block
         ctx["oob"] = True  # a swap response — see _respond_status_block
         return render(request, "tasks/partials/task_status_block.html", ctx)
 

@@ -205,11 +205,11 @@ def test_comments_come_back_newest_first(commentable):
 
 @pytest.mark.django_db
 def test_the_comment_buttons_are_the_size_the_task_surfaces_use(commentable):
-    """One button size per surface, and the task surfaces run at btn-xs.
+    """Comment is a send button beside the box; Save and Cancel stay btn-xs.
 
-    Comment, Save and Cancel sit under a thread whose card sits under Mark
-    Completed, the self-mark and the matrix's row buttons — all btn-xs. At
-    btn-sm they were the only buttons on the page at their own size.
+    The posting box and its send button share one row on both task surfaces.
+    Save and Cancel sit under a thread whose card sits under Mark Completed,
+    the self-mark and the row buttons — all btn-xs.
     """
     from django.template.loader import render_to_string
 
@@ -225,9 +225,13 @@ def test_the_comment_buttons_are_the_size_the_task_surfaces_use(commentable):
         "comments/comment_edit_form.html",
         {"comment": comment, "form": CommentForm(instance=comment)},
     )
-    for name, html, count in (("Comment", posting, 1), ("Save / Cancel", editing, 2)):
-        assert html.count("btn-xs") == count, f"{name} is not at btn-xs"
-        assert "btn-sm" not in html, f"{name} still carries btn-sm"
+    # Posting: one square send button beside the box, named for screen readers.
+    assert "btn-primary btn-square" in posting
+    assert '<span class="sr-only">Comment</span>' in posting
+    assert "btn-sm" not in posting
+    # Editing: Save and Cancel at btn-xs.
+    assert editing.count("btn-xs") == 2, "Save / Cancel is not at btn-xs"
+    assert "btn-sm" not in editing
 
 
 @pytest.mark.django_db
