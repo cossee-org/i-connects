@@ -1705,6 +1705,20 @@ def test_summary_number_cards_open_their_tabs(client, user):
 
 
 @pytest.mark.django_db
+def test_overview_is_one_full_width_column(client, user):
+    """About, then the Wiki, then Recent activity, each the full width."""
+    project = _make_project(user)
+    client.force_login(user)
+    body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    assert "proj-columns" not in body
+    assert (
+        body.index('id="proj-about-heading"')
+        < body.index('id="proj-wiki-heading"')
+        < body.index('id="proj-activity-heading"')
+    )
+
+
+@pytest.mark.django_db
 def test_summary_is_a_report_not_a_workbench(client, user):
     """Adding and editing live on the tabs; the summary only reports."""
     project = _make_project(user)
