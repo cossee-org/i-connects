@@ -48,7 +48,7 @@
                 {% endif %}
 
                 {# Task content card #}
-                <div class="brand-card flex-1 flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors min-w-0{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
+                <div class="brand-card flex-1 flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors min-w-0"
                      @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
 
                   {# Name only — the description belongs to the side pane, not the row. #}

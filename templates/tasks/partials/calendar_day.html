@@ -3,7 +3,7 @@
 {% if calendar_day_tasks %}
   <ul class="flex flex-col gap-2">
     {% for item in calendar_day_tasks %}
-      <li class="brand-card flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors{% if item.task.is_priority %} border-l-2 border-l-error{% endif %}"
+      <li class="brand-card flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors"
           @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=item.task.pk %}' })">
 
         {# Name only — the description belongs to the side pane, not the agenda row. #}

@@ -1373,6 +1373,34 @@ def test_overdue_is_an_icon_beside_the_flags_on_every_view(client, user):
 
 
 @pytest.mark.django_db
+def test_high_priority_is_the_red_flag_alone_on_every_view(client, user):
+    """No red margin down a high-priority card or row: the flag says it."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    tomorrow = timezone.now() + timedelta(days=1)
+    Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Urgent", deadline=tomorrow, is_priority=True,
+    )
+    client.force_login(user)
+    kwargs = {"project_pk": project.pk}
+    calendar = reverse("tasks:board_calendar", kwargs=kwargs)
+    date = timezone.localdate(tomorrow).isoformat()
+
+    for url, params in (
+        (reverse("tasks:board_kanban", kwargs=kwargs), {}),
+        (reverse("tasks:board_list", kwargs=kwargs), {}),
+        (calendar, {"view": "day", "date": date}),
+        (calendar, {"view": "week", "date": date}),
+        (calendar, {"view": "month", "date": date}),
+    ):
+        content = client.get(url, params).content.decode()
+        assert "border-l-error" not in content, (url, params)
+        assert 'aria-label="High priority"' in content, (url, params)
+    assert "border-l-error" not in client.get(reverse("tasks:my_list")).content.decode()
+
+
+@pytest.mark.django_db
 def test_overdue_pill_on_task_pane_and_page_follows_close_and_reopen(client, pm_user):
     project, col1, _col2 = _make_project_with_board(pm_user)
     member = _primary_member(project, pm_user)
