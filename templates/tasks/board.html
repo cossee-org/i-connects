@@ -45,29 +45,48 @@
 </style>
 <script>
   document.addEventListener('alpine:init', function () {
+    // Each view's partial endpoint, and the container it renders into.
+    var VIEWS = {
+      board: ['{% url "tasks:board_kanban" project_pk=project.pk %}', '#board-view-container'],
+      list: ['{% url "tasks:board_list" project_pk=project.pk %}', '#list-view-container'],
+      table: ['{% url "tasks:board_table" project_pk=project.pk %}', '#table-view-container'],
+      calendar: ['{% url "tasks:board_calendar" project_pk=project.pk %}', '#calendar-view-container']
+    };
     Alpine.store('board', {
       viewMode: localStorage.getItem('boardViewMode') || 'board',
+      q: '{{ search_q|escapejs }}',
+      // Re-fetch one view with the current search. A view keeps its own
+      // place (the Table's sort, the Calendar's view and date) in hidden
+      // [data-view-state] inputs, sent back so a search does not reset it.
+      load: function (view) {
+        var entry = VIEWS[view] || VIEWS.board;
+        var values = {};
+        document.querySelectorAll(entry[1] + ' [data-view-state]').forEach(function (input) {
+          values[input.name] = input.value;
+        });
+        if (this.q) values.q = this.q;
+        htmx.ajax('GET', entry[0], { target: entry[1], swap: 'innerHTML', values: values });
+      },
       setView: function (next) {
         if (next === this.viewMode) return;
         this.viewMode = next;
         localStorage.setItem('boardViewMode', next);
-        if (next === 'list') {
-          htmx.ajax('GET', '{% url "tasks:board_list" project_pk=project.pk %}', {
-            target: '#list-view-container', swap: 'innerHTML'
-          });
-        } else if (next === 'table') {
-          htmx.ajax('GET', '{% url "tasks:board_table" project_pk=project.pk %}', {
-            target: '#table-view-container', swap: 'innerHTML'
-          });
-        } else if (next === 'calendar') {
-          htmx.ajax('GET', '{% url "tasks:board_calendar" project_pk=project.pk %}', {
-            target: '#calendar-view-container', swap: 'innerHTML'
-          });
-        } else {
-          htmx.ajax('GET', '{% url "tasks:board_kanban" project_pk=project.pk %}', {
-            target: '#board-view-container', swap: 'innerHTML'
-          });
-        }
+        this.load(next);
+      },
+      // Kept in the address bar too, so a reload or a shared link keeps it.
+      search: function (q) {
+        q = (q || '').trim();
+        if (q === this.q) return;
+        this.q = q;
+        var url = new URL(window.location.href);
+        if (q) { url.searchParams.set('q', q); } else { url.searchParams.delete('q'); }
+        history.replaceState(null, '', url.pathname + url.search + url.hash);
+        this.load(this.viewMode);
+      },
+      clearSearch: function () {
+        var box = document.getElementById('task-search');
+        if (box) { box.value = ''; box.focus(); }
+        this.search('');
       }
     });
   });
@@ -95,11 +114,15 @@
     white chip. Manage columns sits beside it as a bordered secondary
     button, so it reads as an action on the columns (Kanban lanes, List
     groups, each task's column) rather than as a fifth view. Right: the
-    page's one primary action, New task.
+    search box, then the page's one primary action, New task.
 
-    On a phone the left group dissolves (contents) so its pieces wrap with
-    New task: the views on one line, Manage columns and New task on the
-    next, at either end.
+    On a phone the left group dissolves (contents) so its pieces wrap: the
+    views on one line, Manage columns on the next, then search and New
+    task sharing the last.
+
+    Each view container below carries hx-include="#task-search", which
+    htmx passes down to every request made inside it (calendar paging,
+    table sorting), so those keep the search without each link adding it.
   {% endcomment %}
   <div class="contents sm:flex sm:flex-wrap sm:items-center sm:gap-2">
     <div class="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-brand-light/40"
@@ -164,15 +187,34 @@
       </button>
     {% endif %}
   </div>
-  {% if is_project_manager %}
-    <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-            hx-get="{% url 'tasks:create' project_pk=project.pk %}"
-            hx-target="#task-modal-body"
-            hx-swap="innerHTML"
-            onclick="document.getElementById('task-modal').showModal()">
-      New task
-    </button>
-  {% endif %}
+  <div class="flex items-center gap-2 w-full sm:w-auto">
+    {# Search: filters whichever view is showing; see views._search_tasks for what it reads. #}
+    <label class="relative flex-1 sm:flex-none sm:w-64">
+      <span class="sr-only">Search tasks</span>
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           stroke-width="1.8" stroke="currentColor"
+           class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-text/50" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+      </svg>
+      <input id="task-search" type="search" name="q" value="{{ search_q }}"
+             placeholder="Search tasks"
+             title="Search by name, description, assignee, reviewer, column or milestone"
+             autocomplete="off"
+             class="input input-sm input-bordered w-full pl-8 bg-base-100 text-sm"
+             @input.debounce.300ms="$store.board.search($event.target.value)"
+             @keydown.enter.prevent="$store.board.search($event.target.value)"
+             @keydown.escape.stop="$store.board.clearSearch()">
+    </label>
+    {% if is_project_manager %}
+      <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0 shrink-0"
+              hx-get="{% url 'tasks:create' project_pk=project.pk %}"
+              hx-target="#task-modal-body"
+              hx-swap="innerHTML"
+              onclick="document.getElementById('task-modal').showModal()">
+        New task
+      </button>
+    {% endif %}
+  </div>
 </div>
 <div x-data="taskPaneData()"
      @open-task-pane="if (!_dragging) openPane($event.detail.url)"
@@ -183,8 +225,13 @@
 
   {# ── Board view ── #}
   <div x-show="$store.board.viewMode === 'board'">
-    <div id="board-view-container">
+    <div id="board-view-container" hx-include="#task-search">
     {% if columns %}
+      {% if is_project_manager %}
+        {% include "tasks/partials/search_status.html" with note="Drag to move is off while searching" %}
+      {% else %}
+        {% include "tasks/partials/search_status.html" %}
+      {% endif %}
       <div class="kanban-scroll-wrap"
            x-data="{
              atStart: true,
@@ -201,6 +248,7 @@
            @resize.window="refresh()">
         <div class="kanban-edge kanban-edge-left" x-show="!atStart" x-cloak x-transition.opacity></div>
         <div id="kanban-board" x-ref="scroller" @scroll="refresh()"
+             {% if search_q %}data-searching{% endif %}
              class="flex gap-4 overflow-x-auto pb-4">
           {% for column in columns %}
             {% include "tasks/task_column.html" with column=column %}
@@ -218,21 +266,21 @@
 
   {# ── List view ── #}
   <div x-show="$store.board.viewMode === 'list'" x-cloak>
-    <div id="list-view-container">
+    <div id="list-view-container" hx-include="#task-search">
       {% include "tasks/task_list_view.html" %}
     </div>
   </div>
 
   {# ── Table view ── #}
   <div x-show="$store.board.viewMode === 'table'" x-cloak>
-    <div id="table-view-container">
+    <div id="table-view-container" hx-include="#task-search">
       {% include "tasks/task_table_view.html" %}
     </div>
   </div>
 
   {# ── Calendar view ── #}
   <div x-show="$store.board.viewMode === 'calendar'" x-cloak>
-    <div id="calendar-view-container">
+    <div id="calendar-view-container" hx-include="#task-search">
       {% include "tasks/task_calendar_view.html" %}
     </div>
   </div>
@@ -408,6 +456,9 @@
     function initKanbanSortable() {
       document.querySelectorAll('.kanban-column-list').forEach(function (el) {
         if (el._sortableInit) return;
+        // A drop's position is counted among the cards on screen, which is
+        // only every card in the column while no search hides some.
+        if (el.closest('[data-searching]')) return;
         el._sortableInit = true;
         new Sortable(el, {
           group: 'kanban',

@@ -14,7 +14,9 @@ from datetime import datetime, time
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Exists, F, Max, Min, OuterRef, ProtectedError, Q, Subquery
+from django.db.models import (
+    Exists, F, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Subquery,
+)
 from django.http import (
     Http404,
     HttpResponse,
@@ -289,13 +291,76 @@ def _fmt_short(d) -> str:
     return f"{d.strftime('%b')} {d.day}"
 
 
+# --- Search: one box on the Tasks page, honoured by every view -------------
+
+def _task_term_q(term: str) -> Q:
+    """Where one search word may match: the task's own text, its people, and
+    the column and milestone it sits in. People match on any part of their
+    name, so a first name, a surname or a membership name all find them."""
+    q = (
+        Q(name__icontains=term)
+        | Q(description__icontains=term)
+        | Q(container__name__icontains=term)
+        | Q(milestone__name__icontains=term)
+    )
+    for people in ("assigned_members", "reviewers"):
+        q |= (
+            Q(**{f"{people}__name__icontains": term})
+            | Q(**{f"{people}__users__given_name__icontains": term})
+            | Q(**{f"{people}__users__family_name__icontains": term})
+            | Q(**{f"{people}__users__name__icontains": term})
+        )
+    return q
+
+
+def _search_tasks(tasks, q: str):
+    """``tasks`` narrowed to those matching every word of ``q``.
+
+    Each word may match a different field, so "dana survey" finds Dana's
+    survey tasks. Matching runs in a pk subquery rather than with
+    ``distinct()``, which would fight the views' ordering on related columns.
+    """
+    terms = q.split()
+    if not terms:
+        return tasks
+    matches = Task.objects.all()
+    for term in terms:
+        matches = matches.filter(_task_term_q(term))
+    return tasks.filter(pk__in=matches.values("pk"))
+
+
+def _search_context(request, project) -> dict:
+    """The search box's value, echoed to every view, and how many of the
+    project's tasks it matches (only worked out while searching)."""
+    q = request.GET.get("q", "").strip()
+    context = {"search_q": q}
+    if q:
+        context["search_match_count"] = _search_tasks(
+            Task.objects.filter(project=project), q
+        ).count()
+    return context
+
+
+def _board_columns(project, q: str = ""):
+    """The Kanban columns, each with its tasks prefetched — only the ones
+    matching ``q`` while searching, so the column counts follow the search."""
+    tasks = _search_tasks(Task.objects.all(), q).prefetch_related(
+        "assigned_members", "reviewers"
+    )
+    return (
+        KanbanBoard.objects.filter(project=project)
+        .prefetch_related(Prefetch("tasks", queryset=tasks))
+        .order_by("container_order")
+    )
+
+
 def _calendar_context(request, project) -> dict:
     view = request.GET.get("view", "month")
     if view not in CALENDAR_VIEWS:
         view = "month"
     anchor = parse_view_date(request.GET.get("date"))
     tasks = (
-        Task.objects.filter(project=project)
+        _search_tasks(Task.objects.filter(project=project), request.GET.get("q", "").strip())
         .filter(Q(deadline__isnull=False) | Q(start_date__isnull=False))
         .prefetch_related("assigned_members", "reviewers")
     )
@@ -418,15 +483,7 @@ def _list_view_context(request, project, columns) -> dict:
         "assigned_members", "reviewers"
     )
 
-    if q:
-        tasks = tasks.filter(
-            Q(name__icontains=q)
-            | Q(description__icontains=q)
-            | Q(assigned_members__name__icontains=q)
-            | Q(assigned_members__users__given_name__icontains=q)
-            | Q(assigned_members__users__family_name__icontains=q)
-            | Q(assigned_members__users__name__icontains=q)
-        )
+    tasks = _search_tasks(tasks, q)
     if column_filter:
         tasks = tasks.filter(container_id=column_filter)
     if done == "complete":
@@ -543,7 +600,7 @@ def _table_view_context(request, project) -> dict:
     ordering = TABLE_SORT_FIELDS[key][1 if descending else 0]
 
     tasks = (
-        Task.objects.filter(project=project)
+        _search_tasks(Task.objects.filter(project=project), request.GET.get("q", "").strip())
         .select_related("container")
         .prefetch_related("assigned_members", "reviewers")
         .order_by(*ordering)
@@ -564,11 +621,9 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        columns = (
-            KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks", "tasks__assigned_members", "tasks__reviewers")
-            .order_by("container_order")
-        )
+        search = _search_context(self.request, self.project)
+        columns = _board_columns(self.project, search["search_q"])
+        context.update(search)
         context["columns"] = columns
         context.update(_list_view_context(self.request, self.project, columns))
         context.update(_calendar_context(self.request, self.project))
@@ -598,6 +653,7 @@ class BoardListPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateView
             .order_by("container_order")
         )
         context["columns"] = columns
+        context.update(_search_context(self.request, self.project))
         context.update(_list_view_context(self.request, self.project, columns))
         return context
 
@@ -609,11 +665,8 @@ class BoardKanbanPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateVi
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["columns"] = (
-            KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks", "tasks__assigned_members", "tasks__reviewers")
-            .order_by("container_order")
-        )
+        context.update(_search_context(self.request, self.project))
+        context["columns"] = _board_columns(self.project, context["search_q"])
         return context
 
 
@@ -628,6 +681,7 @@ class BoardCalendarPartialView(LoginRequiredMixin, ProjectContextMixin, Template
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context.update(_search_context(self.request, self.project))
         context.update(_calendar_context(self.request, self.project))
         return context
 
@@ -639,6 +693,7 @@ class BoardTablePartialView(LoginRequiredMixin, ProjectContextMixin, TemplateVie
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context.update(_search_context(self.request, self.project))
         context.update(_table_view_context(self.request, self.project))
         return context
 

@@ -1,0 +1,13 @@
+{# Search status — {% include "tasks/partials/search_status.html" %} at the top of each Tasks view. #}
+{# Renders nothing unless the Tasks search box has a value (search_q, from views._search_context). #}
+{# Pass note="…" for a view-specific caveat, e.g. that the calendar only shows dated tasks. #}
+{% if search_q %}
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 px-1 text-sm" role="status">
+    <span class="text-brand-text/70">
+      {{ search_match_count }} task{{ search_match_count|pluralize }} match{{ search_match_count|pluralize:"es," }}
+      <span class="font-medium text-brand-navy">&ldquo;{{ search_q }}&rdquo;</span>{% if note %}. {{ note }}{% endif %}
+    </span>
+    <button type="button" class="text-brand-navy hover:text-brand-coral hover:underline"
+            @click="$store.board.clearSearch()">Clear search</button>
+  </div>
+{% endif %}

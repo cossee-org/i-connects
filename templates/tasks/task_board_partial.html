@@ -2,6 +2,11 @@
 {% load static project_tags %}
 
 {% if columns %}
+  {% if is_project_manager %}
+    {% include "tasks/partials/search_status.html" with note="Drag to move is off while searching" %}
+  {% else %}
+    {% include "tasks/partials/search_status.html" %}
+  {% endif %}
   <div class="kanban-scroll-wrap"
        x-data="{
          atStart: true,
@@ -18,6 +23,7 @@
        @resize.window="refresh()">
     <div class="kanban-edge kanban-edge-left" x-show="!atStart" x-cloak x-transition.opacity></div>
     <div id="kanban-board" x-ref="scroller" @scroll="refresh()"
+         {% if search_q %}data-searching{% endif %}
          class="flex gap-4 overflow-x-auto pb-4">
       {% for column in columns %}
         {% include "tasks/task_column.html" with column=column %}

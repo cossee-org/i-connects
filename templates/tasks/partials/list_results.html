@@ -2,7 +2,13 @@
 {# the rows alone for a search / filter / sort bar to swap into. #}
 {# Context comes from views._list_view_context. #}
 
-{% if list_is_filtered or not list_reorderable %}
+{% if search_q %}
+  {% if is_project_manager %}
+    {% include "tasks/partials/search_status.html" with note="Drag to reorder is off while searching" %}
+  {% else %}
+    {% include "tasks/partials/search_status.html" %}
+  {% endif %}
+{% elif list_is_filtered or not list_reorderable %}
   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 px-1">
     {% if list_is_filtered %}
       <span class="text-sm text-brand-text/60" role="status">

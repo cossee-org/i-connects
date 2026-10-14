@@ -1189,6 +1189,131 @@ def test_board_list_drag_handle_only_shows_in_unfiltered_board_order(client, pm_
 
 
 # ---------------------------------------------------------------------------
+# Search (one box, every view)
+# ---------------------------------------------------------------------------
+
+
+def _search_project(user, other_user):
+    """Tasks that each match a different field, plus one that matches none."""
+    project, col1, col2 = _make_project_with_board(user)
+    alice = _primary_member(project, user)
+    bob = ProjectMember.objects.create(project=project)
+    bob.users.add(other_user)
+    other_user.given_name, other_user.family_name = "Bob", "Builder"
+    other_user.save()
+    milestone = Milestone.objects.create(
+        project=project, name="Pilot phase",
+        end_date=timezone.now() + timedelta(days=30),
+    )
+    day = timezone.now() + timedelta(days=2)
+
+    def make(name, column=col1, **kw):
+        return Task.objects.create(
+            project=project, created_by=alice, container=column,
+            container_task_order=Task.objects.count(), name=name, deadline=day, **kw,
+        )
+
+    make("Survey wording")
+    make("Ethics form", description="Needs the survey attached")
+    make("Data cleaning").assigned_members.add(bob)
+    make("Codebook").reviewers.add(bob)
+    make("Ship report", column=col2)            # column "Doing"
+    make("Interview guide", milestone=milestone)
+    make("Unrelated thing")
+    return project
+
+
+def _names_in(content, names=(
+    "Survey wording", "Ethics form", "Data cleaning", "Codebook",
+    "Ship report", "Interview guide", "Unrelated thing",
+)):
+    return {name for name in names if name in content}
+
+
+@pytest.mark.django_db
+def test_search_matches_each_field_on_every_view(client, user, other_user):
+    project = _search_project(user, other_user)
+    client.force_login(user)
+    kwargs = {"project_pk": project.pk}
+    urls = [
+        reverse("tasks:board_kanban", kwargs=kwargs),
+        reverse("tasks:board_list", kwargs=kwargs),
+        reverse("tasks:board_table", kwargs=kwargs),
+        reverse("tasks:board_calendar", kwargs=kwargs),
+    ]
+    cases = {
+        "survey": {"Survey wording", "Ethics form"},        # name, description
+        "builder": {"Data cleaning", "Codebook"},           # assignee, reviewer surname
+        "doing": {"Ship report"},                           # column
+        "pilot": {"Interview guide"},                       # milestone
+        "bob builder": {"Data cleaning", "Codebook"},       # full name, word by word
+        "survey ethics": {"Ethics form"},                   # every word must match
+        "nothing like this": set(),
+    }
+    for q, expected in cases.items():
+        for url in urls:
+            params = {"q": q}
+            if "calendar" in url:
+                params["view"] = "month"
+                params["date"] = (timezone.now() + timedelta(days=2)).date().isoformat()
+            content = client.get(url, params).content.decode()
+            assert _names_in(content) == expected, (q, url)
+            assert f"{len(expected)} task" in content, (q, url)
+
+
+@pytest.mark.django_db
+def test_board_page_renders_with_the_search_from_the_url(client, user, other_user):
+    project = _search_project(user, other_user)
+    client.force_login(user)
+    content = client.get(
+        reverse("tasks:board", kwargs={"project_pk": project.pk}), {"q": "builder"}
+    ).content.decode()
+    assert 'id="task-search"' in content
+    assert 'value="builder"' in content
+    assert "Clear search" in content
+    # Every view container sends the search with its own requests.
+    assert content.count('hx-include="#task-search"') == 4
+    assert "Unrelated thing" not in content
+
+    # No search: everything shows and there is no status line.
+    content = client.get(
+        reverse("tasks:board", kwargs={"project_pk": project.pk})
+    ).content.decode()
+    assert "Unrelated thing" in content
+    assert "Clear search" not in content
+
+
+@pytest.mark.django_db
+def test_kanban_turns_off_dragging_while_searching(client, pm_user):
+    project, col1, _col2 = _make_project_with_board(pm_user)
+    member = _primary_member(project, pm_user)
+    Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Movable",
+    )
+    client.force_login(pm_user)
+    url = reverse("tasks:board_kanban", kwargs={"project_pk": project.pk})
+
+    assert "data-searching" not in client.get(url).content.decode()
+    searching = client.get(url, {"q": "mov"}).content.decode()
+    assert "data-searching" in searching
+    assert "Drag to move is off while searching" in searching
+    # The column count follows the search.
+    assert client.get(url, {"q": "zzz"}).content.decode().count(">0</span>") == 2
+
+
+@pytest.mark.django_db
+def test_table_search_keeps_its_sort_state_and_says_when_nothing_matches(client, user, other_user):
+    project = _search_project(user, other_user)
+    client.force_login(user)
+    url = reverse("tasks:board_table", kwargs={"project_pk": project.pk})
+    content = client.get(url, {"q": "survey", "table_sort": "-name"}).content.decode()
+    assert _row_order(content, ["Survey wording", "Ethics form"]) == ["Survey wording", "Ethics form"]
+    assert 'name="table_sort" value="-name"' in content
+    assert "No matching tasks" in client.get(url, {"q": "zzz"}).content.decode()
+
+
+# ---------------------------------------------------------------------------
 # Overdue indicator
 # ---------------------------------------------------------------------------
 
