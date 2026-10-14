@@ -2,7 +2,7 @@
   Project Overview → Wiki: the pages a lead has put on the Overview (the
   page's "Show on Project Overview" setting), as one list, the most
   recently updated first; a locked page (agreements, protocols, data
-  dictionaries) carries a lock. All of them show; "See more", a plain
+  dictionaries) carries a lock. All of them show; "See all", a plain
   button at the card's top right, opens the Wiki tab while the wiki holds
   other pages too.
 
@@ -10,11 +10,11 @@
   wiki_page_count and is_project_manager.
 {% endcomment %}
 <section class="brand-card p-5" aria-labelledby="proj-wiki-heading">
-  {# Headed like About: a plain title, no icon; See more across from it. #}
+  {# Headed like About: a plain title, no icon; See all across from it. #}
   <div class="flex items-center justify-between gap-2 mb-3">
     <h2 id="proj-wiki-heading" class="text-lg font-semibold text-brand-navy">Wiki</h2>
     {% if summary.wiki.pages and wiki_page_count > summary.wiki.pages|length %}
-      <a href="{% url 'wiki:list' project_pk=project.pk %}" class="btn btn-sm btn-ghost">See more</a>
+      <a href="{% url 'wiki:list' project_pk=project.pk %}" class="btn btn-sm btn-ghost">See all</a>
     {% endif %}
   </div>
 

@@ -1767,9 +1767,9 @@ def test_overview_wiki_card_lists_the_pages_put_on_the_overview(client, user):
     assert order == sorted(order)
     assert card.count('aria-label="Locked page"') == 2
     assert "Scratchpad" not in card and "Old rules" not in card
-    # No dates, no rules between rows; the wiki holds more, so "See more".
+    # No dates, no rules between rows; the wiki holds more, so "See all".
     assert "Oct" not in card and "divide-y" not in card
-    assert "See more" in card
+    assert "See all" in card
 
 
 @pytest.mark.django_db
@@ -1793,17 +1793,17 @@ def test_overview_wiki_card_lists_every_page_put_on_the_overview(client, user):
     card = _wiki_card(response.content.decode())
     assert all(f">{t}</a>" in card for t in titles)
     # Every page in the wiki is already listed: nothing more to see.
-    assert "See more" not in card
+    assert "See all" not in card
 
-    # A page not on the Overview: "See more" opens the Wiki for it.
+    # A page not on the Overview: "See all" opens the Wiki for it.
     create_page(project=project, actor=user, title="Scratchpad")
     card = _wiki_card(client.get(url).content.decode())
     wiki_url = reverse("wiki:list", kwargs={"project_pk": project.pk})
     assert "Scratchpad" not in card
-    assert f'<a href="{wiki_url}"' in card and "See more" in card
+    assert f'<a href="{wiki_url}"' in card and "See all" in card
     # A plain button at the top right, beside the title, above the list.
-    assert f'<a href="{wiki_url}" class="btn btn-sm btn-ghost">See more</a>' in card
-    assert card.index("See more") < card.index("<ul")
+    assert f'<a href="{wiki_url}" class="btn btn-sm btn-ghost">See all</a>' in card
+    assert card.index("See all") < card.index("<ul")
 
 
 def _wiki_card(body: str) -> str:
