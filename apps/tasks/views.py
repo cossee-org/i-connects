@@ -515,7 +515,7 @@ def _table_view_context(request, project) -> dict:
 
     tasks = (
         Task.objects.filter(project=project)
-        .select_related("container", "milestone")
+        .select_related("container")
         .prefetch_related("assigned_members", "reviewers")
         .order_by(*ordering)
     )

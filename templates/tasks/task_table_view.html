@@ -12,7 +12,6 @@
           {% include "tasks/partials/table_sort_header.html" with key="name" label="Task" %}
           {% include "tasks/partials/table_sort_header.html" with key="column" label="Column" %}
           <th scope="col">Assignees</th>
-          <th scope="col">Milestone</th>
           {% include "tasks/partials/table_sort_header.html" with key="start" label="Start" %}
           {% include "tasks/partials/table_sort_header.html" with key="due" label="Due" %}
           {% include "tasks/partials/table_sort_header.html" with key="priority" label="Priority" %}
@@ -30,8 +29,8 @@
               <button type="button" class="text-left hover:text-brand-coral transition-colors line-clamp-2"
                       @click.stop="$dispatch('open-task-pane', { url: '{{ pane_url }}' })">{{ task.name }}</button>
             </th>
-            <td class="whitespace-nowrap text-brand-text/80">{{ task.container.name }}</td>
-            <td class="text-brand-text/80">
+            <td class="text-xs whitespace-nowrap text-brand-text/80">{{ task.container.name }}</td>
+            <td class="text-xs text-brand-text/80">
               {% with assignees=task.assigned_members.all|member_name_summary %}
                 {% if assignees.short %}
                   <span title="{{ assignees.full }}">{{ assignees.short }}</span>
@@ -40,16 +39,13 @@
                 {% endif %}
               {% endwith %}
             </td>
-            <td class="text-brand-text/80">
-              {% if task.milestone %}{{ task.milestone.name }}{% else %}<span class="text-brand-text/40">&mdash;</span>{% endif %}
-            </td>
-            <td class="whitespace-nowrap text-brand-text/80">
+            <td class="text-xs whitespace-nowrap text-brand-text/80">
               {% if task.start_date %}{{ task.start_date|date:"M j, Y" }}{% else %}<span class="text-brand-text/40">&mdash;</span>{% endif %}
             </td>
-            <td class="whitespace-nowrap">
+            <td class="text-xs whitespace-nowrap">
               {% if task.deadline %}
                 {% if task.deadline < table_now and task.status != "COMPLETED" %}
-                  <span class="text-error font-medium">{{ task.deadline|date:"M j, Y" }} <span class="text-xs">(overdue)</span></span>
+                  <span class="text-error font-medium">{{ task.deadline|date:"M j, Y" }} (overdue)</span>
                 {% else %}
                   <span class="text-brand-text/80">{{ task.deadline|date:"M j, Y" }}</span>
                 {% endif %}
@@ -57,21 +53,21 @@
                 <span class="text-brand-text/40">&mdash;</span>
               {% endif %}
             </td>
-            <td class="whitespace-nowrap">
+            <td class="text-xs whitespace-nowrap">
               {% if task.is_priority %}
                 {% include "_components/priority_flag.html" %}
               {% else %}
                 <span class="text-brand-text/40">&mdash;</span>
               {% endif %}
             </td>
-            <td class="whitespace-nowrap">
+            <td class="text-xs whitespace-nowrap">
               {% if task.status == "COMPLETED" %}
-                <span class="inline-flex items-center gap-1 text-success text-xs font-medium">
+                <span class="inline-flex items-center gap-1 text-success font-medium">
                   {% include "_components/completion_check.html" with task=task %}
                   Complete
                 </span>
               {% else %}
-                <span class="text-xs text-brand-text/60">Not complete</span>
+                <span class="text-brand-text/60">Not complete</span>
               {% endif %}
             </td>
           </tr>
