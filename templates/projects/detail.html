@@ -137,7 +137,11 @@
                @click.prevent="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">{{ task.name }}</a>
               <div class="text-xs text-brand-text/60 mt-0.5">{{ task.container.name }}</div>
             </div>
-            <span class="text-xs font-medium text-error shrink-0">Overdue &middot; due {{ task.deadline|date:"M j" }}</span>
+            {# The task views' Overdue pill, then the date in plain grey, as on a Kanban card. #}
+            <span class="flex items-center gap-2 shrink-0">
+              {% include "_components/overdue_badge.html" with task=task %}
+              <span class="text-xs text-brand-text/70 whitespace-nowrap">Due {{ task.deadline|date:"M j" }}</span>
+            </span>
           </li>
         {% endfor %}
         {% for task in summary.waiting %}

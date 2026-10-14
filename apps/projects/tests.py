@@ -1653,6 +1653,8 @@ def test_summary_reports_attention_coming_up_activity_and_progress(client, user,
     assert summary["credit"]["people"] == 1
 
     body = response.content.decode()
+    # The overdue row carries the task views' shared Overdue pill.
+    assert body.count("Overdue: was due") == 1
     assert "Ready for a lead to complete" in body
     assert "asked to join as member" in body
     assert ">Soon one</a>" in body and "Ship it" in body
