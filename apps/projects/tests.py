@@ -1736,8 +1736,8 @@ def test_summary_is_a_report_not_a_workbench(client, user):
 
 @pytest.mark.django_db
 def test_overview_wiki_card_lists_the_pages_put_on_the_overview(client, user):
-    """Only the pages a lead put on the Overview, in one list: the locked ones
-    first, by title and each with a lock, then the others, newest edit first."""
+    """Only the pages a lead put on the Overview, in one list, the most
+    recently updated first; a locked page carries a lock."""
     from apps.wiki.services import create_page, update_page
 
     project = _make_project(user)
@@ -1754,7 +1754,7 @@ def test_overview_wiki_card_lists_the_pages_put_on_the_overview(client, user):
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
     wiki = response.context["summary"]["wiki"]
     assert [page.title for page in wiki["pages"]] == [
-        "Data protocol", "Team agreement", "Meeting notes", "Glossary",
+        "Meeting notes", "Glossary", "Data protocol", "Team agreement",
     ]
 
     body = response.content.decode()
@@ -1763,7 +1763,7 @@ def test_overview_wiki_card_lists_the_pages_put_on_the_overview(client, user):
     assert "Key pages" not in card and "Recently updated" not in card
     # One plain list, no rail.
     assert card.count("<ul") == 1 and "wiki-rail" not in card
-    order = [card.index(f">{t}</a>") for t in ("Data protocol", "Team agreement", "Meeting notes", "Glossary")]
+    order = [card.index(f">{t}</a>") for t in ("Meeting notes", "Glossary", "Data protocol", "Team agreement")]
     assert order == sorted(order)
     assert card.count('aria-label="Locked page"') == 2
     assert "Scratchpad" not in card and "Old rules" not in card
@@ -1787,8 +1787,8 @@ def test_overview_wiki_card_lists_every_page_put_on_the_overview(client, user):
     url = reverse("projects:detail", kwargs={"pk": project.pk})
     response = client.get(url)
     titles = [page.title for page in response.context["summary"]["wiki"]["pages"]]
-    # No cap: the locked page leads, then every other one, newest edit first.
-    assert titles == ["Team agreement", "Six", "Five", "Four", "Three", "Two", "One"]
+    # No cap, and newest update first: being locked does not move a page up.
+    assert titles == ["Six", "Five", "Four", "Three", "Two", "One", "Team agreement"]
 
     card = _wiki_card(response.content.decode())
     assert all(f">{t}</a>" in card for t in titles)

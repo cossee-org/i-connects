@@ -708,13 +708,13 @@ def _project_summary(project, now, *, is_lead: bool) -> dict:
         )
 
     # ── Wiki ──
-    # Every page a lead has put on the Overview (that the viewer may read).
-    # The locked ones (pages the project treats as settled: agreements,
-    # protocols) come first, by title; the rest follow, newest edit first.
-    pages = readable_pages.filter(show_on_overview=True)
-    locked = list(pages.filter(locked=True).order_by("title", "id"))
-    others = list(pages.filter(locked=False).order_by("-updated_at", "id"))
-    wiki = {"pages": locked + others}
+    # Every page a lead has put on the Overview (that the viewer may read),
+    # the most recently updated first.
+    wiki = {
+        "pages": list(
+            readable_pages.filter(show_on_overview=True).order_by("-updated_at", "-id")
+        )
+    }
 
     return {
         "activity": events[:8],
@@ -847,7 +847,7 @@ class ProjectDetailView(DetailView):
         else:
             context["public_wiki_pages"] = list(
                 readable_pages.filter(show_on_overview=True).order_by(
-                    "-locked", "title", "id"
+                    "-updated_at", "-id"
                 )
             )
         return context
