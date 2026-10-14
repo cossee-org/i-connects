@@ -3,11 +3,6 @@
 
 {% url 'tasks:board_calendar' project_pk=project.pk as calendar_url %}
 
-{# Carried into the next fetch of this view (a search, a view switch) so the calendar stays put. #}
-<input type="hidden" name="view" value="{{ calendar_view }}" data-view-state>
-<input type="hidden" name="date" value="{{ calendar_date }}" data-view-state>
-{% include "tasks/partials/search_status.html" with note="Only tasks with dates appear on the calendar" %}
-
 <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
   <div class="flex items-center gap-3">
     <h2 class="text-lg font-semibold text-brand-navy whitespace-nowrap">{{ calendar_label }}</h2>

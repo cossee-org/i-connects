@@ -3,10 +3,6 @@
 {# Context comes from views._table_view_context. #}
 {% load task_tags %}
 
-{# Carried into the next fetch of this view (a search, a view switch) so the sort survives it. #}
-<input type="hidden" name="table_sort" value="{% if table_sort_desc %}-{% endif %}{{ table_sort_key }}" data-view-state>
-{% include "tasks/partials/search_status.html" %}
-
 {% if table_tasks %}
   <div class="brand-card overflow-x-auto">
     <table class="table table-sm">
@@ -80,8 +76,6 @@
       </tbody>
     </table>
   </div>
-{% elif search_q %}
-  {% include "_components/empty_state.html" with title="No matching tasks" body="No tasks match this search. Try fewer or different words." %}
 {% else %}
   {% include "_components/empty_state.html" with title="No tasks yet" body="Tasks added to this project's columns show up here." %}
 {% endif %}
