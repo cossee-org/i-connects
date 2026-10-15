@@ -1486,16 +1486,18 @@ def test_completion_card_separates_done_and_reviewed_progress(client, user, othe
     ).content.decode()
     assert "1 of 3 complete" in detail
 
-    # No review on the task: one bar, and the heading counts done.
+    # No review on the task: one bar, and no count beside the heading — the
+    # bar already says how many are done.
     task.reviewers.clear()
     for log in task.task_logs.all():
         log.reviewed_by = None
         log.reviewed_at = None
         log.save(update_fields=["reviewed_by", "reviewed_at"])
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "2 of 3 done" in pane
+    assert "2 of 3 done" not in pane and "complete</span>" not in pane
     progress = pane[pane.index("data-progress") : pane.index("data-assignee-rows")]
     assert "Marked done" in progress and "Reviewed" not in progress
+    assert "2 of 3" in progress
 
 
 @pytest.mark.django_db
@@ -2797,7 +2799,8 @@ def test_pane_matrix_survives_the_lead_closing_the_task(client, user, other_user
     # One assignee marked done, one did not — not two, as a bulk close
     # would have produced.
     assert pane.count('data-mark="yes"') == 1
-    assert "1 of 2 done" in pane
+    progress = pane[pane.index("data-progress") : pane.index("data-assignee-rows")]
+    assert "1 of 2" in progress
 
 
 @pytest.mark.django_db
@@ -4083,6 +4086,29 @@ def test_completed_task_has_no_locked_note(client, user, other_user):
 
 
 @pytest.mark.django_db
+def test_completion_heading_carries_an_info_button_explaining_the_procedure(client, user, other_user):
+    """An (i) beside the Completion heading explains done, reviewed, completed
+    and locked, on the pane and the full page; the card itself carries no
+    tick hint and no done count beside the heading."""
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+    client.force_login(user)
+
+    for url in (
+        _pane_url(project, task),
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}),
+    ):
+        html = client.get(url).content.decode()
+        info = html[html.index("data-completion-info") :]
+        info = info[: info.index("</ol>")]
+        assert 'aria-label="About Completion"' in info
+        assert 'x-show="open"' in info
+        for step in ("1. Done.", "2. Reviewed.", "3. Completed.", "4. Locked."):
+            assert step in info, step
+        assert "Tick to mark, untick to undo." not in html
+        assert "0 of 2 done" not in html
+
+
+@pytest.mark.django_db
 def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, other_user):
     """On a completed task every Done and Reviewed box is locked: it keeps its
     state, posts nothing, and a click shows a notice that the task has to be
@@ -4129,7 +4155,7 @@ def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, oth
         headers={"hx-request": "true"},
     ).content.decode()
     assert "data-locked" not in reopened and "task-locked-notice" not in reopened
-    assert "Tick to mark, untick to undo." in reopened
+    assert MARK_NOT_DONE in reopened
 
 
 def _sole_assignee_task(user, other_user, *, name="Reviewed to done"):
