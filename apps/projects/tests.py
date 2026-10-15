@@ -2336,3 +2336,33 @@ def test_removing_a_lead_redraws_the_viewers_own_row_out_of_band(client, user, o
     assert f'id="member-row-{member.pk}"' not in html
     assert f'id="member-row-{own.pk}"' in html and 'hx-swap-oob="true"' in html
     assert "openRemoveMemberModal" not in html, "the viewer is the last Lead now"
+
+
+@pytest.mark.django_db
+def test_a_lead_stepping_down_reloads_the_page(client, user, other_user):
+    """A Lead who demotes themselves gets the whole page reloaded (HX-Refresh)
+    with a note, since nothing on it is theirs to act on any more."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    other = ProjectMember.objects.create(project=project)
+    other.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.PROJECT_MANAGER
+    )
+    own = ProjectMember.objects.get(project=project, users=user)
+    client.force_login(user)
+
+    response = client.post(
+        reverse("projects:update_privilege", kwargs={"pk": project.pk, "member_pk": own.pk}),
+        {"privilege": MemberPrivileges.CONTRIBUTOR},
+        headers={"hx-request": "true"},
+    )
+    assert response.status_code == 200
+    assert response["HX-Refresh"] == "true"
+    assert ProjectPrivilege.objects.get(project=project, user=user).privilege == MemberPrivileges.CONTRIBUTOR
+
+    page = client.get(reverse("projects:members", kwargs={"pk": project.pk})).content.decode()
+    assert "You are now a Member of this project." in page
+    assert "Modify privilege" not in page

@@ -1198,6 +1198,21 @@ class UpdateMemberPrivilegeView(
             },
         )
 
+        if (
+            primary_user.id == request.user.id
+            and new_privilege != MemberPrivileges.PROJECT_MANAGER
+        ):
+            # A Lead who steps down no longer sees the page a Lead does: no
+            # actions in the table, no Invite member, no Settings tab. Reload
+            # it as they now see it rather than patching one row.
+            messages.success(
+                request,
+                f"You are now a {MemberPrivileges(new_privilege).label} of this project.",
+            )
+            response = HttpResponse("")
+            response["HX-Refresh"] = "true"
+            return response
+
         return HttpResponse(
             _render_member_row(request, self.project, member)
             + _viewer_row_oob(request, self.project, changed_member=member)
