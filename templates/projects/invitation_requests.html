@@ -23,19 +23,32 @@
 {% if invitations %}
   <div class="brand-card overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="table">
+      {% comment %}
+        Every header but Actions sorts the rows in the browser (sortableRows()
+        in base.html), ascending first; clicking the active header flips the
+        direction. Invited sorts by the name shown (the person's, else the
+        email); Privilege puts Leads first; Date sorts by time. Ties keep the
+        server's order, newest first, which is also the order before any
+        header is clicked.
+      {% endcomment %}
+      <table class="table" x-data="sortableRows()">
         <thead class="bg-brand-lighter text-brand-navy">
           <tr>
-            <th scope="col">Invited</th>
-            <th scope="col">Privilege</th>
-            <th scope="col">Sent by</th>
-            <th scope="col">Date</th>
+            {% include "_components/sortable_header.html" with key="invited" label="Invited" %}
+            {% include "_components/sortable_header.html" with key="privilege" label="Privilege" %}
+            {% include "_components/sortable_header.html" with key="sender" label="Sent by" %}
+            {% include "_components/sortable_header.html" with key="date" label="Date" %}
             <th scope="col" class="text-right">Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody x-ref="rows">
           {% for invitation in invitations %}
-            <tr class="hover:bg-brand-lighter/40 align-middle">
+            <tr class="hover:bg-brand-lighter/40 align-middle"
+                data-order="{{ forloop.counter0 }}"
+                data-sort-invited="{% if invitation.invited_user %}{{ invitation.invited_user.name|default:invitation.invited_user.email|lower }}{% else %}{{ invitation.email|lower }}{% endif %}"
+                data-sort-privilege="{% if invitation.privilege == 'PROJECT_MANAGER' %}0{% else %}1{% endif %}"
+                data-sort-sender="{{ invitation.added_by|default:''|lower }}"
+                data-sort-date="{{ invitation.created_at|date:'U' }}">
               <td>
                 {% if invitation.invited_user %}
                   <div class="font-medium text-brand-navy">{{ invitation.invited_user.name|default:invitation.invited_user.email }}</div>

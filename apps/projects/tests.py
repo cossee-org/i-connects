@@ -1985,3 +1985,30 @@ def test_join_requests_table_sorts_by_every_header_but_actions(client, user, oth
     assert 'data-sort-privilege="1"' in row
     assert 'data-sort-message="keen to help"' in row
     assert f'data-sort-submitted="{int(jr.created_at.timestamp())}"' in row
+
+
+@pytest.mark.django_db
+def test_invitation_requests_table_sorts_by_every_header_but_actions(client, user):
+    """Invited, Privilege, Sent by and Date are sort buttons, Actions is not,
+    and each row carries what it sorts by."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    invitation = Invitation.objects.create(
+        project=project, email="Eve@Example.org",
+        privilege=MemberPrivileges.PROJECT_MANAGER, invitation_code="sortme",
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:project_invitations", kwargs={"pk": project.pk})
+    ).content.decode()
+    for key in ("invited", "privilege", "sender", "date"):
+        assert f"@click=\"sortBy('{key}')\"" in content, key
+    assert '<th scope="col" class="text-right">Actions</th>' in content
+    row = content[content.index('data-order="0"') :]
+    row = row[: row.index(">")]
+    assert 'data-sort-invited="eve@example.org"' in row
+    assert 'data-sort-privilege="0"' in row
+    assert f'data-sort-date="{int(invitation.created_at.timestamp())}"' in row
