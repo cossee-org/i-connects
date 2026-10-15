@@ -2,25 +2,11 @@
 {# and rendered alone by BoardTablePartialView when a header re-sorts it. #}
 {# Context comes from views._table_view_context. #}
 
-{% comment %}
-  The table wears the Completion table's look (tasks/partials/task_status_block.html):
-  a ruled grid on every cell, a pale header row with small grey labels, and
-  the same cell padding and type size. The look is set here rather than in
-  the compiled stylesheet, as the Completion table's is, and rides along
-  when a header re-sorts the table. The table's own grid is its frame, so it
-  sits in a plain scroll box rather than a card.
-{% endcomment %}
-<style>
-  .task-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-  .task-table th, .task-table td { border: 1px solid rgb(189 203 232 / 0.9); padding: 0.5rem 0.625rem; vertical-align: middle; text-align: left; }
-  .task-table thead th { background: #eaeff8; font-size: 0.75rem; font-weight: 600; color: rgb(51 51 51 / 0.75); }
-  .task-table tbody tr { background: #fff; }
-</style>
 {% if table_tasks %}
-  <div class="overflow-x-auto">
-    <table class="task-table">
+  <div class="brand-card overflow-x-auto">
+    <table class="table table-sm">
       <caption class="sr-only">Tasks in {{ project.name }}. Select a column header to sort.</caption>
-      <thead>
+      <thead class="bg-brand-lighter text-brand-navy">
         <tr>
           {% include "tasks/partials/table_sort_header.html" with key="name" label="Task" %}
           {% include "tasks/partials/table_sort_header.html" with key="assignees" label="Assignees" %}
