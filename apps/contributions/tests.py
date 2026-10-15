@@ -1527,3 +1527,18 @@ def test_the_add_modal_keeps_its_explanation_behind_an_info_button(client, user)
     title_row = html[: html.index('aria-label="About Add a contribution"')]
     assert "Add a contribution</h2>" in title_row
     assert '<p class="text-sm text-brand-text/70 mb-4">' not in html
+
+
+@pytest.mark.django_db
+def test_the_add_modal_links_the_credit_roles_from_the_label_line(client, user):
+    """"CRediT roles ↗" on the CRediT role label line, as on a new task's
+    Task type, in place of the "What each role covers" line."""
+    project, _col, _pm = _make_project(user)
+    client.force_login(user)
+
+    html = client.get(_add_url(project), headers={"hx-request": "true"}).content.decode()
+    assert "What each role covers" not in html
+    assert ">credit.niso.org</a>" not in html
+    link = html.index("CRediT roles &#8599;")
+    assert html.index("CRediT role <span") < link < html.index('name="contribution_type"')
+    assert 'href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"' in html
