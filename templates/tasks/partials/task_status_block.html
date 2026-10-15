@@ -153,14 +153,16 @@
         target, so state kept inside it would snap back to collapsed on every
         mark and review, taking the row you had just acted on with it.
 
-        The table's look is set here rather than in the compiled stylesheet:
-        it is drawn by this block alone, which both the pane and the full
-        task page render.
+        The table wears the Tasks tab's Table view look (tasks/task_table_view.html):
+        a daisyUI table-sm in a card, with a lavender header row in navy and
+        rules between rows only. What is its own — the column widths and the
+        tick boxes — is set here rather than in the compiled stylesheet: it
+        is drawn by this block alone, which both the pane and the full task
+        page render.
       {% endcomment %}
       <style>
-        .completion-table { width: 100%; margin-top: 0.75rem; border-collapse: collapse; table-layout: fixed; font-size: 0.875rem; }
-        .completion-table th, .completion-table td { border: 1px solid rgb(189 203 232 / 0.9); padding: 0.5rem 0.625rem; vertical-align: middle; }
-        .completion-table thead th { background: #eaeff8; font-size: 0.75rem; font-weight: 600; color: rgb(51 51 51 / 0.75); text-align: left; }
+        .completion-table { table-layout: fixed; }
+        .completion-table th, .completion-table td { vertical-align: middle; }
         .completion-table col.completion-name-col { width: 34%; }
         .completion-table.no-review col.completion-name-col { width: 45%; }
         .completion-mark { display: flex; align-items: center; gap: 0.625rem; min-width: 0; }
@@ -176,13 +178,14 @@
         .completion-locked-notice { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
         .completion-tick:focus-visible { outline: 2px solid #f03d30; outline-offset: 2px; }
       </style>
-      <table class="completion-table{% if not show_review %} no-review{% endif %}" data-assignee-rows>
+      <div class="brand-card overflow-x-auto mt-3">
+      <table class="table table-sm completion-table{% if not show_review %} no-review{% endif %}" data-assignee-rows>
         <colgroup>
           <col class="completion-name-col">
           <col>
           {% if show_review %}<col>{% endif %}
         </colgroup>
-        <thead>
+        <thead class="bg-brand-lighter text-brand-navy">
           <tr>
             <th scope="col">Assignee</th>
             <th scope="col">Done</th>
@@ -229,6 +232,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
       {% if assignee_count > 3 %}
         <button type="button"
                 class="mt-1 text-xs font-medium text-brand-navy hover:underline"
