@@ -42,17 +42,25 @@
             <path fill-rule="evenodd" d="M18 10A8 8 0 1 1 2 10a8 8 0 0 1 16 0ZM9 9a1 1 0 0 1 2 0v4a1 1 0 1 1-2 0V9Zm1-3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
           </svg>
         </button>
-        <div id="task-completion-info" x-cloak x-show="open"
+        {% comment %}
+          The id sits on the inner element, not on the one x-show hides: HTMX
+          settles an id'd element by putting its original style attribute
+          back after the swap, which would wipe Alpine's display:none and
+          open the note on its own after every mark.
+        {% endcomment %}
+        <div x-cloak x-show="open" data-completion-info-panel
              x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
              x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
              class="absolute left-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-30 text-xs text-brand-text/80 normal-case tracking-normal font-normal"
              style="width: min(22rem, calc(100vw - 4rem))">
+          <div id="task-completion-info">
           <p class="text-sm font-semibold text-brand-navy">How completion works</p>
           <ol class="mt-2 flex flex-col gap-2">
             <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished; a Lead can tick it for anyone. Untick to undo.</li>
             <li><span class="font-semibold text-violet-600">2. Reviewed.</span> On a task with reviewers, a reviewer or a Lead ticks Reviewed once a part is done. Whoever reviewed it, or a Lead, can untick it. Undoing a Done mark clears its review.</li>
             <li><span class="font-semibold text-brand-navy">3. Completed.</span> A Lead marks the whole task completed with Mark completed at the top. A task with reviewers also completes by itself once every part is reviewed. Once completed, its Done and Reviewed records are locked for everyone; a Lead marks it not complete to change them.</li>
           </ol>
+          </div>
         </div>
       </div>
       {% else %}

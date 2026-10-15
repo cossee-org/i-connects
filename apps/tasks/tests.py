@@ -4148,6 +4148,11 @@ def test_completion_heading_carries_an_info_button_explaining_the_procedure(clie
         assert "4." not in info
         assert "Tick to mark, untick to undo." not in html
         assert "0 of 2 done" not in html
+        # The element x-show hides carries no id: HTMX restores an id'd
+        # element's style after a swap, which would open the note on its own.
+        panel = html[html.rindex("<div", 0, html.index("data-completion-info-panel")) :]
+        panel = panel[: panel.index(">")]
+        assert 'x-show="open"' in panel and " id=" not in panel
 
 
 @pytest.mark.django_db
