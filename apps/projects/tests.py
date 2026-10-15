@@ -2135,10 +2135,9 @@ def test_members_table_offers_modify_privilege_to_a_lead(client, user, other_use
 
 
 @pytest.mark.django_db
-def test_members_table_action_buttons_wear_the_review_style(client, user, other_user):
-    """Modify privilege is a plain-text button like Manage columns; Remove
-    is a small full coral one like the Pending join requests table's
-    Review."""
+def test_members_table_action_buttons_styles(client, user, other_user):
+    """Modify privilege looks like Resend on Pending invitation requests, a
+    plain navy button; Remove is a small full coral one."""
     project = create_project_with_owner(
         user=user,
         form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
@@ -2157,6 +2156,24 @@ def test_members_table_action_buttons_wear_the_review_style(client, user, other_
     row = row[: row.index("</tr>")]
     full = 'class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"'
     modify = row[row.index("openPrivilegeModal") - 200 : row.index("openPrivilegeModal")]
-    assert 'class="btn btn-sm btn-ghost"' in modify, "Modify privilege is plain text"
+    assert 'class="btn btn-sm btn-ghost text-brand-navy hover:bg-brand-lighter"' in modify, "Modify privilege looks like Resend"
     remove = row[row.index("openRemoveMemberModal") - 200 : row.index("openRemoveMemberModal")]
-    assert full in remove, "Remove keeps the Review style"
+    assert full in remove, "Remove stays a full coral button"
+
+
+@pytest.mark.django_db
+def test_join_requests_review_button_looks_like_resend(client, user, other_user):
+    """Review on Pending join requests wears Resend's plain navy style."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    JoinRequest.objects.create(project=project, user=other_user)
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:join_requests", kwargs={"pk": project.pk})
+    ).content.decode()
+    tbody = content[content.index("<tbody") : content.index("</tbody>")]
+    assert 'class="btn btn-sm btn-ghost text-brand-navy hover:bg-brand-lighter"' in tbody
+    assert "bg-brand-coral" not in tbody
