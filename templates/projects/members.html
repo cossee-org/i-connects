@@ -115,6 +115,76 @@
   </form>
 </dialog>
 
+{% if user_privilege == "PROJECT_MANAGER" %}
+{% comment %}
+  Modify privilege: one modal for every row. openPrivilegeModal() fills in
+  the member and their current privilege; Save posts the form to that row's
+  update_privilege URL and swaps the row it returns, then closes. A refusal
+  (a 4xx, such as the last Lead stepping down) keeps the modal open with
+  the reason.
+{% endcomment %}
+<dialog id="privilege-modal" class="modal" aria-labelledby="privilege-modal-title">
+  <div class="modal-box">
+    <h3 id="privilege-modal-title" class="text-lg font-semibold text-brand-navy">Modify privilege</h3>
+    <form id="privilege-form" class="mt-3">
+      {% csrf_token %}
+      <label for="privilege-select" class="block text-sm text-brand-text">
+        Privilege for <strong id="privilege-member-name"></strong>
+      </label>
+      <select id="privilege-select" name="privilege" class="select select-bordered w-full mt-2">
+        {% for value, label in privilege_choices %}
+          <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <p id="privilege-error" class="mt-2 text-sm text-error" role="alert" hidden></p>
+      <div class="flex gap-2 justify-end mt-6">
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('privilege-modal').close()">Cancel</button>
+        <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Save</button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  var modal = document.getElementById('privilege-modal');
+  var form = document.getElementById('privilege-form');
+  var select = document.getElementById('privilege-select');
+  var error = document.getElementById('privilege-error');
+
+  window.openPrivilegeModal = function (url, name, current, targetId) {
+    document.getElementById('privilege-member-name').textContent = name;
+    if (current) select.value = current;
+    error.hidden = true;
+    modal._url = url;
+    modal._target = targetId;
+    modal.showModal();
+  };
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    htmx.ajax('POST', modal._url, {
+      source: form,
+      target: '#' + modal._target,
+      swap: 'outerHTML'
+    });
+  });
+
+  form.addEventListener('htmx:afterRequest', function (event) {
+    if (event.detail.successful) {
+      modal.close();
+    } else {
+      error.textContent = (event.detail.xhr && event.detail.xhr.responseText) || 'The privilege could not be changed.';
+      error.hidden = false;
+    }
+  });
+}());
+</script>
+{% endif %}
+
 <script>
 (function () {
   var modal = document.getElementById('remove-member-modal');

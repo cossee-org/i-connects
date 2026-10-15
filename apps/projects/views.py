@@ -938,7 +938,7 @@ class ProjectDeleteView(ProjectManagerRequiredMixin, DeleteView):
 
 
 def _member_rows(project, *, viewer=None):
-    """Collect (member, user, privilege, privilege_form) dicts for a project.
+    """Collect (member, user, privilege) dicts for a project.
 
     When ``viewer`` is supplied, each row is annotated with ``is_self`` so
     the template can disable PM-mutating controls on the viewer's own row
@@ -970,9 +970,6 @@ def _member_rows(project, *, viewer=None):
                 "is_self": (
                     primary_user is not None and primary_user.id == viewer_id
                 ),
-                "form": MemberPrivilegeForm(
-                    initial={"privilege": effective or MemberPrivileges.CONTRIBUTOR}
-                ),
             }
         )
     return rows
@@ -990,6 +987,8 @@ class ProjectMemberListView(
             project=self.project, user=self.request.user
         )
         if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
+            # The Modify privilege modal's choices.
+            context["privilege_choices"] = MemberPrivileges.choices
             context["pending_join_request_count"] = JoinRequest.objects.filter(
                 project=self.project, status=JoinRequestStatus.PENDING
             ).count()
@@ -1149,7 +1148,6 @@ class UpdateMemberPrivilegeView(
             "user": primary_user,
             "privilege": new_privilege,
             "is_self": primary_user.id == request.user.id,
-            "form": MemberPrivilegeForm(initial={"privilege": new_privilege}),
         }
         return render(
             request,

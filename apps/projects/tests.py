@@ -2097,3 +2097,38 @@ def test_members_table_shows_privilege_as_plain_text(client, user, other_user):
     assert '<td class="text-xs text-brand-text/80">Lead</td>' in tbody
     assert "<select" not in tbody
     assert "rounded-full text-xs font-medium" not in tbody
+
+
+@pytest.mark.django_db
+def test_members_table_offers_modify_privilege_to_a_lead(client, user, other_user):
+    """A Lead gets Modify privilege under Actions, opening one shared modal;
+    the last Lead's own row has it disabled; a Member gets neither."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    url = reverse("projects:members", kwargs={"pk": project.pk})
+    update_url = reverse(
+        "projects:update_privilege", kwargs={"pk": project.pk, "member_pk": member.pk}
+    )
+
+    client.force_login(user)
+    content = client.get(url).content.decode()
+    assert 'id="privilege-modal"' in content
+    assert '<option value="PROJECT_MANAGER">Lead</option>' in content
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    row = row[: row.index("</tr>")]
+    assert f"openPrivilegeModal('{update_url}', 'Bob', 'CONTRIBUTOR', 'member-row-{member.pk}')" in row
+    own = content[content.index("member-row-") :]
+    own = own[: own.index("</tr>")]
+    assert "Modify privilege" in own and "openPrivilegeModal" not in own, "the last Lead cannot step down"
+
+    client.force_login(other_user)
+    content = client.get(url).content.decode()
+    assert "Modify privilege" not in content
+    assert 'id="privilege-modal"' not in content
