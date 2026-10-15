@@ -2136,8 +2136,9 @@ def test_members_table_offers_modify_privilege_to_a_lead(client, user, other_use
 
 @pytest.mark.django_db
 def test_members_table_action_buttons_wear_the_review_style(client, user, other_user):
-    """Modify privilege and Remove look like the Pending join requests
-    table's Review button: a small, full coral button."""
+    """Modify privilege and Remove are small full-shade buttons like the
+    Pending join requests table's Review: Modify privilege in neutral grey,
+    Remove in coral."""
     project = create_project_with_owner(
         user=user,
         form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
@@ -2155,5 +2156,8 @@ def test_members_table_action_buttons_wear_the_review_style(client, user, other_
     row = content[content.index(f'id="member-row-{member.pk}"') :]
     row = row[: row.index("</tr>")]
     full = 'class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"'
-    assert row.count(full) == 2
+    modify = row[row.index("openPrivilegeModal") - 200 : row.index("openPrivilegeModal")]
+    assert 'class="btn btn-sm btn-neutral"' in modify, "Modify privilege is neutral"
+    remove = row[row.index("openRemoveMemberModal") - 200 : row.index("openRemoveMemberModal")]
+    assert full in remove, "Remove keeps the Review style"
     assert "btn-ghost" not in row
