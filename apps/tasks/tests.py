@@ -1477,9 +1477,11 @@ def test_completion_card_separates_done_and_reviewed_progress(client, user, othe
     progress = pane[pane.index("data-progress") : pane.index("data-assignee-rows")]
     assert progress.index("Marked done") < progress.index("2 of 3") < progress.index("Reviewed") < progress.index("1 of 3")
     assert "bg-success" in progress and "bg-violet-600" in progress
-    # The stages read in their own colours under the name: done green,
-    # review violet. A part done but not reviewed shows the done line alone.
-    assert "text-success" in _row_for(pane, contrib) and "text-violet-600" in _row_for(pane, contrib)
+    # The boxes carry the stage colours; the date and who beside them are
+    # plain text. A part done but not reviewed shows the done line alone.
+    row = _row_for(pane, contrib)
+    assert "completion-tick-done" in row and "completion-tick-review" in row
+    assert "text-success" not in row and "text-violet-600" not in row
     assert "data-done-line" in _row_for(pane, lead) and "data-review-line" not in _row_for(pane, lead)
     detail = client.get(
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
@@ -3254,13 +3256,13 @@ def test_matrix_shows_when_an_assignee_marked_done(client, user, other_user):
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
     stamped = log.completed_at.strftime("%b %-d")
-    # In the Done cell, in green beside the ticked box: the date, then who.
+    # In the Done cell, in plain text beside the ticked box: the date, then who.
     row = _row_for(pane, contrib)
     cell = row[row.index("data-done-cell") :]
     line = cell[cell.index("data-done-line") :]
     line = line[: line.index("</span>")]
     assert line.index(stamped) < line.index("by ")
-    assert "text-success" in cell[: cell.index("data-done-line") + 20]
+    assert "text-success" not in cell
     assert 'data-mark="yes"' in row
 
 

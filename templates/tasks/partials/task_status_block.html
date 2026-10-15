@@ -134,8 +134,9 @@
         One table row per assignee, under Assignee / Done / Reviewed (the
         last only on a task under review), one line each. The Assignee cell
         names them. The Done and Reviewed cells each hold a tick box and,
-        beside it, when and by whom: "Oct 14 · by …" in green under Done, in
-        purple under Reviewed; otherwise "Not done yet", "Awaiting review" or
+        beside it, when and by whom ("Oct 14 · by …"), in plain text — the
+        round boxes carry the colour, green for Done and purple for Reviewed;
+        otherwise "Not done yet", "Awaiting review" or
         a dash. The boxes — tick to mark, untick to undo — are live only for
         whoever may make that change (task_done_tick.html,
         task_review_tick.html), and read-only for everyone else. Each tick
@@ -164,7 +165,7 @@
         .completion-table.no-review col.completion-name-col { width: 45%; }
         .completion-mark { display: flex; align-items: center; gap: 0.625rem; min-width: 0; }
         .completion-mark-note { font-size: 0.8125rem; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
-        .completion-tick { appearance: none; -webkit-appearance: none; margin: 0; width: 22px; height: 22px; border-radius: 6px; border: 2px solid #9aa3c7; background: #fff; position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0; }
+        .completion-tick { appearance: none; -webkit-appearance: none; margin: 0; width: 22px; height: 22px; border-radius: 999px; border: 2px solid #9aa3c7; background: #fff; position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0; }
         .completion-tick:checked::after { content: ""; position: absolute; left: 6px; top: 2px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
         .completion-tick-done:checked { background: #16a34a; border-color: #16a34a; }
         .completion-tick-review:checked { background: #7c3aed; border-color: #7c3aed; }
@@ -202,7 +203,7 @@
                 <div class="completion-mark">
                   {% include "tasks/partials/task_done_tick.html" with s=s task=task %}
                   {% if s.done %}
-                    <span class="completion-mark-note text-success" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
+                    <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
                   {% else %}
                     <span class="completion-mark-note text-brand-text/60">Not done yet</span>
                   {% endif %}
@@ -213,9 +214,9 @@
                   <div class="completion-mark">
                     {% include "tasks/partials/task_review_tick.html" with s=s task=task %}
                     {% if s.reviewed %}
-                      <span class="completion-mark-note text-violet-600" data-review-line>{% if s.reviewed_at %}{{ s.reviewed_at|date:"M j" }} &middot; {% endif %}by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}</span>
+                      <span class="completion-mark-note text-brand-text/80" data-review-line>{% if s.reviewed_at %}{{ s.reviewed_at|date:"M j" }} &middot; {% endif %}by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}</span>
                     {% elif s.done and not marks_locked %}
-                      <span class="completion-mark-note text-amber-600">Awaiting review</span>
+                      <span class="completion-mark-note text-brand-text/60">Awaiting review</span>
                     {% elif s.done %}
                       <span class="completion-mark-note text-brand-text/60">Not reviewed</span>
                     {% else %}
