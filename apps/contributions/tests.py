@@ -632,9 +632,9 @@ def test_the_pages_offer_both_downloads(client, user, other_user):
     body = client.get(
         reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
     ).content.decode()
-    # The tab's Matrix says "(CSV)" as on My Contributions; List is still short.
+    # Both say "(CSV)" on the tab, as on My Contributions.
     assert 'aria-label="Download the contribution matrix as CSV"' in body and 'aria-label="Download the contribution list as CSV"' in body
-    assert "Matrix (CSV)" in body
+    assert "Matrix (CSV)" in body and "List (CSV)" in body
 
     body = client.get(reverse("contributions:contributions")).content.decode()
     assert "Matrix (CSV)" in body and "List (CSV)" in body
