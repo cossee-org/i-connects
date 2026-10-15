@@ -1924,8 +1924,8 @@ def test_members_table_hides_the_roles_column_by_default(client, user):
 
 @pytest.mark.django_db
 def test_members_table_sorts_by_every_header_but_actions(client, user, other_user):
-    """Name, Email and Privilege are sort buttons, Actions is not, and each
-    row carries what it sorts by — Privilege as a rank, Lead first."""
+    """Name and Privilege are sort buttons, Actions is not, and each row
+    carries what it sorts by — Privilege as a rank, Lead first."""
     project = create_project_with_owner(
         user=user,
         form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
@@ -1940,8 +1940,9 @@ def test_members_table_sorts_by_every_header_but_actions(client, user, other_use
     content = client.get(
         reverse("projects:members", kwargs={"pk": project.pk})
     ).content.decode()
-    for key in ("name", "email", "privilege"):
+    for key in ("name", "privilege"):
         assert f"@click=\"sortBy('{key}')\"" in content, key
+    assert "sortBy('email')" not in content, "the email has no column to sort"
     assert "sortBy('roles')" not in content, "Roles is hidden, so is its sort"
     assert "sortBy('actions')" not in content
     assert '<th scope="col" class="text-right">Actions</th>' in content
@@ -1949,7 +1950,6 @@ def test_members_table_sorts_by_every_header_but_actions(client, user, other_use
     row = content[content.index(f'id="member-row-{member.pk}"') :]
     row = row[: row.index(">")]
     assert f'data-order="{member.pk}"' in row
-    assert f'data-sort-email="{other_user.email.lower()}"' in row
     assert 'data-sort-privilege="1"' in row
     assert 'data-sort-privilege="0"' in content, "the Lead ranks first"
 
@@ -2036,3 +2036,39 @@ def test_pending_requests_tables_show_privilege_as_plain_text(client, user, othe
         tbody = content[content.index("<tbody") : content.index("</tbody>")]
         assert f'<td class="text-xs text-brand-text/80">{label}</td>' in tbody, name
         assert "rounded-full" not in tbody, f"{name} still draws a pill"
+
+
+@pytest.mark.django_db
+def test_members_table_puts_the_email_under_the_name(client, user, other_user):
+    """No Email column: a person's email sits under their name, and a person
+    with no name, whose email already stands in for it, is not shown twice."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    thead = content[content.index("<thead") : content.index("</thead>")]
+    assert "Email" not in thead
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    row = row[: row.index("</tr>")]
+    name_cell = row[row.index("<td") : row.index("</td>")]
+    assert other_user.name in name_cell
+    assert f'<div class="text-xs text-brand-text/60">{other_user.email}</div>' in name_cell
+
+    other_user.name = ""
+    other_user.save(update_fields=["name"])
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    name_cell = row[row.index("<td") : row.index("</td>")]
+    assert name_cell.count(other_user.email) == 1

@@ -11,7 +11,6 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
 <tr id="member-row-{{ row.member.pk }}" class="hover:bg-brand-lighter/40"
     data-order="{{ row.member.pk }}"
     data-sort-name="{% if row.user %}{{ row.user.name|default:row.user.email|lower }}{% else %}{{ row.member.name|default:'unnamed'|lower }}{% endif %}"
-    data-sort-email="{{ row.user.email|default:''|lower }}"
     data-sort-privilege="{% if row.privilege == 'PROJECT_MANAGER' %}0{% elif row.privilege == 'CONTRIBUTOR' %}1{% else %}2{% endif %}"
     data-sort-roles="{% for r in row.member.roles.all %}{{ r.name|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}">
   <td>
@@ -20,7 +19,12 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
         <span aria-hidden="true" class="w-8 h-8 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">
           {{ row.user.name|default:row.user.email|slice:":1"|upper }}
         </span>
-        <span class="text-brand-text font-medium">{{ row.user.name|default:row.user.email }}</span>
+        {# The email sits under the name, as on the Pending requests tables; #}
+        {# a person with no name already shows it as their name. #}
+        <div class="min-w-0">
+          <div class="text-brand-text font-medium">{{ row.user.name|default:row.user.email }}</div>
+          {% if row.user.name %}<div class="text-xs text-brand-text/60">{{ row.user.email }}</div>{% endif %}
+        </div>
       {% else %}
         <span aria-hidden="true" class="w-8 h-8 rounded-full bg-brand-light text-brand-navy flex items-center justify-center text-xs font-semibold shrink-0">
           {{ row.member.name|default:"?"|slice:":1"|upper }}
@@ -29,7 +33,6 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
       {% endif %}
     </div>
   </td>
-  <td class="text-xs text-brand-text/80">{{ row.user.email|default:"&mdash;" }}</td>
   <td>
     {% if user_privilege == "PROJECT_MANAGER" and row.user %}
       <form
