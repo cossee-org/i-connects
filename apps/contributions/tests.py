@@ -1529,3 +1529,18 @@ def test_every_contribution_sorts_by_every_header_but_actions(client, user):
     assert f'data-sort-task="{task.name.lower()}"' in row
     assert 'data-sort-role="software"' in row
     assert f'data-sort-completed="{int(record.closed_at.timestamp())}"' in row
+
+
+@pytest.mark.django_db
+def test_the_edit_modal_links_the_credit_roles_from_the_label_line(client, user):
+    """"CRediT roles ↗" on the CRediT role label line, as in Add a
+    contribution, in place of the "What each role covers" line."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+    client.force_login(user)
+
+    html = client.get(_edit_url(project, record), headers={"hx-request": "true"}).content.decode()
+    assert "What each role covers" not in html
+    link = html.index("CRediT roles &#8599;")
+    assert html.index("CRediT role <span") < link < html.index('name="contribution_type"')
