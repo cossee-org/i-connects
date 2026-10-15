@@ -4087,8 +4087,8 @@ def test_completed_task_has_no_locked_note(client, user, other_user):
 
 @pytest.mark.django_db
 def test_completion_heading_carries_an_info_button_explaining_the_procedure(client, user, other_user):
-    """An (i) beside the Completion heading explains done, reviewed, completed
-    and locked, on the pane and the full page; the card itself carries no
+    """An (i) beside the Completion heading explains done, reviewed and
+    completed (and the lock completing brings), on the pane and the full page; the card itself carries no
     tick hint and no done count beside the heading."""
     project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     client.force_login(user)
@@ -4102,8 +4102,11 @@ def test_completion_heading_carries_an_info_button_explaining_the_procedure(clie
         info = info[: info.index("</ol>")]
         assert 'aria-label="About Completion"' in info
         assert 'x-show="open"' in info
-        for step in ("1. Done.", "2. Reviewed.", "3. Completed.", "4. Locked."):
+        for step in ("1. Done.", "2. Reviewed.", "3. Completed."):
             assert step in info, step
+        completed = info[info.index("3. Completed.") :]
+        assert "locked for everyone" in completed
+        assert "4." not in info
         assert "Tick to mark, untick to undo." not in html
         assert "0 of 2 done" not in html
 

@@ -27,7 +27,7 @@
       <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold">Completion</h3>
       {% comment %}
         The (i) beside the heading: how a part goes from done to reviewed,
-        how the task is completed, and what completing it locks. It sits
+        and how the task is completed, which locks its records. It sits
         inside the swap target, so a mark or review closes it again, which
         is fine for a note opened to read.
       {% endcomment %}
@@ -51,8 +51,7 @@
           <ol class="mt-2 flex flex-col gap-2">
             <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished; a Lead can tick it for anyone. Untick to undo.</li>
             <li><span class="font-semibold text-violet-600">2. Reviewed.</span> On a task with reviewers, a reviewer or a Lead ticks Reviewed once a part is done. Whoever reviewed it, or a Lead, can untick it. Undoing a Done mark clears its review.</li>
-            <li><span class="font-semibold text-brand-navy">3. Completed.</span> A Lead marks the whole task completed with Mark completed at the top. A task with reviewers also completes by itself once every part is reviewed.</li>
-            <li><span class="font-semibold text-brand-navy">4. Locked.</span> Once the task is completed, its Done and Reviewed records are locked for everyone. A Lead marks it not complete to change them.</li>
+            <li><span class="font-semibold text-brand-navy">3. Completed.</span> A Lead marks the whole task completed with Mark completed at the top. A task with reviewers also completes by itself once every part is reviewed. Once completed, its Done and Reviewed records are locked for everyone; a Lead marks it not complete to change them.</li>
           </ol>
         </div>
       </div>
