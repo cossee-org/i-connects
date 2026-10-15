@@ -12,7 +12,11 @@
 <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
   <div class="flex items-center gap-2">
     <h2 class="text-lg font-semibold text-brand-navy">Contributors</h2>
-    {% include "_components/info_popover.html" with label="Contributors" body="Everyone on this project, with their privilege and roles. Leads run the project and manage its members; members work on its tasks." %}
+    {% if show_member_roles %}
+      {% include "_components/info_popover.html" with label="Contributors" body="Everyone on this project, with their privilege and roles. Leads run the project and manage its members; members work on its tasks." %}
+    {% else %}
+      {% include "_components/info_popover.html" with label="Contributors" body="Everyone on this project, with their privilege. Leads run the project and manage its members; members work on its tasks." %}
+    {% endif %}
   </div>
 </div>
 {% if user_privilege == "PROJECT_MANAGER" %}
@@ -53,7 +57,8 @@
             <th scope="col">Name</th>
             <th scope="col">Email</th>
             <th scope="col">Privilege</th>
-            <th scope="col">Roles</th>
+            {# Roles is hidden for now (SHOW_MEMBER_ROLES), not removed. #}
+            {% if show_member_roles %}<th scope="col">Roles</th>{% endif %}
             <th scope="col" class="text-right">Actions</th>
           </tr>
         </thead>

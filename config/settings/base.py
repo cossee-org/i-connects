@@ -289,6 +289,10 @@ SITE_URL = env("SITE_URL", "")
 # this on brings both back as they were.
 SHOW_SURVEYS_AND_COMMUNICATIONS = env_bool("SHOW_SURVEYS_AND_COMMUNICATIONS", False)
 
+# The Roles column of the Contributors table is hidden for now. Members keep
+# their roles; turning this on shows the column again.
+SHOW_MEMBER_ROLES = env_bool("SHOW_MEMBER_ROLES", False)
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------

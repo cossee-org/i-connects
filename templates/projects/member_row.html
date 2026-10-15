@@ -47,6 +47,7 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
       </span>
     {% endif %}
   </td>
+  {% if show_member_roles %}
   <td>
     <div class="flex flex-wrap gap-1">
       {% for r in row.member.roles.all %}
@@ -56,6 +57,7 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
       {% endfor %}
     </div>
   </td>
+  {% endif %}
   <td class="text-right">
     {% if user_privilege == "PROJECT_MANAGER" %}
       {% if row.is_self and viewer_is_last_pm %}

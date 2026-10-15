@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.audit.models import AuditAction, AuditLog
@@ -1893,3 +1894,27 @@ def test_overview_wiki_follows_who_can_see_each_page(client, user, other_user):
     body = visitor.content.decode()
     assert 'id="proj-public-wiki-heading"' in body and ">About us</a>" in body
     assert "Protocol" not in body and "Budget" not in body and "Press kit" not in body
+
+
+@pytest.mark.django_db
+def test_members_table_hides_the_roles_column_by_default(client, user):
+    """Roles is hidden for now: no header, no cells, and the (i) stops
+    promising them. The column comes back with SHOW_MEMBER_ROLES."""
+    from django.test import override_settings
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    client.force_login(user)
+    url = reverse("projects:members", kwargs={"pk": project.pk})
+
+    content = client.get(url).content.decode()
+    assert '<th scope="col">Roles</th>' not in content
+    assert "privilege and roles" not in content
+    assert '<th scope="col">Privilege</th>' in content
+
+    with override_settings(SHOW_MEMBER_ROLES=True):
+        content = client.get(url).content.decode()
+    assert '<th scope="col">Roles</th>' in content
+    assert "privilege and roles" in content
