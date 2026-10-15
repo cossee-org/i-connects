@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.db import models
+from django.utils import timezone
 
 from apps.core.enums import AutoAssignNew, CompletedAs, ContributionType, TaskStatus
 
@@ -226,6 +227,19 @@ class Task(models.Model):
         for log in self.task_logs.all():
             current.setdefault(log.assigned_to_id, log)
         return current
+
+    @property
+    def is_overdue(self) -> bool:
+        """Still open past its deadline — a finished task is never late.
+
+        The same rule as the dashboard's overdue count and the overdue-task
+        digest; the browsing views flag it with ``_components/overdue_badge.html``.
+        """
+        return (
+            self.deadline is not None
+            and self.status != TaskStatus.COMPLETED
+            and self.deadline < timezone.now()
+        )
 
     @property
     def assignee_count(self) -> int:

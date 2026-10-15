@@ -13,7 +13,17 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-2xl mx-auto space-y-5">
+{% if object %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="flex items-center gap-2">
+    <h2 class="text-lg font-semibold text-brand-navy">Settings</h2>
+    {% include "_components/info_popover.html" with label="Settings" body="The project's name, description, status, visibility and contribution tracking, and where to archive or delete it. Only leads can see this tab." %}
+  </div>
+</div>
+{% endif %}
+{# Settings is a project tab, so its cards span the tab like every other   #}
+{# tab's; the create form, which shares this template, stays a centred column. #}
+<div class="space-y-5{% if not object %} max-w-2xl mx-auto{% endif %}">
   <form method="post" class="brand-card p-6">
     {% csrf_token %}
 
@@ -62,7 +72,7 @@
   </form>
 
   {% if object %}
-    <div class="brand-card p-6 border-error/40">
+    <div class="brand-card p-6">
       <h2 class="text-lg font-semibold text-brand-navy mb-4">Deletion and archiving</h2>
       <p class="text-xs text-brand-text/60 mb-4">
         Archive this project to hide it from active lists while keeping its data,

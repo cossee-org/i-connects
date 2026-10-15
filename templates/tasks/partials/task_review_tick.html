@@ -1,0 +1,47 @@
+{% comment %}
+  The Reviewed tick box of one completion-table row — ticked once a reviewer
+  has signed the part off. Ticking reviews it; unticking withdraws the
+  review. Expects ``s`` (one entry of views._task_status_context's
+  assignee_states) and ``task``; it swaps #task-status-block.
+
+  The same rules as before: only a part marked done can be reviewed, by one
+  of the task's reviewers or a Lead (``s.can_review``); a review can be
+  withdrawn by whoever gave it or a Lead (``s.can_unreview``). Everyone else
+  sees it read-only.
+
+  Once the task is marked completed, a click shows the card's locked notice
+  instead of toggling the box — see task_done_tick.html.
+{% endcomment %}
+{% if marks_locked %}
+  <input type="checkbox" class="completion-tick completion-tick-review"{% if s.reviewed %} checked{% endif %}
+         aria-disabled="true" data-locked
+         aria-describedby="task-locked-notice"
+         aria-label="{{ s.member.display_name }}: {% if s.reviewed %}reviewed{% else %}not reviewed{% endif %} (locked)"
+         title="Locked: the task is marked completed"
+         @click.prevent="showLocked()">
+{% elif s.reviewed %}
+  {% if s.can_unreview %}
+    <input type="checkbox" class="completion-tick completion-tick-review" checked
+           hx-post="{% url 'tasks:review_log' pk=task.pk log_pk=s.log.pk %}"
+           hx-vals='{"reviewed": "0", "pane_mode": "1"}'
+           hx-target="#task-status-block"
+           hx-swap="outerHTML"
+           aria-label="Mark {% if s.is_viewer %}your{% else %}{{ s.member.display_name }}'s{% endif %} part not reviewed"
+           title="Untick to undo">
+  {% else %}
+    <input type="checkbox" class="completion-tick completion-tick-review" disabled checked
+           aria-label="{{ s.member.display_name }}: reviewed">
+  {% endif %}
+{% elif s.awaiting_review and s.log and s.can_review %}
+  <input type="checkbox" class="completion-tick completion-tick-review"
+         hx-post="{% url 'tasks:review_log' pk=task.pk log_pk=s.log.pk %}"
+         hx-vals='{"reviewed": "1", "pane_mode": "1"}'
+         hx-target="#task-status-block"
+         hx-swap="outerHTML"
+         aria-label="Mark {% if s.is_viewer %}your{% else %}{{ s.member.display_name }}'s{% endif %} part reviewed"
+         title="Tick to mark reviewed">
+{% else %}
+  <input type="checkbox" class="completion-tick completion-tick-review" disabled
+         aria-label="{{ s.member.display_name }}: {% if s.done and not marks_locked %}awaiting review{% else %}not reviewed{% endif %}"
+         {% if not s.done %}title="Can be reviewed once the part is done"{% endif %}>
+{% endif %}

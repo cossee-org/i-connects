@@ -77,6 +77,39 @@
       </div>
     {% endif %}
 
+    {% if form.show_on_overview %}
+      <div class="form-control w-full mb-4">
+        <label class="label cursor-pointer justify-start gap-2 pb-1" for="{{ form.show_on_overview.id_for_label }}">
+          {{ form.show_on_overview }}
+          <span class="label-text text-brand-navy font-medium">{{ form.show_on_overview.label }}</span>
+        </label>
+        <label class="label pt-0">
+          <span class="label-text-alt text-brand-text/60">
+            Lists this page on the Project Overview's Wiki card, where members see it first.
+          </span>
+        </label>
+      </div>
+    {% endif %}
+
+    {% if form.visibility %}
+      <fieldset class="form-control w-full mb-4">
+        <legend class="label pb-1">
+          <span class="label-text text-brand-navy font-medium">{{ form.visibility.label }}</span>
+        </legend>
+        <div class="flex flex-wrap gap-4">
+          {% for choice in form.visibility %}
+            <label class="label cursor-pointer justify-start gap-2 py-1" for="{{ choice.id_for_label }}">
+              {{ choice.tag }}
+              <span class="label-text">{{ choice.choice_label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+        <span class="label-text-alt text-brand-text/60 mt-1">
+          Public means anyone who can see the project. In a private project, that is its contributors.
+        </span>
+      </fieldset>
+    {% endif %}
+
     {% if page %}
       <p class="text-xs text-brand-text/60">
         Saving keeps the current text as revision {{ page.latest_revision_number }} in the

@@ -1,63 +1,43 @@
-{# Modal fragment — loaded via HTMX into #review-modal-body. #}
-<div class="modal-box max-w-md bg-base-100 border border-brand-light/60">
-  <button type="button"
-          class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
-          onclick="document.getElementById('review-modal').close()"
-          aria-label="Close">&times;</button>
+{% comment %}
+  Modal fragment — loaded via HTMX into #review-modal-body, from Pending join
+  requests and from the dashboard's requests list.
 
-  <div class="text-center">
-    <div class="mx-auto w-12 h-12 rounded-full bg-brand-coral/10 flex items-center justify-center mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-           stroke-width="1.6" stroke="currentColor" class="w-6 h-6 text-brand-coral" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
-      </svg>
-    </div>
+  The same plain shape as the Contributors table's Modify privilege and
+  Remove modals: a navy title, the request in a sentence, then the actions
+  on the right — Cancel to close, Decline in red text, Approve in coral.
+{% endcomment %}
+<div class="modal-box">
+  <h3 class="text-lg font-semibold text-brand-navy">Review join request</h3>
+  <p class="mt-3 text-brand-text">
+    <strong>{{ join_request.user.name|default:join_request.user.email }}</strong>
+    wants to join <strong>{{ project.name }}</strong> as {{ join_request.get_requested_privilege_display }}.
+  </p>
+  {% if join_request.message %}
+    <p class="mt-3 text-sm text-brand-text/80 whitespace-pre-line">&ldquo;{{ join_request.message }}&rdquo;</p>
+  {% endif %}
+  <p class="mt-3 text-xs text-brand-text/60">
+    {{ join_request.user.email }} &middot; submitted {{ join_request.created_at|date:"Y-m-d" }}
+  </p>
 
-    <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold">Join request</div>
-    <h3 class="text-xl font-semibold text-brand-navy mt-1">{{ project.name }}</h3>
-
-    <p class="mt-4 text-brand-text">
-      <strong>{{ join_request.user.name|default:join_request.user.email }}</strong>
-      wants to join this project as
-    </p>
-    <div class="mt-2">
-      <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
-        {% if join_request.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-navy/10 text-brand-navy{% endif %}">
-        {{ join_request.get_requested_privilege_display }}
-      </span>
-    </div>
-
-    {% if join_request.message %}
-      <div class="mt-5 text-left brand-panel p-4">
-        <div class="text-xs uppercase tracking-wider text-brand-navy font-semibold mb-1">Message</div>
-        <p class="text-sm text-brand-text/80 whitespace-pre-line">{{ join_request.message }}</p>
-      </div>
-    {% endif %}
-
-    <div class="mt-2 text-xs text-brand-text/50">
-      Submitted {{ join_request.created_at|date:"Y-m-d" }}
-      &bull; {{ join_request.user.email }}
-    </div>
-
-    <div class="flex gap-2 justify-center mt-6">
-      <form method="post"
-            action="{% url 'projects:decline_join_request' pk=project.pk join_request_pk=join_request.pk %}"
-            hx-post="{% url 'projects:decline_join_request' pk=project.pk join_request_pk=join_request.pk %}"
-            hx-on::after-request="if(event.detail.successful){ document.getElementById('review-modal').close(); window.location.reload(); }">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-ghost">Decline</button>
-      </form>
-      <form method="post"
-            action="{% url 'projects:approve_join_request' pk=project.pk join_request_pk=join_request.pk %}"
-            hx-post="{% url 'projects:approve_join_request' pk=project.pk join_request_pk=join_request.pk %}"
-            hx-on::after-request="if(event.detail.successful){ document.getElementById('review-modal').close(); window.location.reload(); }">
-        {% csrf_token %}
-        <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-          Approve
-        </button>
-      </form>
-    </div>
+  <div class="flex gap-2 justify-end mt-6">
+    <button type="button" class="btn btn-ghost"
+            onclick="document.getElementById('review-modal').close()">Cancel</button>
+    <form method="post"
+          action="{% url 'projects:decline_join_request' pk=project.pk join_request_pk=join_request.pk %}"
+          hx-post="{% url 'projects:decline_join_request' pk=project.pk join_request_pk=join_request.pk %}"
+          hx-on::after-request="if(event.detail.successful){ document.getElementById('review-modal').close(); window.location.reload(); }">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-ghost text-error hover:bg-error/10">Decline</button>
+    </form>
+    <form method="post"
+          action="{% url 'projects:approve_join_request' pk=project.pk join_request_pk=join_request.pk %}"
+          hx-post="{% url 'projects:approve_join_request' pk=project.pk join_request_pk=join_request.pk %}"
+          hx-on::after-request="if(event.detail.successful){ document.getElementById('review-modal').close(); window.location.reload(); }">
+      {% csrf_token %}
+      <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+        Approve
+      </button>
+    </form>
   </div>
 </div>
 <form method="dialog" class="modal-backdrop">

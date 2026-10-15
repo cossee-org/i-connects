@@ -7,6 +7,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -601,6 +602,127 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         return context
 
 
+def _project_summary(project, now, *, is_lead: bool) -> dict:
+    """Everything the Project Overview tab reports to a member, beyond its
+    number cards.
+
+    The tab answers two questions, one card each:
+
+    - Recent activity: who did what lately, across tasks and the wiki.
+    - Wiki: the pages a lead put on the Overview, settled ones first.
+
+    Wiki pages follow their "Who can see it": a leads-only page is neither
+    listed nor named in the activity for anyone but a lead. Each list is
+    capped; the tabs hold the rest.
+    """
+    from django.utils.timesince import timesince
+
+    from apps.core.enums import TaskStatus
+    from apps.tasks.models import Task, TaskLog
+    from apps.tasks.services import all_submissions_reviewed
+    from apps.wiki.models import WikiPage, WikiRevision
+
+    tasks = Task.objects.filter(project=project)
+    readable_pages = WikiPage.objects.filter(project=project).visible_to(
+        is_lead=is_lead, is_member=True
+    )
+
+    # ── Recent activity ──
+    # Drawn from what the app records today: a task's creation and its
+    # completion live on the task, each assignee's done mark and its review
+    # on their current TaskLog, and every wiki save is a revision.
+    events = []
+    for t in tasks.select_related("created_by").order_by("-created_at")[:8]:
+        events.append({
+            "when": t.created_at,
+            "who": t.created_by.display_name if t.created_by else "Someone",
+            "verb": "created", "kind": "task", "task": t,
+        })
+    for log in (
+        TaskLog.objects.filter(
+            task__project=project,
+            status=TaskStatus.COMPLETED,
+            completed_at__isnull=False,
+        )
+        .select_related("task", "assigned_to")
+        .order_by("-completed_at")[:8]
+    ):
+        events.append({
+            "when": log.completed_at,
+            "who": log.assigned_to.display_name,
+            "verb": "marked their part done on", "kind": "task", "task": log.task,
+        })
+    for log in (
+        TaskLog.objects.filter(task__project=project, reviewed_at__isnull=False)
+        .select_related("task", "assigned_to", "reviewed_by")
+        .order_by("-reviewed_at")[:8]
+    ):
+        own = log.reviewed_by_id == log.assigned_to_id
+        part = "their own part" if own else f"{log.assigned_to.display_name}'s part"
+        events.append({
+            "when": log.reviewed_at,
+            "who": log.reviewed_by.display_name if log.reviewed_by else "Someone",
+            "verb": f"reviewed {part} on", "kind": "task", "task": log.task,
+        })
+    for t in (
+        tasks.filter(closed_at__isnull=False)
+        .select_related("closed_by")
+        .prefetch_related("reviewers", "assigned_members", "task_logs")
+        .order_by("-closed_at")[:8]
+    ):
+        # The last sign-off closes a reviewed task by itself (mark_reviewed),
+        # so it reads as the task finishing, not as the reviewer's own click
+        # — the review just before it already names them. Completed with
+        # every part reviewed is the same test clear_review uses to tell a
+        # task its reviews closed from one a Lead closed by hand.
+        if all_submissions_reviewed(t):
+            events.append({
+                "when": t.closed_at, "who": "", "verb": "",
+                "after": "was marked done: every part reviewed",
+                "kind": "task", "task": t,
+            })
+        else:
+            events.append({
+                "when": t.closed_at,
+                "who": t.closed_by.display_name if t.closed_by else "A lead",
+                "verb": "completed", "kind": "task", "task": t,
+            })
+    for r in (
+        WikiRevision.objects.filter(page__in=readable_pages)
+        .select_related("page", "editor")
+        .order_by("-created_at")[:8]
+    ):
+        events.append({
+            "when": r.created_at,
+            "who": r.editor.display_name if r.editor else "Someone",
+            "verb": "created the wiki page" if r.number == 1 else "edited the wiki page",
+            "kind": "wiki", "page": r.page,
+        })
+    events.sort(key=lambda e: e["when"], reverse=True)
+    for e in events:
+        # One unit is enough for a feed ("4 hours ago", not "4 hours, 39
+        # minutes ago"); the last minute reads "just now", not "0 minutes".
+        e["ago"] = (
+            "just now"
+            if (now - e["when"]).total_seconds() < 60
+            else f"{timesince(e['when'], now, depth=1)} ago"
+        )
+
+    # ── Wiki ──
+    # Every page a lead has put on the Overview (that the viewer may read),
+    # the most recently updated first.
+    wiki = {
+        "pages": list(
+            readable_pages.filter(show_on_overview=True).order_by("-updated_at", "-id")
+        )
+    }
+
+    return {
+        "activity": events[:8],
+        "wiki": wiki,
+    }
+
+
 class ProjectDetailView(DetailView):
     """Project overview page.
 
@@ -671,12 +793,6 @@ class ProjectDetailView(DetailView):
                 ).first()
             )
             if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
-                pending_jrs = list(
-                    JoinRequest.objects.filter(
-                        project=project, status=JoinRequestStatus.PENDING
-                    ).select_related("user").order_by("-created_at")[:20]
-                )
-                context["pending_join_requests"] = pending_jrs
                 context["pending_join_request_count"] = JoinRequest.objects.filter(
                     project=project, status=JoinRequestStatus.PENDING
                 ).count()
@@ -684,7 +800,6 @@ class ProjectDetailView(DetailView):
                     project=project
                 ).count()
             else:
-                context["pending_join_requests"] = []
                 context["pending_join_request_count"] = 0
                 context["pending_invitation_count"] = 0
         else:
@@ -698,28 +813,44 @@ class ProjectDetailView(DetailView):
         # Drives the project section tabs in the top bar (members only).
         context["is_project_member"] = context["user_privilege"] is not None
 
-        # Task summary — only meaningful for members, but the queries are
-        # cheap enough to run for any viewer who can see the project.
+        # The number cards are cheap enough to count for any viewer who can
+        # see the project; the summary's cards are drawn for members only.
         from apps.core.enums import TaskStatus
-        from apps.tasks.models import KanbanBoard, Task
+        from apps.tasks.models import Task
+        from apps.wiki.models import WikiPage
         from django.utils import timezone
 
         context["today"] = timezone.now()
         task_qs = Task.objects.filter(project=project)
         context["task_count"] = task_qs.count()
-        context["overdue_count"] = task_qs.filter(
-            deadline__lt=context["today"],
-        ).count()
+        # Overdue means still open past its deadline; a finished task whose
+        # deadline has passed is not late.
+        context["overdue_count"] = (
+            task_qs.exclude(status=TaskStatus.COMPLETED)
+            .filter(deadline__lt=context["today"])
+            .count()
+        )
         context["contributor_count"] = ProjectPrivilege.objects.filter(
             project=project
         ).values("user").distinct().count()
-        context["tasks"] = (
-            task_qs.select_related("container")
-            .order_by("-updated_at")[:20]
+        # Wiki pages count and show as the viewer may read them. Anyone but a
+        # member only gets this far on a public project, where the pages a
+        # lead made public and put on the Overview are listed for them.
+        readable_pages = WikiPage.objects.filter(project=project).visible_to(
+            is_lead=context["is_project_manager"],
+            is_member=context["is_project_member"],
         )
-        context["has_kanban_columns"] = KanbanBoard.objects.filter(
-            project=project
-        ).exists()
+        context["wiki_page_count"] = readable_pages.count()
+        if context["is_project_member"]:
+            context["summary"] = _project_summary(
+                project, context["today"], is_lead=context["is_project_manager"]
+            )
+        else:
+            context["public_wiki_pages"] = list(
+                readable_pages.filter(show_on_overview=True).order_by(
+                    "-updated_at", "-id"
+                )
+            )
         return context
 
 
@@ -808,7 +939,7 @@ class ProjectDeleteView(ProjectManagerRequiredMixin, DeleteView):
 
 
 def _member_rows(project, *, viewer=None):
-    """Collect (member, user, privilege, privilege_form) dicts for a project.
+    """Collect (member, user, privilege) dicts for a project.
 
     When ``viewer`` is supplied, each row is annotated with ``is_self`` so
     the template can disable PM-mutating controls on the viewer's own row
@@ -840,12 +971,63 @@ def _member_rows(project, *, viewer=None):
                 "is_self": (
                     primary_user is not None and primary_user.id == viewer_id
                 ),
-                "form": MemberPrivilegeForm(
-                    initial={"privilege": effective or MemberPrivileges.CONTRIBUTOR}
-                ),
             }
         )
     return rows
+
+
+def _render_member_row(request, project, member, *, oob=False):
+    """One Contributors table row, as the members page draws it for ``request.user``.
+
+    ``oob`` marks it as an htmx out-of-band swap, so it can ride along with
+    another response and replace the row of the same id in place.
+    """
+    primary_user = member.users.first()
+    privilege = (
+        ProjectPrivilege.objects.filter(project=project, user=primary_user)
+        .values_list("privilege", flat=True)
+        .first()
+        if primary_user
+        else MemberPrivileges.CONTRIBUTOR
+    )
+    row = {
+        "member": member,
+        "user": primary_user,
+        "privilege": privilege,
+        "is_self": primary_user is not None and primary_user.id == request.user.id,
+    }
+    return render_to_string(
+        "projects/member_row.html",
+        {
+            "row": row,
+            "project": project,
+            "user_privilege": MemberPrivileges.PROJECT_MANAGER,
+            "viewer_is_last_pm": is_last_project_manager(
+                project=project, user=request.user
+            ),
+            "oob": oob,
+        },
+        request=request,
+    )
+
+
+def _viewer_row_oob(request, project, *, changed_member):
+    """The viewer's own row, out of band, after a change to someone else's.
+
+    Promoting, demoting or removing another member can make the viewer the
+    last Lead or stop them being it, which disables or enables their own
+    Modify privilege and Remove. Their row is redrawn with the change so it
+    does not wait for a reload. Empty when the change was to their own row,
+    which the response redraws anyway.
+    """
+    viewer_member = (
+        ProjectMember.objects.filter(project=project, users=request.user, deleted=False)
+        .exclude(pk=changed_member.pk)
+        .first()
+    )
+    if viewer_member is None:
+        return ""
+    return _render_member_row(request, project, viewer_member, oob=True)
 
 
 class ProjectMemberListView(
@@ -860,6 +1042,8 @@ class ProjectMemberListView(
             project=self.project, user=self.request.user
         )
         if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
+            # The Modify privilege modal's choices.
+            context["privilege_choices"] = MemberPrivileges.choices
             context["pending_join_request_count"] = JoinRequest.objects.filter(
                 project=self.project, status=JoinRequestStatus.PENDING
             ).count()
@@ -1014,24 +1198,24 @@ class UpdateMemberPrivilegeView(
             },
         )
 
-        row = {
-            "member": member,
-            "user": primary_user,
-            "privilege": new_privilege,
-            "is_self": primary_user.id == request.user.id,
-            "form": MemberPrivilegeForm(initial={"privilege": new_privilege}),
-        }
-        return render(
-            request,
-            "projects/member_row.html",
-            {
-                "row": row,
-                "project": self.project,
-                "user_privilege": MemberPrivileges.PROJECT_MANAGER,
-                "viewer_is_last_pm": is_last_project_manager(
-                    project=self.project, user=request.user
-                ),
-            },
+        if (
+            primary_user.id == request.user.id
+            and new_privilege != MemberPrivileges.PROJECT_MANAGER
+        ):
+            # A Lead who steps down no longer sees the page a Lead does: no
+            # actions in the table, no Invite member, no Settings tab. Reload
+            # it as they now see it rather than patching one row.
+            messages.success(
+                request,
+                f"You are now a {MemberPrivileges(new_privilege).label} of this project.",
+            )
+            response = HttpResponse("")
+            response["HX-Refresh"] = "true"
+            return response
+
+        return HttpResponse(
+            _render_member_row(request, self.project, member)
+            + _viewer_row_oob(request, self.project, changed_member=member)
         )
 
 
@@ -1079,8 +1263,11 @@ class RemoveMemberView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
             },
         )
         if request.headers.get("HX-Request"):
-            # Empty response removes the row via hx-swap="outerHTML".
-            return HttpResponse("")
+            # Empty main content removes the row via hx-swap="outerHTML";
+            # the viewer's own row rides along out of band.
+            return HttpResponse(
+                _viewer_row_oob(request, self.project, changed_member=member)
+            )
         return HttpResponseRedirect(
             reverse("projects:members", kwargs={"pk": self.project.pk})
         )

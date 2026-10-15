@@ -19,7 +19,7 @@ from django.utils.text import slugify
 from apps.audit.models import AuditAction
 from apps.audit.services import log_action
 
-from .models import WikiPage, WikiRevision
+from .models import WikiPage, WikiRevision, WikiVisibility
 
 #: Slugs the wiki's own URLs claim. A page titled "New" would otherwise
 #: generate ``/wiki/new/``, which routes to the create form — the page would
@@ -134,6 +134,8 @@ def create_page(
     content_markdown: str = "",
     summary: str = "",
     locked: bool = False,
+    show_on_overview: bool = False,
+    visibility: str = WikiVisibility.MEMBERS,
 ) -> WikiPage:
     """Create a page, its first revision, and the audit entry, atomically."""
     page = WikiPage.objects.create(
@@ -142,6 +144,8 @@ def create_page(
         slug=unique_slug(project, title),
         content_markdown=content_markdown or "",
         locked=locked,
+        show_on_overview=show_on_overview,
+        visibility=visibility,
         created_by=actor if getattr(actor, "pk", None) else None,
         updated_by=actor if getattr(actor, "pk", None) else None,
     )
@@ -165,14 +169,17 @@ def update_page(
     content_markdown: str,
     summary: str = "",
     locked: bool | None = None,
+    show_on_overview: bool | None = None,
+    visibility: str | None = None,
     expected_revision: int | None = None,
 ) -> tuple[WikiPage, bool]:
     """Save an edit. Returns ``(page, a_revision_was_written)``.
 
     A save that changes neither the title nor the body writes no revision —
     an "Update" button pressed twice should not fill the history with
-    identical snapshots. Changing only the lock still counts as a change to
-    the page (and is audit-logged), just not to its text.
+    identical snapshots. Changing only a setting (the lock, being on the
+    Project Overview, who can see it) still counts as a change to the page (and is
+    audit-logged), just not to its text. ``None`` leaves a setting as is.
 
     ``expected_revision`` is the revision the editor loaded. If the page has
     moved on since, this raises :class:`EditConflict` instead of overwriting
@@ -189,14 +196,22 @@ def update_page(
     new_title = title.strip()
     new_body = content_markdown or ""
     text_changed = new_title != page.title or new_body != page.content_markdown
-    lock_changed = locked is not None and locked != page.locked
-    if not text_changed and not lock_changed:
+    settings_changed = (
+        (locked is not None and locked != page.locked)
+        or (show_on_overview is not None and show_on_overview != page.show_on_overview)
+        or (visibility is not None and visibility != page.visibility)
+    )
+    if not text_changed and not settings_changed:
         return page, False
 
     page.title = new_title
     page.content_markdown = new_body
     if locked is not None:
         page.locked = locked
+    if show_on_overview is not None:
+        page.show_on_overview = show_on_overview
+    if visibility is not None:
+        page.visibility = visibility
     if getattr(actor, "pk", None):
         page.updated_by = actor
     page.save()
@@ -213,6 +228,8 @@ def update_page(
             "slug": page.slug,
             "text_changed": text_changed,
             "locked": page.locked,
+            "show_on_overview": page.show_on_overview,
+            "visibility": page.visibility,
         },
     )
     return page, text_changed

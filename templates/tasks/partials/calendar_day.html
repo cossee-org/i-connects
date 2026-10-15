@@ -3,7 +3,7 @@
 {% if calendar_day_tasks %}
   <ul class="flex flex-col gap-2">
     {% for item in calendar_day_tasks %}
-      <li class="brand-card flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors{% if item.task.is_priority %} border-l-2 border-l-error{% endif %}"
+      <li class="brand-card flex items-center gap-3 px-4 py-3 hover:bg-brand-lighter cursor-pointer transition-colors"
           @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=item.task.pk %}' })">
 
         {# Name only — the description belongs to the side pane, not the agenda row. #}
@@ -17,13 +17,8 @@
 
         {% include "_components/reviewer_count.html" with count=item.task.reviewers.all|length tooltip=True %}
 
-        {# Priority flag and completed check, paired at the row's end. #}
-        {% if item.task.is_priority or item.task.status == "COMPLETED" %}
-          <span class="flex items-center gap-1 shrink-0">
-            {% if item.task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True tooltip=True %}{% endif %}
-            {% include "_components/completion_check.html" with task=item.task tooltip=True %}
-          </span>
-        {% endif %}
+        {# The task's state icons, together at the row's end. #}
+        {% include "_components/task_flags.html" with task=item.task %}
       </li>
     {% endfor %}
   </ul>

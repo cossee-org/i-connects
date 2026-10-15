@@ -14,7 +14,7 @@ from datetime import datetime, time
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Exists, F, Max, Min, OuterRef, ProtectedError, Q, Subquery
+from django.db.models import Count, Exists, F, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Subquery
 from django.http import (
     Http404,
     HttpResponse,
@@ -68,7 +68,6 @@ from apps.tasks.mixins import (
 )
 from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
 from apps.tasks.services import (
-    all_submissions_reviewed,
     approve_completion,
     clear_review,
     close_task,
@@ -289,6 +288,60 @@ def _fmt_short(d) -> str:
     return f"{d.strftime('%b')} {d.day}"
 
 
+# --- Board filter: ?filter= narrows every board view -----------------------
+
+#: The board's Filter menu, in order: value -> label. "" shows every task.
+BOARD_FILTERS = (
+    ("", "All"),
+    ("overdue", "Overdue"),
+    ("high_priority", "High Priority"),
+    ("completed", "Completed"),
+    ("not_completed", "Not Completed"),
+)
+
+
+def _board_filter(request) -> str:
+    """The board's filter (``?filter=``), or "" for every task.
+
+    The board's Filter menu sets it, and the Project Overview's Overdue
+    number links to ``?filter=overdue``. Kanban, List, Table and Calendar
+    all honour it; board.html adds it to each view's HTMX requests while
+    it is on. Anything unknown means every task.
+    """
+    value = request.GET.get("filter", "")
+    return value if value in dict(BOARD_FILTERS) else ""
+
+
+def _apply_board_filter(tasks, value: str):
+    """Narrow ``tasks`` to the board filter ``value``. Overdue is
+    ``Task.is_overdue`` as a query: still open past its deadline."""
+    if value == "overdue":
+        return tasks.filter(deadline__lt=timezone.now()).exclude(
+            status=TaskStatus.COMPLETED
+        )
+    if value == "high_priority":
+        return tasks.filter(is_priority=True)
+    if value == "completed":
+        return tasks.filter(status=TaskStatus.COMPLETED)
+    if value == "not_completed":
+        return tasks.exclude(status=TaskStatus.COMPLETED)
+    return tasks
+
+
+def _kanban_columns(request, project):
+    """The board's columns, each with its tasks prefetched (narrowed by the
+    board filter, so a column's count matches its cards)."""
+    tasks = _apply_board_filter(
+        Task.objects.prefetch_related("assigned_members", "reviewers"),
+        _board_filter(request),
+    )
+    return (
+        KanbanBoard.objects.filter(project=project)
+        .prefetch_related(Prefetch("tasks", queryset=tasks))
+        .order_by("container_order")
+    )
+
+
 def _calendar_context(request, project) -> dict:
     view = request.GET.get("view", "month")
     if view not in CALENDAR_VIEWS:
@@ -299,6 +352,7 @@ def _calendar_context(request, project) -> dict:
         .filter(Q(deadline__isnull=False) | Q(start_date__isnull=False))
         .prefetch_related("assigned_members", "reviewers")
     )
+    tasks = _apply_board_filter(tasks, _board_filter(request))
 
     context = {
         "calendar_view": view,
@@ -393,6 +447,7 @@ def _list_view_context(request, project, columns) -> dict:
     priority = request.GET.get("priority", "")
     assignee = request.GET.get("assignee", "")
     sort = request.GET.get("sort", "")
+    board_filter = _board_filter(request)
 
     if sort not in dict(LIST_SORT_CHOICES):
         sort = "manual"
@@ -439,6 +494,7 @@ def _list_view_context(request, project, columns) -> dict:
         tasks = tasks.filter(assigned_members__isnull=True)
     elif assignee:
         tasks = tasks.filter(assigned_members__pk=assignee)
+    tasks = _apply_board_filter(tasks, board_filter)
 
     tasks = tasks.distinct().order_by(*_list_order_by(sort))
 
@@ -446,7 +502,7 @@ def _list_view_context(request, project, columns) -> dict:
     for task in tasks:
         by_column.setdefault(task.container_id, []).append(task)
 
-    is_filtered = bool(q or column_filter or done or priority or assignee)
+    is_filtered = bool(q or column_filter or done or priority or assignee or board_filter)
     groups = []
     for column in columns:
         column_tasks = by_column.get(column.pk, [])
@@ -477,6 +533,68 @@ def _list_view_context(request, project, columns) -> dict:
     }
 
 
+# --- Table view: one flat, sortable table of every task -------------------
+
+# Header key -> ordering. Each header toggles between its key and "-key";
+# dated columns keep undated tasks last in both directions, as the List does.
+_BOARD_ORDER = ("container__container_order", "container_task_order", "id")
+
+TABLE_SORT_FIELDS = {
+    "name": (("name", "id"), ("-name", "id")),
+    # Board order: by column, then position in it. The default sort; the
+    # Table has no Column header of its own.
+    "column": (
+        _BOARD_ORDER,
+        ("-container__container_order", "container_task_order", "id"),
+    ),
+    # How many assignees / reviewers a task has (annotated in
+    # _table_view_context), board order breaking ties.
+    "assignees": (("n_assignees", *_BOARD_ORDER), ("-n_assignees", *_BOARD_ORDER)),
+    "reviewers": (("n_reviewers", *_BOARD_ORDER), ("-n_reviewers", *_BOARD_ORDER)),
+    "start": (
+        (F("start_date").asc(nulls_last=True), "id"),
+        (F("start_date").desc(nulls_last=True), "id"),
+    ),
+    "due": (
+        (F("deadline").asc(nulls_last=True), "id"),
+        (F("deadline").desc(nulls_last=True), "id"),
+    ),
+    "priority": (("-is_priority", "name", "id"), ("is_priority", "name", "id")),
+    "status": (("status", "name", "id"), ("-status", "name", "id")),
+}
+
+
+def _table_view_context(request, project) -> dict:
+    """Every task in the project as one flat table, sorted by ``?table_sort=``.
+
+    The value is a header key, optionally prefixed with ``-`` for descending;
+    anything else falls back to board order (by column, then position in it).
+    """
+    raw = request.GET.get("table_sort", "")
+    key = raw.lstrip("-")
+    if key not in TABLE_SORT_FIELDS:
+        raw, key = "column", "column"
+    descending = raw.startswith("-")
+    ordering = TABLE_SORT_FIELDS[key][1 if descending else 0]
+
+    tasks = (
+        Task.objects.filter(project=project)
+        .select_related("container")
+        .prefetch_related("assigned_members", "reviewers")
+        .annotate(
+            n_assignees=Count("assigned_members", distinct=True),
+            n_reviewers=Count("reviewers", distinct=True),
+        )
+        .order_by(*ordering)
+    )
+    tasks = _apply_board_filter(tasks, _board_filter(request))
+    return {
+        "table_tasks": tasks,
+        "table_sort_key": key,
+        "table_sort_desc": descending,
+    }
+
+
 class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
     """Main kanban board for a project."""
 
@@ -484,14 +602,13 @@ class BoardView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        columns = (
-            KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks", "tasks__assigned_members", "tasks__reviewers")
-            .order_by("container_order")
-        )
+        columns = _kanban_columns(self.request, self.project)
         context["columns"] = columns
+        context["board_filter"] = _board_filter(self.request)
+        context["board_filters"] = BOARD_FILTERS
         context.update(_list_view_context(self.request, self.project, columns))
         context.update(_calendar_context(self.request, self.project))
+        context.update(_table_view_context(self.request, self.project))
         return context
 
 
@@ -528,11 +645,7 @@ class BoardKanbanPartialView(LoginRequiredMixin, ProjectContextMixin, TemplateVi
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["columns"] = (
-            KanbanBoard.objects.filter(project=self.project)
-            .prefetch_related("tasks", "tasks__assigned_members", "tasks__reviewers")
-            .order_by("container_order")
-        )
+        context["columns"] = _kanban_columns(self.request, self.project)
         return context
 
 
@@ -548,6 +661,17 @@ class BoardCalendarPartialView(LoginRequiredMixin, ProjectContextMixin, Template
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(_calendar_context(self.request, self.project))
+        return context
+
+
+class BoardTablePartialView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
+    """HTMX partial that renders the table view, sorted by ``?table_sort=``."""
+
+    template_name = "tasks/task_table_view.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(_table_view_context(self.request, self.project))
         return context
 
 
@@ -684,6 +808,13 @@ class TaskCreateView(
                 {"task": task, "project": self.project},
             )
             response["HX-Trigger"] = json.dumps({"task-created": {"id": task.id}})
+            if self.request.POST.get("autosave") == "1":
+                # Saved because its editor was closed by accident: the board
+                # reloads on task-created, and this says why the task is there.
+                messages.success(
+                    self.request,
+                    f"Task '{task.name}' was saved when its editor closed.",
+                )
             return response
         messages.success(self.request, f"Task '{task.name}' created.")
         next_url = self.request.POST.get("next")
@@ -813,12 +944,12 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
 
         from_pane = self.request.GET.get("from_pane")
         if from_pane == "board":
-            return {"url": f"{board_url}?open_task={task_pk}", "label": "Tasks"}
+            return {"url": f"{board_url}?open_task={task_pk}", "label": "All tasks"}
         if from_pane == "project":
-            return {"url": f"{project_url}?open_task={task_pk}", "label": "Project"}
+            return {"url": f"{project_url}?open_task={task_pk}", "label": "Project Overview"}
 
-        board = {"url": board_url, "label": "Tasks"}
-        project = {"url": project_url, "label": "Project"}
+        board = {"url": board_url, "label": "All tasks"}
+        project = {"url": project_url, "label": "Project Overview"}
         referer = self.request.META.get("HTTP_REFERER", "")
         if not referer:
             return board
@@ -1089,21 +1220,16 @@ _LOCKED_MESSAGE = (
 )
 
 def _marks_locked(task) -> bool:
-    """True when a Lead's judgement closed the task, freezing every per-member
+    """True once the task is marked completed, freezing every per-member
     action.
 
-    Marking done, undoing a mark and reviewing all stop there — for assignees,
-    reviewers and Leads alike. A Lead who needs to change one marks the task
-    Not Complete first, which is the only action such a task still offers.
-
-    A task the reviews closed is *not* locked, even though it is completed:
-    its completion is the sum of those verdicts rather than a decision over
-    them, so each one stays withdrawable and taking one back reopens the task
-    (see services.clear_review). Locking there would delete "withdraw my
-    review" outright for the single-assignee tasks that are most of them —
-    the last sign-off would seal itself.
+    Marking done, undoing a mark, reviewing and withdrawing a review all stop
+    there — for assignees, reviewers and Leads alike, and however the task
+    came to be completed: by a Lead's click, or by its last review closing it.
+    A Lead who needs to change one marks the task Not Complete first, which
+    is the only action a completed task still offers.
     """
-    return task.status == TaskStatus.COMPLETED and not all_submissions_reviewed(task)
+    return task.status == TaskStatus.COMPLETED
 
 
 def _task_status_context(task, *, project_member, is_project_manager):
@@ -1171,6 +1297,9 @@ def _task_status_context(task, *, project_member, is_project_manager):
                     )
                 ),
                 "can_mark_done": is_project_manager and not locked,
+                # The viewer's own row: they tick their own part done (and
+                # untick it) from it, while the task is open.
+                "is_viewer": bool(project_member and member.id == project_member.id),
                 # The entry the review buttons act on. None until the member
                 # has one seeded, in which case there is nothing to review.
                 "log": log,
@@ -1246,6 +1375,10 @@ def _respond_status_block(request, task, *, project_member, is_project_manager):
             task, project_member=project_member, is_project_manager=is_project_manager
         )
         ctx["pane_mode"] = pane_mode
+        # The side pane sends surface=pane with every request made inside it
+        # (an inherited hx-vals on its root), so pieces that are laid out
+        # differently there come back in the pane's shape.
+        ctx["surface"] = request.POST.get("surface", "")
         # A swap response: the chip and the two action-bar buttons sit outside
         # the block on every surface that renders it, so they come back out of
         # band with it. First renders leave this off — the markup around the
@@ -1266,6 +1399,7 @@ class TaskStatusBlockView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             is_project_manager=self.is_project_manager,
         )
         ctx["pane_mode"] = pane_mode
+        ctx["surface"] = request.GET.get("surface", "")  # see _respond_status_block
         ctx["oob"] = True  # a swap response — see _respond_status_block
         return render(request, "tasks/partials/task_status_block.html", ctx)
 
