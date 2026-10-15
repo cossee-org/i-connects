@@ -2178,3 +2178,32 @@ def test_join_requests_review_button_looks_like_resend(client, user, other_user)
     tbody = content[content.index("<tbody") : content.index("</tbody>")]
     assert 'class="btn btn-sm btn-ghost text-brand-navy hover:bg-brand-lighter"' in tbody
     assert "bg-brand-coral" not in tbody
+
+
+@pytest.mark.django_db
+def test_review_join_request_modal_is_the_plain_modal(client, user, other_user):
+    """The Review modal has the Contributors modals' plain shape: a navy
+    title, the request in a sentence, Cancel / Decline / Approve on the
+    right — no icon badge, pill or close cross."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Bird Song", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    jr = JoinRequest.objects.create(
+        project=project, user=other_user, message="Keen to help",
+        requested_privilege=MemberPrivileges.CONTRIBUTOR,
+    )
+    client.force_login(user)
+
+    html = client.get(
+        reverse(
+            "projects:review_join_request",
+            kwargs={"pk": project.pk, "join_request_pk": jr.pk},
+        ),
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert '<h3 class="text-lg font-semibold text-brand-navy">Review join request</h3>' in html
+    assert "wants to join <strong>Bird Song</strong> as Member." in html
+    assert "Keen to help" in html
+    assert html.index(">Cancel<") < html.index(">Decline<") < html.index("Approve")
+    assert "rounded-full" not in html and "btn-circle" not in html
