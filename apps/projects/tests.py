@@ -2400,3 +2400,22 @@ def test_people_with_accounts_link_to_their_profile(client, user, other_user):
     assert f'href="{reverse("public_profile", kwargs={"pk": other_user.pk})}"' in invitations
     assert invitations.count('href="/people/') == 1, "the email with no account is not a link"
     assert "nobody@example.org" in invitations
+
+
+@pytest.mark.django_db
+def test_pending_requests_tables_write_dates_as_tasks_do(client, user, other_user):
+    """Submitted (join requests) and Date (invitations) read "Mar 4, 2026"."""
+    from datetime import datetime, timezone as dt_tz
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    when = datetime(2026, 3, 4, 12, 0, tzinfo=dt_tz.utc)
+    jr = JoinRequest.objects.create(project=project, user=other_user)
+    JoinRequest.objects.filter(pk=jr.pk).update(created_at=when)
+    client.force_login(user)
+
+    html = client.get(reverse("projects:join_requests", kwargs={"pk": project.pk})).content.decode()
+    assert '<td class="text-xs text-brand-text/70 whitespace-nowrap">Mar 4, 2026</td>' in html
+    assert "2026-03-04" not in html

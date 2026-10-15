@@ -56,7 +56,7 @@
               </td>
               <td class="text-xs text-brand-text/80">{{ jr.get_requested_privilege_display }}</td>
               <td class="max-w-md text-xs text-brand-text/80 whitespace-pre-line">{{ jr.message|default:"—" }}</td>
-              <td class="text-xs text-brand-text/70">{{ jr.created_at|date:"Y-m-d H:i" }}</td>
+              <td class="text-xs text-brand-text/70 whitespace-nowrap">{{ jr.created_at|date:"M j, Y" }}</td>
               <td class="text-right">
                 <button type="button"
                         class="btn btn-sm btn-ghost text-brand-navy hover:bg-brand-lighter"
