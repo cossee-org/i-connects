@@ -1,9 +1,10 @@
 {% comment %}
-  One sortable <th> for the Contributors table:
-  {% include "projects/partials/member_sort_header.html" with key="name" label="Name" %}.
+  One sortable <th>:
+  {% include "_components/sortable_header.html" with key="name" label="Name" %}.
   Clicking sorts by this header, ascending first; clicking the active header
   flips the direction. The sort runs in the browser — sortBy, ariaSort,
-  sortKey and sortDesc come from the table's x-data in projects/members.html.
+  sortKey and sortDesc come from the table's x-data="sortableRows()"
+  (base.html), and each row carries a data-sort-<key>.
 {% endcomment %}
 <th scope="col" :aria-sort="ariaSort('{{ key }}')">
   <button type="button"

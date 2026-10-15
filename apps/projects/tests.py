@@ -1958,3 +1958,30 @@ def test_members_table_sorts_by_every_header_but_actions(client, user, other_use
             reverse("projects:members", kwargs={"pk": project.pk})
         ).content.decode()
     assert "@click=\"sortBy('roles')\"" in content
+
+
+@pytest.mark.django_db
+def test_join_requests_table_sorts_by_every_header_but_actions(client, user, other_user):
+    """User, Requested as, Message and Submitted are sort buttons, Actions is
+    not, and each row carries what it sorts by."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    jr = JoinRequest.objects.create(
+        project=project, user=other_user, message="Keen To Help",
+        requested_privilege=MemberPrivileges.CONTRIBUTOR,
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:join_requests", kwargs={"pk": project.pk})
+    ).content.decode()
+    for key in ("user", "privilege", "message", "submitted"):
+        assert f"@click=\"sortBy('{key}')\"" in content, key
+    assert '<th scope="col" class="text-right">Actions</th>' in content
+    row = content[content.index('data-order="0"') :]
+    row = row[: row.index(">")]
+    assert 'data-sort-privilege="1"' in row
+    assert 'data-sort-message="keen to help"' in row
+    assert f'data-sort-submitted="{int(jr.created_at.timestamp())}"' in row

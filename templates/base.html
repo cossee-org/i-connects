@@ -202,6 +202,43 @@
     };
   </script>
 
+  {% comment %}
+    Header sort for a plain table, in the browser: x-data="sortableRows()" on
+    the <table>, x-ref="rows" on its <tbody>, a _components/sortable_header.html
+    per sortable column, and on each row data-order (the server's order) and
+    a data-sort-<key> per column. Ascending first; clicking the active header
+    flips the direction. Keys compare as text with digits read as numbers, so
+    ranks and epoch seconds sort as numbers; an empty key sorts last either
+    way, and ties keep the server's order.
+  {% endcomment %}
+  <script>
+    window.sortableRows = function () {
+      return {
+        sortKey: "",
+        sortDesc: false,
+        sortBy: function (key) {
+          if (this.sortKey === key) { this.sortDesc = !this.sortDesc; } else { this.sortKey = key; this.sortDesc = false; }
+          var field = "sort" + key[0].toUpperCase() + key.slice(1);
+          var dir = this.sortDesc ? -1 : 1;
+          var body = this.$refs.rows;
+          var rows = Array.prototype.slice.call(body.rows).sort(function (a, b) {
+            var x = a.dataset[field] || "", y = b.dataset[field] || "";
+            if (x !== y) {
+              if (!x) return 1;
+              if (!y) return -1;
+              return x.localeCompare(y, undefined, { numeric: true }) * dir;
+            }
+            return Number(a.dataset.order) - Number(b.dataset.order);
+          });
+          rows.forEach(function (r) { body.appendChild(r); });
+        },
+        ariaSort: function (key) {
+          return this.sortKey === key ? (this.sortDesc ? "descending" : "ascending") : null;
+        },
+      };
+    };
+  </script>
+
   {% comment %}Vendored locally so the UI works in environments whose network policy blocks external hosts.{% endcomment %}
   <script src="{% static 'js/vendor/htmx.min.js' %}"></script>
   <script defer src="{% static 'js/vendor/alpine.min.js' %}"></script>

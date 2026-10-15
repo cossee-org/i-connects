@@ -23,19 +23,31 @@
 {% if join_requests %}
   <div class="brand-card overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="table">
+      {% comment %}
+        Every header but Actions sorts the rows in the browser (sortableRows()
+        in base.html), ascending first; clicking the active header flips the
+        direction. Requested as puts Leads first; Submitted sorts by time; an
+        empty message sorts last either way. Ties keep the server's order,
+        oldest first, which is also the order before any header is clicked.
+      {% endcomment %}
+      <table class="table" x-data="sortableRows()">
         <thead class="bg-brand-lighter text-brand-navy">
           <tr>
-            <th scope="col">User</th>
-            <th scope="col">Requested as</th>
-            <th scope="col">Message</th>
-            <th scope="col">Submitted</th>
+            {% include "_components/sortable_header.html" with key="user" label="User" %}
+            {% include "_components/sortable_header.html" with key="privilege" label="Requested as" %}
+            {% include "_components/sortable_header.html" with key="message" label="Message" %}
+            {% include "_components/sortable_header.html" with key="submitted" label="Submitted" %}
             <th scope="col" class="text-right">Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody x-ref="rows">
           {% for jr in join_requests %}
-            <tr class="hover:bg-brand-lighter/40 align-top">
+            <tr class="hover:bg-brand-lighter/40 align-top"
+                data-order="{{ forloop.counter0 }}"
+                data-sort-user="{{ jr.user.name|default:jr.user.email|lower }}"
+                data-sort-privilege="{% if jr.requested_privilege == 'PROJECT_MANAGER' %}0{% else %}1{% endif %}"
+                data-sort-message="{{ jr.message|lower }}"
+                data-sort-submitted="{{ jr.created_at|date:'U' }}">
               <td>
                 <div class="font-medium text-brand-navy">{{ jr.user.name|default:jr.user.email }}</div>
                 <div class="text-xs text-brand-text/60">{{ jr.user.email }}</div>
