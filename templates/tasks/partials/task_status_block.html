@@ -148,10 +148,22 @@
 
         Past the third row the rest wait behind See more: a task with a dozen
         assignees would otherwise be a wall of names above the comments.
-        ``rowsExpanded`` comes from an x-data wrapper *outside* this block,
-        which the surrounding template owns — this element is an HTMX swap
-        target, so state kept inside it would snap back to collapsed on every
-        mark and review, taking the row you had just acted on with it.
+        Which rows those are is left to CSS (tr:nth-child), so it follows
+        the rows wherever a sort puts them.
+
+        Each header sorts the rows in the browser, ascending first; clicking
+        the active header flips the direction. Assignee sorts by name; Done
+        puts parts done first, earliest first, then the rest; Reviewed puts
+        parts reviewed first, earliest first, then those awaiting review,
+        then the rest. Ties keep the server's order (data-order), which is
+        also the order before any header is clicked.
+
+        ``rowsExpanded``, ``sortKey`` and ``sortDesc`` come from an x-data
+        wrapper *outside* this block, which the surrounding template owns —
+        this element is an HTMX swap target, so state kept inside it would
+        snap back on every mark and review: the rows would collapse, taking
+        the row you had just acted on with them, and fall out of their sort.
+        The table re-applies the sort each time it is swapped in.
 
         The table wears the Tasks tab's Table view look (tasks/task_table_view.html):
         a daisyUI table-sm in a card, with a lavender header row in navy and
@@ -163,6 +175,7 @@
       <style>
         .completion-table { table-layout: fixed; }
         .completion-table th, .completion-table td { vertical-align: middle; }
+        .completion-table:not(.rows-expanded) tbody tr:nth-child(n+4) { display: none; }
         .completion-table col.completion-name-col { width: 34%; }
         .completion-table.no-review col.completion-name-col { width: 45%; }
         .completion-mark { display: flex; align-items: center; gap: 0.625rem; min-width: 0; }
@@ -179,7 +192,30 @@
         .completion-tick:focus-visible { outline: 2px solid #f03d30; outline-offset: 2px; }
       </style>
       <div class="brand-card overflow-x-auto mt-3">
-      <table class="table table-sm completion-table{% if not show_review %} no-review{% endif %}" data-assignee-rows>
+      <table class="table table-sm completion-table{% if not show_review %} no-review{% endif %}" data-assignee-rows
+             :class="{ 'rows-expanded': rowsExpanded }"
+             x-data="{
+               sortBy(key) {
+                 if (sortKey === key) { sortDesc = !sortDesc } else { sortKey = key; sortDesc = false }
+                 this.sortRows()
+               },
+               sortRows() {
+                 const body = this.$refs.rows
+                 const field = { name: 'sortName', done: 'sortDone', reviewed: 'sortReviewed' }[sortKey]
+                 const dir = sortDesc ? -1 : 1
+                 const rows = [...body.rows].sort((a, b) => {
+                   if (field) {
+                     const x = a.dataset[field], y = b.dataset[field]
+                     const c = field === 'sortName' ? x.localeCompare(y) : Number(x) - Number(y)
+                     if (c) return c * dir
+                   }
+                   return Number(a.dataset.order) - Number(b.dataset.order)
+                 })
+                 rows.forEach(r => body.appendChild(r))
+               },
+               ariaSort(key) { return sortKey === key ? (sortDesc ? 'descending' : 'ascending') : null },
+             }"
+             x-init="if (sortKey) $nextTick(() => sortRows())">
         <colgroup>
           <col class="completion-name-col">
           <col>
@@ -187,14 +223,49 @@
         </colgroup>
         <thead class="bg-brand-lighter text-brand-navy">
           <tr>
-            <th scope="col">Assignee</th>
-            <th scope="col">Done</th>
-            {% if show_review %}<th scope="col">Reviewed</th>{% endif %}
+            <th scope="col" :aria-sort="ariaSort('name')">
+              <button type="button" class="inline-flex items-center gap-1 font-semibold hover:text-brand-coral transition-colors" @click="sortBy('name')">
+                Assignee
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true"
+                     x-cloak x-show="sortKey === 'name'" :class="{ 'rotate-180': sortDesc }">
+                  <path fill-rule="evenodd" d="M10 17a.75.75 0 0 1-.75-.75V5.612L5.29 9.77a.75.75 0 0 1-1.08-1.04l5.25-5.5a.75.75 0 0 1 1.08 0l5.25 5.5a.75.75 0 1 1-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0 1 10 17Z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </th>
+            <th scope="col" :aria-sort="ariaSort('done')">
+              <button type="button" class="inline-flex items-center gap-1 font-semibold hover:text-brand-coral transition-colors" @click="sortBy('done')">
+                Done
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true"
+                     x-cloak x-show="sortKey === 'done'" :class="{ 'rotate-180': sortDesc }">
+                  <path fill-rule="evenodd" d="M10 17a.75.75 0 0 1-.75-.75V5.612L5.29 9.77a.75.75 0 0 1-1.08-1.04l5.25-5.5a.75.75 0 0 1 1.08 0l5.25 5.5a.75.75 0 1 1-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0 1 10 17Z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </th>
+            {% if show_review %}
+            <th scope="col" :aria-sort="ariaSort('reviewed')">
+              <button type="button" class="inline-flex items-center gap-1 font-semibold hover:text-brand-coral transition-colors" @click="sortBy('reviewed')">
+                Reviewed
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true"
+                     x-cloak x-show="sortKey === 'reviewed'" :class="{ 'rotate-180': sortDesc }">
+                  <path fill-rule="evenodd" d="M10 17a.75.75 0 0 1-.75-.75V5.612L5.29 9.77a.75.75 0 0 1-1.08-1.04l5.25-5.5a.75.75 0 0 1 1.08 0l5.25 5.5a.75.75 0 1 1-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0 1 10 17Z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </th>
+            {% endif %}
           </tr>
         </thead>
-        <tbody>
+        <tbody x-ref="rows">
           {% for s in assignee_states %}
-            <tr data-assignee-row="{{ s.member.pk }}"{% if forloop.counter > 3 %} x-show="rowsExpanded" x-cloak{% endif %}>
+            {% comment %}
+              The sort keys: a done or reviewed part sorts by when (epoch
+              seconds, 0 for an older record with no time on it); the rest
+              sort after every timestamp, awaiting review before not done.
+            {% endcomment %}
+            <tr data-assignee-row="{{ s.member.pk }}"
+                data-order="{{ forloop.counter0 }}"
+                data-sort-name="{{ s.member.display_name|lower }}"
+                data-sort-done="{% if s.done %}{% if s.done_at %}{{ s.done_at|date:'U' }}{% else %}0{% endif %}{% else %}100000000000{% endif %}"
+                data-sort-reviewed="{% if s.reviewed %}{% if s.reviewed_at %}{{ s.reviewed_at|date:'U' }}{% else %}0{% endif %}{% elif s.done %}100000000000{% else %}200000000000{% endif %}">
               <td>
                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                   <span class="w-6 h-6 rounded-full bg-brand-navy/80 text-white text-[11px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>

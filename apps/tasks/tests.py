@@ -3044,10 +3044,18 @@ def test_the_matrix_hides_its_later_rows_and_keeps_them_open_across_a_swap(
         TaskLog.objects.create(task=task, assigned_to=m)
     client.force_login(user)
 
+    # Rows past the third are hidden by position (CSS nth-child), so the
+    # hidden ones follow a header sort; the table opens them all when
+    # rowsExpanded is on.
+    hide_rule = ".completion-table:not(.rows-expanded) tbody tr:nth-child(n+4) { display: none; }"
     for name, url in _task_surfaces(project, task).items():
         html = client.get(url).content.decode()
-        assert html.count('x-show="rowsExpanded"') == 2, f"{name} hid the wrong rows"
-        assert 'x-data="{ rowsExpanded: false }"' in html, f"{name} has nowhere to keep it"
+        assert html.count("data-assignee-row=") == 5, f"{name} dropped a row"
+        assert hide_rule in html, f"{name} hid no rows"
+        assert ":class=\"{ 'rows-expanded': rowsExpanded }\"" in html
+        assert (
+            "x-data=\"{ rowsExpanded: false, sortKey: '', sortDesc: false }\"" in html
+        ), f"{name} has nowhere to keep it"
 
     # The swap response carries the rows but not the state — that stayed put.
     swapped = client.post(
@@ -3055,8 +3063,40 @@ def test_the_matrix_hides_its_later_rows_and_keeps_them_open_across_a_swap(
         {"pane_mode": "1"},
         headers={"hx-request": "true"},
     ).content.decode()
-    assert 'x-show="rowsExpanded"' in swapped
+    assert "'rows-expanded': rowsExpanded" in swapped
     assert "rowsExpanded: false" not in swapped, "the swap would reset the toggle"
+    assert "sortKey: ''" not in swapped, "the swap would reset the sort"
+
+
+@pytest.mark.django_db
+def test_the_matrix_headers_sort_its_rows(client, user, other_user):
+    """Each header is a sort button, and each row carries what it sorts by.
+
+    The sort itself runs in the browser; what the server owes it is the keys:
+    the name, and for Done and Reviewed a time for the parts that have one,
+    with the rest after every time — awaiting review before not done.
+    """
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.set([lead])
+    when = timezone.now()
+    TaskLog.objects.filter(task=task, assigned_to=lead).update(
+        status=TaskStatus.COMPLETED, completed_at=when
+    )
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        for key in ("name", "done", "reviewed"):
+            assert f"@click=\"sortBy('{key}')\"" in html, f"{name} cannot sort by {key}"
+        lead_row = html[html.index(f'data-assignee-row="{lead.pk}"') :]
+        lead_row = lead_row[: lead_row.index(">")]
+        assert f'data-sort-name="{lead.display_name.lower()}"' in lead_row
+        assert f'data-sort-done="{int(when.timestamp())}"' in lead_row
+        assert 'data-sort-reviewed="100000000000"' in lead_row, f"{name}: awaiting review"
+        contrib_row = html[html.index(f'data-assignee-row="{contrib.pk}"') :]
+        contrib_row = contrib_row[: contrib_row.index(">")]
+        assert 'data-sort-done="100000000000"' in contrib_row
+        assert 'data-sort-reviewed="200000000000"' in contrib_row
 
 
 @pytest.mark.django_db
@@ -3067,7 +3107,6 @@ def test_a_short_matrix_gets_no_see_more(client, user, other_user):
 
     for name, url in _task_surfaces(project, task).items():
         html = client.get(url).content.decode()
-        assert 'x-show="rowsExpanded"' not in html, f"{name} hid a row it should not"
         block = html[html.index('id="task-status-block"') :]
         block = block[: block.index("</div>")]
         assert "See more" not in block, f"{name} offers a toggle with nothing behind it"
