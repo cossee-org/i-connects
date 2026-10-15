@@ -51,18 +51,50 @@
 {% if rows %}
   <div class="brand-card overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="table">
+      {% comment %}
+        Every header but Actions sorts the rows in the browser, ascending
+        first; clicking the active header flips the direction. Name, Email
+        and Roles sort alphabetically, with an empty email or no roles last
+        either way; Privilege puts Leads first. Ties keep the server's order
+        (by member id, data-order), which is also the order before any
+        header is clicked. A row a privilege change swaps in carries its new
+        keys and stays where it is until the next sort.
+      {% endcomment %}
+      <table class="table"
+             x-data="{
+               sortKey: '',
+               sortDesc: false,
+               sortBy(key) {
+                 if (this.sortKey === key) { this.sortDesc = !this.sortDesc } else { this.sortKey = key; this.sortDesc = false }
+                 const field = 'sort' + key[0].toUpperCase() + key.slice(1)
+                 const dir = this.sortDesc ? -1 : 1
+                 const body = this.$refs.rows
+                 const rows = [...body.rows].sort((a, b) => {
+                   const x = a.dataset[field] || '', y = b.dataset[field] || ''
+                   if (x !== y) {
+                     if (!x) return 1
+                     if (!y) return -1
+                     return x.localeCompare(y) * dir
+                   }
+                   return Number(a.dataset.order) - Number(b.dataset.order)
+                 })
+                 rows.forEach(r => body.appendChild(r))
+               },
+               ariaSort(key) { return this.sortKey === key ? (this.sortDesc ? 'descending' : 'ascending') : null },
+             }">
         <thead class="bg-brand-lighter text-brand-navy">
           <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Email</th>
-            <th scope="col">Privilege</th>
+            {% include "projects/partials/member_sort_header.html" with key="name" label="Name" %}
+            {% include "projects/partials/member_sort_header.html" with key="email" label="Email" %}
+            {% include "projects/partials/member_sort_header.html" with key="privilege" label="Privilege" %}
             {# Roles is hidden for now (SHOW_MEMBER_ROLES), not removed. #}
-            {% if show_member_roles %}<th scope="col">Roles</th>{% endif %}
+            {% if show_member_roles %}
+              {% include "projects/partials/member_sort_header.html" with key="roles" label="Roles" %}
+            {% endif %}
             <th scope="col" class="text-right">Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody x-ref="rows">
           {% for row in rows %}
             {% include "projects/member_row.html" with row=row project=project user_privilege=user_privilege %}
           {% endfor %}

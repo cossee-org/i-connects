@@ -1,0 +1,18 @@
+{% comment %}
+  One sortable <th> for the Contributors table:
+  {% include "projects/partials/member_sort_header.html" with key="name" label="Name" %}.
+  Clicking sorts by this header, ascending first; clicking the active header
+  flips the direction. The sort runs in the browser — sortBy, ariaSort,
+  sortKey and sortDesc come from the table's x-data in projects/members.html.
+{% endcomment %}
+<th scope="col" :aria-sort="ariaSort('{{ key }}')">
+  <button type="button"
+          class="inline-flex items-center gap-1 font-semibold hover:text-brand-coral transition-colors"
+          @click="sortBy('{{ key }}')">
+    {{ label }}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true"
+         x-cloak x-show="sortKey === '{{ key }}'" :class="{ 'rotate-180': sortDesc }">
+      <path fill-rule="evenodd" d="M10 17a.75.75 0 0 1-.75-.75V5.612L5.29 9.77a.75.75 0 0 1-1.08-1.04l5.25-5.5a.75.75 0 0 1 1.08 0l5.25 5.5a.75.75 0 1 1-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0 1 10 17Z" clip-rule="evenodd" />
+    </svg>
+  </button>
+</th>

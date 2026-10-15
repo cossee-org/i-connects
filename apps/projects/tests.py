@@ -1910,11 +1910,51 @@ def test_members_table_hides_the_roles_column_by_default(client, user):
     url = reverse("projects:members", kwargs={"pk": project.pk})
 
     content = client.get(url).content.decode()
-    assert '<th scope="col">Roles</th>' not in content
+    thead = content[content.index("<thead") : content.index("</thead>")]
+    assert "Roles" not in thead
     assert "privilege and roles" not in content
-    assert '<th scope="col">Privilege</th>' in content
+    assert "Privilege" in thead
 
     with override_settings(SHOW_MEMBER_ROLES=True):
         content = client.get(url).content.decode()
-    assert '<th scope="col">Roles</th>' in content
+    thead = content[content.index("<thead") : content.index("</thead>")]
+    assert "Roles" in thead
     assert "privilege and roles" in content
+
+
+@pytest.mark.django_db
+def test_members_table_sorts_by_every_header_but_actions(client, user, other_user):
+    """Name, Email and Privilege are sort buttons, Actions is not, and each
+    row carries what it sorts by — Privilege as a rank, Lead first."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    for key in ("name", "email", "privilege"):
+        assert f"@click=\"sortBy('{key}')\"" in content, key
+    assert "sortBy('roles')" not in content, "Roles is hidden, so is its sort"
+    assert "sortBy('actions')" not in content
+    assert '<th scope="col" class="text-right">Actions</th>' in content
+
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    row = row[: row.index(">")]
+    assert f'data-order="{member.pk}"' in row
+    assert f'data-sort-email="{other_user.email.lower()}"' in row
+    assert 'data-sort-privilege="1"' in row
+    assert 'data-sort-privilege="0"' in content, "the Lead ranks first"
+
+    with override_settings(SHOW_MEMBER_ROLES=True):
+        content = client.get(
+            reverse("projects:members", kwargs={"pk": project.pk})
+        ).content.decode()
+    assert "@click=\"sortBy('roles')\"" in content
