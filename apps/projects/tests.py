@@ -2132,3 +2132,28 @@ def test_members_table_offers_modify_privilege_to_a_lead(client, user, other_use
     content = client.get(url).content.decode()
     assert "Modify privilege" not in content
     assert 'id="privilege-modal"' not in content
+
+
+@pytest.mark.django_db
+def test_members_table_action_buttons_wear_the_review_style(client, user, other_user):
+    """Modify privilege and Remove look like the Pending join requests
+    table's Review button: a small, full coral button."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    row = row[: row.index("</tr>")]
+    full = 'class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"'
+    assert row.count(full) == 2
+    assert "btn-ghost" not in row
