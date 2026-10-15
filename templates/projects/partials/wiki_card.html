@@ -1,0 +1,62 @@
+{% comment %}
+  Project Overview → Wiki: the pages a lead has put on the Overview (the
+  page's "Show on Project Overview" setting), as one list, the most
+  recently updated first; a locked page (agreements, protocols, data
+  dictionaries) carries a lock. All of them show; "See all", a plain
+  button at the card's top right, opens the Wiki tab while the wiki holds
+  other pages too.
+
+  Needs project, summary (see projects.views._project_summary),
+  wiki_page_count and is_project_manager.
+{% endcomment %}
+<section class="brand-card p-5" aria-labelledby="proj-wiki-heading">
+  {# Headed like About: a plain title, no icon; See all across from it. #}
+  <div class="flex items-center justify-between gap-2 mb-3">
+    <h2 id="proj-wiki-heading" class="text-lg font-semibold text-brand-navy">Wiki</h2>
+    {% if summary.wiki.pages and wiki_page_count > summary.wiki.pages|length %}
+      <a href="{% url 'wiki:list' project_pk=project.pk %}" class="btn btn-sm btn-ghost">See all</a>
+    {% endif %}
+  </div>
+
+  {% if not wiki_page_count %}
+    <p class="text-sm text-brand-text/60 italic">No wiki pages yet.</p>
+    {# The Overview reports; writing starts on the Wiki tab. #}
+    <a href="{% url 'wiki:list' project_pk=project.pk %}"
+       class="inline-block mt-2 text-sm font-medium text-brand-navy hover:text-brand-coral">
+      Go to the Wiki &rarr;
+    </a>
+  {% elif not summary.wiki.pages %}
+    <p class="text-sm text-brand-text/60 italic">No wiki pages are on the Overview yet.</p>
+    {% if is_project_manager %}
+      <p class="text-xs text-brand-text/60 mt-1">
+        Edit a page and tick &ldquo;Show on Project Overview&rdquo; to list it here.
+      </p>
+    {% endif %}
+    <a href="{% url 'wiki:list' project_pk=project.pk %}"
+       class="inline-block mt-2 text-sm font-medium text-brand-navy hover:text-brand-coral">
+      Go to the Wiki &rarr;
+    </a>
+  {% else %}
+    <ul class="space-y-2">
+      {% for page in summary.wiki.pages %}
+        <li class="text-sm">
+          {# The lock's slot is kept on every row so the titles line up. #}
+          <span class="flex items-baseline gap-2 min-w-0">
+            <span class="w-3.5 shrink-0 self-center">
+              {% if page.locked %}
+                {# lock-closed: settled, lead-edited #}
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                     stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 text-brand-text/60"
+                     aria-label="Locked page" role="img">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+              {% endif %}
+            </span>
+            <a href="{{ page.get_absolute_url }}"
+               class="font-medium text-brand-navy hover:text-brand-coral break-words min-w-0">{{ page.title }}</a>
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>

@@ -1,13 +1,11 @@
 {% extends "base.html" %}
-{% load github_tags %}
 
 {% comment %}
   The full task page. It carries the same components as the side pane
-  (tasks/task_detail_pane.html), in the same order — summary, description,
-  completion, references, comments — laid out for a page rather than a column:
-  the summary's name and tags become the page's own heading, the pane's top bar
-  becomes an action row above the cards, and the whole thing runs at a page's
-  reading measure instead of the pane's width.
+  (tasks/task_detail_pane.html), in the same order — the task's card,
+  Completion, Comments — laid out for a page rather than a column: under the
+  project's own header and tabs, like a Wiki page, with the pane's top bar as
+  an action row above the cards.
 
   Only the two pane controls that make no sense here are left out: Open full
   page (this is it) and Close pane.
@@ -15,198 +13,56 @@
 
 {% block title %}{{ task.name }} &mdash; {{ project.name }} &mdash; i&bull;CONNECTS{% endblock %}
 
-{% comment %}
-  One column, so the page keeps a reading measure rather than stretching the
-  comment thread and the completion matrix across the full 7xl. Both wrappers
-  narrow together, so the header's rule lines up with the cards under it.
-{% endcomment %}
-{% block main_wrapper %}container mx-auto px-4 sm:px-6 lg:px-8 pt-8 max-w-4xl{% endblock %}
-{% block main_wrapper_content %}container mx-auto px-4 sm:px-6 lg:px-8 pb-8 max-w-4xl{% endblock %}
-
-{% block breadcrumbs %}
-  <a href="{{ back_url }}"
-     class="inline-flex items-center gap-1.5 text-sm text-brand-navy/70 hover:text-brand-coral font-medium mb-4">
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
-    </svg>
-    {{ back_label }}
-  </a>
-{% endblock %}
-
-{% comment %}
-  No project section tabs on a task. The tabs name the project's sections, and
-  a single task is a leaf reached from one rather than a section of its own —
-  the strip would light up Tasks while you are off the board, and the back link
-  above is the way out. The header takes over the rule the strip used to draw
-  between the page's chrome and its content.
-{% endcomment %}
-{% block project_tabs %}{% endblock %}
-
 {% block page_header %}
-  {% comment %}
-    The pane's summary card, as the page's header: the name, the three tags,
-    then the dates and the author. Same content in the same order — the pane
-    reads it out of a card because it has no page heading of its own, and the
-    page reads it out of the heading it already had.
-  {% endcomment %}
-  <header class="mb-6 pb-4 border-b border-brand-light flex flex-col gap-2">
-    <div class="text-xs uppercase tracking-wider text-brand-coral font-semibold">{{ project.name }}</div>
-    <h1 class="page-title font-semibold text-brand-navy leading-tight">{{ task.name }}</h1>
-
-    <div class="flex flex-wrap items-center gap-2">
-      {% if task.is_priority %}{% include "_components/priority_flag.html" with text_size="text-sm" %}{% endif %}
-      {% include "tasks/partials/task_completion_chip.html" with task=task %}
-      {% include "_components/status_badge.html" with status=task.container.name plain=True %}
-    </div>
-
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-brand-text/70">
-      {% if task.start_date %}
-        <span class="inline-flex items-center gap-1.5">
-          {# clock #}
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-               stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-          <span>Start date</span>
-          <span class="text-brand-navy font-medium">{{ task.start_date|date:"M j, Y" }}</span>
-        </span>
-      {% endif %}
-      {% if task.deadline %}
-        <span class="inline-flex items-center gap-1.5">
-          {# clock #}
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-               stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-          <span>Due date</span>
-          <span class="text-brand-navy font-medium">{{ task.deadline|date:"M j, Y" }}</span>
-        </span>
-      {% endif %}
-      {% include "tasks/partials/task_type_meta.html" with task=task %}
-      {% include "tasks/partials/task_closed_by_meta.html" with task=task %}
-      {# Created by, in the same plain icon-label-value shape as the dates. #}
-      <span class="inline-flex items-center gap-1.5">
-        {# user-circle #}
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-        </svg>
-        <span>Created by</span>
-        <span class="text-brand-navy font-medium">{{ task.created_by.display_name }}</span>
-      </span>
-    </div>
+  <header class="mb-6">
+    {% include "_components/project_header.html" %}
   </header>
 {% endblock %}
 
 {% block content %}
-  <div class="space-y-4">
+  {# The way back, above the task. #}
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <a href="{{ back_url }}"
+       class="btn btn-sm btn-ghost text-brand-navy">&larr; {{ back_label }}</a>
+  </div>
+
+  {% comment %}
+    The same three light cards as the side pane, in the same order: the task
+    (name, tags, its details as a property list, then the description), its
+    Completion, and its Comments — under the pane's top bar, laid out here
+    as an action row. Cards drop brand-card's shadow, as in the pane.
+
+    surface=pane rides along on every request made inside (htmx inherits
+    hx-vals), so the pieces the completion toggle swaps out of band (the
+    Closed by row, the days-left hint) come back in the card's shape here
+    too. Milestone and GitHub are not shown, as in the pane.
+  {% endcomment %}
+  <div class="space-y-3 [&_.brand-card]:shadow-none" hx-vals='{"surface": "pane"}'>
 
     {% comment %}
-      The pane's top bar, as a row of its own above the cards: the Lead's
-      task-level toggle and the assignee's own mark on the left, the Lead's
-      Delete and Edit on the right. The first two live outside
-      #task-status-block, so the block's swap refreshes them out of band —
-      which is also why the self-mark wrapper renders even for someone who has
-      no mark to make: the swap needs something to replace.
+      The pane's top bar: the Lead's task-level toggle on the left, Edit and
+      the ⋯ menu on the right. The toggle lives outside #task-status-block, so
+      the block's swap refreshes it out of band. An assignee marks their own
+      part from their row's Done box in the Completion table.
     {% endcomment %}
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="flex items-center gap-1 min-w-0">
         {% include "tasks/partials/task_completion_button.html" with task=task is_project_manager=is_project_manager %}
-        {% include "tasks/partials/task_self_mark_button.html" with task=task is_assignee=status_block.is_assignee my_done=status_block.my_done %}
       </div>
       {% include "tasks/partials/task_lead_actions.html" with task=task project=project is_project_manager=is_project_manager %}
     </div>
 
-    {% comment %}
-      Description, clamped behind a See more toggle — but only when it really
-      overflows, which the browser measures on init rather than the server
-      guessing from character count. See the pane for why line-clamp-3 is both
-      a static class and a binding.
-    {% endcomment %}
-    <section class="brand-card p-4">
-      <h2 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">Description</h2>
-      {% if task.description %}
-        <div x-data="{ expanded: false, overflowing: false }"
-             x-init="$nextTick(() => { overflowing = $refs.body.scrollHeight > $refs.body.clientHeight + 1 })">
-          <div x-ref="body"
-               id="task-description-{{ task.pk }}"
-               class="text-sm text-brand-text line-clamp-3"
-               :class="{ 'line-clamp-3': !expanded }">
-            {{ task.description|linebreaks }}
-          </div>
-          <button type="button" x-show="overflowing" x-cloak
-                  class="mt-1 text-xs font-medium text-brand-navy hover:underline"
-                  aria-controls="task-description-{{ task.pk }}"
-                  :aria-expanded="expanded"
-                  @click="expanded = !expanded"
-                  x-text="expanded ? 'See less' : 'See more'">See more</button>
-        </div>
-      {% else %}
-        <p class="text-sm text-brand-text/50 italic">No description.</p>
-      {% endif %}
-    </section>
+    {% include "tasks/partials/task_overview_card.html" with task=task title_class="text-2xl" %}
 
     {% comment %}
-      Completion breakdown: the per-assignee matrix, its marks and reviews, and
-      the reviewers named under it. pane_mode is the matrix layout, not the
-      surface — the page asks for it too, and the block draws its own card
-      either way.
-
-      No Assignees / Reviewers sections of their own, for the same reason the
-      pane dropped them: this card names the assignees, reports their marks and
-      the reviewers' verdicts, and names the reviewers under the matrix.
-
-      The matrix's See more state lives out here rather than inside the block,
-      because the block is an HTMX swap target: state within it would reset to
-      collapsed on every mark and review, so expanding to reach the sixth
-      assignee and acting on them would make the row you were working in
-      vanish. Out here it survives the swap.
+      Completion: one row per assignee, with the mark-done and review
+      actions. The rows' See more state and header sort live out here
+      rather than inside the block, because the block is an HTMX swap
+      target: state within it would reset on every mark and review.
     {% endcomment %}
-    <div x-data="{ rowsExpanded: false }">
+    <div x-data="{ rowsExpanded: false, sortKey: '', sortDesc: false }">
       {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager assignee_states=status_block.assignee_states done_count=status_block.done_count marks_locked=status_block.marks_locked reviewed_count=status_block.reviewed_count needs_review=status_block.needs_review show_review=status_block.show_review reviewers=status_block.reviewers assignee_count=status_block.assignee_count is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
     </div>
-
-    {% comment %}
-      Details: the task's references. Skipped when it has none, rather than
-      showing an empty card. The GitHub link keeps the page's own resolved
-      owner/repo#number form, which the narrow pane prints raw.
-    {% endcomment %}
-    {% if task.milestone or task.github_url %}
-      <section class="brand-card p-4 space-y-3">
-        {% if task.milestone %}
-          <div>
-            <h2 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">Milestone</h2>
-            <p class="text-sm text-brand-navy font-medium">{{ task.milestone.name }}</p>
-          </div>
-        {% endif %}
-        {% if task.github_url %}
-          <div>
-            <h2 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-2">GitHub</h2>
-            {% with gh=task.github_url|github_link %}
-              {% if gh %}
-                <a href="{{ task.github_url }}" target="_blank" rel="noopener"
-                   class="inline-flex items-center gap-1.5 text-sm text-brand-navy hover:text-brand-coral font-medium"
-                   aria-label="Open GitHub {{ gh.kind }} #{{ gh.number }} in {{ gh.owner }}/{{ gh.repo }}">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="w-4 h-4" aria-hidden="true" fill="currentColor">
-                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
-                  </svg>
-                  <span>{{ gh.short }}</span>
-                  <span class="text-xs text-brand-text/60">{% if gh.kind == "pull" %}pull request{% else %}issue{% endif %}</span>
-                </a>
-              {% else %}
-                <a href="{{ task.github_url }}" target="_blank" rel="noopener"
-                   class="text-sm text-brand-navy hover:text-brand-coral font-medium break-all">
-                  {{ task.github_url }}
-                </a>
-              {% endif %}
-            {% endwith %}
-          </div>
-        {% endif %}
-      </section>
-    {% endif %}
 
     {% comment %}
       Comments, newest first, with the box that writes one at the top: posting
@@ -219,9 +75,9 @@
     {% endcomment %}
     {% with total=task.comments.count %}
       <section class="brand-card p-4">
-        <h2 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-3">
-          Comments{% if total %} ({{ total }}){% endif %}
-        </h2>
+        <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-3">
+          Comments{% if total %} <span class="normal-case tracking-normal font-normal text-brand-text/60">{{ total }}</span>{% endif %}
+        </h3>
 
         {% include "comments/comment_form.html" with task=task form=comment_form %}
 

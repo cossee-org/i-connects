@@ -2,12 +2,10 @@
   Hand-entered credit, loaded into #contribution-modal-body via HTMX.
   Posts back to itself so validation errors come back into the modal.
 {% endcomment %}
-<h2 class="text-lg font-semibold text-brand-navy mb-1">Add a contribution</h2>
-<p class="text-sm text-brand-text/70 mb-4">
-  For work the ledger missed &mdash; someone who did the task without being an
-  assignee, or whose done mark never went in. It will be marked as entered by
-  hand, and left alone if the task is reopened.
-</p>
+<div class="flex items-center gap-2 mb-4">
+  <h2 class="text-lg font-semibold text-brand-navy">Add a contribution</h2>
+  {% include "_components/info_popover.html" with label="Add a contribution" body="For work the ledger missed — someone who did the task without being an assignee, or whose done mark never went in. It will be marked as entered by hand, and left alone if the task is reopened." %}
+</div>
 
 <form method="post"
       action="{% url 'contributions:contribution_add' project_pk=project.pk %}"
@@ -32,12 +30,27 @@
 
   {% include "_components/form_field.html" with field=form.task %}
   {% include "_components/form_field.html" with field=form.user %}
-  {% include "_components/form_field.html" with field=form.contribution_type %}
-  <p class="text-xs text-brand-text/60 -mt-2 mb-3">
-    What each role covers:
-    <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
-       class="text-brand-coral hover:underline">credit.niso.org</a>
-  </p>
+  {% comment %}
+    The CRediT definitions link sits on the label line, as on a new task's
+    Task type (tasks/task_form.html), rather than in a line under the field.
+  {% endcomment %}
+  {% with field=form.contribution_type %}
+  <div class="form-control w-full mb-3">
+    <div class="flex items-center justify-between gap-2 px-1 py-0.5 pb-1">
+      <label for="{{ field.id_for_label }}" class="label p-0">
+        <span class="label-text text-sm text-brand-navy font-medium">{{ field.label }}{% if field.field.required %} <span class="text-brand-coral" aria-hidden="true">*</span><span class="sr-only"> (required)</span>{% endif %}</span>
+      </label>
+      <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
+         class="text-xs font-medium text-brand-coral hover:underline">CRediT roles &#8599;<span class="sr-only"> (opens in a new tab)</span></a>
+    </div>
+    {{ field }}
+    {% if field.errors %}
+      <label class="label pt-1">
+        <span class="label-text-alt text-error">{{ field.errors|join:" " }}</span>
+      </label>
+    {% endif %}
+  </div>
+  {% endwith %}
 
   <div class="flex gap-2 justify-end mt-6">
     <button type="button" class="btn btn-sm btn-ghost"

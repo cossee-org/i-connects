@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Communication &mdash; {{ project.name }}{% endblock %}
+{% block title %}Communications &mdash; {{ project.name }}{% endblock %}
 
 {% block page_header %}
   <header class="mb-6">
@@ -9,5 +9,12 @@
 {% endblock %}
 
 {% block content %}
-{% include "_components/empty_state.html" with title="Coming soon" body="Communication is on the way. Check back later." %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="flex items-center gap-2">
+    <h2 class="text-lg font-semibold text-brand-navy">Communications</h2>
+    {% include "_components/info_popover.html" with label="Communications" body="Messages sent to and from this project's members." %}
+  </div>
+</div>
+
+{% include "_components/empty_state.html" with title="Coming soon" body="Communications are on the way. Check back later." %}
 {% endblock %}

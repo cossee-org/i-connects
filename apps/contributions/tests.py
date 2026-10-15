@@ -632,6 +632,8 @@ def test_the_pages_offer_both_downloads(client, user, other_user):
     body = client.get(
         reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
     ).content.decode()
+    # Both say "(CSV)" on the tab, as on My Contributions.
+    assert 'aria-label="Download the contribution matrix as CSV"' in body and 'aria-label="Download the contribution list as CSV"' in body
     assert "Matrix (CSV)" in body and "List (CSV)" in body
 
     body = client.get(reverse("contributions:contributions")).content.decode()
@@ -643,7 +645,7 @@ def test_the_pages_offer_both_downloads(client, user, other_user):
     body = client.get(
         reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
     ).content.decode()
-    assert "Matrix (CSV)" in body and "List (CSV)" not in body
+    assert 'aria-label="Download the contribution matrix as CSV"' in body and 'aria-label="Download the contribution list as CSV"' not in body
 
 
 @pytest.mark.django_db
@@ -852,6 +854,26 @@ def test_the_add_form_offers_only_this_projects_tasks_and_members(
 
 
 @pytest.mark.django_db
+def test_the_add_form_offers_other_last(client, user, other_user):
+    """Other follows the 14 CRediT roles, and a contribution can be added
+    under it."""
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    task = _make_task(project, col, pm, assignees=[pm])
+
+    choices = ContributionAddForm(project=project).fields["contribution_type"].choices
+    assert choices[-1] == (ContributionType.OTHER, "Other")
+    assert len(choices) == 15
+
+    client.force_login(user)
+    client.post(
+        _add_url(project),
+        {"task": task.pk, "user": other_user.pk, "contribution_type": ContributionType.OTHER},
+    )
+    assert ContributionRecord.objects.get(user=other_user).contribution_type == ContributionType.OTHER
+
+
+@pytest.mark.django_db
 def test_the_tracking_tab_offers_the_controls_to_a_lead_only(
     client, user, other_user
 ):
@@ -869,6 +891,38 @@ def test_the_tracking_tab_offers_the_controls_to_a_lead_only(
     body = client.get(url).content.decode()
     assert "Add contribution" not in body
     assert "contribution-modal" not in body
+
+
+@pytest.mark.django_db
+def test_add_contribution_shares_the_toolbar_with_the_downloads(client, user):
+    """One row: Matrix, List, Add contribution, then the views."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert body.count("Add contribution") == 1
+    assert (
+        body.index('aria-label="Download the contribution matrix as CSV"')
+        < body.index('aria-label="Download the contribution list as CSV"')
+        < body.index("Add contribution")
+        < body.index('id="contributions-by-member-container"')
+    )
+
+
+@pytest.mark.django_db
+def test_a_lead_can_add_the_first_contribution(client, user):
+    """No credit yet means no downloads, but adding is still offered."""
+    project, _col, _pm = _make_project(user)
+
+    client.force_login(user)
+    body = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    assert 'aria-label="Download the contribution matrix as CSV"' not in body
+    assert "Add contribution" in body
 
 
 @pytest.mark.django_db
@@ -993,7 +1047,8 @@ def test_the_by_member_view_renders_on_its_own(client, user, other_user):
 
     client.force_login(user)
     body = client.get(_by_member_url(project)).content.decode()
-    assert "Contributions by member" in body
+    # No heading of its own: the switcher on the page names the view.
+    assert "<h2" not in body
     assert "Software" in body
     assert "Alice" in body
     # It is the partial, not the whole page.
@@ -1007,7 +1062,9 @@ def test_the_every_contribution_view_renders_on_its_own(client, user):
 
     client.force_login(user)
     body = client.get(_every_url(project)).content.decode()
-    assert "Every contribution" in body
+    # No heading of its own: the switcher on the page names the view.
+    assert "<h2" not in body
+    assert "Software" in body
     assert "<!DOCTYPE html>" not in body
 
 
@@ -1404,3 +1461,108 @@ def test_matrix_columns_use_the_same_order(client, user):
     labels = [label for _value, label in get_project_contributions_matrix(project)["types"]]
     assert labels[0] == "Conceptualization"
     assert labels[-1] == "Other"
+
+
+@pytest.mark.django_db
+def test_the_page_offers_no_with_contributions_only_filter(client, user):
+    """The "With contributions only" toggle is gone: not drawn by the page,
+    nor re-sent when the matrix is re-sorted."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    client.force_login(user)
+
+    page = client.get(
+        reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
+    ).content.decode()
+    swap = client.get(
+        _by_member_url(project), {"sort": "member", "dir": "desc"}
+    ).content.decode()
+    for body in (page, swap):
+        assert "With contributions only" not in body
+        assert 'id="matrix-filter"' not in body
+
+
+@pytest.mark.django_db
+def test_the_add_modal_keeps_its_explanation_behind_an_info_button(client, user):
+    """The modal's explanation opens from an (i) beside its title rather than
+    sitting under it as a paragraph."""
+    project, _col, _pm = _make_project(user)
+    client.force_login(user)
+
+    html = client.get(_add_url(project), headers={"hx-request": "true"}).content.decode()
+    assert 'aria-label="About Add a contribution"' in html
+    title_row = html[: html.index('aria-label="About Add a contribution"')]
+    assert "Add a contribution</h2>" in title_row
+    assert '<p class="text-sm text-brand-text/70 mb-4">' not in html
+
+
+@pytest.mark.django_db
+def test_the_add_modal_links_the_credit_roles_from_the_label_line(client, user):
+    """"CRediT roles ↗" on the CRediT role label line, as on a new task's
+    Task type, in place of the "What each role covers" line."""
+    project, _col, _pm = _make_project(user)
+    client.force_login(user)
+
+    html = client.get(_add_url(project), headers={"hx-request": "true"}).content.decode()
+    assert "What each role covers" not in html
+    assert ">credit.niso.org</a>" not in html
+    link = html.index("CRediT roles &#8599;")
+    assert html.index("CRediT role <span") < link < html.index('name="contribution_type"')
+    assert 'href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"' in html
+
+
+@pytest.mark.django_db
+def test_every_contribution_sorts_by_every_header_but_actions(client, user):
+    """Member, Task, Role, Completed and Closed by are sort buttons; Actions
+    is not; each row carries what it sorts by."""
+    project, col, pm = _make_project(user)
+    task = _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(user)
+    html = client.get(_every_url(project)).content.decode()
+    for key in ("member", "task", "role", "completed", "closer"):
+        assert f"@click=\"sortBy('{key}')\"" in html, key
+    assert '<th scope="col" class="text-right">Actions</th>' in html
+    row = html[html.index('data-order="0"') :]
+    row = row[: row.index(">")]
+    assert f'data-sort-task="{task.name.lower()}"' in row
+    assert 'data-sort-role="software"' in row
+    assert f'data-sort-completed="{int(record.closed_at.timestamp())}"' in row
+
+
+@pytest.mark.django_db
+def test_the_edit_modal_links_the_credit_roles_from_the_label_line(client, user):
+    """"CRediT roles ↗" on the CRediT role label line, as in Add a
+    contribution, in place of the "What each role covers" line."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+    client.force_login(user)
+
+    html = client.get(_edit_url(project, record), headers={"hx-request": "true"}).content.decode()
+    assert "What each role covers" not in html
+    link = html.index("CRediT roles &#8599;")
+    assert html.index("CRediT role <span") < link < html.index('name="contribution_type"')
+
+
+@pytest.mark.django_db
+def test_withdrawing_asks_first_in_a_remove_style_modal(client, user):
+    """Withdraw opens a confirmation modal in the Remove design rather than
+    the browser's confirm box; its form posts the withdrawal."""
+    project, col, pm = _make_project(user)
+    task = _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+    client.force_login(user)
+
+    html = client.get(_edit_url(project, record), headers={"hx-request": "true"}).content.decode()
+    assert "hx-confirm" not in html
+    assert "showModal()\">Withdraw</button>" in html
+    modal = html[html.index('id="withdraw-contribution-modal"') :]
+    modal = modal[: modal.index("</dialog>")]
+    assert 'class="modal-box border border-error/40"' in modal
+    assert task.name in modal and "Keep contribution" in modal
+    assert f'hx-post="{_remove_url(project, record)}"' in modal
+
+    client.post(_remove_url(project, record), headers={"hx-request": "true"})
+    assert not ContributionRecord.objects.exists()

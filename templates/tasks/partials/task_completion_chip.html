@@ -1,6 +1,8 @@
 {# Complete / Not Complete chip. Pass oob=True to re-render it out of band alongside a #task-status-block swap. #}
+{# An open task past its deadline also carries the shared Overdue pill here, inside the chip, so the #}
+{# out-of-band swap that follows a Lead completing or reopening the task adds or drops it in step. #}
 <span id="task-completion-chip"{% if oob %} hx-swap-oob="true"{% endif %}
-      class="inline-flex items-center gap-1.5 text-sm font-medium {% if task.status == 'COMPLETED' %}text-success{% else %}text-brand-text/70{% endif %}">
+      class="inline-flex items-center gap-1.5 text-sm font-medium {% if task.status == 'COMPLETED' %}text-blue-600{% else %}text-brand-text/70{% endif %}">
   {% if task.status == "COMPLETED" %}
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="w-3.5 h-3.5 shrink-0" fill="currentColor" aria-hidden="true">
       <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm4.7-9.3a1 1 0 0 0-1.4-1.4L9 11.6 6.7 9.3a1 1 0 0 0-1.4 1.4l3 3a1 1 0 0 0 1.4 0l5-5Z" clip-rule="evenodd" />
@@ -11,5 +13,6 @@
       <circle cx="10" cy="10" r="7.5" />
     </svg>
     <span>Not Complete</span>
+    {% include "_components/overdue_badge.html" with task=task text_size="text-sm" %}
   {% endif %}
 </span>

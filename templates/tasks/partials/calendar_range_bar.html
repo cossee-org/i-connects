@@ -4,11 +4,12 @@
 {% with dates=bar.task|task_dates %}
 <div class="col-start-{{ bar.start_col }} col-end-{{ bar.end_col|add:"1" }} h-5 flex items-center gap-1 px-1.5 text-[10px] font-medium text-brand-navy truncate cursor-pointer bg-brand-navy/10 hover:bg-brand-navy/15 border-y border-brand-navy/15 transition-colors
             {% if bar.is_range_start %}rounded-l-md border-l{% endif %}
-            {% if bar.is_range_end %}rounded-r-md border-r{% endif %}
-            {% if bar.task.is_priority and bar.is_range_start %} border-l-2 border-l-error{% endif %}"
+            {% if bar.is_range_end %}rounded-r-md border-r{% endif %}"
      title="{{ bar.task.name }} ({{ dates.full }})"
      @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=bar.task.pk %}' })">
+  {% if bar.task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True compact=True %}{% endif %}
   {% include "_components/completion_check.html" with task=bar.task compact=True %}
+  {% include "_components/overdue_badge.html" with task=bar.task icon_only=True compact=True %}
   <span class="truncate">{{ bar.task.name }}</span>
 </div>
 {% endwith %}

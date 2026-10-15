@@ -15,17 +15,65 @@
      {% endif %}
      hx-trigger="assignees-changed from:body"
      hx-swap="outerHTML"
+     {% if pane_mode and marks_locked %}
+       x-data="{ lockedNotice: false, lockedTimer: null,
+                 showLocked() { this.lockedNotice = true; clearTimeout(this.lockedTimer);
+                                this.lockedTimer = setTimeout(() => this.lockedNotice = false, 6000) } }"
+     {% endif %}
      class="brand-card p-4">
   <div class="flex items-center justify-between gap-3 flex-wrap">
-    <div class="flex items-center gap-2">
+    <div class="relative flex items-center gap-2">
       {% if pane_mode %}
       <h3 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold">Completion</h3>
+      {% comment %}
+        The (i) beside the heading: how a part goes from done to reviewed,
+        and how the task is completed, which locks its records. It sits
+        inside the swap target, so a mark or review closes it again, which
+        is fine for a note opened to read.
+      {% endcomment %}
+      {# Positioned from the heading row, not the icon, so it fits a phone. #}
+      <div class="flex" x-data="{ open: false }" @keydown.escape="open = false" @click.outside="open = false" data-completion-info>
+        <button type="button" @click="open = !open"
+                aria-label="About Completion"
+                :aria-expanded="open"
+                aria-controls="task-completion-info"
+                class="inline-flex items-center justify-center w-5 h-5 rounded-full text-brand-text/50 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4" aria-hidden="true">
+            <path fill-rule="evenodd" d="M18 10A8 8 0 1 1 2 10a8 8 0 0 1 16 0ZM9 9a1 1 0 0 1 2 0v4a1 1 0 1 1-2 0V9Zm1-3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
+          </svg>
+        </button>
+        {% comment %}
+          The id sits on the inner element, not on the one x-show hides: HTMX
+          settles an id'd element by putting its original style attribute
+          back after the swap, which would wipe Alpine's display:none and
+          open the note on its own after every mark.
+        {% endcomment %}
+        <div x-cloak x-show="open" data-completion-info-panel
+             x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+             class="absolute left-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-30 text-xs text-brand-text/80 normal-case tracking-normal font-normal"
+             style="width: min(22rem, calc(100vw - 4rem))">
+          <div id="task-completion-info">
+          <p class="text-sm font-semibold text-brand-navy">How completion works</p>
+          <ol class="mt-2 flex flex-col gap-2">
+            <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished; a Lead can tick it for anyone. Untick to undo.</li>
+            <li><span class="font-semibold text-violet-600">2. Reviewed.</span> On a task with reviewers, a reviewer or a Lead ticks Reviewed once a part is done. Whoever reviewed it, or a Lead, can untick it. Undoing a Done mark clears its review.</li>
+            <li><span class="font-semibold text-brand-navy">3. Completed.</span> A Lead marks the whole task completed with Mark completed at the top. A task with reviewers also completes by itself once every part is reviewed. Once completed, its Done and Reviewed records are locked for everyone; a Lead marks it not complete to change them.</li>
+          </ol>
+          </div>
+        </div>
+      </div>
       {% else %}
       <h3 class="text-lg font-semibold text-brand-navy">Completion</h3>
       {% endif %}
-      <span class="text-xs text-brand-text/60">
-        {{ done_count }} / {{ assignee_count }} done{% if show_review and reviewed_count %} &middot; {{ reviewed_count }} reviewed{% endif %}
-      </span>
+      {% comment %}
+        No count beside the heading in the matrix layout: its Marked done and
+        Reviewed bars already say how far along the parts are. The plain
+        layout, which has no bars, keeps its done count.
+      {% endcomment %}
+      {% if not pane_mode %}
+        <span class="text-xs text-brand-text/60">{{ done_count }} of {{ assignee_count }} done</span>
+      {% endif %}
     </div>
 
     {% comment %}
@@ -57,79 +105,246 @@
     people being added to or taken off the task without any extra bookkeeping.
   {% endcomment %}
   {% if pane_mode %}
-    {% comment %}
-      Why the row buttons are gone. Without this a reviewer opening a
-      completed task just finds their actions missing; the Lead's Mark Not
-      Complete in the top bar is what hands them back.
-    {% endcomment %}
-    {% if marks_locked %}
-      <p class="mt-2 text-xs text-brand-text/60">
-        {% if needs_review %}
-          Completed &mdash; marks and reviews are locked. Mark the task not
-          complete to change them.
-        {% else %}
-          Completed &mdash; marks are locked. Mark the task not complete to
-          change them.
-        {% endif %}
-      </p>
-    {% endif %}
-
     {% if assignee_states %}
-      <div class="mt-3 overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-xs uppercase tracking-wider text-brand-text/70">
-              <th scope="col" class="text-left font-semibold pb-1.5">Assignee</th>
-              <th scope="col" class="text-left font-semibold pb-1.5 px-2 whitespace-nowrap">Marked Done</th>
+      {% comment %}
+        How far along, one labelled bar per stage: Marked done (green) and,
+        on a task under review, Reviewed (violet), each with its count. The
+        heading carries the overall figure — parts both marked done and
+        reviewed — so a task without review shows the one bar and no
+        repeat of it.
+      {% endcomment %}
+      <div class="mt-3 grid grid-cols-[6.5rem_1fr_3.5rem] items-center gap-x-3 gap-y-2 text-xs" data-progress>
+        <span class="text-brand-text/80 font-medium">Marked done</span>
+        <span class="h-1.5 rounded-full bg-brand-lighter overflow-hidden" aria-hidden="true">
+          <span class="block h-full rounded-full bg-success" style="width: {% widthratio done_count assignee_count 100 %}%"></span>
+        </span>
+        <span class="text-right text-brand-text/80">{{ done_count }} of {{ assignee_count }}</span>
+        {% if show_review %}
+          <span class="text-brand-text/80 font-medium">Reviewed</span>
+          <span class="h-1.5 rounded-full bg-brand-lighter overflow-hidden" aria-hidden="true">
+            <span class="block h-full rounded-full bg-violet-600" style="width: {% widthratio reviewed_count assignee_count 100 %}%"></span>
+          </span>
+          <span class="text-right text-brand-text/80">{{ reviewed_count }} of {{ assignee_count }}</span>
+        {% endif %}
+      </div>
+
+      {% comment %}
+        One table row per assignee, under Assignee / Done / Reviewed (the
+        last only on a task under review), one line each. The Assignee cell
+        names them. The Done and Reviewed cells each hold a tick box and,
+        beside it, when and by whom ("Oct 14 · by …"), in plain text — the
+        round boxes carry the colour, green for Done and purple for Reviewed;
+        otherwise "Not done yet", "Awaiting review" or
+        a dash. The boxes — tick to mark, untick to undo — are live only for
+        whoever may make that change (task_done_tick.html,
+        task_review_tick.html), and read-only for everyone else. Each tick
+        cell carries its state as
+        ``data-mark`` (yes / no for Done; yes / pending / none for Reviewed).
+        Rows come from the task's current
+        assignees, so the table follows people being added to or taken off
+        the task without any extra bookkeeping.
+
+        Past the third row the rest wait behind See more: a task with a dozen
+        assignees would otherwise be a wall of names above the comments.
+        Which rows those are is left to CSS (tr:nth-child), so it follows
+        the rows wherever a sort puts them.
+
+        Each header sorts the rows in the browser, ascending first; clicking
+        the active header flips the direction. Assignee sorts by name; Done
+        puts parts done first, earliest first, then the rest; Reviewed puts
+        parts reviewed first, earliest first, then those awaiting review,
+        then the rest. Ties keep the server's order (data-order), which is
+        also the order before any header is clicked.
+
+        ``rowsExpanded``, ``sortKey`` and ``sortDesc`` come from an x-data
+        wrapper *outside* this block, which the surrounding template owns —
+        this element is an HTMX swap target, so state kept inside it would
+        snap back on every mark and review: the rows would collapse, taking
+        the row you had just acted on with them, and fall out of their sort.
+        The table re-applies the sort each time it is swapped in.
+
+        The table wears the Tasks tab's Table view look (tasks/task_table_view.html):
+        a daisyUI table-sm in a card, with a lavender header row in navy and
+        rules between rows only. What is its own — the column widths and the
+        tick boxes — is set here rather than in the compiled stylesheet: it
+        is drawn by this block alone, which both the pane and the full task
+        page render.
+      {% endcomment %}
+      <style>
+        .completion-table { table-layout: fixed; }
+        .completion-table th, .completion-table td { vertical-align: middle; }
+        .completion-table:not(.rows-expanded) tbody tr:nth-child(n+4) { display: none; }
+        .completion-table col.completion-name-col { width: 34%; }
+        .completion-table.no-review col.completion-name-col { width: 45%; }
+        .completion-mark { display: flex; align-items: center; gap: 0.625rem; min-width: 0; }
+        .completion-mark-note { font-size: 0.8125rem; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
+        .completion-tick { appearance: none; -webkit-appearance: none; margin: 0; width: 22px; height: 22px; border-radius: 999px; border: 2px solid #9aa3c7; background: #fff; position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0; }
+        .completion-tick:checked::after { content: ""; position: absolute; left: 6px; top: 2px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+        .completion-tick-done:checked { background: #16a34a; border-color: #16a34a; }
+        .completion-tick-review:checked { background: #7c3aed; border-color: #7c3aed; }
+        .completion-tick:disabled { cursor: default; }
+        .completion-tick:disabled:not(:checked) { opacity: 0.45; }
+        .completion-tick[aria-disabled="true"] { cursor: not-allowed; }
+        .completion-tick[aria-disabled="true"]:not(:checked) { opacity: 0.45; }
+        .completion-locked-notice { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
+        .completion-tick:focus-visible { outline: 2px solid #f03d30; outline-offset: 2px; }
+      </style>
+      <div class="brand-card overflow-x-auto mt-3">
+      <table class="table table-sm completion-table{% if not show_review %} no-review{% endif %}" data-assignee-rows
+             :class="{ 'rows-expanded': rowsExpanded }"
+             x-data="{
+               sortBy(key) {
+                 if (sortKey === key) { sortDesc = !sortDesc } else { sortKey = key; sortDesc = false }
+                 this.sortRows()
+               },
+               sortRows() {
+                 const body = this.$refs.rows
+                 const field = { name: 'sortName', done: 'sortDone', reviewed: 'sortReviewed' }[sortKey]
+                 const dir = sortDesc ? -1 : 1
+                 const rows = [...body.rows].sort((a, b) => {
+                   if (field) {
+                     const x = a.dataset[field], y = b.dataset[field]
+                     const c = field === 'sortName' ? x.localeCompare(y) : Number(x) - Number(y)
+                     if (c) return c * dir
+                   }
+                   return Number(a.dataset.order) - Number(b.dataset.order)
+                 })
+                 rows.forEach(r => body.appendChild(r))
+               },
+               ariaSort(key) { return sortKey === key ? (sortDesc ? 'descending' : 'ascending') : null },
+             }"
+             x-init="if (sortKey) $nextTick(() => sortRows())">
+        <colgroup>
+          <col class="completion-name-col">
+          <col>
+          {% if show_review %}<col>{% endif %}
+        </colgroup>
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th scope="col" :aria-sort="ariaSort('name')">
+              <button type="button" class="inline-flex items-center gap-1 font-semibold hover:text-brand-coral transition-colors" @click="sortBy('name')">
+                Assignee
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true"
+                     x-cloak x-show="sortKey === 'name'" :class="{ 'rotate-180': sortDesc }">
+                  <path fill-rule="evenodd" d="M10 17a.75.75 0 0 1-.75-.75V5.612L5.29 9.77a.75.75 0 0 1-1.08-1.04l5.25-5.5a.75.75 0 0 1 1.08 0l5.25 5.5a.75.75 0 1 1-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0 1 10 17Z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </th>
+            <th scope="col" :aria-sort="ariaSort('done')">
+              <button type="button" class="inline-flex items-center gap-1 font-semibold hover:text-brand-coral transition-colors" @click="sortBy('done')">
+                Done
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true"
+                     x-cloak x-show="sortKey === 'done'" :class="{ 'rotate-180': sortDesc }">
+                  <path fill-rule="evenodd" d="M10 17a.75.75 0 0 1-.75-.75V5.612L5.29 9.77a.75.75 0 0 1-1.08-1.04l5.25-5.5a.75.75 0 0 1 1.08 0l5.25 5.5a.75.75 0 1 1-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0 1 10 17Z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </th>
+            {% if show_review %}
+            <th scope="col" :aria-sort="ariaSort('reviewed')">
+              <button type="button" class="inline-flex items-center gap-1 font-semibold hover:text-brand-coral transition-colors" @click="sortBy('reviewed')">
+                Reviewed
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true"
+                     x-cloak x-show="sortKey === 'reviewed'" :class="{ 'rotate-180': sortDesc }">
+                  <path fill-rule="evenodd" d="M10 17a.75.75 0 0 1-.75-.75V5.612L5.29 9.77a.75.75 0 0 1-1.08-1.04l5.25-5.5a.75.75 0 0 1 1.08 0l5.25 5.5a.75.75 0 1 1-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0 1 10 17Z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </th>
+            {% endif %}
+          </tr>
+        </thead>
+        <tbody x-ref="rows">
+          {% for s in assignee_states %}
+            {% comment %}
+              The sort keys: a done or reviewed part sorts by when (epoch
+              seconds, 0 for an older record with no time on it); the rest
+              sort after every timestamp, awaiting review before not done.
+            {% endcomment %}
+            <tr data-assignee-row="{{ s.member.pk }}"
+                data-order="{{ forloop.counter0 }}"
+                data-sort-name="{{ s.member.display_name|lower }}"
+                data-sort-done="{% if s.done %}{% if s.done_at %}{{ s.done_at|date:'U' }}{% else %}0{% endif %}{% else %}100000000000{% endif %}"
+                data-sort-reviewed="{% if s.reviewed %}{% if s.reviewed_at %}{{ s.reviewed_at|date:'U' }}{% else %}0{% endif %}{% elif s.done %}100000000000{% else %}200000000000{% endif %}">
+              <td>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+                  <span class="w-6 h-6 rounded-full bg-brand-navy/80 text-white text-[11px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
+                  <span class="text-sm font-medium text-brand-navy break-words min-w-0" data-assignee-name>{{ s.member.display_name }}</span>
+                  {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
+                </div>
+              </td>
+              <td data-done-cell data-mark="{% if s.done %}yes{% else %}no{% endif %}">
+                <div class="completion-mark">
+                  {% include "tasks/partials/task_done_tick.html" with s=s task=task %}
+                  {% if s.done %}
+                    <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
+                  {% else %}
+                    <span class="completion-mark-note text-brand-text/60">Not done yet</span>
+                  {% endif %}
+                </div>
+              </td>
               {% if show_review %}
-                <th scope="col" class="text-left font-semibold pb-1.5 whitespace-nowrap">Reviewed</th>
+                <td data-review-cell data-mark="{% if s.reviewed %}yes{% elif s.done %}pending{% else %}none{% endif %}">
+                  <div class="completion-mark">
+                    {% include "tasks/partials/task_review_tick.html" with s=s task=task %}
+                    {% if s.reviewed %}
+                      <span class="completion-mark-note text-brand-text/80" data-review-line>{% if s.reviewed_at %}{{ s.reviewed_at|date:"M j" }} &middot; {% endif %}by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}</span>
+                    {% elif s.done and not marks_locked %}
+                      <span class="completion-mark-note text-brand-text/60">Awaiting review</span>
+                    {% elif s.done %}
+                      <span class="completion-mark-note text-brand-text/60">Not reviewed</span>
+                    {% else %}
+                      <span class="completion-mark-note text-brand-text/60" aria-hidden="true">&mdash;</span>
+                    {% endif %}
+                  </div>
+                </td>
               {% endif %}
             </tr>
-          </thead>
-          {% comment %}
-            Past the third row the matrix waits behind See more: a task with a
-            dozen assignees would otherwise be a wall of names above the
-            reviewers and the comments. ``rowsExpanded`` comes from an x-data
-            wrapper *outside* this block, which the surrounding template owns —
-            this element is an HTMX swap target, so state kept inside it would
-            snap back to collapsed on every mark and review, taking the row
-            you had just acted on with it.
-          {% endcomment %}
-          <tbody class="divide-y divide-brand-light/60">
-            {% for s in assignee_states %}
-              <tr{% if forloop.counter > 3 %} x-show="rowsExpanded" x-cloak{% endif %}>
-                <th scope="row" class="text-left font-normal text-brand-navy py-1.5 pr-2">{{ s.member.display_name }}</th>
-                <td class="py-1.5 px-2">{% include "tasks/partials/task_done_cell.html" with s=s task=task %}</td>
-                {% if show_review %}
-                  <td class="py-1.5">{% include "tasks/partials/task_review_cell.html" with s=s task=task %}</td>
-                {% endif %}
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+          {% endfor %}
+        </tbody>
+      </table>
       </div>
       {% if assignee_count > 3 %}
         <button type="button"
-                class="mt-2 text-xs font-medium text-brand-navy hover:underline"
+                class="mt-1 text-xs font-medium text-brand-navy hover:underline"
                 :aria-expanded="rowsExpanded"
                 @click="rowsExpanded = !rowsExpanded"
                 x-text="rowsExpanded ? 'See less' : 'See more'">See more</button>
+      {% endif %}
+      {% if marks_locked %}
+        {% comment %}
+          Hidden until someone clicks a box on the completed task: then it
+          says why nothing changed, and goes again after a few seconds. The
+          live region stays in the page so the message is read out when it
+          appears.
+        {% endcomment %}
+        <div id="task-locked-notice" role="status" aria-live="polite">
+          <p class="completion-locked-notice mt-2 flex items-start gap-2 rounded-md px-3 py-2 text-xs"
+             x-show="lockedNotice" x-cloak x-transition.opacity data-locked-notice>
+            {# lock-closed #}
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+            </svg>
+            <span>
+              This task is already marked completed, so its records are locked.
+              {% if is_project_manager %}Mark it not complete first to change them.{% else %}A Lead has to mark it not complete before they can change.{% endif %}
+            </span>
+          </p>
+        </div>
       {% endif %}
     {% else %}
       <p class="mt-3 text-sm text-brand-text/60">Nobody is assigned to this task yet.</p>
     {% endif %}
 
     {% comment %}
-      Who the Reviewed column is waiting on — and gone with that column on a
-      task that asks for no review. It belongs to this card rather than a
-      section of its own: reviewers exist here to produce that column, and
-      sitting inside the swap target means adding or removing one shows up
-      with the next refresh. h4 under the card's h3, not a second h3.
+      Who reviews, on one line under the rows — and gone on a task that asks
+      for no review. It belongs to this card rather than a section of its
+      own: reviewers exist here to produce the rows' verdicts, and sitting
+      inside the swap target means adding or removing one shows up with the
+      next refresh. h4 under the card's h3, not a second h3.
     {% endcomment %}
     {% if reviewers %}
-      <div class="mt-3 pt-3 border-t border-brand-light/60">
-        <h4 class="text-xs uppercase tracking-wider text-brand-text/70 font-semibold mb-1">Reviewers</h4>
-        <p class="text-sm text-brand-navy">
+      <div class="mt-2 pt-2.5 border-t border-brand-light/50 flex flex-wrap items-baseline gap-x-2 text-sm">
+        <h4 class="text-xs text-brand-text/60 font-medium">Reviewers</h4>
+        <p class="text-brand-navy">
           {% for reviewer in reviewers %}{{ reviewer.display_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
         </p>
       </div>
@@ -156,8 +371,9 @@
 </div>
 
 {% comment %}
-  Keep the chip and the two action-bar buttons in sync with this swap: all
-  three sit outside #task-status-block, so the swap cannot reach them in place.
+  Keep the chip and the action bar's completion button in sync with this
+  swap: both sit outside #task-status-block, so the swap cannot reach them in
+  place.
 
   Only on a swap response, which is what ``oob`` marks — the views that render
   one set it. A first render (the pane's fragment, the full task page) already
@@ -169,13 +385,14 @@
 {% if pane_mode and oob %}
   {% include "tasks/partials/task_completion_chip.html" with task=task oob=True %}
   {% include "tasks/partials/task_completion_button.html" with task=task is_project_manager=is_project_manager oob=True %}
-  {% include "tasks/partials/task_self_mark_button.html" with task=task is_assignee=is_assignee my_done=my_done oob=True %}
   {% comment %}
     Closing and reopening are what write and clear the closer, so the line
     naming them has to move with the same swap — otherwise a task just
     closed sits there unattributed until the page is reloaded.
   {% endcomment %}
-  {% include "tasks/partials/task_closed_by_meta.html" with task=task oob=True %}
+  {% include "tasks/partials/task_closed_by_meta.html" with task=task oob=True layout=surface %}
+  {# The pane's "N days left" beside its dates goes with the same toggle. #}
+  {% if surface == "pane" %}{% include "tasks/partials/task_due_hint.html" with task=task oob=True %}{% endif %}
   {% comment %}
     And the Lead's Delete / Edit pair, which a completed task does not
     offer — leaving them up would hand a Lead two buttons their endpoints

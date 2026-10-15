@@ -31,124 +31,105 @@
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
 
-    {# Task name with 255-char counter #}
-    <div class="md:col-span-2">
-      <div x-data="{ nameCharCount: {{ form.name.value|default:''|length }} }">
-        {% include "_components/form_field.html" with field=form.name %}
-        <p class="text-xs text-brand-text/50 -mt-2 mb-3 text-left"
-           :class="nameCharCount > 255 ? 'text-error' : ''">
-          <span x-text="nameCharCount"></span> / 255
-        </p>
+    {% comment %}
+      Task name, with High priority beside it: the real is_priority checkbox,
+      visually hidden inside a label drawn as a flag toggle button (red while
+      ticked, via has-[:checked]). The counter tracks the 255-char limit.
+    {% endcomment %}
+    <div class="md:col-span-2 mb-3" x-data="{ nameCharCount: {{ form.name.value|default:''|length }} }">
+      <label for="{{ form.name.id_for_label }}" class="label py-0.5 pb-1">
+        <span class="label-text text-sm text-brand-navy font-medium">{{ form.name.label }} <span class="text-brand-coral" aria-hidden="true">*</span><span class="sr-only"> (required)</span></span>
+      </label>
+      <div class="flex items-start gap-2">
+        <div class="flex-1 min-w-0">{{ form.name }}</div>
+        <label class="shrink-0 inline-flex items-center gap-1.5 h-12 px-3 rounded-lg border border-gray-300 bg-base-100 text-sm font-medium text-brand-text/70 cursor-pointer select-none transition-colors hover:bg-gray-50
+                      has-[:checked]:border-error/40 has-[:checked]:bg-error/10 has-[:checked]:text-error has-[:checked]:hover:bg-error/15
+                      has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-navy/40">
+          {{ form.is_priority }}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+            <path d="M3 1.5a.5.5 0 0 1 .5.5v.32l1.418-.317a5.75 5.75 0 0 1 3.417.384l.13.062a4.75 4.75 0 0 0 2.817.317l1.674-.372a.5.5 0 0 1 .611.487v6.554a.5.5 0 0 1-.389.487l-1.671.372a5.75 5.75 0 0 1-3.417-.384l-.131-.062a4.75 4.75 0 0 0-2.816-.318L3.5 9.72V14.5a.5.5 0 0 1-1 0v-13a.5.5 0 0 1 .5-.5Z"/>
+          </svg>
+          High priority
+        </label>
       </div>
+      <p class="text-xs text-brand-text/50 mt-1 text-right"
+         :class="nameCharCount > 255 ? 'text-error' : ''">
+        <span x-text="nameCharCount"></span> / 255
+      </p>
+      {% if form.name.errors %}<p class="text-xs text-error mt-1">{{ form.name.errors|join:" " }}</p>{% endif %}
+      {% if form.is_priority.errors %}<p class="text-xs text-error mt-1">{{ form.is_priority.errors|join:" " }}</p>{% endif %}
     </div>
 
     <div class="md:col-span-2"
          x-data="{ descCharCount: {{ form.description.value|default:''|length }} }">
       {% include "_components/form_field.html" with field=form.description %}
-      <p class="text-xs text-brand-text/50 -mt-2 mb-3 text-left"
+      <p class="text-xs text-brand-text/50 -mt-2 mb-3 text-right"
          :class="descCharCount > 5000 ? 'text-error' : ''">
         <span x-text="descCharCount"></span> / 5000
       </p>
     </div>
 
-    {# Status and Completion — same row, no bounding box #}
-    <div class="form-control w-full mb-3"
-         x-data="{
-           open: false,
-           options: [{% for val, label in form.container.field.choices %}{% if val %}{value: '{{ val }}', label: '{{ label|escapejs }}'},{% endif %}{% endfor %}],
-           value: '{{ form.container.value|default:'' }}',
-           get selected() { return this.options.find(o => String(o.value) === String(this.value)) || null },
-           pick(val) { this.value = val; this.open = false; }
-         }"
-         @keydown.escape="open = false"
-         @click.outside="open = false">
-      <label class="label py-0.5 pb-1">
-        <span class="label-text text-sm text-brand-navy font-medium">Kanban column <span class="text-brand-coral" aria-hidden="true">*</span></span>
-      </label>
-      <div class="relative w-full">
-        <input type="hidden" name="container" :value="value">
-        <button type="button" @click="open = !open"
-                class="w-full h-12 inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 text-sm shadow-sm"
-                :class="selected ? 'text-gray-900' : 'text-gray-400'">
-          <span x-text="selected ? selected.label : 'Select Kanban column'"></span>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-               class="w-3.5 h-3.5 text-brand-text/50 shrink-0">
-            <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-          </svg>
-        </button>
-        <div x-cloak x-show="open"
-             x-transition:enter="transition ease-out duration-100"
-             x-transition:enter-start="opacity-0 scale-95"
-             x-transition:enter-end="opacity-100 scale-100"
-             x-transition:leave="transition ease-in duration-75"
-             x-transition:leave-start="opacity-100 scale-100"
-             x-transition:leave-end="opacity-0 scale-95"
-             class="absolute left-0 right-0 bottom-full bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30 mb-1">
-          <template x-for="opt in options" :key="opt.value">
-            <button type="button" @click="pick(opt.value)"
-                    class="w-full text-left px-4 py-1.5 text-sm text-gray-900 hover:bg-gray-50 transition-colors whitespace-nowrap"
-                    :class="String(opt.value) === String(value) ? 'font-semibold bg-gray-50' : 'font-normal'">
-              <span x-text="opt.label"></span>
-            </button>
-          </template>
-        </div>
-      </div>
-      {% if form.container.errors %}
-        <label class="label pt-1">
-          <span class="label-text-alt text-error">{{ form.container.errors|join:" " }}</span>
-        </label>
-      {% endif %}
+    {# Every picker is the same select style: Kanban column, Task type, Assignees, Reviewers. #}
+    <div{% if not form.contribution_type %} class="md:col-span-2"{% endif %}>
+      {% include "_components/form_field.html" with field=form.container %}
     </div>
 
     {% if form.contribution_type %}
-      {# Only CRediT projects carry a task type — see TaskForm._init_task_type. #}
-      <div>
-        {% include "_components/form_field.html" with field=form.contribution_type %}
-        <p class="text-xs text-brand-text/60 -mt-2 mb-3">
-          What each role covers:
+      {% comment %}
+        Only CRediT projects carry a task type — see TaskForm._init_task_type.
+        The link to the CRediT definitions sits on the label line rather than
+        under the field, so this field stays level with Kanban column; the
+        help text moves to a hover on the label, and stays on the page for
+        screen readers as the select's aria-describedby target.
+      {% endcomment %}
+      <div class="form-control w-full mb-3">
+        <div class="flex items-center justify-between gap-2 px-1 py-0.5 pb-1">
+          <label for="{{ form.contribution_type.id_for_label }}" class="label p-0" title="{{ form.contribution_type.help_text }}">
+            <span class="label-text text-sm text-brand-navy font-medium">{{ form.contribution_type.label }}</span>
+          </label>
           <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
-             class="text-brand-coral hover:underline">credit.niso.org</a>
-        </p>
+             class="text-xs font-medium text-brand-coral hover:underline">CRediT roles &#8599;<span class="sr-only"> (opens in a new tab)</span></a>
+        </div>
+        {{ form.contribution_type }}
+        <p id="{{ form.contribution_type.auto_id }}_helptext" class="sr-only">{{ form.contribution_type.help_text }}</p>
+        {% if form.contribution_type.errors %}
+          <p class="text-xs text-error mt-1">{{ form.contribution_type.errors|join:" " }}</p>
+        {% endif %}
       </div>
     {% endif %}
 
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
 
-    <div class="md:col-span-2 mb-3">
-      <label class="label cursor-pointer justify-start gap-2 py-0" for="{{ form.is_priority.id_for_label }}">
-        {{ form.is_priority }}
-        <span class="label-text text-sm text-brand-navy font-medium">{{ form.is_priority.label }}</span>
-      </label>
-      {% if form.is_priority.errors %}
-        <span class="label-text-alt text-error">{{ form.is_priority.errors|join:" " }}</span>
-      {% endif %}
-    </div>
-
     <div class="md:col-span-2">
       {% include "_components/form_field.html" with field=form.assigned_members %}
     </div>
 
     {% comment %}
-      Reviewers only exist to answer Require review, so the field stays out of
-      the way until the box is ticked. The form asks for at least one reviewer
-      whenever it is, and clears them again when it is not — so what the box
-      says and who is named never drift apart.
+      Review, as a small panel under Assignees: its name and explanation on
+      the left, the switch (the real requires_review checkbox) on the right,
+      and the Reviewers picker inside the panel once it is on. Reviewers only
+      exist to answer Require review, so the field stays out of the way until
+      then. The form asks for at least one reviewer whenever it is on, and
+      clears them again when it is not — so what the switch says and who is
+      named never drift apart.
     {% endcomment %}
-    <div class="md:col-span-2"
+    <div class="md:col-span-2 mb-3"
          x-data="{ requiresReview: {{ form.requires_review.value|yesno:'true,false,false' }} }">
-      <div class="mb-3">
-        <label class="label cursor-pointer justify-start gap-2 py-0" for="{{ form.requires_review.id_for_label }}">
+      <div class="rounded-lg border border-brand-light/70 bg-brand-lighter/40 px-4 py-3">
+        <label for="{{ form.requires_review.id_for_label }}" class="flex items-start justify-between gap-4 cursor-pointer">
+          <span class="min-w-0">
+            <span class="block text-sm font-medium text-brand-navy">{{ form.requires_review.label }}</span>
+            <span id="{{ form.requires_review.auto_id }}_helptext" class="block text-xs text-brand-text/60 mt-0.5">{{ form.requires_review.help_text }}</span>
+          </span>
           {{ form.requires_review }}
-          <span class="label-text text-sm text-brand-navy font-medium">{{ form.requires_review.label }}</span>
         </label>
-        <p class="text-xs text-brand-text/60 mt-1">{{ form.requires_review.help_text }}</p>
         {% if form.requires_review.errors %}
-          <span class="label-text-alt text-error">{{ form.requires_review.errors|join:" " }}</span>
+          <p class="text-xs text-error mt-1">{{ form.requires_review.errors|join:" " }}</p>
         {% endif %}
-      </div>
-      <div x-cloak x-show="requiresReview" x-transition>
-        {% include "_components/form_field.html" with field=form.reviewers %}
+        <div x-cloak x-show="requiresReview" x-transition class="mt-3 [&_.form-control]:mb-0">
+          {% include "_components/form_field.html" with field=form.reviewers %}
+        </div>
       </div>
     </div>
   </div>
@@ -157,11 +138,71 @@
     {% if standalone %}
       <a href="{% if next_url %}{{ next_url }}{% else %}{% url 'tasks:board' project_pk=project.pk %}{% endif %}" class="btn btn-ghost">Cancel</a>
     {% else %}
+      {# Cancel discards on purpose, so an accidental-close save must not follow it. #}
       <button type="button" class="btn btn-ghost"
-              onclick="document.getElementById('task-modal') && document.getElementById('task-modal').close()">
+              onclick="var m = document.getElementById('task-modal'); if (m) { m.dataset.discard = '1'; m.close(); }">
         Cancel
       </button>
     {% endif %}
     <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Save</button>
   </div>
 </form>
+
+{% if not standalone and not form.instance.pk %}
+{% comment %}
+  A new task's editor closed by accident — a click outside it, or Esc — is
+  saved rather than lost, when the form passes its own checks (a name, at
+  least). Cancel and the × discard on purpose: they set data-discard on the
+  dialog first. Save and a successful create close it too, but by then the
+  form has been sent, so nothing is sent twice.
+
+  The save goes the way Save does, with autosave=1 so the board says so
+  after its reload. If the server turns it down (a rule the browser cannot
+  check), the editor opens again with the errors, nothing typed lost.
+
+  Edit forms are left alone: closing one keeps the task as it was.
+{% endcomment %}
+<script>
+(function () {
+  var dialog = document.getElementById('task-modal');
+  var body = document.getElementById('task-modal-body');
+  var form = body && body.querySelector('form[action="{{ form_action }}"]');
+  if (!dialog || !form) return;
+  delete dialog.dataset.discard;
+
+  form.addEventListener('htmx:beforeRequest', function () { form._sent = true; });
+
+  dialog.addEventListener('close', function onClose() {
+    // The editor now holds another form (or this one was sent): not ours.
+    if (!form.isConnected || !body.contains(form)) {
+      dialog.removeEventListener('close', onClose);
+      return;
+    }
+    var discard = dialog.dataset.discard === '1';
+    delete dialog.dataset.discard;
+    if (discard || form._sent || !form.checkValidity()) return;
+    dialog.removeEventListener('close', onClose);
+    form._sent = true;
+    htmx.ajax('POST', form.getAttribute('action'), {
+      source: form,
+      values: { autosave: '1' },
+      swap: 'none'
+    }).then(function () {
+      if (form._created) return;
+      // Turned down: show the form again, with its errors. htmx.swap (not
+      // innerHTML) so the returned form's own script runs and it keeps
+      // this safety net.
+      htmx.swap(body, form._reply || '', { swapStyle: 'innerHTML' });
+      dialog.showModal();
+    });
+  });
+
+  form.addEventListener('htmx:afterRequest', function (evt) {
+    var xhr = evt.detail.xhr;
+    var trigger = xhr && xhr.getResponseHeader('HX-Trigger');
+    form._created = !!(trigger && trigger.indexOf('task-created') !== -1);
+    form._reply = xhr ? xhr.responseText : '';
+  });
+}());
+</script>
+{% endif %}

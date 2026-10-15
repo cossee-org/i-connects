@@ -39,6 +39,12 @@
 {% endblock %}
 
 {% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="flex items-center gap-2">
+    <h2 class="text-lg font-semibold text-brand-navy">Contribution Tracking</h2>
+    {% include "_components/info_popover.html" with label="Contribution Tracking" body="Credit on this project, by CRediT role. A member earns credit on a task when they mark their own part done and a lead completes the task — where the task requires review, once their submission has been reviewed." link_href="https://credit.niso.org/" link_text="What is CRediT?" %}
+  </div>
+</div>
 {% if not project.tracks_credit %}
   {% comment %}
     Nothing to show, and nothing that could appear later: contributions are
@@ -53,53 +59,53 @@
   {% endif %}
 {% else %}
 
-  <p class="text-sm text-brand-text/70 mb-4 max-w-2xl">
-    Credit on this project, by
-    <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"
-       class="text-brand-navy underline hover:text-brand-coral">CRediT</a>
-    role. A member earns credit on a task when they mark their own part done
-    and a lead completes the task &mdash; where the task requires review, once
-    their submission has been reviewed.
-  </p>
 
   {% comment %}
-    View switcher on the left, downloads on the right — the same shape the
-    Tasks board uses for Kanban / List / Calendar. The two downloads line up
-    with the two views: the matrix is Contributions by member, the list is
-    Every contribution.
+    One row, as on Tasks: the view switcher on the left; downloads
+    ("Matrix (CSV)", "List (CSV)") and a lead's "Add contribution" on the
+    right. Narrower than a laptop screen, it wraps. The two
+    downloads line up with the two views: the matrix is Contributions by
+    member, the list is Every contribution. Adding is here rather than inside
+    one view so it is there in both; saving reloads the page.
   {% endcomment %}
   <div x-data class="flex flex-wrap items-center gap-2 justify-between mb-4">
-    <div class="join">
-      <button type="button" class="btn btn-ghost btn-sm join-item"
-              :class="{ 'btn-active': $store.credit.viewMode === 'by-member' }"
-              @click="$store.credit.setView('by-member')">
-        {# table-cells #}
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m0 0h-7.5m-9 0h7.5m0 0c.621 0 1.125.504 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 1.5v-1.5m0 0c0-.621.504-1.125 1.125-1.125m0 0h7.5" />
-        </svg>
-        Contributions by member
-      </button>
-      <button type="button" class="btn btn-ghost btn-sm join-item"
-              :class="{ 'btn-active': $store.credit.viewMode === 'every' }"
-              @click="$store.credit.setView('every')">
-        {# list-bullet #}
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-             stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-        </svg>
-        Every contribution
-      </button>
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="join">
+        <button type="button" class="btn btn-ghost btn-sm join-item"
+                :class="{ 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15': $store.credit.viewMode === 'by-member' }"
+                @click="$store.credit.setView('by-member')">
+          {# table-cells #}
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m0 0h-7.5m-9 0h7.5m0 0c.621 0 1.125.504 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 1.5v-1.5m0 0c0-.621.504-1.125 1.125-1.125m0 0h7.5" />
+          </svg>
+          Contributions by member
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm join-item"
+                :class="{ 'bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/15': $store.credit.viewMode === 'every' }"
+                @click="$store.credit.setView('every')">
+          {# list-bullet #}
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+               stroke-width="1.8" stroke="currentColor" class="w-4 h-4 shrink-0" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+          </svg>
+          Every contribution
+        </button>
+      </div>
     </div>
-
-    {% if matrix.totals.grand_total > 0 %}
-      {% url 'contributions:project_contributions_csv' project_pk=project.pk as csv_url %}
-      {% if is_project_manager %}
-        {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" %}
-      {% else %}
-        {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" %}
+    <div class="flex flex-wrap items-center gap-2">
+      {% if matrix.totals.grand_total > 0 %}
+        {% url 'contributions:project_contributions_csv' project_pk=project.pk as csv_url %}
+        {% if is_project_manager %}
+          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" list_url=csv_url|add:"?format=list" %}
+        {% else %}
+          {% include "contributions/_download_buttons.html" with matrix_url=csv_url|add:"?format=matrix" %}
+        {% endif %}
       {% endif %}
-    {% endif %}
+      {% if is_project_manager %}
+        {% include "contributions/partials/add_button.html" %}
+      {% endif %}
+    </div>
   </div>
 
   <div x-data>

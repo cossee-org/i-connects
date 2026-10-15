@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Survey &mdash; {{ project.name }}{% endblock %}
+{% block title %}Surveys &mdash; {{ project.name }}{% endblock %}
 
 {% block page_header %}
   <header class="mb-6">
@@ -9,5 +9,12 @@
 {% endblock %}
 
 {% block content %}
-{% include "_components/empty_state.html" with title="Coming soon" body="Survey is on the way. Check back later." %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="flex items-center gap-2">
+    <h2 class="text-lg font-semibold text-brand-navy">Surveys</h2>
+    {% include "_components/info_popover.html" with label="Surveys" body="Every survey created for collecting information in this project." %}
+  </div>
+</div>
+
+{% include "_components/empty_state.html" with title="Coming soon" body="Surveys are on the way. Check back later." %}
 {% endblock %}
