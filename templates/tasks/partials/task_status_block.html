@@ -15,6 +15,11 @@
      {% endif %}
      hx-trigger="assignees-changed from:body"
      hx-swap="outerHTML"
+     {% if pane_mode and marks_locked %}
+       x-data="{ lockedNotice: false, lockedTimer: null,
+                 showLocked() { this.lockedNotice = true; clearTimeout(this.lockedTimer);
+                                this.lockedTimer = setTimeout(() => this.lockedNotice = false, 6000) } }"
+     {% endif %}
      class="brand-card p-4">
   <div class="flex items-center justify-between gap-3 flex-wrap">
     <div class="flex items-center gap-2">
@@ -117,6 +122,9 @@
         .completion-tick-review:checked { background: #7c3aed; border-color: #7c3aed; }
         .completion-tick:disabled { cursor: default; }
         .completion-tick:disabled:not(:checked) { opacity: 0.45; }
+        .completion-tick[aria-disabled="true"] { cursor: not-allowed; }
+        .completion-tick[aria-disabled="true"]:not(:checked) { opacity: 0.45; }
+        .completion-locked-notice { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
         .completion-tick:focus-visible { outline: 2px solid #f03d30; outline-offset: 2px; }
       </style>
       <table class="completion-table" data-assignee-rows>
@@ -173,7 +181,27 @@
                 @click="rowsExpanded = !rowsExpanded"
                 x-text="rowsExpanded ? 'See less' : 'See more'">See more</button>
       {% endif %}
-      {% if not marks_locked %}
+      {% if marks_locked %}
+        {% comment %}
+          Hidden until someone clicks a box on the completed task: then it
+          says why nothing changed, and goes again after a few seconds. The
+          live region stays in the page so the message is read out when it
+          appears.
+        {% endcomment %}
+        <div id="task-locked-notice" role="status" aria-live="polite">
+          <p class="completion-locked-notice mt-2 flex items-start gap-2 rounded-md px-3 py-2 text-xs"
+             x-show="lockedNotice" x-cloak x-transition.opacity data-locked-notice>
+            {# lock-closed #}
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+            </svg>
+            <span>
+              This task is already marked completed, so its records are locked.
+              {% if is_project_manager %}Mark it not complete first to change them.{% else %}A Lead has to mark it not complete before they can change.{% endif %}
+            </span>
+          </p>
+        </div>
+      {% else %}
         <p class="mt-2 text-xs text-brand-text/60">Tick to mark, untick to undo.</p>
       {% endif %}
     {% else %}

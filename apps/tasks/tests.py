@@ -4082,6 +4082,56 @@ def test_completed_task_has_no_locked_note(client, user, other_user):
     assert MARK_NOT_DONE in reopened
 
 
+@pytest.mark.django_db
+def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, other_user):
+    """On a completed task every Done and Reviewed box is locked: it keeps its
+    state, posts nothing, and a click shows a notice that the task has to be
+    marked not complete first. Reopening drops the lock and the notice."""
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=contrib)
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "data-locked" not in pane and "task-locked-notice" not in pane
+
+    closed = client.post(
+        reverse("tasks:close", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    for html in (closed, client.get(_pane_url(project, task)).content.decode()):
+        rows = _rows(html)
+        # Two rows, a Done and a Reviewed box each: all four locked.
+        assert rows.count("data-locked") == 4
+        assert rows.count('@click.prevent="showLocked()"') == 4
+        assert "hx-post" not in rows
+        # The marks already made still read as ticked.
+        row = _row_for(html, contrib)
+        assert row.count(" checked") == 2 and "(locked)" in row
+        # The notice is there, hidden until a click, and tells a Lead what to do.
+        assert 'id="task-locked-notice"' in html and 'x-show="lockedNotice"' in html
+        assert "already marked completed" in html
+        assert "Mark it not complete first" in html
+
+    # Someone who is not a Lead is told a Lead has to reopen it.
+    client.force_login(other_user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "A Lead has to mark it not complete" in pane
+
+    client.force_login(user)
+    reopened = client.post(
+        reverse("tasks:reopen", kwargs={"pk": task.pk}),
+        {"pane_mode": "1"},
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert "data-locked" not in reopened and "task-locked-notice" not in reopened
+    assert "Tick to mark, untick to undo." in reopened
+
+
 def _sole_assignee_task(user, other_user, *, name="Reviewed to done"):
     """A task with one assignee and the Lead as its only reviewer.
 

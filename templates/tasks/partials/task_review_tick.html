@@ -6,10 +6,20 @@
 
   The same rules as before: only a part marked done can be reviewed, by one
   of the task's reviewers or a Lead (``s.can_review``); a review can be
-  withdrawn by whoever gave it or a Lead (``s.can_unreview``). Everyone else,
-  and everyone once the task is marked completed, sees it read-only.
+  withdrawn by whoever gave it or a Lead (``s.can_unreview``). Everyone else
+  sees it read-only.
+
+  Once the task is marked completed, a click shows the card's locked notice
+  instead of toggling the box — see task_done_tick.html.
 {% endcomment %}
-{% if s.reviewed %}
+{% if marks_locked %}
+  <input type="checkbox" class="completion-tick completion-tick-review"{% if s.reviewed %} checked{% endif %}
+         aria-disabled="true" data-locked
+         aria-describedby="task-locked-notice"
+         aria-label="{{ s.member.display_name }}: {% if s.reviewed %}reviewed{% else %}not reviewed{% endif %} (locked)"
+         title="Locked: the task is marked completed"
+         @click.prevent="showLocked()">
+{% elif s.reviewed %}
   {% if s.can_unreview %}
     <input type="checkbox" class="completion-tick completion-tick-review" checked
            hx-post="{% url 'tasks:review_log' pk=task.pk log_pk=s.log.pk %}"
