@@ -2247,7 +2247,8 @@ def test_cancel_invitation_asks_first(client, user):
 
 @pytest.mark.django_db
 def test_members_table_shows_when_each_member_joined(client, user, other_user):
-    """A sortable Joined column gives the date the membership was created."""
+    """A sortable Joined column gives the date the membership was created,
+    written as tasks write dates ("Mar 4, 2026")."""
     from datetime import datetime, timezone as dt_tz
 
     project = create_project_with_owner(
@@ -2272,7 +2273,7 @@ def test_members_table_shows_when_each_member_joined(client, user, other_user):
     row = content[content.index(f'id="member-row-{member.pk}"') :]
     row = row[: row.index("</tr>")]
     assert f'data-sort-joined="{int(joined.timestamp())}"' in row
-    assert '<td class="text-xs text-brand-text/70">2026-03-04</td>' in row
+    assert '<td class="text-xs text-brand-text/70 whitespace-nowrap">Mar 4, 2026</td>' in row
 
 
 @pytest.mark.django_db

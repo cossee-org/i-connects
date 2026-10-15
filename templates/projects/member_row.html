@@ -55,7 +55,7 @@ and oob to send it as an htmx out-of-band swap (projects.views._viewer_row_oob).
     request, or being added with the project. Someone removed and back again
     keeps their membership, so this stays the date they first joined.
   {% endcomment %}
-  <td class="text-xs text-brand-text/70">{{ row.member.created_at|date:"Y-m-d" }}</td>
+  <td class="text-xs text-brand-text/70 whitespace-nowrap">{{ row.member.created_at|date:"M j, Y" }}</td>
   <td class="text-right">
     {% if user_privilege == "PROJECT_MANAGER" %}
     <div class="flex justify-end gap-2">
