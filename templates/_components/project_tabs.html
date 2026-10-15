@@ -2,7 +2,7 @@
 {# base.html includes this on project-scoped pages for project members.         #}
 {# Tabs: Project (detail), Tasks (Kanban board), Contributors (members),        #}
 {# Contribution Tracking, Wiki, Surveys, Communications, and Settings for a     #}
-{# lead. Surveys and Communications are placeholders for now.                   #}
+{# lead. Surveys and Communications are placeholders, hidden for now.          #}
 {% with am=request.resolver_match.app_name un=request.resolver_match.url_name %}
 <nav class="project-subnav" aria-label="Project sections">
   <div class="project-subnav-inner">
@@ -49,8 +49,10 @@
     {% comment %}
       Surveys keeps its old route name (`projects:project_forms`) and path:
       the module is still the forms_builder one underneath, and only its
-      user-facing name changed.
+      user-facing name changed. Surveys and Communications are hidden for
+      now (SHOW_SURVEYS_AND_COMMUNICATIONS), not removed.
     {% endcomment %}
+    {% if show_surveys_and_communications %}
     <a href="{% url 'projects:project_forms' pk=project.pk %}"
        class="project-tab{% if am == 'projects' and un == 'project_forms' %} active{% endif %}"
        {% if am == 'projects' and un == 'project_forms' %}aria-current="page"{% endif %}>
@@ -67,6 +69,7 @@
       </svg>
       Communications
     </a>
+    {% endif %}
     {% if user_privilege == "PROJECT_MANAGER" %}
     <a href="{% url 'projects:update' pk=project.pk %}"
        class="project-tab{% if am == 'projects' and un == 'update' %} active{% endif %}"

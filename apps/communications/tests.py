@@ -5,11 +5,17 @@ surfaces answer, the project one is members-only, and the navigation names
 the two modules and reaches them. The label assertions are here because a
 rename regresses silently — nothing else fails when a tab goes back to
 saying "Forms".
+
+Both modules are hidden from the navigation for now
+(SHOW_SURVEYS_AND_COMMUNICATIONS off), so the navigation tests turn the
+setting on, and the hidden-by-default tests guard that nothing is drawn
+while the pages still answer.
 """
 
 from __future__ import annotations
 
 import pytest
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.core.enums import MemberPrivileges, ProjectStatus
@@ -47,6 +53,7 @@ def _project_url(project):
 # The sidebar
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
+@override_settings(SHOW_SURVEYS_AND_COMMUNICATIONS=True)
 def test_the_sidebar_carries_surveys_then_communications(client, user):
     client.force_login(user)
 
@@ -68,6 +75,7 @@ def test_the_sidebar_carries_surveys_then_communications(client, user):
 
 
 @pytest.mark.django_db
+@override_settings(SHOW_SURVEYS_AND_COMMUNICATIONS=True)
 def test_the_sidebar_marks_each_module_active_on_its_own_page(client, user):
     client.force_login(user)
 
@@ -81,6 +89,21 @@ def test_the_sidebar_marks_each_module_active_on_its_own_page(client, user):
     # And neither claims the other's page.
     assert comms_link not in surveys
     assert surveys_link not in comms
+
+
+@pytest.mark.django_db
+def test_the_sidebar_hides_surveys_and_communications_by_default(client, user):
+    client.force_login(user)
+
+    content = client.get(reverse("projects:dashboard")).content.decode()
+
+    sidebar = content[content.index('aria-label="Primary"'):]
+    sidebar = sidebar[: sidebar.index("</nav>")]
+    assert reverse("forms_builder:form_list") not in sidebar
+    assert reverse("communications:list") not in sidebar
+    # Hidden, not removed: both pages still answer.
+    assert client.get(reverse("forms_builder:form_list")).status_code == 200
+    assert client.get(reverse("communications:list")).status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +147,7 @@ def test_the_surveys_page_answers_under_its_new_name(client, user):
 # The project section
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
+@override_settings(SHOW_SURVEYS_AND_COMMUNICATIONS=True)
 def test_a_member_sees_the_project_communications_section(client, project, pm_user):
     client.force_login(pm_user)
 
@@ -154,6 +178,7 @@ def test_the_project_section_is_members_only(client, project, other_user):
 
 
 @pytest.mark.django_db
+@override_settings(SHOW_SURVEYS_AND_COMMUNICATIONS=True)
 def test_the_project_tab_strip_names_both_modules(client, project, pm_user):
     client.force_login(pm_user)
 
@@ -173,6 +198,26 @@ def test_the_project_tab_strip_names_both_modules(client, project, pm_user):
     assert "Forms" not in strip
     # Communications comes after Surveys, and Settings stays last.
     assert strip.index("Surveys") < strip.index("Communications") < strip.index("Settings")
+
+
+@pytest.mark.django_db
+def test_the_project_tab_strip_hides_both_modules_by_default(client, project, pm_user):
+    client.force_login(pm_user)
+
+    content = client.get(
+        reverse("projects:detail", kwargs={"pk": project.pk})
+    ).content.decode()
+
+    strip = content[content.index('aria-label="Project sections"'):]
+    strip = strip[: strip.index("</nav>")]
+    assert reverse("projects:project_forms", kwargs={"pk": project.pk}) not in strip
+    assert _project_url(project) not in strip
+    assert "Settings" in strip
+    # Hidden, not removed: both project pages still answer.
+    assert client.get(
+        reverse("projects:project_forms", kwargs={"pk": project.pk})
+    ).status_code == 200
+    assert client.get(_project_url(project)).status_code == 200
 
 
 # ---------------------------------------------------------------------------

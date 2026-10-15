@@ -130,6 +130,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "apps.projects.context_processors.sidebar_counts",
                 "apps.notifications.context_processors.unread_notifications",
+                "apps.core.context_processors.module_visibility",
             ],
         },
     },
@@ -282,6 +283,11 @@ AWS_SES_REGION_ENDPOINT = env("AWS_SES_REGION_ENDPOINT", "email.us-east-1.amazon
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "i-connects <noreply@iconnects.local>")
 SITE_URL = env("SITE_URL", "")
+
+# Surveys and Communications are hidden for now: their sidebar links and
+# project tabs are not drawn. The pages and routes are untouched, so turning
+# this on brings both back as they were.
+SHOW_SURVEYS_AND_COMMUNICATIONS = env_bool("SHOW_SURVEYS_AND_COMMUNICATIONS", False)
 
 # ---------------------------------------------------------------------------
 # Logging
