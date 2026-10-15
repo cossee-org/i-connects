@@ -57,12 +57,7 @@
                   <div class="font-medium text-brand-navy">{{ invitation.email }}</div>
                 {% endif %}
               </td>
-              <td>
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                  {% if invitation.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-                  {{ invitation.get_privilege_display }}
-                </span>
-              </td>
+              <td class="text-xs text-brand-text/80">{{ invitation.get_privilege_display }}</td>
               <td class="text-xs text-brand-text/70">{{ invitation.added_by }}</td>
               <td class="text-xs text-brand-text/70">{{ invitation.created_at|date:"Y-m-d" }}</td>
               <td class="text-right">

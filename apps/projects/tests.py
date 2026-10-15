@@ -2012,3 +2012,27 @@ def test_invitation_requests_table_sorts_by_every_header_but_actions(client, use
     assert 'data-sort-invited="eve@example.org"' in row
     assert 'data-sort-privilege="0"' in row
     assert f'data-sort-date="{int(invitation.created_at.timestamp())}"' in row
+
+
+@pytest.mark.django_db
+def test_pending_requests_tables_show_privilege_as_plain_text(client, user, other_user):
+    """Requested as and Privilege read as plain text, not a pill."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    JoinRequest.objects.create(
+        project=project, user=other_user,
+        requested_privilege=MemberPrivileges.PROJECT_MANAGER,
+    )
+    Invitation.objects.create(
+        project=project, email="eve@example.org",
+        privilege=MemberPrivileges.CONTRIBUTOR, invitation_code="plain",
+    )
+    client.force_login(user)
+
+    for name, label in (("join_requests", "Lead"), ("project_invitations", "Member")):
+        content = client.get(reverse(f"projects:{name}", kwargs={"pk": project.pk})).content.decode()
+        tbody = content[content.index("<tbody") : content.index("</tbody>")]
+        assert f'<td class="text-xs text-brand-text/80">{label}</td>' in tbody, name
+        assert "rounded-full" not in tbody, f"{name} still draws a pill"

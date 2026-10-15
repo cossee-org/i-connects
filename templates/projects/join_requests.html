@@ -52,12 +52,7 @@
                 <div class="font-medium text-brand-navy">{{ jr.user.name|default:jr.user.email }}</div>
                 <div class="text-xs text-brand-text/60">{{ jr.user.email }}</div>
               </td>
-              <td>
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                  {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-                  {{ jr.get_requested_privilege_display }}
-                </span>
-              </td>
+              <td class="text-xs text-brand-text/80">{{ jr.get_requested_privilege_display }}</td>
               <td class="max-w-md text-xs text-brand-text/80 whitespace-pre-line">{{ jr.message|default:"—" }}</td>
               <td class="text-xs text-brand-text/70">{{ jr.created_at|date:"Y-m-d H:i" }}</td>
               <td class="text-right">
