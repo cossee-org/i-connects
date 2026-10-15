@@ -67,13 +67,11 @@
       <h3 class="text-lg font-semibold text-brand-navy">Completion</h3>
       {% endif %}
       {% comment %}
-        On a task under review, the parts both done and reviewed. Without
-        review the matrix's Marked done bar already gives the done count, so
-        it is not repeated here; the plain layout, which has no bar, keeps it.
+        No count beside the heading in the matrix layout: its Marked done and
+        Reviewed bars already say how far along the parts are. The plain
+        layout, which has no bars, keeps its done count.
       {% endcomment %}
-      {% if show_review %}
-        <span class="text-xs text-brand-text/60">{{ complete_count }} of {{ assignee_count }} complete</span>
-      {% elif not pane_mode %}
+      {% if not pane_mode %}
         <span class="text-xs text-brand-text/60">{{ done_count }} of {{ assignee_count }} done</span>
       {% endif %}
     </div>

@@ -1458,9 +1458,9 @@ def test_task_cards_show_only_the_blue_completed_check(client, user, other_user)
 
 @pytest.mark.django_db
 def test_completion_card_separates_done_and_reviewed_progress(client, user, other_user, pm_user):
-    """Marked done and Reviewed each get a labelled bar and count, and the
-    heading says how many parts are complete (done and reviewed). A task
-    without review shows the done bar alone, and its heading counts done."""
+    """Marked done and Reviewed each get a labelled bar and count, with no
+    count beside the heading — the bars already say how far along it is. A
+    task without review shows the done bar alone."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -1473,7 +1473,7 @@ def test_completion_card_separates_done_and_reviewed_progress(client, user, othe
     client.force_login(user)
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "1 of 3 complete" in pane
+    assert "complete</span>" not in pane
     progress = pane[pane.index("data-progress") : pane.index("data-assignee-rows")]
     assert progress.index("Marked done") < progress.index("2 of 3") < progress.index("Reviewed") < progress.index("1 of 3")
     assert "bg-success" in progress and "bg-violet-600" in progress
@@ -1486,7 +1486,7 @@ def test_completion_card_separates_done_and_reviewed_progress(client, user, othe
     detail = client.get(
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
-    assert "1 of 3 complete" in detail
+    assert "complete</span>" not in detail
 
     # No review on the task: one bar, and no count beside the heading — the
     # bar already says how many are done.
