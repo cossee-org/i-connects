@@ -69,13 +69,11 @@
                       Resend
                     </button>
                   </form>
-                  <form method="post"
-                        action="{% url 'projects:cancel_invitation' pk=project.pk invitation_pk=invitation.pk %}">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-ghost text-error hover:bg-error/10">
-                      Cancel
-                    </button>
-                  </form>
+                  {# Asks first: openCancelInvitationModal() below posts the cancel. #}
+                  <button type="button" class="btn btn-sm btn-ghost text-error hover:bg-error/10"
+                          onclick="openCancelInvitationModal('{% url 'projects:cancel_invitation' pk=project.pk invitation_pk=invitation.pk %}', '{{ invitation.invited_user.name|default:invitation.email|escapejs }}')">
+                    Cancel
+                  </button>
                 </div>
               </td>
             </tr>
@@ -87,4 +85,40 @@
 {% else %}
   {% include "_components/empty_state.html" with title="No pending invitations" body="All invitations have been accepted, declined, or cancelled." %}
 {% endif %}
+
+{% comment %}
+  Cancel's confirmation, in the design of the Contributors table's Remove
+  modal: cancelling deletes the invitation and its link stops working, so
+  there is no undoing it; inviting the person again means sending a new
+  invitation. openCancelInvitationModal() points the form at the row's
+  cancel URL; the form posts it as the row's Cancel used to.
+{% endcomment %}
+<dialog id="cancel-invitation-modal" class="modal">
+  <div class="modal-box border border-error/40">
+    <h3 class="text-lg font-semibold text-error">Cancel invitation</h3>
+    <p class="mt-3 text-brand-text">
+      Cancel the invitation to <strong id="cancel-invitation-name"></strong>? This cannot be undone. To invite them again, a new invitation will need to be sent.
+    </p>
+    <div class="flex gap-2 justify-end mt-6">
+      <form method="dialog" class="contents">
+        <button class="btn btn-ghost">Keep invitation</button>
+      </form>
+      <form method="post" id="cancel-invitation-form" class="contents">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline btn-error">Cancel invitation</button>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<script>
+window.openCancelInvitationModal = function (url, name) {
+  document.getElementById('cancel-invitation-name').textContent = name;
+  document.getElementById('cancel-invitation-form').action = url;
+  document.getElementById('cancel-invitation-modal').showModal();
+};
+</script>
 {% endblock %}

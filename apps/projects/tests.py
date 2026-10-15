@@ -2207,3 +2207,39 @@ def test_review_join_request_modal_is_the_plain_modal(client, user, other_user):
     assert "Keen to help" in html
     assert html.index(">Cancel<") < html.index(">Decline<") < html.index("Approve")
     assert "rounded-full" not in html and "btn-circle" not in html
+
+
+@pytest.mark.django_db
+def test_cancel_invitation_asks_first(client, user):
+    """Cancel opens a confirmation, in the Remove modal's design, that says
+    it cannot be undone and that a new invitation is needed to invite them
+    again; the row itself no longer posts the cancel."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    invitation = Invitation.objects.create(
+        project=project, email="eve@example.org",
+        privilege=MemberPrivileges.CONTRIBUTOR, invitation_code="askfirst",
+    )
+    client.force_login(user)
+    cancel_url = reverse(
+        "projects:cancel_invitation",
+        kwargs={"pk": project.pk, "invitation_pk": invitation.pk},
+    )
+
+    content = client.get(
+        reverse("projects:project_invitations", kwargs={"pk": project.pk})
+    ).content.decode()
+    tbody = content[content.index("<tbody") : content.index("</tbody>")]
+    assert f"openCancelInvitationModal('{cancel_url}', 'eve@example.org')" in tbody
+    assert f'action="{cancel_url}"' not in tbody, "the row no longer cancels at once"
+    modal = content[content.index('id="cancel-invitation-modal"') :]
+    modal = modal[: modal.index("</dialog>")]
+    assert 'class="modal-box border border-error/40"' in modal
+    assert "This cannot be undone." in modal
+    assert "a new invitation will need to be sent" in modal
+
+    # The confirmation's form posts to the same endpoint, which still cancels.
+    client.post(cancel_url)
+    assert not Invitation.objects.filter(pk=invitation.pk).exists()
