@@ -2,12 +2,10 @@
   Hand-entered credit, loaded into #contribution-modal-body via HTMX.
   Posts back to itself so validation errors come back into the modal.
 {% endcomment %}
-<h2 class="text-lg font-semibold text-brand-navy mb-1">Add a contribution</h2>
-<p class="text-sm text-brand-text/70 mb-4">
-  For work the ledger missed &mdash; someone who did the task without being an
-  assignee, or whose done mark never went in. It will be marked as entered by
-  hand, and left alone if the task is reopened.
-</p>
+<div class="flex items-center gap-2 mb-4">
+  <h2 class="text-lg font-semibold text-brand-navy">Add a contribution</h2>
+  {% include "_components/info_popover.html" with label="Add a contribution" body="For work the ledger missed — someone who did the task without being an assignee, or whose done mark never went in. It will be marked as entered by hand, and left alone if the task is reopened." %}
+</div>
 
 <form method="post"
       action="{% url 'contributions:contribution_add' project_pk=project.pk %}"

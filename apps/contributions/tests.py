@@ -1513,3 +1513,17 @@ def test_the_matrix_filter_toggle_flips_and_says_which_way(client, user):
     assert 'aria-pressed="true"' in on
     assert '"used": "0"' in on
     assert "btn btn-xs btn-primary" in on
+
+
+@pytest.mark.django_db
+def test_the_add_modal_keeps_its_explanation_behind_an_info_button(client, user):
+    """The modal's explanation opens from an (i) beside its title rather than
+    sitting under it as a paragraph."""
+    project, _col, _pm = _make_project(user)
+    client.force_login(user)
+
+    html = client.get(_add_url(project), headers={"hx-request": "true"}).content.decode()
+    assert 'aria-label="About Add a contribution"' in html
+    title_row = html[: html.index('aria-label="About Add a contribution"')]
+    assert "Add a contribution</h2>" in title_row
+    assert '<p class="text-sm text-brand-text/70 mb-4">' not in html
