@@ -71,15 +71,21 @@
 
     /* ── Project section tabs — same seamless underline style as the        */
     /* Requests/Tasks brand-tab bars: no background band, sits in the page's */
-    /* own container, only a border-bottom + coral underline on the active  */
+    /* own container, only a bottom rule + coral underline on the active    */
     /* tab change color.                                                    */
+    /* The row scrolls sideways on a narrow screen and never up and down:   */
+    /* overflow-x: auto alone turns overflow-y to auto as well, so the rule  */
+    /* is drawn as an inset shadow inside the row, under the tabs' own       */
+    /* underline, rather than as a border they overlap with a -1px margin —  */
+    /* that pixel of overlap was what scrolled vertically.                  */
     .project-subnav {
-      border-bottom: 1px solid #bdcbe8;
       margin-bottom: 1.5rem;
     }
     .project-subnav-inner {
       display: flex; align-items: stretch; gap: 1.5rem;
-      overflow-x: auto;
+      overflow-x: auto; overflow-y: hidden;
+      overscroll-behavior-x: contain;
+      box-shadow: inset 0 -1px 0 #bdcbe8;
     }
     .project-tab {
       display: inline-flex; align-items: center; gap: 0.5rem;
@@ -88,7 +94,6 @@
       color: #323895;
       white-space: nowrap;
       border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
       transition: color 0.15s ease, border-color 0.15s ease;
     }
     .project-tab:hover { color: #f03d30; }
