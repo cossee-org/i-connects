@@ -33,33 +33,8 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
       {% endif %}
     </div>
   </td>
-  <td>
-    {% if user_privilege == "PROJECT_MANAGER" and row.user %}
-      <form
-        hx-post="{% url 'projects:update_privilege' pk=project.pk member_pk=row.member.pk %}"
-        hx-target="#member-row-{{ row.member.pk }}"
-        hx-swap="outerHTML"
-        class="flex items-center gap-2"
-      >
-        {% csrf_token %}
-        {% if row.is_self and viewer_is_last_pm %}
-          <select name="privilege" disabled
-                  title="A project must always have at least one Lead."
-                  class="select select-bordered select-sm">
-            <option value="PROJECT_MANAGER" selected>Lead</option>
-          </select>
-        {% else %}
-          {{ row.form.privilege }}
-          <button class="btn btn-xs btn-ghost" type="submit">Save</button>
-        {% endif %}
-      </form>
-    {% else %}
-      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-        {% if row.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-        {{ row.privilege|privilege_label|default:"&mdash;" }}
-      </span>
-    {% endif %}
-  </td>
+  {# Plain text for everyone; a Lead changes it with Modify privilege under Actions. #}
+  <td class="text-xs text-brand-text/80">{{ row.privilege|privilege_label|default:"&mdash;" }}</td>
   {% if show_member_roles %}
   <td>
     <div class="flex flex-wrap gap-1">

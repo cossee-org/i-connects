@@ -2072,3 +2072,28 @@ def test_members_table_puts_the_email_under_the_name(client, user, other_user):
     row = content[content.index(f'id="member-row-{member.pk}"') :]
     name_cell = row[row.index("<td") : row.index("</td>")]
     assert name_cell.count(other_user.email) == 1
+
+
+@pytest.mark.django_db
+def test_members_table_shows_privilege_as_plain_text(client, user, other_user):
+    """The Privilege cell reads as plain text, for a Lead too: no inline
+    select, no pill."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    tbody = content[content.index("<tbody") : content.index("</tbody>")]
+    assert '<td class="text-xs text-brand-text/80">Member</td>' in tbody
+    assert '<td class="text-xs text-brand-text/80">Lead</td>' in tbody
+    assert "<select" not in tbody
+    assert "rounded-full text-xs font-medium" not in tbody
