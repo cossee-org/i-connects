@@ -40,7 +40,10 @@ any such edits into `build_guide.js` before running it.
 1. Install the tools: Playwright for Python (`pip install playwright pillow`
    and `playwright install chromium`), Node with the `docx` package
    (`npm install docx`), and LibreOffice Writer with `python3-uno`.
-2. With PostgreSQL and Redis running and `DATABASE_URL` / `REDIS_URL` set as
+2. Build the stylesheet the way the Docker image does (`npm ci` then
+   `npm run build:css`): the committed `static/css/output.css` can lag behind
+   the templates, and screenshots taken with it would miss newer styles.
+3. With PostgreSQL and Redis running and `DATABASE_URL` / `REDIS_URL` set as
    for local development, run:
 
    ```bash
@@ -52,7 +55,7 @@ any such edits into `build_guide.js` before running it.
    `tools/docs_settings.py` (emails are written to files so the script can
    follow the confirmation and invitation links), runs the scenario and
    re-saves every screenshot in `screenshots/`.
-3. Build the document and the PDF:
+4. Build the document and the PDF:
 
    ```bash
    node documentation/tools/build_guide.js

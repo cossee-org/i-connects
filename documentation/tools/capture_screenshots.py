@@ -178,19 +178,25 @@ def settle(pg, ms=500):
 
 
 HL = "outline: 3px solid #f03d30 !important; outline-offset: 3px !important; border-radius: 6px;"
+# For table cells, whose outline would be clipped by the table's edge.
+HL_INSET = "outline: 3px solid #f03d30 !important; outline-offset: -3px !important; border-radius: 6px;"
 
 
 def shot(pg, name, full=False, hl=()):
     """Screenshot the viewport (or the whole page) with ``hl`` outlined in red.
+
+    An item of ``hl`` is a locator, or a (locator, css) pair to outline it
+    some other way.
 
     A whole-page shot grows the viewport to the page's height rather than
     using Playwright's stitched full_page capture, which would paint the
     sticky top bar halfway down the image.
     """
     pg.wait_for_timeout(350)
-    for loc in hl:
+    for item in hl:
+        loc, css = item if isinstance(item, tuple) else (item, HL)
         loc.evaluate("(el, css) => { el.dataset.oldStyle = el.getAttribute('style') || '';"
-                     " el.setAttribute('style', el.dataset.oldStyle + ';' + css); }", HL)
+                     " el.setAttribute('style', el.dataset.oldStyle + ';' + css); }", css)
     if full:
         height = pg.evaluate("Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)")
         pg.set_viewport_size({"width": W, "height": max(H, height)})
@@ -244,23 +250,43 @@ def task_url(n):
     return f"/projects/1/tasks/{n}/"
 
 
+# The task's Completion table: one row per assignee, with round Done and
+# Reviewed tick boxes. Screenshots outline the table cell holding the box.
+OWN_DONE = "input[aria-label='Mark your part done']"
+OWN_UNDO = "input[aria-label='Mark your part not done']"
+TO_REVIEW = "input.completion-tick-review[hx-vals*='\"reviewed\": \"1\"']"
+
+
+def cell(pg, tick):
+    """The table cell holding ``tick``, for ``shot``'s ``hl``."""
+    return pg.locator(f"td:has({tick})").first, HL_INSET
+
+
+def show_completion(pg):
+    """Scroll the whole Completion card into view, keeping the task's title
+    above it in view too."""
+    pg.locator("table[data-assignee-rows]").first.evaluate(
+        "el => { el.scrollIntoView({block: 'end'}); window.scrollBy(0, 110); }")
+
+
 def mark_own(pg, n, comment=None, shots=None):
     go(pg, task_url(n))
     if comment:
         pg.fill("textarea[placeholder='Add a comment']", comment)
         pg.click("button:has-text('Comment')")
         settle(pg)
-    btn = pg.locator("button:has-text('Mark my part done')").first
     if shots:
-        shot(pg, shots[0], hl=[btn])
-    btn.click()
+        show_completion(pg)
+        shot(pg, shots[0], hl=[cell(pg, OWN_DONE)])
+    pg.locator(OWN_DONE).first.click()
     settle(pg)
     if shots:
-        shot(pg, shots[1], hl=[pg.locator("button:has-text('Undo my mark')").first])
+        show_completion(pg)
+        shot(pg, shots[1], hl=[cell(pg, OWN_UNDO)])
 
 
 def review_next(pg):
-    pg.locator("button:has-text('Mark reviewed')").first.click()
+    pg.locator(TO_REVIEW).first.click()
     settle(pg)
 
 
@@ -424,18 +450,21 @@ def s06_tasks(pg):
         doc = i == 0
         go(pg, "/projects/1/board/")
         if doc:
-            shot(pg, "06_board_empty", hl=[pg.locator("main :text-is('+ New task')").first])
-            pg.locator("main :text-is('+ New task')").first.click()
+            new = pg.locator("main button:text-is('New task')").first
+            shot(pg, "06_board_empty", hl=[new])
+            new.click()
             settle(pg, 300)
         else:
             go(pg, "/projects/1/tasks/new/")
         pg.fill("input[name=name]", t["name"])
         pg.fill("textarea[name=description]", t["desc"])
+        if not pg.input_value("select[name=container]"):
+            pg.select_option("select[name=container]", label="To Do")
         pg.select_option("select[name=contribution_type]", label=t["type"])
         pg.fill("input[name=start_date]", t["start"])
         pg.fill("input[name=deadline]", t["due"])
         if t.get("priority"):
-            pg.check("input[name=is_priority]")
+            pg.locator("label:has(input[name=is_priority])").click()
         if doc:
             pg.locator("input[name=name]").scroll_into_view_if_needed()
             shot(pg, "06_task_details")
@@ -476,10 +505,13 @@ def s08_review(pg):
     login(pg, SOFIA)
     shot(pg, "08_dashboard_to_review", hl=[pg.locator("main a:has-text('Collect eelgrass leaf samples')").first])
     go(pg, task_url(1))
-    shot(pg, "08_review_before", hl=[pg.locator("button:has-text('Mark reviewed')").first])
+    show_completion(pg)
+    shot(pg, "08_review_before", hl=[cell(pg, TO_REVIEW)])
     review_next(pg)
-    shot(pg, "08_review_partial", hl=[pg.locator("button:has-text('Mark reviewed')").first])
+    show_completion(pg)
+    shot(pg, "08_review_partial", hl=[cell(pg, TO_REVIEW)])
     review_next(pg)
+    show_completion(pg)
     shot(pg, "08_review_complete")
 
 
@@ -523,9 +555,12 @@ def s10_contributions(pg):
     login(pg, MAYA)
     go(pg, "/projects/1/contribution-tracking/")
     shot(pg, "10_by_member")
-    pg.locator("label:has-text('Only roles and members with contributions') input").first.check()
+    # Sort by a role (one click: most first) — Sofia, the protocol's author,
+    # moves to the top for Methodology.
+    sort = "#contributions-by-member-container th button:has-text('Methodology')"
+    pg.locator(sort).first.click()
     settle(pg)
-    shot(pg, "10_by_member_filtered", hl=[pg.locator("label:has-text('Only roles and members with contributions')").first])
+    shot(pg, "10_by_member_sorted", hl=[(pg.locator(sort).first, HL_INSET)])
     pg.click("text=Every contribution")
     settle(pg)
     add = pg.locator("main :text-is('Add contribution')").first
@@ -559,7 +594,7 @@ def s11_wiki(pg):
     print("11. Write a project wiki")
     login(pg, SOFIA)
     go(pg, "/projects/1/wiki/")
-    new = pg.locator("main a:has-text('New page')").first
+    new = pg.locator("main a:has-text('Write the first page')").first
     shot(pg, "11_wiki_empty", hl=[new])
     new.click()
     settle(pg, 800)
