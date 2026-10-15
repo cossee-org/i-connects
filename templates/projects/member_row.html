@@ -53,14 +53,14 @@ Context: row {member, user, privilege, is_self}, project, user_privilege, viewer
         Modify privilege opens the shared modal in projects/members.html,
         which posts to update_privilege and swaps this row. Only a member
         with a linked account has a privilege to change; the last Lead's own
-        row cannot step down, as with Remove. Both are full-shade buttons in
-        the shape of the Pending join requests table's Review: Modify
-        privilege in the theme's neutral grey, Remove in coral. Disabled,
+        row cannot step down, as with Remove. Modify privilege is a plain-text
+        button, like the Tasks tab's Manage columns; Remove is a full coral
+        one, like the Pending join requests table's Review. Disabled,
         daisyUI's own disabled look takes over.
       {% endcomment %}
       {% if row.user %}
         {% if row.is_self and viewer_is_last_pm %}
-          <button class="btn btn-sm btn-neutral"
+          <button class="btn btn-sm btn-ghost"
                   disabled
                   title="A project must always have at least one Lead.">
             Modify privilege
@@ -68,7 +68,7 @@ Context: row {member, user, privilege, is_self}, project, user_privilege, viewer
         {% else %}
           <button
             type="button"
-            class="btn btn-sm btn-neutral"
+            class="btn btn-sm btn-ghost"
             onclick="openPrivilegeModal('{% url 'projects:update_privilege' pk=project.pk member_pk=row.member.pk %}', '{{ row.user.name|default:row.user.email|escapejs }}', '{{ row.privilege|default:'' }}', 'member-row-{{ row.member.pk }}')"
           >
             Modify privilege
