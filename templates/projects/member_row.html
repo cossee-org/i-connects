@@ -29,7 +29,7 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
       {% endif %}
     </div>
   </td>
-  <td class="text-sm text-brand-text/80">{{ row.user.email|default:"&mdash;" }}</td>
+  <td class="text-xs text-brand-text/80">{{ row.user.email|default:"&mdash;" }}</td>
   <td>
     {% if user_privilege == "PROJECT_MANAGER" and row.user %}
       <form

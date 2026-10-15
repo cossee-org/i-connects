@@ -46,8 +46,8 @@
                   {{ jr.get_requested_privilege_display }}
                 </span>
               </td>
-              <td class="max-w-md text-sm text-brand-text/80 whitespace-pre-line">{{ jr.message|default:"—" }}</td>
-              <td class="text-sm text-brand-text/70">{{ jr.created_at|date:"Y-m-d H:i" }}</td>
+              <td class="max-w-md text-xs text-brand-text/80 whitespace-pre-line">{{ jr.message|default:"—" }}</td>
+              <td class="text-xs text-brand-text/70">{{ jr.created_at|date:"Y-m-d H:i" }}</td>
               <td class="text-right">
                 <button type="button"
                         class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
