@@ -58,10 +58,11 @@
       because the block is an HTMX swap target: state within it would reset
       to collapsed on every mark and review, so expanding to reach the sixth
       assignee and acting on them would make the row you were working in
-      vanish. Out here it survives the swap.
+      vanish. The header sort (sortKey, sortDesc) lives out here for the
+      same reason. Out here both survive the swap.
     {% endcomment %}
-    <div x-data="{ rowsExpanded: false }">
-    {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager assignee_states=status_block.assignee_states done_count=status_block.done_count marks_locked=status_block.marks_locked reviewed_count=status_block.reviewed_count complete_count=status_block.complete_count needs_review=status_block.needs_review show_review=status_block.show_review reviewers=status_block.reviewers assignee_count=status_block.assignee_count is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
+    <div x-data="{ rowsExpanded: false, sortKey: '', sortDesc: false }">
+    {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager assignee_states=status_block.assignee_states done_count=status_block.done_count marks_locked=status_block.marks_locked reviewed_count=status_block.reviewed_count needs_review=status_block.needs_review show_review=status_block.show_review reviewers=status_block.reviewers assignee_count=status_block.assignee_count is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
     </div>
 
     {% comment %}

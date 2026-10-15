@@ -12,7 +12,11 @@
 <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
   <div class="flex items-center gap-2">
     <h2 class="text-lg font-semibold text-brand-navy">Contributors</h2>
-    {% include "_components/info_popover.html" with label="Contributors" body="Everyone on this project, with their privilege and roles. Leads run the project and manage its members; members work on its tasks." %}
+    {% if show_member_roles %}
+      {% include "_components/info_popover.html" with label="Contributors" body="Everyone on this project, with their privilege and roles. Leads run the project and manage its members; members work on its tasks." %}
+    {% else %}
+      {% include "_components/info_popover.html" with label="Contributors" body="Everyone on this project, with their privilege. Leads run the project and manage its members; members work on its tasks." %}
+    {% endif %}
   </div>
 </div>
 {% if user_privilege == "PROJECT_MANAGER" %}
@@ -47,17 +51,31 @@
 {% if rows %}
   <div class="brand-card overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="table">
+      {% comment %}
+        Every header but Actions sorts the rows in the browser, ascending
+        first; clicking the active header flips the direction. Name and Roles
+        sort alphabetically, with no roles last either way; Privilege puts
+        Leads first; Joined sorts by date. A person's email sits under their
+        name rather than in a column of its own. Ties keep the server's order
+        (by member id, data-order), which is also the order before any
+        header is clicked. A row a privilege change swaps in carries its new
+        keys and stays where it is until the next sort. The sort itself is
+        sortableRows() in base.html.
+      {% endcomment %}
+      <table class="table" x-data="sortableRows()">
         <thead class="bg-brand-lighter text-brand-navy">
           <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Email</th>
-            <th scope="col">Privilege</th>
-            <th scope="col">Roles</th>
+            {% include "_components/sortable_header.html" with key="name" label="Name" %}
+            {% include "_components/sortable_header.html" with key="privilege" label="Privilege" %}
+            {# Roles is hidden for now (SHOW_MEMBER_ROLES), not removed. #}
+            {% if show_member_roles %}
+              {% include "_components/sortable_header.html" with key="roles" label="Roles" %}
+            {% endif %}
+            {% include "_components/sortable_header.html" with key="joined" label="Joined" %}
             <th scope="col" class="text-right">Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody x-ref="rows">
           {% for row in rows %}
             {% include "projects/member_row.html" with row=row project=project user_privilege=user_privilege %}
           {% endfor %}
@@ -97,6 +115,76 @@
     <button>close</button>
   </form>
 </dialog>
+
+{% if user_privilege == "PROJECT_MANAGER" %}
+{% comment %}
+  Modify privilege: one modal for every row. openPrivilegeModal() fills in
+  the member and their current privilege; Save posts the form to that row's
+  update_privilege URL and swaps the row it returns, then closes. A refusal
+  (a 4xx, such as the last Lead stepping down) keeps the modal open with
+  the reason.
+{% endcomment %}
+<dialog id="privilege-modal" class="modal" aria-labelledby="privilege-modal-title">
+  <div class="modal-box">
+    <h3 id="privilege-modal-title" class="text-lg font-semibold text-brand-navy">Modify privilege</h3>
+    <form id="privilege-form" class="mt-3">
+      {% csrf_token %}
+      <label for="privilege-select" class="block text-sm text-brand-text">
+        Privilege for <strong id="privilege-member-name"></strong>
+      </label>
+      <select id="privilege-select" name="privilege" class="select select-bordered w-full mt-2">
+        {% for value, label in privilege_choices %}
+          <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <p id="privilege-error" class="mt-2 text-sm text-error" role="alert" hidden></p>
+      <div class="flex gap-2 justify-end mt-6">
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('privilege-modal').close()">Cancel</button>
+        <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Save</button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  var modal = document.getElementById('privilege-modal');
+  var form = document.getElementById('privilege-form');
+  var select = document.getElementById('privilege-select');
+  var error = document.getElementById('privilege-error');
+
+  window.openPrivilegeModal = function (url, name, current, targetId) {
+    document.getElementById('privilege-member-name').textContent = name;
+    if (current) select.value = current;
+    error.hidden = true;
+    modal._url = url;
+    modal._target = targetId;
+    modal.showModal();
+  };
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    htmx.ajax('POST', modal._url, {
+      source: form,
+      target: '#' + modal._target,
+      swap: 'outerHTML'
+    });
+  });
+
+  form.addEventListener('htmx:afterRequest', function (event) {
+    if (event.detail.successful) {
+      modal.close();
+    } else {
+      error.textContent = (event.detail.xhr && event.detail.xhr.responseText) || 'The privilege could not be changed.';
+      error.hidden = false;
+    }
+  });
+}());
+</script>
+{% endif %}
 
 <script>
 (function () {

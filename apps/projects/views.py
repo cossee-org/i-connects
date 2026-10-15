@@ -7,6 +7,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -938,7 +939,7 @@ class ProjectDeleteView(ProjectManagerRequiredMixin, DeleteView):
 
 
 def _member_rows(project, *, viewer=None):
-    """Collect (member, user, privilege, privilege_form) dicts for a project.
+    """Collect (member, user, privilege) dicts for a project.
 
     When ``viewer`` is supplied, each row is annotated with ``is_self`` so
     the template can disable PM-mutating controls on the viewer's own row
@@ -970,12 +971,63 @@ def _member_rows(project, *, viewer=None):
                 "is_self": (
                     primary_user is not None and primary_user.id == viewer_id
                 ),
-                "form": MemberPrivilegeForm(
-                    initial={"privilege": effective or MemberPrivileges.CONTRIBUTOR}
-                ),
             }
         )
     return rows
+
+
+def _render_member_row(request, project, member, *, oob=False):
+    """One Contributors table row, as the members page draws it for ``request.user``.
+
+    ``oob`` marks it as an htmx out-of-band swap, so it can ride along with
+    another response and replace the row of the same id in place.
+    """
+    primary_user = member.users.first()
+    privilege = (
+        ProjectPrivilege.objects.filter(project=project, user=primary_user)
+        .values_list("privilege", flat=True)
+        .first()
+        if primary_user
+        else MemberPrivileges.CONTRIBUTOR
+    )
+    row = {
+        "member": member,
+        "user": primary_user,
+        "privilege": privilege,
+        "is_self": primary_user is not None and primary_user.id == request.user.id,
+    }
+    return render_to_string(
+        "projects/member_row.html",
+        {
+            "row": row,
+            "project": project,
+            "user_privilege": MemberPrivileges.PROJECT_MANAGER,
+            "viewer_is_last_pm": is_last_project_manager(
+                project=project, user=request.user
+            ),
+            "oob": oob,
+        },
+        request=request,
+    )
+
+
+def _viewer_row_oob(request, project, *, changed_member):
+    """The viewer's own row, out of band, after a change to someone else's.
+
+    Promoting, demoting or removing another member can make the viewer the
+    last Lead or stop them being it, which disables or enables their own
+    Modify privilege and Remove. Their row is redrawn with the change so it
+    does not wait for a reload. Empty when the change was to their own row,
+    which the response redraws anyway.
+    """
+    viewer_member = (
+        ProjectMember.objects.filter(project=project, users=request.user, deleted=False)
+        .exclude(pk=changed_member.pk)
+        .first()
+    )
+    if viewer_member is None:
+        return ""
+    return _render_member_row(request, project, viewer_member, oob=True)
 
 
 class ProjectMemberListView(
@@ -990,6 +1042,8 @@ class ProjectMemberListView(
             project=self.project, user=self.request.user
         )
         if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
+            # The Modify privilege modal's choices.
+            context["privilege_choices"] = MemberPrivileges.choices
             context["pending_join_request_count"] = JoinRequest.objects.filter(
                 project=self.project, status=JoinRequestStatus.PENDING
             ).count()
@@ -1144,24 +1198,24 @@ class UpdateMemberPrivilegeView(
             },
         )
 
-        row = {
-            "member": member,
-            "user": primary_user,
-            "privilege": new_privilege,
-            "is_self": primary_user.id == request.user.id,
-            "form": MemberPrivilegeForm(initial={"privilege": new_privilege}),
-        }
-        return render(
-            request,
-            "projects/member_row.html",
-            {
-                "row": row,
-                "project": self.project,
-                "user_privilege": MemberPrivileges.PROJECT_MANAGER,
-                "viewer_is_last_pm": is_last_project_manager(
-                    project=self.project, user=request.user
-                ),
-            },
+        if (
+            primary_user.id == request.user.id
+            and new_privilege != MemberPrivileges.PROJECT_MANAGER
+        ):
+            # A Lead who steps down no longer sees the page a Lead does: no
+            # actions in the table, no Invite member, no Settings tab. Reload
+            # it as they now see it rather than patching one row.
+            messages.success(
+                request,
+                f"You are now a {MemberPrivileges(new_privilege).label} of this project.",
+            )
+            response = HttpResponse("")
+            response["HX-Refresh"] = "true"
+            return response
+
+        return HttpResponse(
+            _render_member_row(request, self.project, member)
+            + _viewer_row_oob(request, self.project, changed_member=member)
         )
 
 
@@ -1209,8 +1263,11 @@ class RemoveMemberView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
             },
         )
         if request.headers.get("HX-Request"):
-            # Empty response removes the row via hx-swap="outerHTML".
-            return HttpResponse("")
+            # Empty main content removes the row via hx-swap="outerHTML";
+            # the viewer's own row rides along out of band.
+            return HttpResponse(
+                _viewer_row_oob(request, self.project, changed_member=member)
+            )
         return HttpResponseRedirect(
             reverse("projects:members", kwargs={"pk": self.project.pk})
         )

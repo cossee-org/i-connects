@@ -808,6 +808,13 @@ class TaskCreateView(
                 {"task": task, "project": self.project},
             )
             response["HX-Trigger"] = json.dumps({"task-created": {"id": task.id}})
+            if self.request.POST.get("autosave") == "1":
+                # Saved because its editor was closed by accident: the board
+                # reloads on task-created, and this says why the task is there.
+                messages.success(
+                    self.request,
+                    f"Task '{task.name}' was saved when its editor closed.",
+                )
             return response
         messages.success(self.request, f"Task '{task.name}' created.")
         next_url = self.request.POST.get("next")
@@ -1329,9 +1336,6 @@ def _task_status_context(task, *, project_member, is_project_manager):
         "assignee_states": assignee_states,
         "done_count": sum(1 for s in assignee_states if s["done"]),
         "reviewed_count": sum(1 for s in assignee_states if s["reviewed"]),
-        # Parts fully through: marked done and reviewed. What "N of M
-        # complete" counts on a task under review.
-        "complete_count": sum(1 for s in assignee_states if s["done"] and s["reviewed"]),
         "assignee_count": len(assignee_states),
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),

@@ -5,7 +5,7 @@ from __future__ import annotations
 from django import forms
 from django.contrib.auth import get_user_model
 
-from apps.core.enums import credit_role_choices
+from apps.core.enums import ContributionType, credit_role_choices
 from apps.tasks.models import Task
 
 from .models import ContributionRecord
@@ -78,3 +78,9 @@ class ContributionAddForm(forms.Form):
             pk__in=[u.pk for u in member_users]
         ).order_by("given_name", "family_name", "name", "email")
         self.fields["user"].label_from_instance = user_display_name
+        # "Other" is ours rather than CRediT's, but work that fits none of the
+        # 14 roles needs somewhere to go, so it is offered last, as on a
+        # task's type (TaskForm._init_task_type).
+        choices = credit_role_choices()
+        choices.append((ContributionType.OTHER, ContributionType.OTHER.label))
+        self.fields["contribution_type"].choices = choices

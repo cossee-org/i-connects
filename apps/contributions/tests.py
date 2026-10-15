@@ -632,8 +632,9 @@ def test_the_pages_offer_both_downloads(client, user, other_user):
     body = client.get(
         reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
     ).content.decode()
-    # Short labels on the tab ("Matrix", "List"); the aria-labels are whole.
+    # Both say "(CSV)" on the tab, as on My Contributions.
     assert 'aria-label="Download the contribution matrix as CSV"' in body and 'aria-label="Download the contribution list as CSV"' in body
+    assert "Matrix (CSV)" in body and "List (CSV)" in body
 
     body = client.get(reverse("contributions:contributions")).content.decode()
     assert "Matrix (CSV)" in body and "List (CSV)" in body
@@ -850,6 +851,26 @@ def test_the_add_form_offers_only_this_projects_tasks_and_members(
     assert list(form.fields["task"].queryset) == [mine_task]
     assert other_task not in form.fields["task"].queryset
     assert [u.pk for u in form.fields["user"].queryset] == [user.pk]
+
+
+@pytest.mark.django_db
+def test_the_add_form_offers_other_last(client, user, other_user):
+    """Other follows the 14 CRediT roles, and a contribution can be added
+    under it."""
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    task = _make_task(project, col, pm, assignees=[pm])
+
+    choices = ContributionAddForm(project=project).fields["contribution_type"].choices
+    assert choices[-1] == (ContributionType.OTHER, "Other")
+    assert len(choices) == 15
+
+    client.force_login(user)
+    client.post(
+        _add_url(project),
+        {"task": task.pk, "user": other_user.pk, "contribution_type": ContributionType.OTHER},
+    )
+    assert ContributionRecord.objects.get(user=other_user).contribution_type == ContributionType.OTHER
 
 
 @pytest.mark.django_db
@@ -1443,53 +1464,105 @@ def test_matrix_columns_use_the_same_order(client, user):
 
 
 @pytest.mark.django_db
-def test_the_matrix_filter_sits_in_the_view_switcher_row(client, user):
-    """Drawn once, by the page, beside "Every contribution" and above the grid."""
+def test_the_page_offers_no_with_contributions_only_filter(client, user):
+    """The "With contributions only" toggle is gone: not drawn by the page,
+    nor re-sent when the matrix is re-sorted."""
     project, col, pm = _make_project(user)
     _credit(project, col, pm, pm, ContributionType.SOFTWARE)
-
     client.force_login(user)
-    body = client.get(
+
+    page = client.get(
         reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
     ).content.decode()
-    assert body.count('id="matrix-filter"') == 1
-    assert "hx-swap-oob" not in body
-    assert (
-        body.index("setView('every')")
-        < body.index('id="matrix-filter"')
-        < body.index('id="contributions-by-member-container"')
-    )
-
-
-@pytest.mark.django_db
-def test_a_matrix_swap_refreshes_the_filter_with_the_current_sort(client, user):
-    """Re-sorting swaps only the grid, so it re-sends the filter out of band;
-    otherwise ticking the box afterwards would drop the new sort."""
-    project, col, pm = _make_project(user)
-    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
-
-    client.force_login(user)
-    body = client.get(
+    swap = client.get(
         _by_member_url(project), {"sort": "member", "dir": "desc"}
     ).content.decode()
-    assert '<div id="matrix-filter" hx-swap-oob="true"' in body
-    assert '"sort": "member", "dir": "desc"' in body
+    for body in (page, swap):
+        assert "With contributions only" not in body
+        assert 'id="matrix-filter"' not in body
 
 
 @pytest.mark.django_db
-def test_the_matrix_filter_toggle_flips_and_says_which_way(client, user):
-    """Off: plain, and a click asks for used=1. On: solid, and a click asks
-    for used=0."""
-    project, col, pm = _make_project(user)
-    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+def test_the_add_modal_keeps_its_explanation_behind_an_info_button(client, user):
+    """The modal's explanation opens from an (i) beside its title rather than
+    sitting under it as a paragraph."""
+    project, _col, _pm = _make_project(user)
     client.force_login(user)
 
-    off = client.get(_by_member_url(project)).content.decode()
-    assert 'aria-pressed="false"' in off
-    assert '"used": "1"' in off
-    assert "btn-ghost text-brand-navy" in off
+    html = client.get(_add_url(project), headers={"hx-request": "true"}).content.decode()
+    assert 'aria-label="About Add a contribution"' in html
+    title_row = html[: html.index('aria-label="About Add a contribution"')]
+    assert "Add a contribution</h2>" in title_row
+    assert '<p class="text-sm text-brand-text/70 mb-4">' not in html
 
-    on = client.get(_by_member_url(project), {"used": "1"}).content.decode()
-    assert 'aria-pressed="true"' in on
-    assert '"used": "0"' in on
-    assert "btn btn-xs btn-primary" in on
+
+@pytest.mark.django_db
+def test_the_add_modal_links_the_credit_roles_from_the_label_line(client, user):
+    """"CRediT roles ↗" on the CRediT role label line, as on a new task's
+    Task type, in place of the "What each role covers" line."""
+    project, _col, _pm = _make_project(user)
+    client.force_login(user)
+
+    html = client.get(_add_url(project), headers={"hx-request": "true"}).content.decode()
+    assert "What each role covers" not in html
+    assert ">credit.niso.org</a>" not in html
+    link = html.index("CRediT roles &#8599;")
+    assert html.index("CRediT role <span") < link < html.index('name="contribution_type"')
+    assert 'href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"' in html
+
+
+@pytest.mark.django_db
+def test_every_contribution_sorts_by_every_header_but_actions(client, user):
+    """Member, Task, Role, Completed and Closed by are sort buttons; Actions
+    is not; each row carries what it sorts by."""
+    project, col, pm = _make_project(user)
+    task = _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(user)
+    html = client.get(_every_url(project)).content.decode()
+    for key in ("member", "task", "role", "completed", "closer"):
+        assert f"@click=\"sortBy('{key}')\"" in html, key
+    assert '<th scope="col" class="text-right">Actions</th>' in html
+    row = html[html.index('data-order="0"') :]
+    row = row[: row.index(">")]
+    assert f'data-sort-task="{task.name.lower()}"' in row
+    assert 'data-sort-role="software"' in row
+    assert f'data-sort-completed="{int(record.closed_at.timestamp())}"' in row
+
+
+@pytest.mark.django_db
+def test_the_edit_modal_links_the_credit_roles_from_the_label_line(client, user):
+    """"CRediT roles ↗" on the CRediT role label line, as in Add a
+    contribution, in place of the "What each role covers" line."""
+    project, col, pm = _make_project(user)
+    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+    client.force_login(user)
+
+    html = client.get(_edit_url(project, record), headers={"hx-request": "true"}).content.decode()
+    assert "What each role covers" not in html
+    link = html.index("CRediT roles &#8599;")
+    assert html.index("CRediT role <span") < link < html.index('name="contribution_type"')
+
+
+@pytest.mark.django_db
+def test_withdrawing_asks_first_in_a_remove_style_modal(client, user):
+    """Withdraw opens a confirmation modal in the Remove design rather than
+    the browser's confirm box; its form posts the withdrawal."""
+    project, col, pm = _make_project(user)
+    task = _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+    client.force_login(user)
+
+    html = client.get(_edit_url(project, record), headers={"hx-request": "true"}).content.decode()
+    assert "hx-confirm" not in html
+    assert "showModal()\">Withdraw</button>" in html
+    modal = html[html.index('id="withdraw-contribution-modal"') :]
+    modal = modal[: modal.index("</dialog>")]
+    assert 'class="modal-box border border-error/40"' in modal
+    assert task.name in modal and "Keep contribution" in modal
+    assert f'hx-post="{_remove_url(project, record)}"' in modal
+
+    client.post(_remove_url(project, record), headers={"hx-request": "true"})
+    assert not ContributionRecord.objects.exists()

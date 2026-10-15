@@ -1458,9 +1458,9 @@ def test_task_cards_show_only_the_blue_completed_check(client, user, other_user)
 
 @pytest.mark.django_db
 def test_completion_card_separates_done_and_reviewed_progress(client, user, other_user, pm_user):
-    """Marked done and Reviewed each get a labelled bar and count, and the
-    heading says how many parts are complete (done and reviewed). A task
-    without review shows the done bar alone, and its heading counts done."""
+    """Marked done and Reviewed each get a labelled bar and count, with no
+    count beside the heading — the bars already say how far along it is. A
+    task without review shows the done bar alone."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -1473,7 +1473,7 @@ def test_completion_card_separates_done_and_reviewed_progress(client, user, othe
     client.force_login(user)
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "1 of 3 complete" in pane
+    assert "complete</span>" not in pane
     progress = pane[pane.index("data-progress") : pane.index("data-assignee-rows")]
     assert progress.index("Marked done") < progress.index("2 of 3") < progress.index("Reviewed") < progress.index("1 of 3")
     assert "bg-success" in progress and "bg-violet-600" in progress
@@ -1486,7 +1486,7 @@ def test_completion_card_separates_done_and_reviewed_progress(client, user, othe
     detail = client.get(
         reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
     ).content.decode()
-    assert "1 of 3 complete" in detail
+    assert "complete</span>" not in detail
 
     # No review on the task: one bar, and no count beside the heading — the
     # bar already says how many are done.
@@ -3044,10 +3044,18 @@ def test_the_matrix_hides_its_later_rows_and_keeps_them_open_across_a_swap(
         TaskLog.objects.create(task=task, assigned_to=m)
     client.force_login(user)
 
+    # Rows past the third are hidden by position (CSS nth-child), so the
+    # hidden ones follow a header sort; the table opens them all when
+    # rowsExpanded is on.
+    hide_rule = ".completion-table:not(.rows-expanded) tbody tr:nth-child(n+4) { display: none; }"
     for name, url in _task_surfaces(project, task).items():
         html = client.get(url).content.decode()
-        assert html.count('x-show="rowsExpanded"') == 2, f"{name} hid the wrong rows"
-        assert 'x-data="{ rowsExpanded: false }"' in html, f"{name} has nowhere to keep it"
+        assert html.count("data-assignee-row=") == 5, f"{name} dropped a row"
+        assert hide_rule in html, f"{name} hid no rows"
+        assert ":class=\"{ 'rows-expanded': rowsExpanded }\"" in html
+        assert (
+            "x-data=\"{ rowsExpanded: false, sortKey: '', sortDesc: false }\"" in html
+        ), f"{name} has nowhere to keep it"
 
     # The swap response carries the rows but not the state — that stayed put.
     swapped = client.post(
@@ -3055,8 +3063,40 @@ def test_the_matrix_hides_its_later_rows_and_keeps_them_open_across_a_swap(
         {"pane_mode": "1"},
         headers={"hx-request": "true"},
     ).content.decode()
-    assert 'x-show="rowsExpanded"' in swapped
+    assert "'rows-expanded': rowsExpanded" in swapped
     assert "rowsExpanded: false" not in swapped, "the swap would reset the toggle"
+    assert "sortKey: ''" not in swapped, "the swap would reset the sort"
+
+
+@pytest.mark.django_db
+def test_the_matrix_headers_sort_its_rows(client, user, other_user):
+    """Each header is a sort button, and each row carries what it sorts by.
+
+    The sort itself runs in the browser; what the server owes it is the keys:
+    the name, and for Done and Reviewed a time for the parts that have one,
+    with the rest after every time — awaiting review before not done.
+    """
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.set([lead])
+    when = timezone.now()
+    TaskLog.objects.filter(task=task, assigned_to=lead).update(
+        status=TaskStatus.COMPLETED, completed_at=when
+    )
+    client.force_login(user)
+
+    for name, url in _task_surfaces(project, task).items():
+        html = client.get(url).content.decode()
+        for key in ("name", "done", "reviewed"):
+            assert f"@click=\"sortBy('{key}')\"" in html, f"{name} cannot sort by {key}"
+        lead_row = html[html.index(f'data-assignee-row="{lead.pk}"') :]
+        lead_row = lead_row[: lead_row.index(">")]
+        assert f'data-sort-name="{lead.display_name.lower()}"' in lead_row
+        assert f'data-sort-done="{int(when.timestamp())}"' in lead_row
+        assert 'data-sort-reviewed="100000000000"' in lead_row, f"{name}: awaiting review"
+        contrib_row = html[html.index(f'data-assignee-row="{contrib.pk}"') :]
+        contrib_row = contrib_row[: contrib_row.index(">")]
+        assert 'data-sort-done="100000000000"' in contrib_row
+        assert 'data-sort-reviewed="200000000000"' in contrib_row
 
 
 @pytest.mark.django_db
@@ -3067,7 +3107,6 @@ def test_a_short_matrix_gets_no_see_more(client, user, other_user):
 
     for name, url in _task_surfaces(project, task).items():
         html = client.get(url).content.decode()
-        assert 'x-show="rowsExpanded"' not in html, f"{name} hid a row it should not"
         block = html[html.index('id="task-status-block"') :]
         block = block[: block.index("</div>")]
         assert "See more" not in block, f"{name} offers a toggle with nothing behind it"
@@ -5338,3 +5377,39 @@ def test_board_toolbar_groups_views_with_columns_and_ends_with_new_task(client, 
     assert "document.getElementById('columns-modal').showModal()" not in member
     create_url = reverse("tasks:create", kwargs={"project_pk": project.pk})
     assert f'hx-get="{create_url}"' not in member
+
+
+@pytest.mark.django_db
+def test_a_new_tasks_editor_saves_itself_when_closed_by_accident(client, user):
+    """The create form carries the accidental-close save; an edit form does
+    not. A save sent that way (autosave=1) creates the task like Save does
+    and leaves a note for the board's reload."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    client.force_login(user)
+    create_url = reverse("tasks:create", kwargs={"project_pk": project.pk})
+
+    form = client.get(create_url, headers={"hx-request": "true"}).content.decode()
+    assert "dialog.addEventListener('close'" in form
+    assert "autosave: '1'" in form
+    assert "dataset.discard = '1'" in form, "Cancel discards on purpose"
+
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Existing",
+    )
+    edit = client.get(
+        reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert "dialog.addEventListener('close'" not in edit
+
+    response = client.post(
+        create_url,
+        {"name": "Saved on close", "container": col1.pk, "autosave": "1"},
+        headers={"hx-request": "true"},
+    )
+    assert "task-created" in response["HX-Trigger"]
+    assert Task.objects.filter(project=project, name="Saved on close").exists()
+    board = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk})).content.decode()
+    assert "Task &#x27;Saved on close&#x27; was saved when its editor closed." in board

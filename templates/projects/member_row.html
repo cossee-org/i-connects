@@ -1,16 +1,34 @@
 {% load project_tags %}
 {% comment %}
 One row in the project members table. HTMX fragment — do NOT wrap in an extends tag.
-Context: row {member, user, privilege, is_self, form}, project, user_privilege, viewer_is_last_pm.
+Context: row {member, user, privilege, is_self}, project, user_privilege, viewer_is_last_pm,
+and oob to send it as an htmx out-of-band swap (projects.views._viewer_row_oob).
 {% endcomment %}
-<tr id="member-row-{{ row.member.pk }}" class="hover:bg-brand-lighter/40">
+{% comment %}
+  The data-sort-* keys feed the table's header sort (projects/members.html).
+  Privilege sorts by rank, Lead (0) before Member (1); data-order is the
+  member id, the server's own order.
+{% endcomment %}
+<tr id="member-row-{{ row.member.pk }}" class="hover:bg-brand-lighter/40"{% if oob %} hx-swap-oob="true"{% endif %}
+    data-order="{{ row.member.pk }}"
+    data-sort-name="{% if row.user %}{{ row.user.name|default:row.user.email|lower }}{% else %}{{ row.member.name|default:'unnamed'|lower }}{% endif %}"
+    data-sort-privilege="{% if row.privilege == 'PROJECT_MANAGER' %}0{% elif row.privilege == 'CONTRIBUTOR' %}1{% else %}2{% endif %}"
+    data-sort-roles="{% for r in row.member.roles.all %}{{ r.name|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}"
+    data-sort-joined="{{ row.member.created_at|date:'U' }}">
   <td>
     <div class="flex items-center gap-2">
       {% if row.user %}
         <span aria-hidden="true" class="w-8 h-8 rounded-full bg-brand-navy text-white flex items-center justify-center text-xs font-semibold shrink-0">
           {{ row.user.name|default:row.user.email|slice:":1"|upper }}
         </span>
-        <span class="text-brand-text font-medium">{{ row.user.name|default:row.user.email }}</span>
+        {# The email sits under the name, as on the Pending requests tables; #}
+        {# a person with no name already shows it as their name. #}
+        {# The name opens the person's profile, as on Every contribution. #}
+        <div class="min-w-0">
+          <a href="{% url 'public_profile' pk=row.user.pk %}"
+             class="block text-brand-text font-medium hover:text-brand-coral">{{ row.user.name|default:row.user.email }}</a>
+          {% if row.user.name %}<div class="text-xs text-brand-text/60">{{ row.user.email }}</div>{% endif %}
+        </div>
       {% else %}
         <span aria-hidden="true" class="w-8 h-8 rounded-full bg-brand-light text-brand-navy flex items-center justify-center text-xs font-semibold shrink-0">
           {{ row.member.name|default:"?"|slice:":1"|upper }}
@@ -19,34 +37,9 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
       {% endif %}
     </div>
   </td>
-  <td class="text-sm text-brand-text/80">{{ row.user.email|default:"&mdash;" }}</td>
-  <td>
-    {% if user_privilege == "PROJECT_MANAGER" and row.user %}
-      <form
-        hx-post="{% url 'projects:update_privilege' pk=project.pk member_pk=row.member.pk %}"
-        hx-target="#member-row-{{ row.member.pk }}"
-        hx-swap="outerHTML"
-        class="flex items-center gap-2"
-      >
-        {% csrf_token %}
-        {% if row.is_self and viewer_is_last_pm %}
-          <select name="privilege" disabled
-                  title="A project must always have at least one Lead."
-                  class="select select-bordered select-sm">
-            <option value="PROJECT_MANAGER" selected>Lead</option>
-          </select>
-        {% else %}
-          {{ row.form.privilege }}
-          <button class="btn btn-xs btn-ghost" type="submit">Save</button>
-        {% endif %}
-      </form>
-    {% else %}
-      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-        {% if row.privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-        {{ row.privilege|privilege_label|default:"&mdash;" }}
-      </span>
-    {% endif %}
-  </td>
+  {# Plain text for everyone; a Lead changes it with Modify privilege under Actions. #}
+  <td class="text-xs text-brand-text/80">{{ row.privilege|privilege_label|default:"&mdash;" }}</td>
+  {% if show_member_roles %}
   <td>
     <div class="flex flex-wrap gap-1">
       {% for r in row.member.roles.all %}
@@ -56,10 +49,43 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
       {% endfor %}
     </div>
   </td>
+  {% endif %}
+  {% comment %}
+    Joined: when the membership was created — joining by invitation or
+    request, or being added with the project. Someone removed and back again
+    keeps their membership, so this stays the date they first joined.
+  {% endcomment %}
+  <td class="text-xs text-brand-text/70 whitespace-nowrap">{{ row.member.created_at|date:"M j, Y" }}</td>
   <td class="text-right">
     {% if user_privilege == "PROJECT_MANAGER" %}
+    <div class="flex justify-end gap-2">
+      {% comment %}
+        Modify privilege opens the shared modal in projects/members.html,
+        which posts to update_privilege and swaps this row. Only a member
+        with a linked account has a privilege to change; the last Lead's own
+        row cannot step down, as with Remove. Modify privilege is a plain navy
+        button, like Resend on Pending invitation requests; Remove is red
+        text, like Cancel there. Disabled, daisyUI's own disabled look takes over.
+      {% endcomment %}
+      {% if row.user %}
+        {% if row.is_self and viewer_is_last_pm %}
+          <button class="btn btn-sm btn-ghost text-brand-navy hover:bg-brand-lighter"
+                  disabled
+                  title="A project must always have at least one Lead.">
+            Modify privilege
+          </button>
+        {% else %}
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost text-brand-navy hover:bg-brand-lighter"
+            onclick="openPrivilegeModal('{% url 'projects:update_privilege' pk=project.pk member_pk=row.member.pk %}', '{{ row.user.name|default:row.user.email|escapejs }}', '{{ row.privilege|default:'' }}', 'member-row-{{ row.member.pk }}')"
+          >
+            Modify privilege
+          </button>
+        {% endif %}
+      {% endif %}
       {% if row.is_self and viewer_is_last_pm %}
-        <button class="btn btn-xs btn-ghost text-error/50 cursor-not-allowed"
+        <button class="btn btn-sm btn-ghost text-error hover:bg-error/10"
                 disabled
                 title="A project must always have at least one Lead.">
           Remove
@@ -67,13 +93,14 @@ Context: row {member, user, privilege, is_self, form}, project, user_privilege, 
       {% else %}
         <button
           type="button"
-          class="btn btn-xs btn-ghost text-error hover:bg-error/10"
+          class="btn btn-sm btn-ghost text-error hover:bg-error/10"
           onclick="openRemoveMemberModal('{% url 'projects:remove_member' pk=project.pk member_pk=row.member.pk %}', '{{ row.user.name|default:row.user.email|escapejs }}', 'member-row-{{ row.member.pk }}')"
           title="Remove member"
         >
           Remove
         </button>
       {% endif %}
+    </div>
     {% endif %}
   </td>
 </tr>

@@ -15,42 +15,51 @@
      class="btn btn-sm btn-ghost text-brand-navy">&larr; All contributors</a>
 </div>
 
-<h2 class="text-lg font-semibold text-brand-navy">Pending join requests</h2>
-<p class="text-sm text-brand-text/70 mt-1 mb-5 max-w-2xl">
-  People asking to join this project, oldest first. Approve one to add them at the privilege they asked for, or decline it with an optional note to the requester.
-</p>
+<div class="flex items-center gap-2 mb-5">
+  <h2 class="text-lg font-semibold text-brand-navy">Pending join requests</h2>
+  {% include "_components/info_popover.html" with label="Pending join requests" body="People asking to join this project, oldest first. Approve one to add them at the privilege they asked for, or decline it with an optional note to the requester." %}
+</div>
 
 {% if join_requests %}
   <div class="brand-card overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="table">
+      {% comment %}
+        Every header but Actions sorts the rows in the browser (sortableRows()
+        in base.html), ascending first; clicking the active header flips the
+        direction. Requested as puts Leads first; Submitted sorts by time; an
+        empty message sorts last either way. Ties keep the server's order,
+        oldest first, which is also the order before any header is clicked.
+      {% endcomment %}
+      <table class="table" x-data="sortableRows()">
         <thead class="bg-brand-lighter text-brand-navy">
           <tr>
-            <th scope="col">User</th>
-            <th scope="col">Requested as</th>
-            <th scope="col">Message</th>
-            <th scope="col">Submitted</th>
+            {% include "_components/sortable_header.html" with key="user" label="User" %}
+            {% include "_components/sortable_header.html" with key="privilege" label="Requested as" %}
+            {% include "_components/sortable_header.html" with key="message" label="Message" %}
+            {% include "_components/sortable_header.html" with key="submitted" label="Submitted" %}
             <th scope="col" class="text-right">Actions</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody x-ref="rows">
           {% for jr in join_requests %}
-            <tr class="hover:bg-brand-lighter/40 align-top">
+            <tr class="hover:bg-brand-lighter/40 align-top"
+                data-order="{{ forloop.counter0 }}"
+                data-sort-user="{{ jr.user.name|default:jr.user.email|lower }}"
+                data-sort-privilege="{% if jr.requested_privilege == 'PROJECT_MANAGER' %}0{% else %}1{% endif %}"
+                data-sort-message="{{ jr.message|lower }}"
+                data-sort-submitted="{{ jr.created_at|date:'U' }}">
               <td>
-                <div class="font-medium text-brand-navy">{{ jr.user.name|default:jr.user.email }}</div>
+                {# The requester always has an account: the name opens their profile. #}
+                <a href="{% url 'public_profile' pk=jr.user.pk %}"
+                   class="block font-medium text-brand-navy hover:text-brand-coral">{{ jr.user.name|default:jr.user.email }}</a>
                 <div class="text-xs text-brand-text/60">{{ jr.user.email }}</div>
               </td>
-              <td>
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                  {% if jr.requested_privilege == 'PROJECT_MANAGER' %}bg-brand-coral/10 text-brand-coral{% else %}bg-brand-light/60 text-brand-text{% endif %}">
-                  {{ jr.get_requested_privilege_display }}
-                </span>
-              </td>
-              <td class="max-w-md text-sm text-brand-text/80 whitespace-pre-line">{{ jr.message|default:"—" }}</td>
-              <td class="text-sm text-brand-text/70">{{ jr.created_at|date:"Y-m-d H:i" }}</td>
+              <td class="text-xs text-brand-text/80">{{ jr.get_requested_privilege_display }}</td>
+              <td class="max-w-md text-xs text-brand-text/80 whitespace-pre-line">{{ jr.message|default:"—" }}</td>
+              <td class="text-xs text-brand-text/70 whitespace-nowrap">{{ jr.created_at|date:"M j, Y" }}</td>
               <td class="text-right">
                 <button type="button"
-                        class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                        class="btn btn-sm btn-ghost text-brand-navy hover:bg-brand-lighter"
                         hx-get="{% url 'projects:review_join_request' pk=project.pk join_request_pk=jr.pk %}"
                         hx-target="#review-modal-body"
                         hx-swap="innerHTML"

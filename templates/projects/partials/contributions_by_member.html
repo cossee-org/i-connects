@@ -1,28 +1,17 @@
 {% comment %}
   Contribution Tracking → Contributions by member.
 
-  The whole grid by default: every CRediT role across the top, every current
-  member down the side. A zero is worth reading — it says which roles the
-  project has yet to cover and who has yet to be credited — so the filter
-  that trims it to what has been earned is offered, not assumed.
+  The whole grid: every CRediT role across the top, every current member
+  down the side. A zero is worth reading — it says which roles the project
+  has yet to cover and who has yet to be credited. (The page no longer
+  offers the "With contributions only" trim; ?used=1 still asks for it.)
 
   Swapped into #contributions-by-member-container. Needs matrix, only_used,
-  project; in_page when included by the full page.
+  project.
 {% endcomment %}
 {% load contribution_tags %}
 
-{% comment %}
-  No heading: the view switcher above already names this view.
-
-  The "With contributions only" filter lives in the page's
-  view-switcher row, not here. Every time this view is swapped in (sorting,
-  filtering) it sends a fresh copy out of band, so the toggle always carries
-  the sort it should keep. On the full page, contribution_tracking.html draws
-  the filter itself and passes in_page so no second copy is made.
-{% endcomment %}
-{% if not in_page %}
-  {% include "projects/partials/contributions_by_member_filter.html" with oob=True %}
-{% endif %}
+{# No heading: the view switcher above already names this view. #}
 
 {% if not matrix.rows %}
   {% if only_used %}

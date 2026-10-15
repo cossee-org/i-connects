@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.audit.models import AuditAction, AuditLog
@@ -1893,3 +1894,537 @@ def test_overview_wiki_follows_who_can_see_each_page(client, user, other_user):
     body = visitor.content.decode()
     assert 'id="proj-public-wiki-heading"' in body and ">About us</a>" in body
     assert "Protocol" not in body and "Budget" not in body and "Press kit" not in body
+
+
+@pytest.mark.django_db
+def test_members_table_hides_the_roles_column_by_default(client, user):
+    """Roles is hidden for now: no header, no cells, and the (i) stops
+    promising them. The column comes back with SHOW_MEMBER_ROLES."""
+    from django.test import override_settings
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    client.force_login(user)
+    url = reverse("projects:members", kwargs={"pk": project.pk})
+
+    content = client.get(url).content.decode()
+    thead = content[content.index("<thead") : content.index("</thead>")]
+    assert "Roles" not in thead
+    assert "privilege and roles" not in content
+    assert "Privilege" in thead
+
+    with override_settings(SHOW_MEMBER_ROLES=True):
+        content = client.get(url).content.decode()
+    thead = content[content.index("<thead") : content.index("</thead>")]
+    assert "Roles" in thead
+    assert "privilege and roles" in content
+
+
+@pytest.mark.django_db
+def test_members_table_sorts_by_every_header_but_actions(client, user, other_user):
+    """Name and Privilege are sort buttons, Actions is not, and each row
+    carries what it sorts by — Privilege as a rank, Lead first."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    for key in ("name", "privilege"):
+        assert f"@click=\"sortBy('{key}')\"" in content, key
+    assert "sortBy('email')" not in content, "the email has no column to sort"
+    assert "sortBy('roles')" not in content, "Roles is hidden, so is its sort"
+    assert "sortBy('actions')" not in content
+    assert '<th scope="col" class="text-right">Actions</th>' in content
+
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    row = row[: row.index(">")]
+    assert f'data-order="{member.pk}"' in row
+    assert 'data-sort-privilege="1"' in row
+    assert 'data-sort-privilege="0"' in content, "the Lead ranks first"
+
+    with override_settings(SHOW_MEMBER_ROLES=True):
+        content = client.get(
+            reverse("projects:members", kwargs={"pk": project.pk})
+        ).content.decode()
+    assert "@click=\"sortBy('roles')\"" in content
+
+
+@pytest.mark.django_db
+def test_join_requests_table_sorts_by_every_header_but_actions(client, user, other_user):
+    """User, Requested as, Message and Submitted are sort buttons, Actions is
+    not, and each row carries what it sorts by."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    jr = JoinRequest.objects.create(
+        project=project, user=other_user, message="Keen To Help",
+        requested_privilege=MemberPrivileges.CONTRIBUTOR,
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:join_requests", kwargs={"pk": project.pk})
+    ).content.decode()
+    for key in ("user", "privilege", "message", "submitted"):
+        assert f"@click=\"sortBy('{key}')\"" in content, key
+    assert '<th scope="col" class="text-right">Actions</th>' in content
+    row = content[content.index('data-order="0"') :]
+    row = row[: row.index(">")]
+    assert 'data-sort-privilege="1"' in row
+    assert 'data-sort-message="keen to help"' in row
+    assert f'data-sort-submitted="{int(jr.created_at.timestamp())}"' in row
+
+
+@pytest.mark.django_db
+def test_invitation_requests_table_sorts_by_every_header_but_actions(client, user):
+    """Invited, Privilege, Sent by and Date are sort buttons, Actions is not,
+    and each row carries what it sorts by."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    invitation = Invitation.objects.create(
+        project=project, email="Eve@Example.org",
+        privilege=MemberPrivileges.PROJECT_MANAGER, invitation_code="sortme",
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:project_invitations", kwargs={"pk": project.pk})
+    ).content.decode()
+    for key in ("invited", "privilege", "sender", "date"):
+        assert f"@click=\"sortBy('{key}')\"" in content, key
+    assert '<th scope="col" class="text-right">Actions</th>' in content
+    row = content[content.index('data-order="0"') :]
+    row = row[: row.index(">")]
+    assert 'data-sort-invited="eve@example.org"' in row
+    assert 'data-sort-privilege="0"' in row
+    assert f'data-sort-date="{int(invitation.created_at.timestamp())}"' in row
+
+
+@pytest.mark.django_db
+def test_pending_requests_tables_show_privilege_as_plain_text(client, user, other_user):
+    """Requested as and Privilege read as plain text, not a pill."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    JoinRequest.objects.create(
+        project=project, user=other_user,
+        requested_privilege=MemberPrivileges.PROJECT_MANAGER,
+    )
+    Invitation.objects.create(
+        project=project, email="eve@example.org",
+        privilege=MemberPrivileges.CONTRIBUTOR, invitation_code="plain",
+    )
+    client.force_login(user)
+
+    for name, label in (("join_requests", "Lead"), ("project_invitations", "Member")):
+        content = client.get(reverse(f"projects:{name}", kwargs={"pk": project.pk})).content.decode()
+        tbody = content[content.index("<tbody") : content.index("</tbody>")]
+        assert f'<td class="text-xs text-brand-text/80">{label}</td>' in tbody, name
+        assert "rounded-full" not in tbody, f"{name} still draws a pill"
+
+
+@pytest.mark.django_db
+def test_members_table_puts_the_email_under_the_name(client, user, other_user):
+    """No Email column: a person's email sits under their name, and a person
+    with no name, whose email already stands in for it, is not shown twice."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    thead = content[content.index("<thead") : content.index("</thead>")]
+    assert "Email" not in thead
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    row = row[: row.index("</tr>")]
+    name_cell = row[row.index("<td") : row.index("</td>")]
+    assert other_user.name in name_cell
+    assert f'<div class="text-xs text-brand-text/60">{other_user.email}</div>' in name_cell
+
+    other_user.name = ""
+    other_user.save(update_fields=["name"])
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    name_cell = row[row.index("<td") : row.index("</td>")]
+    assert name_cell.count(other_user.email) == 1
+
+
+@pytest.mark.django_db
+def test_members_table_shows_privilege_as_plain_text(client, user, other_user):
+    """The Privilege cell reads as plain text, for a Lead too: no inline
+    select, no pill."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    tbody = content[content.index("<tbody") : content.index("</tbody>")]
+    assert '<td class="text-xs text-brand-text/80">Member</td>' in tbody
+    assert '<td class="text-xs text-brand-text/80">Lead</td>' in tbody
+    assert "<select" not in tbody
+    assert "rounded-full text-xs font-medium" not in tbody
+
+
+@pytest.mark.django_db
+def test_members_table_offers_modify_privilege_to_a_lead(client, user, other_user):
+    """A Lead gets Modify privilege under Actions, opening one shared modal;
+    the last Lead's own row has it disabled; a Member gets neither."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    url = reverse("projects:members", kwargs={"pk": project.pk})
+    update_url = reverse(
+        "projects:update_privilege", kwargs={"pk": project.pk, "member_pk": member.pk}
+    )
+
+    client.force_login(user)
+    content = client.get(url).content.decode()
+    assert 'id="privilege-modal"' in content
+    assert '<option value="PROJECT_MANAGER">Lead</option>' in content
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    row = row[: row.index("</tr>")]
+    assert f"openPrivilegeModal('{update_url}', 'Bob', 'CONTRIBUTOR', 'member-row-{member.pk}')" in row
+    own = content[content.index("member-row-") :]
+    own = own[: own.index("</tr>")]
+    assert "Modify privilege" in own and "openPrivilegeModal" not in own, "the last Lead cannot step down"
+
+    client.force_login(other_user)
+    content = client.get(url).content.decode()
+    assert "Modify privilege" not in content
+    assert 'id="privilege-modal"' not in content
+
+
+@pytest.mark.django_db
+def test_members_table_action_buttons_styles(client, user, other_user):
+    """Modify privilege looks like Resend on Pending invitation requests, a
+    plain navy button; Remove is red text, like Cancel there."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    row = row[: row.index("</tr>")]
+    red = 'class="btn btn-sm btn-ghost text-error hover:bg-error/10"'
+    modify = row[row.index("openPrivilegeModal") - 200 : row.index("openPrivilegeModal")]
+    assert 'class="btn btn-sm btn-ghost text-brand-navy hover:bg-brand-lighter"' in modify, "Modify privilege looks like Resend"
+    remove = row[row.index("openRemoveMemberModal") - 200 : row.index("openRemoveMemberModal")]
+    assert red in remove, "Remove is red text, like Cancel"
+    assert "bg-brand-coral" not in row
+
+
+@pytest.mark.django_db
+def test_join_requests_review_button_looks_like_resend(client, user, other_user):
+    """Review on Pending join requests wears Resend's plain navy style."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    JoinRequest.objects.create(project=project, user=other_user)
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:join_requests", kwargs={"pk": project.pk})
+    ).content.decode()
+    tbody = content[content.index("<tbody") : content.index("</tbody>")]
+    assert 'class="btn btn-sm btn-ghost text-brand-navy hover:bg-brand-lighter"' in tbody
+    assert "bg-brand-coral" not in tbody
+
+
+@pytest.mark.django_db
+def test_review_join_request_modal_is_the_plain_modal(client, user, other_user):
+    """The Review modal has the Contributors modals' plain shape: a navy
+    title, the request in a sentence, Cancel / Decline / Approve on the
+    right — no icon badge, pill or close cross."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Bird Song", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    jr = JoinRequest.objects.create(
+        project=project, user=other_user, message="Keen to help",
+        requested_privilege=MemberPrivileges.CONTRIBUTOR,
+    )
+    client.force_login(user)
+
+    html = client.get(
+        reverse(
+            "projects:review_join_request",
+            kwargs={"pk": project.pk, "join_request_pk": jr.pk},
+        ),
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert '<h3 class="text-lg font-semibold text-brand-navy">Review join request</h3>' in html
+    assert "wants to join <strong>Bird Song</strong> as Member." in html
+    assert "Keen to help" in html
+    assert html.index(">Cancel<") < html.index(">Decline<") < html.index("Approve")
+    assert "rounded-full" not in html and "btn-circle" not in html
+
+
+@pytest.mark.django_db
+def test_cancel_invitation_asks_first(client, user):
+    """Cancel opens a confirmation, in the Remove modal's design, that says
+    it cannot be undone and that a new invitation is needed to invite them
+    again; the row itself no longer posts the cancel."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    invitation = Invitation.objects.create(
+        project=project, email="eve@example.org",
+        privilege=MemberPrivileges.CONTRIBUTOR, invitation_code="askfirst",
+    )
+    client.force_login(user)
+    cancel_url = reverse(
+        "projects:cancel_invitation",
+        kwargs={"pk": project.pk, "invitation_pk": invitation.pk},
+    )
+
+    content = client.get(
+        reverse("projects:project_invitations", kwargs={"pk": project.pk})
+    ).content.decode()
+    tbody = content[content.index("<tbody") : content.index("</tbody>")]
+    assert f"openCancelInvitationModal('{cancel_url}', 'eve@example.org')" in tbody
+    assert f'action="{cancel_url}"' not in tbody, "the row no longer cancels at once"
+    modal = content[content.index('id="cancel-invitation-modal"') :]
+    modal = modal[: modal.index("</dialog>")]
+    assert 'class="modal-box border border-error/40"' in modal
+    assert "This cannot be undone." in modal
+    assert "a new invitation will need to be sent" in modal
+
+    # The confirmation's form posts to the same endpoint, which still cancels.
+    client.post(cancel_url)
+    assert not Invitation.objects.filter(pk=invitation.pk).exists()
+
+
+@pytest.mark.django_db
+def test_members_table_shows_when_each_member_joined(client, user, other_user):
+    """A sortable Joined column gives the date the membership was created,
+    written as tasks write dates ("Mar 4, 2026")."""
+    from datetime import datetime, timezone as dt_tz
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    joined = datetime(2026, 3, 4, 12, 0, tzinfo=dt_tz.utc)
+    ProjectMember.objects.filter(pk=member.pk).update(created_at=joined)
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    thead = content[content.index("<thead") : content.index("</thead>")]
+    assert "sortBy('joined')" in thead
+    assert thead.index("Privilege") < thead.index("Joined") < thead.index("Actions")
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    row = row[: row.index("</tr>")]
+    assert f'data-sort-joined="{int(joined.timestamp())}"' in row
+    assert '<td class="text-xs text-brand-text/70 whitespace-nowrap">Mar 4, 2026</td>' in row
+
+
+@pytest.mark.django_db
+def test_privilege_change_redraws_the_viewers_own_row_out_of_band(client, user, other_user):
+    """Promoting someone frees the last Lead's own buttons at once, and
+    demoting them again locks them: the viewer's row rides along out of band."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    own = ProjectMember.objects.get(project=project, users=user)
+    url = reverse(
+        "projects:update_privilege", kwargs={"pk": project.pk, "member_pk": member.pk}
+    )
+    client.force_login(user)
+
+    def own_row(html):
+        start = html.index(f'id="member-row-{own.pk}"')
+        return html[html.rindex("<tr", 0, start) : html.index("</tr>", start)]
+
+    html = client.post(
+        url, {"privilege": MemberPrivileges.PROJECT_MANAGER}, headers={"hx-request": "true"}
+    ).content.decode()
+    assert f'id="member-row-{member.pk}"' in html
+    row = own_row(html)
+    assert 'hx-swap-oob="true"' in row
+    assert "openPrivilegeModal" in row and "openRemoveMemberModal" in row, "no longer the last Lead"
+
+    html = client.post(
+        url, {"privilege": MemberPrivileges.CONTRIBUTOR}, headers={"hx-request": "true"}
+    ).content.decode()
+    row = own_row(html)
+    assert "openPrivilegeModal" not in row and "disabled" in row, "the last Lead again"
+
+
+@pytest.mark.django_db
+def test_removing_a_lead_redraws_the_viewers_own_row_out_of_band(client, user, other_user):
+    """Removing the other Lead leaves the viewer the last one: the empty
+    response that drops the row carries the viewer's row, now locked."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.PROJECT_MANAGER
+    )
+    own = ProjectMember.objects.get(project=project, users=user)
+    client.force_login(user)
+
+    html = client.post(
+        reverse("projects:remove_member", kwargs={"pk": project.pk, "member_pk": member.pk}),
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert f'id="member-row-{member.pk}"' not in html
+    assert f'id="member-row-{own.pk}"' in html and 'hx-swap-oob="true"' in html
+    assert "openRemoveMemberModal" not in html, "the viewer is the last Lead now"
+
+
+@pytest.mark.django_db
+def test_a_lead_stepping_down_reloads_the_page(client, user, other_user):
+    """A Lead who demotes themselves gets the whole page reloaded (HX-Refresh)
+    with a note, since nothing on it is theirs to act on any more."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    other = ProjectMember.objects.create(project=project)
+    other.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.PROJECT_MANAGER
+    )
+    own = ProjectMember.objects.get(project=project, users=user)
+    client.force_login(user)
+
+    response = client.post(
+        reverse("projects:update_privilege", kwargs={"pk": project.pk, "member_pk": own.pk}),
+        {"privilege": MemberPrivileges.CONTRIBUTOR},
+        headers={"hx-request": "true"},
+    )
+    assert response.status_code == 200
+    assert response["HX-Refresh"] == "true"
+    assert ProjectPrivilege.objects.get(project=project, user=user).privilege == MemberPrivileges.CONTRIBUTOR
+
+    page = client.get(reverse("projects:members", kwargs={"pk": project.pk})).content.decode()
+    assert "You are now a Member of this project." in page
+    assert "Modify privilege" not in page
+
+
+@pytest.mark.django_db
+def test_people_with_accounts_link_to_their_profile(client, user, other_user):
+    """On Contributors, Pending join requests and Pending invitation requests
+    a name with an account behind it opens that profile; an invited email
+    with no account stays plain text."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    JoinRequest.objects.create(project=project, user=other_user)
+    Invitation.objects.create(
+        project=project, email=other_user.email, invited_user=other_user,
+        privilege=MemberPrivileges.CONTRIBUTOR, invitation_code="has-account",
+    )
+    Invitation.objects.create(
+        project=project, email="nobody@example.org",
+        privilege=MemberPrivileges.CONTRIBUTOR, invitation_code="no-account",
+    )
+    client.force_login(user)
+
+    def tbody(name):
+        html = client.get(reverse(f"projects:{name}", kwargs={"pk": project.pk})).content.decode()
+        return html[html.index("<tbody") : html.index("</tbody>")]
+
+    members = tbody("members")
+    assert f'href="{reverse("public_profile", kwargs={"pk": user.pk})}"' in members
+    assert f'href="{reverse("public_profile", kwargs={"pk": other_user.pk})}"' in tbody("join_requests")
+    invitations = tbody("project_invitations")
+    assert f'href="{reverse("public_profile", kwargs={"pk": other_user.pk})}"' in invitations
+    assert invitations.count('href="/people/') == 1, "the email with no account is not a link"
+    assert "nobody@example.org" in invitations
+
+
+@pytest.mark.django_db
+def test_pending_requests_tables_write_dates_as_tasks_do(client, user, other_user):
+    """Submitted (join requests) and Date (invitations) read "Mar 4, 2026"."""
+    from datetime import datetime, timezone as dt_tz
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    when = datetime(2026, 3, 4, 12, 0, tzinfo=dt_tz.utc)
+    jr = JoinRequest.objects.create(project=project, user=other_user)
+    JoinRequest.objects.filter(pk=jr.pk).update(created_at=when)
+    client.force_login(user)
+
+    html = client.get(reverse("projects:join_requests", kwargs={"pk": project.pk})).content.decode()
+    assert '<td class="text-xs text-brand-text/70 whitespace-nowrap">Mar 4, 2026</td>' in html
+    assert "2026-03-04" not in html
+
+    invitation = Invitation.objects.create(
+        project=project, email="eve@example.org",
+        privilege=MemberPrivileges.CONTRIBUTOR, invitation_code="dated",
+    )
+    Invitation.objects.filter(pk=invitation.pk).update(created_at=when)
+    html = client.get(reverse("projects:project_invitations", kwargs={"pk": project.pk})).content.decode()
+    assert '<td class="text-xs text-brand-text/70 whitespace-nowrap">Mar 4, 2026</td>' in html
+    assert "2026-03-04" not in html
