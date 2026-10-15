@@ -184,7 +184,7 @@ const titlePage = [
   }),
   p("This guide walks through the everyday workflow of i-CONNECTS, the collaboration platform for tracking who does what in distributed research projects: creating an account, setting up a project, inviting collaborators, assigning and reviewing tasks, recording CRediT contributions, and documenting the project in its wiki."),
   p("Every screenshot was taken from a running copy of i-CONNECTS in a web browser, using a fictitious demo project. Names, email addresses and data in the screenshots are made up."),
-  new Paragraph({ spacing: { before: 1800 }, children: [new TextRun({ text: "Version 1.0 · October 2026", color: GREY })] }),
+  new Paragraph({ spacing: { before: 1800 }, children: [new TextRun({ text: "Version 1.1 · October 2026", color: GREY })] }),
   new Paragraph({ children: [new PageBreak()] }),
 ];
 
@@ -280,8 +280,8 @@ const ch3 = [
   ...figure("03_project_filled", "The completed new-project form."),
   p("The new project opens on its overview page. The `Lead` badge under the title shows your privilege in this project. The tabs give you access to everything in the project:"),
   ...bullets([
-    "`Project` — the overview, with counts of tasks, overdue tasks, join requests and contributors.",
-    "`Tasks` — the task board (Kanban, list and calendar views).",
+    "`Project` — the overview, with counts of tasks, overdue tasks, join requests, contributors and wiki pages.",
+    "`Tasks` — the project's tasks, as a Kanban board, a list, a table or a calendar.",
     "`Contributors` — the members, their privileges, and invitations.",
     "`Contribution Tracking` — the CRediT record of the project.",
     "`Wiki` — the project's shared documentation.",
@@ -326,7 +326,7 @@ const ch5 = [
   ...figure("05_invite_review", "The invitation page."),
   p("The project opens, with the `Member` badge under its title. It now appears under `Projects` in your sidebar."),
   ...figure("05_invite_accepted", "Joined: the invitee is now a member of the project."),
-  p("Back on the Contributors tab, the Lead sees everyone who has joined. From here a Lead can change a member's privilege (choose it and click `Save`) or remove a member."),
+  p("Back on the Contributors tab, the Lead sees everyone who has joined. From here a Lead can change a member's privilege with `Modify privilege` (choose it and click `Save`) or remove a member with `Remove`."),
   ...figure("05_members_after", "The project's members after all three invitations were accepted."),
 ];
 
@@ -334,14 +334,14 @@ const ch6 = [
   h1("6. Create a new task"),
   p("Tasks are the units of work in a project. Each task has assignees who do the work, optionally reviewers who check it, and — on a CRediT project — a task type: the CRediT role its contributors are credited with when the task is completed. Leads create tasks."),
   ...steps([
-    "Open the project's `Tasks` tab and click `+ New task`. (The `+` at the top of a column creates a task in that column.)",
+    "Open the project's `Tasks` tab and click `New task`. (The `+` at the top of a column creates a task in that column.)",
   ]),
   ...figure("06_board_empty", "The Kanban board of a project with no tasks yet."),
   ...steps([
-    "Give the task a clear `Task name` and a `Description` of what has to be done.",
+    "Give the task a clear `Task name` and a `Description` of what has to be done. Click `High priority` beside the name for urgent work.",
     "Pick the `Kanban column` the task starts in, usually To Do.",
     "Pick the `Task type`: the CRediT role this work represents, for example Investigation for field work or Data curation for cleaning data.",
-    "Optionally set a `Start date` and `Due date`, and tick `Mark as high priority` for urgent work.",
+    "Optionally set a `Start date` and `Due date`.",
   ]),
   ...figure("06_task_details", "The first part of the new-task form."),
   ...steps([
@@ -349,14 +349,14 @@ const ch6 = [
   ]),
   ...figure("06_task_assignees", "Choosing the task's assignees."),
   ...steps([
-    "If the work should be checked before it counts, tick `Require review`, open `Reviewers` and tick at least one reviewer.",
+    "If the work should be checked before it counts, switch on `Require review`, open `Reviewers` and tick at least one reviewer.",
     "Click `Save`.",
   ]),
   ...figure("06_task_reviewers", "Choosing a reviewer for a task that requires review."),
   ...figure("06_task_filled", "The rest of the form, ready to save."),
   p("The task appears on the board. Its card shows the dates, the number of assignees and — with the eye icon — the number of reviewers; a red flag marks high priority. Click a card to open the task."),
   ...figure("06_task_created", "The new task on the Kanban board."),
-  p("In this guide the Lead creates four more tasks in the same way. The `List` and `Calendar` buttons above the board show the same tasks as a table or on a calendar."),
+  p("In this guide the Lead creates four more tasks in the same way. The `List`, `Table` and `Calendar` buttons above the board show the same tasks in other layouts."),
   ...figure("06_board_with_tasks", "The board with all five tasks of the example project."),
 ];
 
@@ -372,12 +372,12 @@ const ch7 = [
   ]),
   ...figure("07_task_comment", "Adding a comment to the task."),
   ...steps([
-    "Click `Mark my part done`.",
+    "In the `Completion` table, tick the round box in the `Done` column of your row.",
   ]),
-  ...figure("07_task_before", "The task page before marking done. The Completion table shows each assignee's progress."),
-  p("The `Completion` table now shows a check mark and the date beside your name. On a task that requires review, it reads `Awaiting review` until a reviewer signs your work off."),
+  ...figure("07_task_before", "The task page before marking done. The Completion table has one row per assignee."),
+  p("The box turns green, with the date and your name beside it. On a task that requires review, your row's `Reviewed` column reads `Awaiting review` until a reviewer signs your work off."),
   ...figure("07_task_after", "Marked done and awaiting review."),
-  ...tip("Marked done by mistake? Click `Undo my mark`. You can undo until the task is completed."),
+  ...tip("Marked done by mistake? Untick the box. You can undo until the task is completed."),
 ];
 
 const ch8 = [
@@ -389,10 +389,10 @@ const ch8 = [
   ...figure("08_dashboard_to_review", "The reviewer's Dashboard, with the task to review tagged To review."),
   ...steps([
     "Check the work — the task's comments are a good place for assignees to say where it is.",
-    "In the `Reviewed` column, click `Mark reviewed` beside each assignee whose work you accept.",
+    "In the `Completion` table, tick the round box in the `Reviewed` column of each assignee whose work you accept.",
   ]),
   ...figure("08_review_before", "Both assignees have marked their part done; each submission can now be reviewed."),
-  p("Each review is recorded with your name and the date. You can take it back with `Mark not reviewed`."),
+  p("The box turns purple, and the review is recorded with the date and your name. To take it back, untick the box."),
   ...figure("08_review_partial", "One submission reviewed, one still to review."),
   p("When the last submission is reviewed, the task completes itself: its status changes to `Complete`, the page names you under `Closed by`, and each assignee is credited with the task's CRediT role."),
   ...figure("08_review_complete", "All submissions reviewed: the task is complete."),
@@ -409,9 +409,9 @@ const ch9 = [
   ...figure("09_complete_before", "A finished task without review, ready to be completed by the Lead."),
   p("The task is now `Complete`, with your name under `Closed by`. On a CRediT project, completing a task is what records contributions: each assignee who marked their own part done — and, on a task that requires review, had it reviewed — is credited with the task's type."),
   ...figure("09_complete_after", "The completed task. Its marks are now locked."),
-  ...important("Assignees who did not mark their part done receive no credit when the task is completed. Before completing, a Lead can set a mark on someone's behalf with the `Mark done` button in their row of the Completion table."),
-  ...tip("Completed a task too early? `Mark Not Complete` reopens it and withdraws the credit it recorded; completing it again records the credit anew. While a task is complete it is locked: it cannot be edited or deleted, and its marks cannot change."),
-  p("A task's Kanban column is separate from whether it is complete. To keep the board tidy, drag finished cards to the `Done` column, and work in progress to `In Progress`. A green check on a card shows that the task is complete."),
+  ...important("Assignees who did not mark their part done receive no credit when the task is completed. Before completing, a Lead can mark someone's part done on their behalf by ticking the `Done` box in their row of the Completion table."),
+  ...tip("Completed a task too early? `Mark Not Complete` reopens it and withdraws the credit it recorded; completing it again records the credit anew. While a task is complete it is locked: it cannot be edited or deleted, and its Done and Reviewed boxes cannot change."),
+  p("A task's Kanban column is separate from whether it is complete. To keep the board tidy, drag finished cards to the `Done` column, and work in progress to `In Progress`. A blue check on a card shows that the task is complete."),
   ...figure("09_board_after", "The board after the Lead has dragged the cards to their columns."),
 ];
 
@@ -419,10 +419,10 @@ const ch10 = [
   h1("10. Track the contribution of members"),
   p("On a project that tracks contributions with CRediT, i-CONNECTS keeps a ledger of who contributed what. Each completed task adds one contribution per credited assignee, under the task's type. Every member of the project can see the record in the `Contribution Tracking` tab."),
   h2("Contributions by member"),
-  p("The first view is a grid of every member against all 14 CRediT roles, with totals for each person and each role. Click a column heading to sort by it."),
+  p("The first view is a grid of every member against all 14 CRediT roles, with totals for each person and each role, sorted by total."),
   ...figure("10_by_member", "Contributions by member: all members against all 14 CRediT roles (the table scrolls sideways)."),
-  p("Tick `Only roles and members with contributions` to hide the empty columns and rows."),
-  ...figure("10_by_member_filtered", "The same grid, narrowed to the roles that have contributions."),
+  p("Click a role's heading to see who contributed most in that role; click it again to reverse the order."),
+  ...figure("10_by_member_sorted", "The same grid, sorted by Methodology."),
   h2("Every contribution"),
   p("`Every contribution` lists the individual records: who was credited, for which task, in which role, when, and who closed the task."),
   ...figure("10_every_contribution", "Every contribution, one row per record."),
@@ -430,7 +430,7 @@ const ch10 = [
   p("Credit is written automatically, but a Lead can correct it. `Edit` on a row changes the role a contribution is recorded under, or removes it. `Add contribution` credits someone the automatic record passed over — for example a reviewer, whose sign-off does not by itself earn credit, or someone who helped without being an assignee."),
   ...steps([
     "Click `Add contribution`.",
-    "Choose the `Task`, the `Member` and the `CRediT role`, then click `Add contribution`.",
+    "In `Add a contribution`, choose the `Task`, the `Member` and the `CRediT role`, then click `Add contribution`.",
   ]),
   ...figure("10_add_contribution", "Crediting the reviewer with Validation on the sampling task."),
   p("Contributions entered by hand are labelled `Added by hand`, and are kept even if the task is later reopened."),
@@ -486,8 +486,8 @@ const reference = [
   h2("A task's life in brief"),
   ...steps([
     "A **Lead** creates the task, with its type, assignees and (optionally) reviewers.",
-    "Each **assignee** does their part and clicks `Mark my part done`.",
-    "If the task requires review, a **reviewer** clicks `Mark reviewed` for each submission; the last review completes the task.",
+    "Each **assignee** does their part and ticks their `Done` box in the task's Completion table.",
+    "If the task requires review, a **reviewer** ticks the `Reviewed` box for each submission; the last review completes the task.",
     "Otherwise a **Lead** clicks `Mark Completed`.",
     "Completion credits each assignee who marked their part done (and was reviewed, where required) with the task's CRediT role, visible under `Contribution Tracking`.",
   ]),
