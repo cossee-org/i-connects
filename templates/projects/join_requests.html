@@ -15,10 +15,10 @@
      class="btn btn-sm btn-ghost text-brand-navy">&larr; All contributors</a>
 </div>
 
-<h2 class="text-lg font-semibold text-brand-navy">Pending join requests</h2>
-<p class="text-sm text-brand-text/70 mt-1 mb-5 max-w-2xl">
-  People asking to join this project, oldest first. Approve one to add them at the privilege they asked for, or decline it with an optional note to the requester.
-</p>
+<div class="flex items-center gap-2 mb-5">
+  <h2 class="text-lg font-semibold text-brand-navy">Pending join requests</h2>
+  {% include "_components/info_popover.html" with label="Pending join requests" body="People asking to join this project, oldest first. Approve one to add them at the privilege they asked for, or decline it with an optional note to the requester." %}
+</div>
 
 {% if join_requests %}
   <div class="brand-card overflow-hidden">

@@ -15,10 +15,10 @@
      class="btn btn-sm btn-ghost text-brand-navy">&larr; All contributors</a>
 </div>
 
-<h2 class="text-lg font-semibold text-brand-navy">Pending invitation requests</h2>
-<p class="text-sm text-brand-text/70 mt-1 mb-5 max-w-2xl">
-  Invitations from this project that are still waiting for an answer, newest first. Resending one emails a fresh link and retires the old one; cancelling withdraws it.
-</p>
+<div class="flex items-center gap-2 mb-5">
+  <h2 class="text-lg font-semibold text-brand-navy">Pending invitation requests</h2>
+  {% include "_components/info_popover.html" with label="Pending invitation requests" body="Invitations from this project that are still waiting for an answer, newest first. Resending one emails a fresh link and retires the old one; cancelling withdraws it." %}
+</div>
 
 {% if invitations %}
   <div class="brand-card overflow-hidden">
