@@ -2273,3 +2273,66 @@ def test_members_table_shows_when_each_member_joined(client, user, other_user):
     row = row[: row.index("</tr>")]
     assert f'data-sort-joined="{int(joined.timestamp())}"' in row
     assert '<td class="text-xs text-brand-text/70">2026-03-04</td>' in row
+
+
+@pytest.mark.django_db
+def test_privilege_change_redraws_the_viewers_own_row_out_of_band(client, user, other_user):
+    """Promoting someone frees the last Lead's own buttons at once, and
+    demoting them again locks them: the viewer's row rides along out of band."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    own = ProjectMember.objects.get(project=project, users=user)
+    url = reverse(
+        "projects:update_privilege", kwargs={"pk": project.pk, "member_pk": member.pk}
+    )
+    client.force_login(user)
+
+    def own_row(html):
+        start = html.index(f'id="member-row-{own.pk}"')
+        return html[html.rindex("<tr", 0, start) : html.index("</tr>", start)]
+
+    html = client.post(
+        url, {"privilege": MemberPrivileges.PROJECT_MANAGER}, headers={"hx-request": "true"}
+    ).content.decode()
+    assert f'id="member-row-{member.pk}"' in html
+    row = own_row(html)
+    assert 'hx-swap-oob="true"' in row
+    assert "openPrivilegeModal" in row and "openRemoveMemberModal" in row, "no longer the last Lead"
+
+    html = client.post(
+        url, {"privilege": MemberPrivileges.CONTRIBUTOR}, headers={"hx-request": "true"}
+    ).content.decode()
+    row = own_row(html)
+    assert "openPrivilegeModal" not in row and "disabled" in row, "the last Lead again"
+
+
+@pytest.mark.django_db
+def test_removing_a_lead_redraws_the_viewers_own_row_out_of_band(client, user, other_user):
+    """Removing the other Lead leaves the viewer the last one: the empty
+    response that drops the row carries the viewer's row, now locked."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.PROJECT_MANAGER
+    )
+    own = ProjectMember.objects.get(project=project, users=user)
+    client.force_login(user)
+
+    html = client.post(
+        reverse("projects:remove_member", kwargs={"pk": project.pk, "member_pk": member.pk}),
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert f'id="member-row-{member.pk}"' not in html
+    assert f'id="member-row-{own.pk}"' in html and 'hx-swap-oob="true"' in html
+    assert "openRemoveMemberModal" not in html, "the viewer is the last Lead now"

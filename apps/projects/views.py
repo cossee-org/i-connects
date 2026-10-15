@@ -7,6 +7,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -975,6 +976,60 @@ def _member_rows(project, *, viewer=None):
     return rows
 
 
+def _render_member_row(request, project, member, *, oob=False):
+    """One Contributors table row, as the members page draws it for ``request.user``.
+
+    ``oob`` marks it as an htmx out-of-band swap, so it can ride along with
+    another response and replace the row of the same id in place.
+    """
+    primary_user = member.users.first()
+    privilege = (
+        ProjectPrivilege.objects.filter(project=project, user=primary_user)
+        .values_list("privilege", flat=True)
+        .first()
+        if primary_user
+        else MemberPrivileges.CONTRIBUTOR
+    )
+    row = {
+        "member": member,
+        "user": primary_user,
+        "privilege": privilege,
+        "is_self": primary_user is not None and primary_user.id == request.user.id,
+    }
+    return render_to_string(
+        "projects/member_row.html",
+        {
+            "row": row,
+            "project": project,
+            "user_privilege": MemberPrivileges.PROJECT_MANAGER,
+            "viewer_is_last_pm": is_last_project_manager(
+                project=project, user=request.user
+            ),
+            "oob": oob,
+        },
+        request=request,
+    )
+
+
+def _viewer_row_oob(request, project, *, changed_member):
+    """The viewer's own row, out of band, after a change to someone else's.
+
+    Promoting, demoting or removing another member can make the viewer the
+    last Lead or stop them being it, which disables or enables their own
+    Modify privilege and Remove. Their row is redrawn with the change so it
+    does not wait for a reload. Empty when the change was to their own row,
+    which the response redraws anyway.
+    """
+    viewer_member = (
+        ProjectMember.objects.filter(project=project, users=request.user, deleted=False)
+        .exclude(pk=changed_member.pk)
+        .first()
+    )
+    if viewer_member is None:
+        return ""
+    return _render_member_row(request, project, viewer_member, oob=True)
+
+
 class ProjectMemberListView(
     ProjectMemberRequiredMixin, ProjectContextMixin, TemplateView
 ):
@@ -1143,23 +1198,9 @@ class UpdateMemberPrivilegeView(
             },
         )
 
-        row = {
-            "member": member,
-            "user": primary_user,
-            "privilege": new_privilege,
-            "is_self": primary_user.id == request.user.id,
-        }
-        return render(
-            request,
-            "projects/member_row.html",
-            {
-                "row": row,
-                "project": self.project,
-                "user_privilege": MemberPrivileges.PROJECT_MANAGER,
-                "viewer_is_last_pm": is_last_project_manager(
-                    project=self.project, user=request.user
-                ),
-            },
+        return HttpResponse(
+            _render_member_row(request, self.project, member)
+            + _viewer_row_oob(request, self.project, changed_member=member)
         )
 
 
@@ -1207,8 +1248,11 @@ class RemoveMemberView(ProjectManagerRequiredMixin, ProjectContextMixin, View):
             },
         )
         if request.headers.get("HX-Request"):
-            # Empty response removes the row via hx-swap="outerHTML".
-            return HttpResponse("")
+            # Empty main content removes the row via hx-swap="outerHTML";
+            # the viewer's own row rides along out of band.
+            return HttpResponse(
+                _viewer_row_oob(request, self.project, changed_member=member)
+            )
         return HttpResponseRedirect(
             reverse("projects:members", kwargs={"pk": self.project.pk})
         )

@@ -1,14 +1,15 @@
 {% load project_tags %}
 {% comment %}
 One row in the project members table. HTMX fragment — do NOT wrap in an extends tag.
-Context: row {member, user, privilege, is_self}, project, user_privilege, viewer_is_last_pm.
+Context: row {member, user, privilege, is_self}, project, user_privilege, viewer_is_last_pm,
+and oob to send it as an htmx out-of-band swap (projects.views._viewer_row_oob).
 {% endcomment %}
 {% comment %}
   The data-sort-* keys feed the table's header sort (projects/members.html).
   Privilege sorts by rank, Lead (0) before Member (1); data-order is the
   member id, the server's own order.
 {% endcomment %}
-<tr id="member-row-{{ row.member.pk }}" class="hover:bg-brand-lighter/40"
+<tr id="member-row-{{ row.member.pk }}" class="hover:bg-brand-lighter/40"{% if oob %} hx-swap-oob="true"{% endif %}
     data-order="{{ row.member.pk }}"
     data-sort-name="{% if row.user %}{{ row.user.name|default:row.user.email|lower }}{% else %}{{ row.member.name|default:'unnamed'|lower }}{% endif %}"
     data-sort-privilege="{% if row.privilege == 'PROJECT_MANAGER' %}0{% elif row.privilege == 'CONTRIBUTOR' %}1{% else %}2{% endif %}"
