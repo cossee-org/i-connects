@@ -1544,3 +1544,25 @@ def test_the_edit_modal_links_the_credit_roles_from_the_label_line(client, user)
     assert "What each role covers" not in html
     link = html.index("CRediT roles &#8599;")
     assert html.index("CRediT role <span") < link < html.index('name="contribution_type"')
+
+
+@pytest.mark.django_db
+def test_withdrawing_asks_first_in_a_remove_style_modal(client, user):
+    """Withdraw opens a confirmation modal in the Remove design rather than
+    the browser's confirm box; its form posts the withdrawal."""
+    project, col, pm = _make_project(user)
+    task = _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+    client.force_login(user)
+
+    html = client.get(_edit_url(project, record), headers={"hx-request": "true"}).content.decode()
+    assert "hx-confirm" not in html
+    assert "showModal()\">Withdraw</button>" in html
+    modal = html[html.index('id="withdraw-contribution-modal"') :]
+    modal = modal[: modal.index("</dialog>")]
+    assert 'class="modal-box border border-error/40"' in modal
+    assert task.name in modal and "Keep contribution" in modal
+    assert f'hx-post="{_remove_url(project, record)}"' in modal
+
+    client.post(_remove_url(project, record), headers={"hx-request": "true"})
+    assert not ContributionRecord.objects.exists()

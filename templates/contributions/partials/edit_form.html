@@ -60,16 +60,38 @@
   </div>
 </form>
 
+{% comment %}
+  Withdrawing asks first, in a modal of the Contributors table's Remove
+  design, opened over this one. Confirming posts the withdrawal, which
+  reloads the tab (HX-Redirect); keeping it closes only the confirmation.
+{% endcomment %}
 <div class="mt-6 pt-4 border-t border-brand-light/60 flex items-center justify-between gap-3">
-  <p class="text-xs text-brand-text/60">
-    Withdrawing removes this credit entirely. It comes back if the task is
-    closed again with the mark still standing.
-  </p>
-  <form method="post"
-        action="{% url 'contributions:contribution_remove' project_pk=project.pk pk=record.pk %}"
-        hx-post="{% url 'contributions:contribution_remove' project_pk=project.pk pk=record.pk %}"
-        hx-confirm="Withdraw this contribution?">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-sm btn-outline btn-error shrink-0">Withdraw</button>
-  </form>
+  <p class="text-xs text-brand-text/60">Or withdraw this credit altogether.</p>
+  <button type="button" class="btn btn-sm btn-ghost text-error hover:bg-error/10 shrink-0"
+          onclick="document.getElementById('withdraw-contribution-modal').showModal()">Withdraw</button>
 </div>
+
+<dialog id="withdraw-contribution-modal" class="modal">
+  <div class="modal-box border border-error/40">
+    <h3 class="text-lg font-semibold text-error">Withdraw contribution</h3>
+    <p class="mt-3 text-brand-text">
+      Withdraw <strong>{{ record.user|display_name }}</strong>&rsquo;s credit on
+      <strong>{{ record.task.name }}</strong>? This removes it entirely. It comes back
+      only if the task is closed again with their mark still standing.
+    </p>
+    <div class="flex gap-2 justify-end mt-6">
+      <form method="dialog" class="contents">
+        <button class="btn btn-ghost">Keep contribution</button>
+      </form>
+      <form method="post" class="contents"
+            action="{% url 'contributions:contribution_remove' project_pk=project.pk pk=record.pk %}"
+            hx-post="{% url 'contributions:contribution_remove' project_pk=project.pk pk=record.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline btn-error">Withdraw</button>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
