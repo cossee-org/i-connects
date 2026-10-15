@@ -1463,56 +1463,22 @@ def test_matrix_columns_use_the_same_order(client, user):
 
 
 @pytest.mark.django_db
-def test_the_matrix_filter_sits_in_the_view_switcher_row(client, user):
-    """Drawn once, by the page, beside "Every contribution" and above the grid."""
+def test_the_page_offers_no_with_contributions_only_filter(client, user):
+    """The "With contributions only" toggle is gone: not drawn by the page,
+    nor re-sent when the matrix is re-sorted."""
     project, col, pm = _make_project(user)
     _credit(project, col, pm, pm, ContributionType.SOFTWARE)
-
     client.force_login(user)
-    body = client.get(
+
+    page = client.get(
         reverse("projects:contribution_tracking", kwargs={"pk": project.pk})
     ).content.decode()
-    assert body.count('id="matrix-filter"') == 1
-    assert "hx-swap-oob" not in body
-    assert (
-        body.index("setView('every')")
-        < body.index('id="matrix-filter"')
-        < body.index('id="contributions-by-member-container"')
-    )
-
-
-@pytest.mark.django_db
-def test_a_matrix_swap_refreshes_the_filter_with_the_current_sort(client, user):
-    """Re-sorting swaps only the grid, so it re-sends the filter out of band;
-    otherwise ticking the box afterwards would drop the new sort."""
-    project, col, pm = _make_project(user)
-    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
-
-    client.force_login(user)
-    body = client.get(
+    swap = client.get(
         _by_member_url(project), {"sort": "member", "dir": "desc"}
     ).content.decode()
-    assert '<div id="matrix-filter" hx-swap-oob="true"' in body
-    assert '"sort": "member", "dir": "desc"' in body
-
-
-@pytest.mark.django_db
-def test_the_matrix_filter_toggle_flips_and_says_which_way(client, user):
-    """Off: plain, and a click asks for used=1. On: solid, and a click asks
-    for used=0."""
-    project, col, pm = _make_project(user)
-    _credit(project, col, pm, pm, ContributionType.SOFTWARE)
-    client.force_login(user)
-
-    off = client.get(_by_member_url(project)).content.decode()
-    assert 'aria-pressed="false"' in off
-    assert '"used": "1"' in off
-    assert "btn-ghost text-brand-navy" in off
-
-    on = client.get(_by_member_url(project), {"used": "1"}).content.decode()
-    assert 'aria-pressed="true"' in on
-    assert '"used": "0"' in on
-    assert "btn btn-xs btn-primary" in on
+    for body in (page, swap):
+        assert "With contributions only" not in body
+        assert 'id="matrix-filter"' not in body
 
 
 @pytest.mark.django_db
