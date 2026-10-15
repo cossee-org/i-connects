@@ -1,21 +1,22 @@
 {# Task date span — {% include "_components/task_dates.html" with task=task %}. #}
 {# One clock icon plus the shared label: "Mar 10 – Mar 12" for a task with both #}
-{# dates, "Due Mar 12" / "Starts Mar 10" for one with a single date, nothing at #}
-{# all when it has neither. Pass hide_on_mobile=True to drop it on narrow screens. #}
+{# dates, "Due Mar 12" / "Starts Mar 10" for one with a single date, and "No date" #}
+{# when it has neither, so a card always says. Pass hide_on_mobile=True to drop it #}
+{# on narrow screens. #}
 {# Pass tooltip=True on surfaces that can afford the styled hover tooltip (Kanban #}
 {# cards, List rows, the Day agenda); elsewhere the same text stays a plain title #}
 {# attribute, which no overflow can clip. #}
 {% load task_tags %}
 {% with dates=task|task_dates %}
-  {% if dates.short %}
+  {% with full=dates.full|default:"No start or due date" %}
     <span class="{% if hide_on_mobile %}hidden sm:inline-flex{% else %}inline-flex{% endif %} items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0{% if tooltip %} hover-tooltip{% endif %}"
-          {% if tooltip %}data-tooltip="{{ dates.full }}"{% else %}title="{{ dates.full }}"{% endif %}>
+          {% if tooltip %}data-tooltip="{{ full }}"{% else %}title="{{ full }}"{% endif %}>
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
            stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
       </svg>
-      {{ dates.short }}
+      {{ dates.short|default:"No date" }}
     </span>
-  {% endif %}
+  {% endwith %}
 {% endwith %}

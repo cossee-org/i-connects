@@ -1,10 +1,10 @@
 {# Assignee count — {% include "_components/assignee_count.html" with count=task.assigned_members.all|length %}. #}
-{# People icon plus how many members are assigned; renders nothing when nobody is, so #}
-{# callers can drop it in unconditionally. The count is passed in rather than derived #}
+{# People icon plus how many members are assigned, 0 included: a card always says how #}
+{# many, so callers drop it in unconditionally. The count is passed in rather than derived #}
 {# here so the surrounding row can test the same value, and callers should prefetch #}
 {# assigned_members to keep this off the per-task query path. The bare number needs #}
 {# naming for assistive tech, hence role="img" plus a spelt-out label. #}
-{% if count %}
+{% with count=count|default:0 %}
   <span class="inline-flex items-center gap-1 text-xs text-brand-text/60 whitespace-nowrap shrink-0{% if tooltip %} hover-tooltip{% endif %}"
         role="img" aria-label="{{ count }} assigned member{{ count|pluralize }}"
         {% if tooltip %}data-tooltip="{{ count }} assigned member{{ count|pluralize }}"{% else %}title="{{ count }} assigned member{{ count|pluralize }}"{% endif %}>
@@ -15,4 +15,4 @@
     </svg>
     {{ count }}
   </span>
-{% endif %}
+{% endwith %}

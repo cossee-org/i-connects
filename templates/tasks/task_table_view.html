@@ -1,7 +1,6 @@
 {# Table view partial — included in board.html inside x-show="$store.board.viewMode === 'table'", #}
 {# and rendered alone by BoardTablePartialView when a header re-sorts it. #}
 {# Context comes from views._table_view_context. #}
-{% load task_tags %}
 
 {% if table_tasks %}
   <div class="brand-card overflow-x-auto">
@@ -10,8 +9,8 @@
       <thead class="bg-brand-lighter text-brand-navy">
         <tr>
           {% include "tasks/partials/table_sort_header.html" with key="name" label="Task" %}
-          {% include "tasks/partials/table_sort_header.html" with key="column" label="Column" %}
           {% include "tasks/partials/table_sort_header.html" with key="assignees" label="Assignees" %}
+          {% include "tasks/partials/table_sort_header.html" with key="reviewers" label="Reviewers" %}
           {% include "tasks/partials/table_sort_header.html" with key="start" label="Start" %}
           {% include "tasks/partials/table_sort_header.html" with key="due" label="Due" %}
           {% include "tasks/partials/table_sort_header.html" with key="priority" label="Priority" %}
@@ -29,26 +28,20 @@
               <button type="button" class="text-left hover:text-brand-coral transition-colors line-clamp-2"
                       @click.stop="$dispatch('open-task-pane', { url: '{{ pane_url }}' })">{{ task.name }}</button>
             </th>
-            <td class="text-xs whitespace-nowrap text-brand-text/80">{{ task.container.name }}</td>
-            <td class="text-xs text-brand-text/80">
-              {% with assignees=task.assigned_members.all|member_name_summary %}
-                {% if assignees.short %}
-                  <span title="{{ assignees.full }}">{{ assignees.short }}</span>
-                {% else %}
-                  <span class="text-brand-text/40">Unassigned</span>
-                {% endif %}
-              {% endwith %}
-            </td>
+            {# How many, not who: the names are in the side pane. #}
+            <td>{% include "_components/assignee_count.html" with count=task.n_assignees %}</td>
+            <td>{% include "_components/reviewer_count.html" with count=task.n_reviewers %}</td>
             <td class="text-xs whitespace-nowrap text-brand-text/80">
               {% if task.start_date %}{{ task.start_date|date:"M j, Y" }}{% else %}<span class="text-brand-text/40">&mdash;</span>{% endif %}
             </td>
             <td class="text-xs whitespace-nowrap">
               {% if task.deadline %}
-                {# The date first so the column's dates line up; the pill keeps a plain title #}
-                {# here, since the table's horizontal scroll box would clip the styled bubble. #}
+                {# The date first so the column's dates line up, then the Overdue icon. It #}
+                {# keeps a plain title here, since the table's horizontal scroll box would #}
+                {# clip the styled bubble. #}
                 <span class="inline-flex items-center gap-2">
                   <span class="text-brand-text/80">{{ task.deadline|date:"M j, Y" }}</span>
-                  {% include "_components/overdue_badge.html" with task=task %}
+                  {% include "_components/overdue_badge.html" with task=task icon_only=True %}
                 </span>
               {% else %}
                 <span class="text-brand-text/40">&mdash;</span>
@@ -63,7 +56,7 @@
             </td>
             <td class="text-xs whitespace-nowrap">
               {% if task.status == "COMPLETED" %}
-                <span class="inline-flex items-center gap-1 text-success font-medium">
+                <span class="inline-flex items-center gap-1 text-blue-600 font-medium">
                   {% include "_components/completion_check.html" with task=task %}
                   Complete
                 </span>

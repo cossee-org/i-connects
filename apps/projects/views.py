@@ -601,68 +601,30 @@ class MyProjectListView(LoginRequiredMixin, ListView):
         return context
 
 
-def _project_summary(project, now, *, is_project_manager: bool) -> dict:
-    """Everything the Project Overview tab reports, beyond its number cards.
+def _project_summary(project, now, *, is_lead: bool) -> dict:
+    """Everything the Project Overview tab reports to a member, beyond its
+    number cards.
 
-    The tab answers four questions, one card each:
+    The tab answers two questions, one card each:
 
-    - Needs attention: overdue tasks, tasks every assignee has marked done
-      (only a lead's completion is left) and, for a lead, join requests.
-    - Coming up: the next deadlines and milestones, in date order.
     - Recent activity: who did what lately, across tasks and the wiki.
-    - Wiki: the project's settled documents (locked pages: agreements,
-      protocols, data dictionaries) always in view, then what changed lately.
-    - Progress: how much is done, where the open work sits on the board,
-      and the credit recorded so far.
+    - Wiki: the pages a lead put on the Overview, settled ones first.
 
-    Each list is capped; the tabs hold the rest.
+    Wiki pages follow their "Who can see it": a leads-only page is neither
+    listed nor named in the activity for anyone but a lead. Each list is
+    capped; the tabs hold the rest.
     """
-    from django.db.models import Count
     from django.utils.timesince import timesince
 
-    from apps.contributions.models import ContributionRecord
     from apps.core.enums import TaskStatus
-    from apps.tasks.models import Milestone, Task, TaskLog
+    from apps.tasks.models import Task, TaskLog
     from apps.tasks.services import all_submissions_reviewed
     from apps.wiki.models import WikiPage, WikiRevision
 
     tasks = Task.objects.filter(project=project)
-    open_tasks = tasks.exclude(status=TaskStatus.COMPLETED)
-    total = tasks.count()
-    completed = total - open_tasks.count()
-
-    # ── Needs attention ──
-    overdue = list(
-        open_tasks.filter(deadline__lt=now).order_by("deadline", "id")[:5]
+    readable_pages = WikiPage.objects.filter(project=project).visible_to(
+        is_lead=is_lead, is_member=True
     )
-    # Every assignee has marked their part done. Prefetched, so the
-    # per-task properties read from memory.
-    waiting = [
-        t
-        for t in open_tasks.prefetch_related("assigned_members", "task_logs")
-        .order_by("-updated_at", "id")
-        if t.assignee_count and t.all_assignees_done
-    ]
-    join_requests = []
-    if is_project_manager:
-        join_requests = list(
-            JoinRequest.objects.filter(
-                project=project, status=JoinRequestStatus.PENDING
-            )
-            .select_related("user")
-            .order_by("created_at")[:5]
-        )
-
-    # ── Coming up ──
-    upcoming = [
-        {"kind": "task", "date": t.deadline, "task": t}
-        for t in open_tasks.filter(deadline__gte=now).order_by("deadline", "id")[:5]
-    ] + [
-        {"kind": "milestone", "date": m.end_date, "milestone": m}
-        for m in Milestone.objects.filter(project=project, end_date__gte=now)
-        .order_by("end_date", "id")[:3]
-    ]
-    upcoming.sort(key=lambda item: item["date"])
 
     # ── Recent activity ──
     # Drawn from what the app records today: a task's creation and its
@@ -725,7 +687,7 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
                 "verb": "completed", "kind": "task", "task": t,
             })
     for r in (
-        WikiRevision.objects.filter(page__project=project)
+        WikiRevision.objects.filter(page__in=readable_pages)
         .select_related("page", "editor")
         .order_by("-created_at")[:8]
     ):
@@ -745,43 +707,17 @@ def _project_summary(project, now, *, is_project_manager: bool) -> dict:
             else f"{timesince(e['when'], now, depth=1)} ago"
         )
 
-    # ── Progress ──
-    columns = list(
-        open_tasks.values("container__name", "container__container_order")
-        .annotate(n=Count("id"))
-        .order_by("container__container_order", "container__name")
-    )
-    credit = None
-    if project.tracks_credit:
-        records = ContributionRecord.objects.filter(project=project)
-        credit = {
-            "count": records.count(),
-            "people": records.values("user").distinct().count(),
-        }
-
     # ── Wiki ──
-    # A locked page is one a lead has marked settled (only leads can edit
-    # it), which is what a project's agreements and protocols are. Those are
-    # listed in full, by title, so members always find them; the rest show
-    # as what was edited lately.
-    pages = WikiPage.objects.filter(project=project).select_related("updated_by")
+    # Every page a lead has put on the Overview (that the viewer may read),
+    # the most recently updated first.
     wiki = {
-        "key_pages": list(pages.filter(locked=True).order_by("title", "id")[:10]),
-        "recent": list(pages.filter(locked=False).order_by("-updated_at", "id")[:4]),
+        "pages": list(
+            readable_pages.filter(show_on_overview=True).order_by("-updated_at", "-id")
+        )
     }
 
     return {
-        "overdue": overdue,
-        "waiting": waiting[:5],
-        "waiting_count": len(waiting),
-        "join_requests": join_requests,
-        "upcoming": upcoming[:6],
         "activity": events[:8],
-        "total": total,
-        "completed": completed,
-        "percent": round(100 * completed / total) if total else 0,
-        "columns": columns,
-        "credit": credit,
         "wiki": wiki,
     }
 
@@ -896,12 +832,23 @@ class ProjectDetailView(DetailView):
         context["contributor_count"] = ProjectPrivilege.objects.filter(
             project=project
         ).values("user").distinct().count()
-        context["wiki_page_count"] = WikiPage.objects.filter(project=project).count()
+        # Wiki pages count and show as the viewer may read them. Anyone but a
+        # member only gets this far on a public project, where the pages a
+        # lead made public and put on the Overview are listed for them.
+        readable_pages = WikiPage.objects.filter(project=project).visible_to(
+            is_lead=context["is_project_manager"],
+            is_member=context["is_project_member"],
+        )
+        context["wiki_page_count"] = readable_pages.count()
         if context["is_project_member"]:
             context["summary"] = _project_summary(
-                project,
-                context["today"],
-                is_project_manager=context["is_project_manager"],
+                project, context["today"], is_lead=context["is_project_manager"]
+            )
+        else:
+            context["public_wiki_pages"] = list(
+                readable_pages.filter(show_on_overview=True).order_by(
+                    "-updated_at", "-id"
+                )
             )
         return context
 

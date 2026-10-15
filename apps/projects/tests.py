@@ -1602,41 +1602,19 @@ def test_summary_on_an_empty_project(client, user):
     client.force_login(user)
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
     body = response.content.decode()
-    assert response.context["summary"]["total"] == 0
-    for empty in (
-        "Nothing needs attention right now.",
-        "No upcoming deadlines or milestones.",
-        "No tasks yet, so nothing to measure.",
-    ):
-        assert empty in body
+    assert "Nothing has happened here yet." in body
 
 
 @pytest.mark.django_db
-def test_summary_reports_attention_coming_up_activity_and_progress(client, user, other_user):
-    from apps.projects.services import create_join_request
-
+def test_summary_reports_activity(client, user, other_user):
     project = _summary_project(user, other_user)
-    newcomer = get_user_model().objects.create_user(
-        email="new@example.com", password="pw-123456789", name="Newcomer"
-    )
-    create_join_request(
-        project=project, user=newcomer, requested_privilege=MemberPrivileges.CONTRIBUTOR
-    )
 
     client.force_login(user)
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
     summary = response.context["summary"]
 
-    # Needs attention: open and late, every assignee done, a join request.
-    assert [t.name for t in summary["overdue"]] == ["Late one"]
-    assert [t.name for t in summary["waiting"]] == ["Waiting one"]
-    assert [jr.user.email for jr in summary["join_requests"]] == ["new@example.com"]
     # A task finished after its deadline is not overdue.
     assert response.context["overdue_count"] == 1
-
-    # Coming up: milestone (tomorrow) before task (in three days).
-    assert [i["kind"] for i in summary["upcoming"]] == ["milestone", "task"]
-    assert summary["upcoming"][1]["task"].name == "Soon one"
 
     # Recent activity covers completions and done marks, newest first.
     verbs = [e["verb"] for e in summary["activity"]]
@@ -1645,20 +1623,10 @@ def test_summary_reports_attention_coming_up_activity_and_progress(client, user,
     assert whens == sorted(whens, reverse=True)
     assert all(e["ago"] == "just now" for e in summary["activity"])
 
-    # Progress.
-    assert (summary["completed"], summary["total"], summary["percent"]) == (2, 5, 40)
-    assert summary["columns"] == [
-        {"container__name": "Doing", "container__container_order": 0, "n": 3}
-    ]
-    assert summary["credit"]["people"] == 1
-
     body = response.content.decode()
-    # The overdue row carries the task views' shared Overdue pill.
-    assert body.count("Overdue: was due") == 1
-    assert "Ready for a lead to complete" in body
-    assert "asked to join as member" in body
-    assert ">Soon one</a>" in body and "Ship it" in body
-    assert 'aria-valuenow="40"' in body
+    # The Progress, Needs attention and Coming up cards are gone.
+    for heading in ("proj-progress-heading", "proj-attention-heading", "proj-upcoming-heading"):
+        assert f'id="{heading}"' not in body
 
 
 @pytest.mark.django_db
@@ -1727,13 +1695,32 @@ def test_summary_number_cards_open_their_tabs(client, user):
     project = _make_project(user)
     client.force_login(user)
     body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    board = reverse("tasks:board", kwargs={"project_pk": project.pk})
     for url in (
-        reverse("tasks:board", kwargs={"project_pk": project.pk}),
+        board,                                  # Tasks
+        f"{board}?filter=overdue",              # Overdue: the board, overdue only
         reverse("projects:join_requests", kwargs={"pk": project.pk}),
         reverse("projects:members", kwargs={"pk": project.pk}),
         reverse("wiki:list", kwargs={"project_pk": project.pk}),
     ):
         assert f'<a href="{url}"\n   class="brand-card p-4' in body, url
+    # The wiki's number is labelled "Wiki", not "Wiki pages".
+    assert ">Wiki pages</span>" not in body
+    assert ">Wiki</span>" in body
+
+
+@pytest.mark.django_db
+def test_overview_is_one_full_width_column(client, user):
+    """About, then the Wiki, then Recent activity, each the full width."""
+    project = _make_project(user)
+    client.force_login(user)
+    body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    assert "proj-columns" not in body
+    assert (
+        body.index('id="proj-about-heading"')
+        < body.index('id="proj-wiki-heading"')
+        < body.index('id="proj-activity-heading"')
+    )
 
 
 @pytest.mark.django_db
@@ -1748,45 +1735,100 @@ def test_summary_is_a_report_not_a_workbench(client, user):
 
 
 @pytest.mark.django_db
-def test_overview_wiki_card_lists_locked_pages_then_recent_ones(client, user):
-    """Locked pages (agreements, protocols) are always listed, by title;
-    the other pages show as recently updated."""
+def test_overview_wiki_card_lists_the_pages_put_on_the_overview(client, user):
+    """Only the pages a lead put on the Overview, in one list, the most
+    recently updated first; a locked page carries a lock."""
     from apps.wiki.services import create_page, update_page
 
     project = _make_project(user)
-    create_page(project=project, actor=user, title="Team agreement", locked=True)
-    create_page(project=project, actor=user, title="Data protocol", locked=True)
-    notes = create_page(project=project, actor=user, title="Meeting notes")
-    create_page(project=project, actor=user, title="Glossary")
+    on = {"show_on_overview": True}
+    create_page(project=project, actor=user, title="Team agreement", locked=True, **on)
+    create_page(project=project, actor=user, title="Data protocol", locked=True, **on)
+    notes = create_page(project=project, actor=user, title="Meeting notes", **on)
+    create_page(project=project, actor=user, title="Glossary", **on)
+    create_page(project=project, actor=user, title="Scratchpad")          # not on it
+    create_page(project=project, actor=user, title="Old rules", locked=True)  # nor this
     update_page(page=notes, actor=user, title=notes.title, content_markdown="Updated.")
 
     client.force_login(user)
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
     wiki = response.context["summary"]["wiki"]
-    assert [p.title for p in wiki["key_pages"]] == ["Data protocol", "Team agreement"]
-    assert [p.title for p in wiki["recent"]] == ["Meeting notes", "Glossary"]
+    assert [page.title for page in wiki["pages"]] == [
+        "Meeting notes", "Glossary", "Data protocol", "Team agreement",
+    ]
 
     body = response.content.decode()
     card = body[body.index('id="proj-wiki-heading"'):]
     card = card[: card.index("</section>")]
-    assert card.index("Key pages") < card.index("Data protocol") < card.index("Recently updated")
-    assert "All 4 pages" in card
+    assert "Key pages" not in card and "Recently updated" not in card
+    # One plain list, no rail.
+    assert card.count("<ul") == 1 and "wiki-rail" not in card
+    order = [card.index(f">{t}</a>") for t in ("Meeting notes", "Glossary", "Data protocol", "Team agreement")]
+    assert order == sorted(order)
+    assert card.count('aria-label="Locked page"') == 2
+    assert "Scratchpad" not in card and "Old rules" not in card
+    # No dates, no rules between rows; the wiki holds more, so "See all".
+    assert "Oct" not in card and "divide-y" not in card
+    assert "See all" in card
 
 
 @pytest.mark.django_db
-def test_overview_wiki_card_when_nothing_is_locked_or_written(client, user, other_user):
+def test_overview_wiki_card_lists_every_page_put_on_the_overview(client, user):
     from apps.wiki.services import create_page
 
     project = _make_project(user)
+    create_page(
+        project=project, actor=user, title="Team agreement", locked=True, show_on_overview=True
+    )
+    for title in ("One", "Two", "Three", "Four", "Five", "Six"):
+        create_page(project=project, actor=user, title=title, show_on_overview=True)
+
     client.force_login(user)
-    body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
+    url = reverse("projects:detail", kwargs={"pk": project.pk})
+    response = client.get(url)
+    titles = [page.title for page in response.context["summary"]["wiki"]["pages"]]
+    # No cap, and newest update first: being locked does not move a page up.
+    assert titles == ["Six", "Five", "Four", "Three", "Two", "One", "Team agreement"]
+
+    card = _wiki_card(response.content.decode())
+    assert all(f">{t}</a>" in card for t in titles)
+    # Every page in the wiki is already listed: nothing more to see.
+    assert "See all" not in card
+
+    # A page not on the Overview: "See all" opens the Wiki for it.
+    create_page(project=project, actor=user, title="Scratchpad")
+    card = _wiki_card(client.get(url).content.decode())
+    wiki_url = reverse("wiki:list", kwargs={"project_pk": project.pk})
+    assert "Scratchpad" not in card
+    assert f'<a href="{wiki_url}"' in card and "See all" in card
+    # A plain button at the top right, beside the title, above the list.
+    assert f'<a href="{wiki_url}" class="btn btn-sm btn-ghost">See all</a>' in card
+    assert card.index("See all") < card.index("<ul")
+
+
+def _wiki_card(body: str) -> str:
+    """The Overview's Wiki card alone, out of the whole page."""
+    card = body[body.index('id="proj-wiki-heading"'):]
+    return card[: card.index("</section>")]
+
+
+@pytest.mark.django_db
+def test_overview_wiki_card_when_nothing_is_on_the_overview_or_written(client, user, other_user):
+    from apps.wiki.services import create_page, update_page
+
+    project = _make_project(user)
+    url = reverse("projects:detail", kwargs={"pk": project.pk})
+    client.force_login(user)
+    body = client.get(url).content.decode()
     assert "No wiki pages yet." in body and "Go to the Wiki" in body
 
-    # Pages but none locked: a lead is told how to keep one here; a member
-    # sees only the recent list.
-    create_page(project=project, actor=user, title="Notes")
-    lead_body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
-    assert "Lock a page" in lead_body
+    # Pages, none on the Overview: the card says so, and a lead is told how
+    # to put one there; a member is not.
+    notes = create_page(project=project, actor=user, title="Notes")
+    lead_body = client.get(url).content.decode()
+    assert "No wiki pages are on the Overview yet." in lead_body
+    assert "Show on Project Overview" in lead_body
+    assert ">Notes</a>" not in _wiki_card(lead_body)
 
     member = ProjectMember.objects.create(project=project)
     member.users.add(other_user)
@@ -1794,6 +1836,60 @@ def test_overview_wiki_card_when_nothing_is_locked_or_written(client, user, othe
         project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
     )
     client.force_login(other_user)
-    member_body = client.get(reverse("projects:detail", kwargs={"pk": project.pk})).content.decode()
-    assert "Lock a page" not in member_body
-    assert ">Notes</a>" in member_body
+    member_body = client.get(url).content.decode()
+    assert "No wiki pages are on the Overview yet." in member_body
+    assert "Show on Project Overview" not in member_body
+
+    # A lead puts it on the Overview: every member now sees it listed.
+    update_page(
+        page=notes, actor=user, title=notes.title, content_markdown="", show_on_overview=True
+    )
+    assert ">Notes</a>" in _wiki_card(client.get(url).content.decode())
+
+
+@pytest.mark.django_db
+def test_overview_wiki_follows_who_can_see_each_page(client, user, other_user):
+    """A leads-only page is on a lead's Overview only — not on the card, in
+    Recent activity or in the Wiki count for anyone else — and a visitor to
+    a public project sees just the public pages put on the Overview."""
+    from apps.wiki.models import WikiVisibility
+    from apps.wiki.services import create_page
+
+    project = _make_project(user)
+    project.is_public = True
+    project.save()
+    on = {"show_on_overview": True}
+    create_page(project=project, actor=user, title="Budget", visibility=WikiVisibility.LEADS, **on)
+    create_page(project=project, actor=user, title="Protocol", **on)
+    create_page(project=project, actor=user, title="About us", visibility=WikiVisibility.PUBLIC, **on)
+    create_page(project=project, actor=user, title="Press kit", visibility=WikiVisibility.PUBLIC)
+    url = reverse("projects:detail", kwargs={"pk": project.pk})
+
+    client.force_login(user)
+    lead = client.get(url)
+    assert {p.title for p in lead.context["summary"]["wiki"]["pages"]} == {
+        "Budget", "Protocol", "About us",
+    }
+    assert lead.context["wiki_page_count"] == 4
+
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    client.force_login(other_user)
+    contributor = client.get(url)
+    assert {p.title for p in contributor.context["summary"]["wiki"]["pages"]} == {
+        "Protocol", "About us",
+    }
+    assert contributor.context["wiki_page_count"] == 3
+    assert "Budget" not in contributor.content.decode()  # not in Recent activity either
+
+    # A visitor: not a member of this public project.
+    member.delete()
+    ProjectPrivilege.objects.filter(project=project, user=other_user).delete()
+    visitor = client.get(url)
+    assert [p.title for p in visitor.context["public_wiki_pages"]] == ["About us"]
+    body = visitor.content.decode()
+    assert 'id="proj-public-wiki-heading"' in body and ">About us</a>" in body
+    assert "Protocol" not in body and "Budget" not in body and "Press kit" not in body

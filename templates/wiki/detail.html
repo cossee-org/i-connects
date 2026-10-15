@@ -14,6 +14,11 @@
 
 {% block content %}
 <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  {% if public_reader %}
+    {# Someone outside the project reading a public page: no wiki around it. #}
+    <a href="{% url 'projects:detail' pk=project.pk %}"
+       class="btn btn-sm btn-ghost text-brand-navy">&larr; Project</a>
+  {% else %}
   <a href="{% url 'wiki:list' project_pk=project.pk %}"
      class="btn btn-sm btn-ghost text-brand-navy">&larr; All wiki pages</a>
   <div class="flex flex-wrap gap-2">
@@ -30,6 +35,7 @@
          class="btn btn-sm btn-outline btn-error">Delete</a>
     {% endif %}
   </div>
+  {% endif %}
 </div>
 
 <div class="flex flex-col lg:flex-row gap-6 items-start">
@@ -49,6 +55,18 @@
           {% endif %}
         </p>
       </div>
+      {% if not public_reader %}
+      <span class="flex flex-wrap gap-2 shrink-0">
+      {% if page.visibility != "members" %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">
+          {{ page.get_visibility_display }}
+        </span>
+      {% endif %}
+      {% if page.show_on_overview %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">
+          On Project Overview
+        </span>
+      {% endif %}
       {% if page.locked %}
         <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-light/50 text-brand-text shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3" aria-hidden="true">
@@ -56,6 +74,8 @@
           </svg>
           Locked &mdash; leads only
         </span>
+      {% endif %}
+      </span>
       {% endif %}
     </div>
 
@@ -67,7 +87,7 @@
       </p>
     {% endif %}
 
-    {% if rendered.missing_links %}
+    {% if rendered.missing_links and not public_reader %}
       <div class="brand-panel p-4 mt-6">
         <p class="text-sm text-brand-navy font-medium">Pages this one links to that don't exist yet</p>
         <ul class="mt-2 flex flex-wrap gap-2">

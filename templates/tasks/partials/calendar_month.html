@@ -41,10 +41,11 @@
         </button>
 
         {% for task in day.tasks|slice:":3" %}
-          <div class="brand-card px-1.5 py-1 cursor-pointer hover:bg-brand-lighter transition-colors truncate{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
+          <div class="brand-card px-1.5 py-1 cursor-pointer hover:bg-brand-lighter transition-colors truncate"
                title="{{ task.name }}"
                @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
             <span class="flex items-center gap-1">
+              {% if task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True compact=True %}{% endif %}
               {% include "_components/completion_check.html" with task=task compact=True %}
               {% include "_components/overdue_badge.html" with task=task icon_only=True compact=True %}
               <span class="text-brand-navy truncate min-w-0">{{ task.name }}</span>

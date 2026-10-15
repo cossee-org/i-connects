@@ -1,40 +1,31 @@
 {# Single task card. Draggable between columns; click opens the side pane. #}
 <li data-task-id="{{ task.pk }}"
     id="task-card-{{ task.pk }}"
-    class="task-card brand-card p-3 hover:shadow-md cursor-pointer mb-2 bg-white{% if task.is_priority %} border-l-2 border-l-error{% endif %}"
+    class="task-card brand-card p-3 hover:shadow-md cursor-pointer mb-2 bg-white"
     @click="$dispatch('open-task-pane', { url: '{% url "tasks:detail_pane" project_pk=project.pk pk=task.pk %}' })">
 
   {% comment %}
-    Title row: the name, then the priority flag and completed check paired at
-    the right. They share a wrapper so justify-between keeps them together
-    instead of spreading all three across the row; the wrapper is skipped
-    entirely when there is nothing to show. items-start keeps the pair level
-    with the first line of a name that wraps.
+    Title row: the name, then the task's state icons (High priority, Overdue,
+    Completed) together at the right, level with the first line of a name
+    that wraps.
   {% endcomment %}
   <div class="flex items-start justify-between gap-2">
     <span class="font-medium text-brand-navy text-sm leading-tight min-w-0">{{ task.name }}</span>
-    {% if task.is_priority or task.status == "COMPLETED" %}
-      <span class="flex items-start gap-1 shrink-0">
-        {% if task.is_priority %}{% include "_components/priority_flag.html" with icon_only=True tooltip=True %}{% endif %}
-        {% include "_components/completion_check.html" with task=task tooltip=True %}
-      </span>
-    {% endif %}
+    {% include "_components/task_flags.html" with task=task top=True %}
   </div>
 
   {# No status pill here — the column heading the card sits under already names it. #}
   {% with assignees=task.assigned_members.all|length reviewers=task.reviewers.all|length %}
-  {% if task.github_url or task.deadline or task.start_date or assignees or reviewers %}
+  {# Always shown: dates (or "No date"), then the assignee and reviewer counts, 0 included. #}
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0 mt-2">
       {% if task.github_url %}
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="w-3.5 h-3.5 shrink-0 text-brand-text/60" aria-label="Linked to GitHub" role="img" fill="currentColor">
           <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
         </svg>
       {% endif %}
-      {% include "_components/overdue_badge.html" with task=task tooltip=True %}
       {% include "_components/task_dates.html" with task=task tooltip=True %}
       {% include "_components/assignee_count.html" with count=assignees tooltip=True %}
       {% include "_components/reviewer_count.html" with count=reviewers tooltip=True %}
     </div>
-  {% endif %}
   {% endwith %}
 </li>
