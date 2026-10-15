@@ -2137,7 +2137,7 @@ def test_members_table_offers_modify_privilege_to_a_lead(client, user, other_use
 @pytest.mark.django_db
 def test_members_table_action_buttons_styles(client, user, other_user):
     """Modify privilege looks like Resend on Pending invitation requests, a
-    plain navy button; Remove is a small full coral one."""
+    plain navy button; Remove is red text, like Cancel there."""
     project = create_project_with_owner(
         user=user,
         form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
@@ -2154,11 +2154,12 @@ def test_members_table_action_buttons_styles(client, user, other_user):
     ).content.decode()
     row = content[content.index(f'id="member-row-{member.pk}"') :]
     row = row[: row.index("</tr>")]
-    full = 'class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"'
+    red = 'class="btn btn-sm btn-ghost text-error hover:bg-error/10"'
     modify = row[row.index("openPrivilegeModal") - 200 : row.index("openPrivilegeModal")]
     assert 'class="btn btn-sm btn-ghost text-brand-navy hover:bg-brand-lighter"' in modify, "Modify privilege looks like Resend"
     remove = row[row.index("openRemoveMemberModal") - 200 : row.index("openRemoveMemberModal")]
-    assert full in remove, "Remove stays a full coral button"
+    assert red in remove, "Remove is red text, like Cancel"
+    assert "bg-brand-coral" not in row
 
 
 @pytest.mark.django_db

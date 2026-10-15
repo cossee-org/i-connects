@@ -54,8 +54,8 @@ Context: row {member, user, privilege, is_self}, project, user_privilege, viewer
         which posts to update_privilege and swaps this row. Only a member
         with a linked account has a privilege to change; the last Lead's own
         row cannot step down, as with Remove. Modify privilege is a plain navy
-        button, like Resend on Pending invitation requests; Remove is a full
-        coral one. Disabled, daisyUI's own disabled look takes over.
+        button, like Resend on Pending invitation requests; Remove is red
+        text, like Cancel there. Disabled, daisyUI's own disabled look takes over.
       {% endcomment %}
       {% if row.user %}
         {% if row.is_self and viewer_is_last_pm %}
@@ -75,7 +75,7 @@ Context: row {member, user, privilege, is_self}, project, user_privilege, viewer
         {% endif %}
       {% endif %}
       {% if row.is_self and viewer_is_last_pm %}
-        <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+        <button class="btn btn-sm btn-ghost text-error hover:bg-error/10"
                 disabled
                 title="A project must always have at least one Lead.">
           Remove
@@ -83,7 +83,7 @@ Context: row {member, user, privilege, is_self}, project, user_privilege, viewer
       {% else %}
         <button
           type="button"
-          class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+          class="btn btn-sm btn-ghost text-error hover:bg-error/10"
           onclick="openRemoveMemberModal('{% url 'projects:remove_member' pk=project.pk member_pk=row.member.pk %}', '{{ row.user.name|default:row.user.email|escapejs }}', 'member-row-{{ row.member.pk }}')"
           title="Remove member"
         >
