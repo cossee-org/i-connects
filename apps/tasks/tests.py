@@ -3243,7 +3243,7 @@ def test_priority_flag_keeps_its_smaller_size_off_the_task_surfaces(client, user
 
 @pytest.mark.django_db
 def test_matrix_shows_when_an_assignee_marked_done(client, user, other_user):
-    """The row's Done line carries the date the assignee set it."""
+    """The row's Done cell carries the date the assignee set it."""
     from apps.tasks.services import mark_own_done
 
     project, task, _lead, contrib = _two_assignee_task(user, other_user)
@@ -3254,10 +3254,13 @@ def test_matrix_shows_when_an_assignee_marked_done(client, user, other_user):
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
     stamped = log.completed_at.strftime("%b %-d")
-    # Under the assignee's name, in the green Done line, beside a ticked box.
+    # In the Done cell, in green beside the ticked box: the date, then who.
     row = _row_for(pane, contrib)
-    line = row[row.index("data-done-line") :]
-    assert f"Done {stamped}" in line[: line.index("</span>")]
+    cell = row[row.index("data-done-cell") :]
+    line = cell[cell.index("data-done-line") :]
+    line = line[: line.index("</span>")]
+    assert line.index(stamped) < line.index("by ")
+    assert "text-success" in cell[: cell.index("data-done-line") + 20]
     assert 'data-mark="yes"' in row
 
 
@@ -4083,6 +4086,42 @@ def test_completed_task_has_no_locked_note(client, user, other_user):
     ).content.decode()
     assert note not in reopened
     assert MARK_NOT_DONE in reopened
+
+
+@pytest.mark.django_db
+def test_each_tick_cell_says_when_and_by_whom_beside_its_box(client, user, other_user, pm_user):
+    """The Done and Reviewed cells carry the date and who beside the box, and
+    say what is still to come otherwise; nothing sits under the name."""
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    third = _add_contributor(project, pm_user)
+    task.assigned_members.add(third)
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=contrib)
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+    mark_own_done(task=task, member=third)
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+
+    def cells(member):
+        row = _row_for(pane, member)
+        name = row[: row.index("data-done-cell")]
+        done = row[row.index("data-done-cell") : row.index("data-review-cell")]
+        review = row[row.index("data-review-cell") :]
+        return name, done, review
+
+    name, done, review = cells(contrib)
+    assert "by " not in name
+    assert f"by {contrib.display_name}" in done and "data-done-line" in done
+    assert f"by {lead.display_name}" in review and "data-review-line" in review
+
+    _name, done, review = cells(third)
+    assert f"by {third.display_name}" in done
+    assert "Awaiting review" in review
+
+    _name, done, review = cells(lead)
+    assert "Not done yet" in done and "&mdash;" in review
 
 
 @pytest.mark.django_db

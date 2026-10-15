@@ -124,12 +124,14 @@
 
       {% comment %}
         One table row per assignee, under Assignee / Done / Reviewed (the
-        last only on a task under review). The Assignee cell names them and,
-        under the name, what has happened to their part: "Done Oct 14 · by …"
-        in green, "Reviewed Oct 14 · by …" in purple. Done and Reviewed are
-        tick boxes — tick to mark, untick to undo — live only for whoever may
-        make that change (task_done_tick.html, task_review_tick.html), and
-        read-only for everyone else. Each tick cell carries its state as
+        last only on a task under review), one line each. The Assignee cell
+        names them. The Done and Reviewed cells each hold a tick box and,
+        beside it, when and by whom: "Oct 14 · by …" in green under Done, in
+        purple under Reviewed; otherwise "Not done yet", "Awaiting review" or
+        a dash. The boxes — tick to mark, untick to undo — are live only for
+        whoever may make that change (task_done_tick.html,
+        task_review_tick.html), and read-only for everyone else. Each tick
+        cell carries its state as
         ``data-mark`` (yes / no for Done; yes / pending / none for Reviewed).
         Rows come from the task's current
         assignees, so the table follows people being added to or taken off
@@ -148,12 +150,13 @@
       {% endcomment %}
       <style>
         .completion-table { width: 100%; margin-top: 0.75rem; border-collapse: collapse; table-layout: fixed; font-size: 0.875rem; }
-        .completion-table th, .completion-table td { border: 1px solid rgb(189 203 232 / 0.9); padding: 0.5rem 0.625rem; vertical-align: top; }
+        .completion-table th, .completion-table td { border: 1px solid rgb(189 203 232 / 0.9); padding: 0.5rem 0.625rem; vertical-align: middle; }
         .completion-table thead th { background: #eaeff8; font-size: 0.75rem; font-weight: 600; color: rgb(51 51 51 / 0.75); text-align: left; }
-        .completion-table .completion-tick-cell { text-align: center; padding-left: 0.25rem; padding-right: 0.25rem; }
-        .completion-table col.completion-tick-col { width: 76px; }
-        .completion-history { display: flex; flex-direction: column; gap: 2px; margin: 0.25rem 0 0 2rem; font-size: 0.75rem; font-weight: 500; }
-        .completion-tick { appearance: none; -webkit-appearance: none; margin: 0; width: 22px; height: 22px; border-radius: 6px; border: 2px solid #9aa3c7; background: #fff; position: relative; cursor: pointer; vertical-align: middle; }
+        .completion-table col.completion-name-col { width: 34%; }
+        .completion-table.no-review col.completion-name-col { width: 45%; }
+        .completion-mark { display: flex; align-items: center; gap: 0.625rem; min-width: 0; }
+        .completion-mark-note { font-size: 0.8125rem; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
+        .completion-tick { appearance: none; -webkit-appearance: none; margin: 0; width: 22px; height: 22px; border-radius: 6px; border: 2px solid #9aa3c7; background: #fff; position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0; }
         .completion-tick:checked::after { content: ""; position: absolute; left: 6px; top: 2px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
         .completion-tick-done:checked { background: #16a34a; border-color: #16a34a; }
         .completion-tick-review:checked { background: #7c3aed; border-color: #7c3aed; }
@@ -164,48 +167,54 @@
         .completion-locked-notice { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
         .completion-tick:focus-visible { outline: 2px solid #f03d30; outline-offset: 2px; }
       </style>
-      <table class="completion-table" data-assignee-rows>
+      <table class="completion-table{% if not show_review %} no-review{% endif %}" data-assignee-rows>
         <colgroup>
+          <col class="completion-name-col">
           <col>
-          <col class="completion-tick-col">
-          {% if show_review %}<col class="completion-tick-col">{% endif %}
+          {% if show_review %}<col>{% endif %}
         </colgroup>
         <thead>
           <tr>
             <th scope="col">Assignee</th>
-            <th scope="col" class="completion-tick-cell">Done</th>
-            {% if show_review %}<th scope="col" class="completion-tick-cell">Reviewed</th>{% endif %}
+            <th scope="col">Done</th>
+            {% if show_review %}<th scope="col">Reviewed</th>{% endif %}
           </tr>
         </thead>
         <tbody>
           {% for s in assignee_states %}
             <tr data-assignee-row="{{ s.member.pk }}"{% if forloop.counter > 3 %} x-show="rowsExpanded" x-cloak{% endif %}>
               <td>
-                <div class="flex items-center gap-2 min-w-0">
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                   <span class="w-6 h-6 rounded-full bg-brand-navy/80 text-white text-[11px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
                   <span class="text-sm font-medium text-brand-navy break-words min-w-0" data-assignee-name>{{ s.member.display_name }}</span>
                   {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
                 </div>
-                {% if s.done or s.reviewed %}
-                  <div class="completion-history">
-                    {% if s.done %}
-                      <span class="text-success" data-done-line>
-                        Done{% if s.done_at %} {{ s.done_at|date:"M j" }}{% endif %} &middot;
-                        by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}
-                      </span>
-                    {% endif %}
+              </td>
+              <td data-done-cell data-mark="{% if s.done %}yes{% else %}no{% endif %}">
+                <div class="completion-mark">
+                  {% include "tasks/partials/task_done_tick.html" with s=s task=task %}
+                  {% if s.done %}
+                    <span class="completion-mark-note text-success" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
+                  {% else %}
+                    <span class="completion-mark-note text-brand-text/60">Not done yet</span>
+                  {% endif %}
+                </div>
+              </td>
+              {% if show_review %}
+                <td data-review-cell data-mark="{% if s.reviewed %}yes{% elif s.done %}pending{% else %}none{% endif %}">
+                  <div class="completion-mark">
+                    {% include "tasks/partials/task_review_tick.html" with s=s task=task %}
                     {% if s.reviewed %}
-                      <span class="text-violet-600" data-review-line>
-                        Reviewed{% if s.reviewed_at %} {{ s.reviewed_at|date:"M j" }}{% endif %} &middot;
-                        by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}
-                      </span>
+                      <span class="completion-mark-note text-violet-600" data-review-line>{% if s.reviewed_at %}{{ s.reviewed_at|date:"M j" }} &middot; {% endif %}by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}</span>
+                    {% elif s.done and not marks_locked %}
+                      <span class="completion-mark-note text-amber-600">Awaiting review</span>
+                    {% elif s.done %}
+                      <span class="completion-mark-note text-brand-text/60">Not reviewed</span>
+                    {% else %}
+                      <span class="completion-mark-note text-brand-text/60" aria-hidden="true">&mdash;</span>
                     {% endif %}
                   </div>
-                {% endif %}
-              </td>
-              <td class="completion-tick-cell" data-done-cell data-mark="{% if s.done %}yes{% else %}no{% endif %}">{% include "tasks/partials/task_done_tick.html" with s=s task=task %}</td>
-              {% if show_review %}
-                <td class="completion-tick-cell" data-review-cell data-mark="{% if s.reviewed %}yes{% elif s.done %}pending{% else %}none{% endif %}">{% include "tasks/partials/task_review_tick.html" with s=s task=task %}</td>
+                </td>
               {% endif %}
             </tr>
           {% endfor %}
