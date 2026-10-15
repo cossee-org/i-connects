@@ -61,7 +61,7 @@
               </td>
               <td class="text-xs text-brand-text/80">{{ invitation.get_privilege_display }}</td>
               <td class="text-xs text-brand-text/70">{{ invitation.added_by }}</td>
-              <td class="text-xs text-brand-text/70">{{ invitation.created_at|date:"Y-m-d" }}</td>
+              <td class="text-xs text-brand-text/70 whitespace-nowrap">{{ invitation.created_at|date:"M j, Y" }}</td>
               <td class="text-right">
                 <div class="flex justify-end gap-2">
                   <form method="post"

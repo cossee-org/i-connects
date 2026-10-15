@@ -2419,3 +2419,12 @@ def test_pending_requests_tables_write_dates_as_tasks_do(client, user, other_use
     html = client.get(reverse("projects:join_requests", kwargs={"pk": project.pk})).content.decode()
     assert '<td class="text-xs text-brand-text/70 whitespace-nowrap">Mar 4, 2026</td>' in html
     assert "2026-03-04" not in html
+
+    invitation = Invitation.objects.create(
+        project=project, email="eve@example.org",
+        privilege=MemberPrivileges.CONTRIBUTOR, invitation_code="dated",
+    )
+    Invitation.objects.filter(pk=invitation.pk).update(created_at=when)
+    html = client.get(reverse("projects:project_invitations", kwargs={"pk": project.pk})).content.decode()
+    assert '<td class="text-xs text-brand-text/70 whitespace-nowrap">Mar 4, 2026</td>' in html
+    assert "2026-03-04" not in html
