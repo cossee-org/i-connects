@@ -853,6 +853,26 @@ def test_the_add_form_offers_only_this_projects_tasks_and_members(
 
 
 @pytest.mark.django_db
+def test_the_add_form_offers_other_last(client, user, other_user):
+    """Other follows the 14 CRediT roles, and a contribution can be added
+    under it."""
+    project, col, pm = _make_project(user)
+    _member_for(project, other_user)
+    task = _make_task(project, col, pm, assignees=[pm])
+
+    choices = ContributionAddForm(project=project).fields["contribution_type"].choices
+    assert choices[-1] == (ContributionType.OTHER, "Other")
+    assert len(choices) == 15
+
+    client.force_login(user)
+    client.post(
+        _add_url(project),
+        {"task": task.pk, "user": other_user.pk, "contribution_type": ContributionType.OTHER},
+    )
+    assert ContributionRecord.objects.get(user=other_user).contribution_type == ContributionType.OTHER
+
+
+@pytest.mark.django_db
 def test_the_tracking_tab_offers_the_controls_to_a_lead_only(
     client, user, other_user
 ):
