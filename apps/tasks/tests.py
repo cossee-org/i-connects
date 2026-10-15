@@ -5377,3 +5377,39 @@ def test_board_toolbar_groups_views_with_columns_and_ends_with_new_task(client, 
     assert "document.getElementById('columns-modal').showModal()" not in member
     create_url = reverse("tasks:create", kwargs={"project_pk": project.pk})
     assert f'hx-get="{create_url}"' not in member
+
+
+@pytest.mark.django_db
+def test_a_new_tasks_editor_saves_itself_when_closed_by_accident(client, user):
+    """The create form carries the accidental-close save; an edit form does
+    not. A save sent that way (autosave=1) creates the task like Save does
+    and leaves a note for the board's reload."""
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    client.force_login(user)
+    create_url = reverse("tasks:create", kwargs={"project_pk": project.pk})
+
+    form = client.get(create_url, headers={"hx-request": "true"}).content.decode()
+    assert "dialog.addEventListener('close'" in form
+    assert "autosave: '1'" in form
+    assert "dataset.discard = '1'" in form, "Cancel discards on purpose"
+
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1, container_task_order=0,
+        name="Existing",
+    )
+    edit = client.get(
+        reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        headers={"hx-request": "true"},
+    ).content.decode()
+    assert "dialog.addEventListener('close'" not in edit
+
+    response = client.post(
+        create_url,
+        {"name": "Saved on close", "container": col1.pk, "autosave": "1"},
+        headers={"hx-request": "true"},
+    )
+    assert "task-created" in response["HX-Trigger"]
+    assert Task.objects.filter(project=project, name="Saved on close").exists()
+    board = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk})).content.decode()
+    assert "Task &#x27;Saved on close&#x27; was saved when its editor closed." in board

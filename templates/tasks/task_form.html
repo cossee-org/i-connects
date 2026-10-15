@@ -138,11 +138,71 @@
     {% if standalone %}
       <a href="{% if next_url %}{{ next_url }}{% else %}{% url 'tasks:board' project_pk=project.pk %}{% endif %}" class="btn btn-ghost">Cancel</a>
     {% else %}
+      {# Cancel discards on purpose, so an accidental-close save must not follow it. #}
       <button type="button" class="btn btn-ghost"
-              onclick="document.getElementById('task-modal') && document.getElementById('task-modal').close()">
+              onclick="var m = document.getElementById('task-modal'); if (m) { m.dataset.discard = '1'; m.close(); }">
         Cancel
       </button>
     {% endif %}
     <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Save</button>
   </div>
 </form>
+
+{% if not standalone and not form.instance.pk %}
+{% comment %}
+  A new task's editor closed by accident — a click outside it, or Esc — is
+  saved rather than lost, when the form passes its own checks (a name, at
+  least). Cancel and the × discard on purpose: they set data-discard on the
+  dialog first. Save and a successful create close it too, but by then the
+  form has been sent, so nothing is sent twice.
+
+  The save goes the way Save does, with autosave=1 so the board says so
+  after its reload. If the server turns it down (a rule the browser cannot
+  check), the editor opens again with the errors, nothing typed lost.
+
+  Edit forms are left alone: closing one keeps the task as it was.
+{% endcomment %}
+<script>
+(function () {
+  var dialog = document.getElementById('task-modal');
+  var body = document.getElementById('task-modal-body');
+  var form = body && body.querySelector('form[action="{{ form_action }}"]');
+  if (!dialog || !form) return;
+  delete dialog.dataset.discard;
+
+  form.addEventListener('htmx:beforeRequest', function () { form._sent = true; });
+
+  dialog.addEventListener('close', function onClose() {
+    // The editor now holds another form (or this one was sent): not ours.
+    if (!form.isConnected || !body.contains(form)) {
+      dialog.removeEventListener('close', onClose);
+      return;
+    }
+    var discard = dialog.dataset.discard === '1';
+    delete dialog.dataset.discard;
+    if (discard || form._sent || !form.checkValidity()) return;
+    dialog.removeEventListener('close', onClose);
+    form._sent = true;
+    htmx.ajax('POST', form.getAttribute('action'), {
+      source: form,
+      values: { autosave: '1' },
+      swap: 'none'
+    }).then(function () {
+      if (form._created) return;
+      // Turned down: show the form again, with its errors. htmx.swap (not
+      // innerHTML) so the returned form's own script runs and it keeps
+      // this safety net.
+      htmx.swap(body, form._reply || '', { swapStyle: 'innerHTML' });
+      dialog.showModal();
+    });
+  });
+
+  form.addEventListener('htmx:afterRequest', function (evt) {
+    var xhr = evt.detail.xhr;
+    var trigger = xhr && xhr.getResponseHeader('HX-Trigger');
+    form._created = !!(trigger && trigger.indexOf('task-created') !== -1);
+    form._reply = xhr ? xhr.responseText : '';
+  });
+}());
+</script>
+{% endif %}

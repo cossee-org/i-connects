@@ -808,6 +808,13 @@ class TaskCreateView(
                 {"task": task, "project": self.project},
             )
             response["HX-Trigger"] = json.dumps({"task-created": {"id": task.id}})
+            if self.request.POST.get("autosave") == "1":
+                # Saved because its editor was closed by accident: the board
+                # reloads on task-created, and this says why the task is there.
+                messages.success(
+                    self.request,
+                    f"Task '{task.name}' was saved when its editor closed.",
+                )
             return response
         messages.success(self.request, f"Task '{task.name}' created.")
         next_url = self.request.POST.get("next")
