@@ -55,8 +55,8 @@
         Every header but Actions sorts the rows in the browser, ascending
         first; clicking the active header flips the direction. Name and Roles
         sort alphabetically, with no roles last either way; Privilege puts
-        Leads first. A person's email sits under their name rather than in
-        a column of its own. Ties keep the server's order
+        Leads first; Joined sorts by date. A person's email sits under their
+        name rather than in a column of its own. Ties keep the server's order
         (by member id, data-order), which is also the order before any
         header is clicked. A row a privilege change swaps in carries its new
         keys and stays where it is until the next sort. The sort itself is
@@ -71,6 +71,7 @@
             {% if show_member_roles %}
               {% include "_components/sortable_header.html" with key="roles" label="Roles" %}
             {% endif %}
+            {% include "_components/sortable_header.html" with key="joined" label="Joined" %}
             <th scope="col" class="text-right">Actions</th>
           </tr>
         </thead>

@@ -2243,3 +2243,33 @@ def test_cancel_invitation_asks_first(client, user):
     # The confirmation's form posts to the same endpoint, which still cancels.
     client.post(cancel_url)
     assert not Invitation.objects.filter(pk=invitation.pk).exists()
+
+
+@pytest.mark.django_db
+def test_members_table_shows_when_each_member_joined(client, user, other_user):
+    """A sortable Joined column gives the date the membership was created."""
+    from datetime import datetime, timezone as dt_tz
+
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    member = ProjectMember.objects.create(project=project)
+    member.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    joined = datetime(2026, 3, 4, 12, 0, tzinfo=dt_tz.utc)
+    ProjectMember.objects.filter(pk=member.pk).update(created_at=joined)
+    client.force_login(user)
+
+    content = client.get(
+        reverse("projects:members", kwargs={"pk": project.pk})
+    ).content.decode()
+    thead = content[content.index("<thead") : content.index("</thead>")]
+    assert "sortBy('joined')" in thead
+    assert thead.index("Privilege") < thead.index("Joined") < thead.index("Actions")
+    row = content[content.index(f'id="member-row-{member.pk}"') :]
+    row = row[: row.index("</tr>")]
+    assert f'data-sort-joined="{int(joined.timestamp())}"' in row
+    assert '<td class="text-xs text-brand-text/70">2026-03-04</td>' in row
