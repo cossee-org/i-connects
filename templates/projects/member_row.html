@@ -23,8 +23,10 @@ and oob to send it as an htmx out-of-band swap (projects.views._viewer_row_oob).
         </span>
         {# The email sits under the name, as on the Pending requests tables; #}
         {# a person with no name already shows it as their name. #}
+        {# The name opens the person's profile, as on Every contribution. #}
         <div class="min-w-0">
-          <div class="text-brand-text font-medium">{{ row.user.name|default:row.user.email }}</div>
+          <a href="{% url 'public_profile' pk=row.user.pk %}"
+             class="block text-brand-text font-medium hover:text-brand-coral">{{ row.user.name|default:row.user.email }}</a>
           {% if row.user.name %}<div class="text-xs text-brand-text/60">{{ row.user.email }}</div>{% endif %}
         </div>
       {% else %}

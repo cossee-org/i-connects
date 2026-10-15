@@ -51,7 +51,9 @@
                 data-sort-date="{{ invitation.created_at|date:'U' }}">
               <td>
                 {% if invitation.invited_user %}
-                  <div class="font-medium text-brand-navy">{{ invitation.invited_user.name|default:invitation.invited_user.email }}</div>
+                  {# Already in the system: the name opens their profile. An email with no account stays plain. #}
+                  <a href="{% url 'public_profile' pk=invitation.invited_user.pk %}"
+                     class="block font-medium text-brand-navy hover:text-brand-coral">{{ invitation.invited_user.name|default:invitation.invited_user.email }}</a>
                   <div class="text-xs text-brand-text/60">{{ invitation.email }}</div>
                 {% else %}
                   <div class="font-medium text-brand-navy">{{ invitation.email }}</div>

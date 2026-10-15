@@ -2366,3 +2366,36 @@ def test_a_lead_stepping_down_reloads_the_page(client, user, other_user):
     page = client.get(reverse("projects:members", kwargs={"pk": project.pk})).content.decode()
     assert "You are now a Member of this project." in page
     assert "Modify privilege" not in page
+
+
+@pytest.mark.django_db
+def test_people_with_accounts_link_to_their_profile(client, user, other_user):
+    """On Contributors, Pending join requests and Pending invitation requests
+    a name with an account behind it opens that profile; an invited email
+    with no account stays plain text."""
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    JoinRequest.objects.create(project=project, user=other_user)
+    Invitation.objects.create(
+        project=project, email=other_user.email, invited_user=other_user,
+        privilege=MemberPrivileges.CONTRIBUTOR, invitation_code="has-account",
+    )
+    Invitation.objects.create(
+        project=project, email="nobody@example.org",
+        privilege=MemberPrivileges.CONTRIBUTOR, invitation_code="no-account",
+    )
+    client.force_login(user)
+
+    def tbody(name):
+        html = client.get(reverse(f"projects:{name}", kwargs={"pk": project.pk})).content.decode()
+        return html[html.index("<tbody") : html.index("</tbody>")]
+
+    members = tbody("members")
+    assert f'href="{reverse("public_profile", kwargs={"pk": user.pk})}"' in members
+    assert f'href="{reverse("public_profile", kwargs={"pk": other_user.pk})}"' in tbody("join_requests")
+    invitations = tbody("project_invitations")
+    assert f'href="{reverse("public_profile", kwargs={"pk": other_user.pk})}"' in invitations
+    assert invitations.count('href="/people/') == 1, "the email with no account is not a link"
+    assert "nobody@example.org" in invitations

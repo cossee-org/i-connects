@@ -49,7 +49,9 @@
                 data-sort-message="{{ jr.message|lower }}"
                 data-sort-submitted="{{ jr.created_at|date:'U' }}">
               <td>
-                <div class="font-medium text-brand-navy">{{ jr.user.name|default:jr.user.email }}</div>
+                {# The requester always has an account: the name opens their profile. #}
+                <a href="{% url 'public_profile' pk=jr.user.pk %}"
+                   class="block font-medium text-brand-navy hover:text-brand-coral">{{ jr.user.name|default:jr.user.email }}</a>
                 <div class="text-xs text-brand-text/60">{{ jr.user.email }}</div>
               </td>
               <td class="text-xs text-brand-text/80">{{ jr.get_requested_privilege_display }}</td>
