@@ -1509,3 +1509,23 @@ def test_the_add_modal_links_the_credit_roles_from_the_label_line(client, user):
     link = html.index("CRediT roles &#8599;")
     assert html.index("CRediT role <span") < link < html.index('name="contribution_type"')
     assert 'href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"' in html
+
+
+@pytest.mark.django_db
+def test_every_contribution_sorts_by_every_header_but_actions(client, user):
+    """Member, Task, Role, Completed and Closed by are sort buttons; Actions
+    is not; each row carries what it sorts by."""
+    project, col, pm = _make_project(user)
+    task = _credit(project, col, pm, pm, ContributionType.SOFTWARE)
+    record = ContributionRecord.objects.get()
+
+    client.force_login(user)
+    html = client.get(_every_url(project)).content.decode()
+    for key in ("member", "task", "role", "completed", "closer"):
+        assert f"@click=\"sortBy('{key}')\"" in html, key
+    assert '<th scope="col" class="text-right">Actions</th>' in html
+    row = html[html.index('data-order="0"') :]
+    row = row[: row.index(">")]
+    assert f'data-sort-task="{task.name.lower()}"' in row
+    assert 'data-sort-role="software"' in row
+    assert f'data-sort-completed="{int(record.closed_at.timestamp())}"' in row

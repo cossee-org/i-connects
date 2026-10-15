@@ -16,20 +16,32 @@
   {% include "_components/empty_state.html" with title="No contributions yet" body="Credit appears here as tasks are completed." %}
 {% else %}
   <div class="brand-card overflow-x-auto">
-    <table class="table">
+    {% comment %}
+      Every header but Actions sorts the rows in the browser (sortableRows()
+      in base.html), ascending first; clicking the active header flips the
+      direction. Completed sorts by date; the rest alphabetically. Ties keep
+      the server's order, newest first, which is also the order before any
+      header is clicked.
+    {% endcomment %}
+    <table class="table" x-data="sortableRows()">
       <thead class="bg-brand-lighter text-brand-navy">
         <tr>
-          <th scope="col">Member</th>
-          <th scope="col">Task</th>
-          <th scope="col">Role</th>
-          <th scope="col">Completed</th>
-          <th scope="col">Closed by</th>
+          {% include "_components/sortable_header.html" with key="member" label="Member" %}
+          {% include "_components/sortable_header.html" with key="task" label="Task" %}
+          {% include "_components/sortable_header.html" with key="role" label="Role" %}
+          {% include "_components/sortable_header.html" with key="completed" label="Completed" %}
+          {% include "_components/sortable_header.html" with key="closer" label="Closed by" %}
           {% if is_project_manager %}<th scope="col" class="text-right">Actions</th>{% endif %}
         </tr>
       </thead>
-      <tbody>
+      <tbody x-ref="rows">
         {% for record in records %}
-          <tr>
+          <tr data-order="{{ forloop.counter0 }}"
+              data-sort-member="{{ record.user|display_name|lower }}"
+              data-sort-task="{{ record.task.name|lower }}"
+              data-sort-role="{{ record.get_contribution_type_display|lower }}"
+              data-sort-completed="{{ record.closed_at|date:'U' }}"
+              data-sort-closer="{{ record|closed_by|lower }}">
             <th scope="row" class="font-normal text-left">
               <a href="{% url 'public_profile' pk=record.user_id %}"
                  class="text-brand-navy hover:text-brand-coral">{{ record.user|display_name }}</a>
