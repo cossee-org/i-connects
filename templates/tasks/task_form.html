@@ -3,7 +3,10 @@
   modal via HTMX. For non-HTMX GETs, ``task_form_page.html`` wraps this
   partial in the base layout.
 {% endcomment %}
-<h2 class="text-lg font-semibold text-brand-navy mb-4">{{ form_title|default:"Task" }}</h2>
+<h2 class="text-lg font-semibold text-brand-navy {% if form.instance.pk %}mb-4{% else %}mb-1{% endif %}">{{ form_title|default:"Task" }}</h2>
+{% if not form.instance.pk %}
+  <p class="text-sm text-brand-text/60 mb-4">Note that this task will be visible to all contributors once created.</p>
+{% endif %}
 <form method="post"
       action="{{ form_action }}"
       {% if not standalone %}hx-post="{{ form_action }}"
