@@ -7,6 +7,9 @@ focused on request/response handling and concentrate the mutation logic
 
 from __future__ import annotations
 
+from functools import partial
+from typing import Iterable
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -463,6 +466,67 @@ def approve_completion(
 # ---------------------------------------------------------------------------
 # Notification helpers (late-imported to avoid circular imports).
 # ---------------------------------------------------------------------------
+def notify_new_assignees(
+    assignments: Iterable[tuple[Task, Iterable[int]]], *, assigned_by=None
+) -> None:
+    """Tell members they were just assigned a task, in-app and by email.
+
+    ``assignments`` pairs each task with the ``ProjectMember`` ids *newly*
+    added to it — callers compare assignees before and after the change, so
+    re-saving a task does not tell its existing assignees again. A team
+    member reaches each of its users. ``assigned_by`` (a user) is left out:
+    a Lead assigning themselves needs no word of it.
+
+    Each task gets its own in-app notification. The email goes once per
+    person, listing every task they were given here, so a CSV import that
+    hands someone ten tasks sends one email rather than ten. It is queued
+    for after the surrounding transaction commits, so the worker sees the
+    saved assignment; whether to send at all is the recipient's
+    ``email_task_assigned`` preference, read by the task itself.
+    """
+    from apps.notifications.services import create_notification
+    from apps.tasks.tasks import send_task_assigned_email_task
+
+    task_ids_by_user: dict[int, list[int]] = {}
+    for task, member_ids in assignments:
+        member_ids = set(member_ids)
+        if not member_ids:
+            continue
+        user_ids = set(
+            ProjectMember.objects.filter(pk__in=member_ids).values_list(
+                "users", flat=True
+            )
+        )
+        user_ids.discard(None)  # a member with no users left on it
+        if assigned_by is not None:
+            user_ids.discard(assigned_by.pk)
+        if not user_ids:
+            continue
+        create_notification(
+            users=list(user_ids),
+            title=f"Task assigned to you: {task.name}",
+            body=f"In project {task.project.name}.",
+            project=task.project,
+            route="tasks:detail",
+            route_kwargs={"project_pk": task.project_id, "pk": task.pk},
+        )
+        for user_id in user_ids:
+            task_ids_by_user.setdefault(user_id, []).append(task.pk)
+
+    assigned_by_id = assigned_by.pk if assigned_by is not None else None
+    for user_id, task_ids in task_ids_by_user.items():
+        transaction.on_commit(
+            partial(
+                send_task_assigned_email_task.delay,
+                user_id,
+                task_ids,
+                assigned_by_id,
+            ),
+            # A broker that is down must not fail an assignment already saved.
+            robust=True,
+        )
+
+
 def _notify_task_completed(*, task: Task, completed_by: ProjectMember) -> None:
     try:
         from apps.notifications.services import create_notification

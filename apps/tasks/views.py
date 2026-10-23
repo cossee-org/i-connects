@@ -74,6 +74,7 @@ from apps.tasks.services import (
     mark_own_done,
     mark_reviewed,
     move_task,
+    notify_new_assignees,
     reopen_own,
     reopen_task,
 )
@@ -791,6 +792,9 @@ class TaskCreateView(
         form.save_m2m()
         # Seed a TaskLog per assignee (mirrors the Blitz createTask behaviour).
         _seed_assignee_logs(task)
+        notify_new_assignees(
+            [(task, _assignee_ids(task))], assigned_by=self.request.user
+        )
         log_action(
             AuditAction.TASK_CREATED,
             actor=self.request.user,
@@ -994,10 +998,16 @@ class TaskUpdateView(
         return kwargs
 
     def form_valid(self, form):
+        # Read before saving: only members this edit adds hear about it.
+        previous_ids = _assignee_ids(self.object)
         task = form.save()
         # Seed Activity & comments entries for any newly-assigned members,
         # mirroring the Assignees ("Change assignees") flow.
         _seed_assignee_logs(task)
+        notify_new_assignees(
+            [(task, _assignee_ids(task) - previous_ids)],
+            assigned_by=self.request.user,
+        )
         log_action(
             AuditAction.TASK_UPDATED,
             actor=self.request.user,
@@ -1478,6 +1488,11 @@ def _task_activity_context(task, *, is_project_manager):
     }
 
 
+def _assignee_ids(task) -> set[int]:
+    """The ``ProjectMember`` ids currently assigned to ``task``, from the DB."""
+    return set(task.assigned_members.values_list("pk", flat=True))
+
+
 def _seed_assignee_logs(task, actor=None) -> bool:
     """Seed a TaskLog (Activity & comments entry) for each assigned member
     that doesn't have one yet.
@@ -1518,7 +1533,12 @@ class TaskAssignView(
         if not form.is_valid():
             return HttpResponseBadRequest("Invalid assignment data.")
         members = form.cleaned_data.get("assigned_members") or []
+        previous_ids = _assignee_ids(self.task)
         self.task.assigned_members.set(members)
+        notify_new_assignees(
+            [(self.task, _assignee_ids(self.task) - previous_ids)],
+            assigned_by=request.user,
+        )
         # Ensure every assigned member has an Activity & comments entry. Keying
         # off existing logs makes this idempotent and also backfills members
         # assigned without a log.
