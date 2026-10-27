@@ -58,7 +58,7 @@
           <ol class="mt-2 flex flex-col gap-2">
             <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished; a Lead can tick it for anyone. Untick to undo.</li>
             <li><span class="font-semibold text-violet-600">2. Reviewed.</span> On a task with reviewers, a reviewer or a Lead ticks Reviewed once a part is done. Whoever reviewed it, or a Lead, can untick it. Undoing a Done mark clears its review.</li>
-            <li><span class="font-semibold text-brand-navy">3. Completed.</span> A Lead marks the whole task completed with Mark completed at the top. A task with reviewers also completes by itself once every part is reviewed. Once completed, its Reviewed records and the Done marks a Lead set for others are locked; a Lead marks it not complete to change them. Each assignee can still tick or untick their own Done.</li>
+            <li><span class="font-semibold text-brand-navy">3. Completed.</span> A Lead marks the whole task completed with Mark completed at the top. A task with reviewers also completes by itself once every part is reviewed. Once completed, its Reviewed records and the Done marks a Lead set for others are locked; a Lead marks it not complete to change them. Each assignee can still tick or untick their own Done, and a part marked done after completion can still be reviewed.</li>
           </ol>
           </div>
         </div>
@@ -287,7 +287,7 @@
                     {% include "tasks/partials/task_review_tick.html" with s=s task=task %}
                     {% if s.reviewed %}
                       <span class="completion-mark-note text-brand-text/80" data-review-line>{% if s.reviewed_at %}{{ s.reviewed_at|date:"M j" }} &middot; {% endif %}by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}</span>
-                    {% elif s.done and not marks_locked %}
+                    {% elif s.done and not s.review_locked %}
                       <span class="completion-mark-note text-brand-text/60">Awaiting review</span>
                     {% elif s.done %}
                       <span class="completion-mark-note text-brand-text/60">Not reviewed</span>
@@ -327,6 +327,7 @@
               This task is already marked completed, so its reviews and other members' marks are locked.
               {% if is_project_manager %}Mark it not complete first to change them.{% else %}A Lead has to mark it not complete before they can change.{% endif %}
               {% if is_assignee %}You can still tick or untick your own part.{% endif %}
+              {% if needs_review %}Parts marked done after completion can still be reviewed.{% endif %}
             </span>
           </p>
         </div>

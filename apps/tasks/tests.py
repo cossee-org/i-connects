@@ -4333,6 +4333,79 @@ def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, oth
     assert MARK_NOT_DONE in reopened
 
 
+@pytest.mark.django_db
+def test_a_part_marked_after_closing_can_still_be_reviewed(client, user, other_user):
+    """A part marked done after the Lead closed the task is reviewed as usual:
+    its Reviewed box is live, the review earns its credit, and withdrawing it
+    takes back only that credit. The task stays closed throughout. A part that
+    was already marked when the task closed stays locked."""
+    from apps.contributions.models import ContributionRecord
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=lead)  # marked before closing, unreviewed
+    client.force_login(user)
+    client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+
+    client.force_login(other_user)
+    client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    late_log = _current_log(task, contrib)
+    assert not ContributionRecord.objects.filter(task=task).exists()  # awaits review
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    late_row = _row_for(pane, contrib)
+    assert _review_url(task, late_log) in late_row and "Awaiting review" in late_row
+    early_row = _row_for(pane, lead)
+    assert "Not reviewed" in early_row and _review_url(task, _current_log(task, lead)) not in early_row
+    assert "Parts marked done after completion can still be reviewed." in pane
+
+    early = client.post(
+        _review_url(task, _current_log(task, lead)), {"reviewed": "1"}, HTTP_HX_REQUEST="true"
+    )
+    assert early.status_code == 403
+
+    reviewed = client.post(_review_url(task, late_log), {"reviewed": "1"}, HTTP_HX_REQUEST="true")
+    assert reviewed.status_code == 200
+    late_log.refresh_from_db()
+    assert late_log.is_reviewed and late_log.reviewed_by == lead
+    record = ContributionRecord.objects.get(task=task)
+    assert record.user == other_user and record.verified_by == user
+    assert AuditLog.objects.filter(action=AuditAction.TASK_REVIEWED).exists()
+
+    withdrawn = client.post(_review_url(task, late_log), {"reviewed": "0"}, HTTP_HX_REQUEST="true")
+    assert withdrawn.status_code == 200
+    assert not ContributionRecord.objects.filter(task=task).exists()
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+
+@pytest.mark.django_db
+def test_undoing_a_late_reviewed_part_leaves_the_task_closed(client, user, other_user):
+    """Even when every part ends up reviewed, undoing one marked after closing
+    does not reopen the task: its completion never rested on that part."""
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=lead)
+    mark_reviewed(task_log=_current_log(task, lead), reviewer=lead)
+    client.force_login(user)
+    client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+
+    client.force_login(other_user)
+    client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    task.refresh_from_db()  # closed by the request above, not on this instance
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+    client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+    assert not _current_log(task, contrib).is_reviewed
+
+
 def _sole_assignee_task(user, other_user, *, name="Reviewed to done"):
     """A task with one assignee and the Lead as its only reviewer.
 

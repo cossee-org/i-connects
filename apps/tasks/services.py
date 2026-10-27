@@ -149,6 +149,23 @@ def reopen_task(*, task: Task) -> Task:
     return task
 
 
+def marked_after_closing(task: Task, log: TaskLog | None) -> bool:
+    """True when ``log`` is a part marked done after ``task`` was closed.
+
+    Such a part was never in front of whoever closed the task, so the
+    completion says nothing about it: its reviewers may still review it, and
+    taking its mark or review back leaves the task's completion standing.
+    """
+    return bool(
+        task.status == TaskStatus.COMPLETED
+        and task.closed_at is not None
+        and log is not None
+        and log.status == TaskStatus.COMPLETED
+        and log.completed_at is not None
+        and log.completed_at > task.closed_at
+    )
+
+
 def _current_log_for(task: Task, member: ProjectMember) -> TaskLog | None:
     """The member's most-recent TaskLog on this task (their current state)."""
     return (
@@ -219,14 +236,18 @@ def reopen_own(
     ``member``, the assignee undoing their own mark.
 
     Like marking, undoing stays open on a closed task. The credit closing
-    wrote for this member goes with the mark; everyone else's stays.
+    wrote for this member goes with the mark; everyone else's stays. A part
+    marked after closing never reopens the task: the completion did not rest
+    on it.
     """
     log = _current_log_for(task, member)
     if log is None:
         return None
     # Whether the task's completion rests on its reviews — see clear_review.
     completed_on_reviews = (
-        task.status == TaskStatus.COMPLETED and all_submissions_reviewed(task)
+        not marked_after_closing(task, log)
+        and task.status == TaskStatus.COMPLETED
+        and all_submissions_reviewed(task)
     )
     was_done = log.status == TaskStatus.COMPLETED
     had_review = log.is_reviewed or log.reviewed_by_id is not None
@@ -373,6 +394,10 @@ def mark_reviewed(*, task_log: TaskLog, reviewer: ProjectMember) -> TaskLog:
 
     Callers are responsible for checking that ``reviewer`` may review this
     task and that the submission exists (see ``views.TaskLogReviewView``).
+
+    On a task already closed (a part marked after closing, see
+    :func:`marked_after_closing`), the review is what that part's credit
+    was waiting on, so it is written here, verified by the reviewer.
     """
     task_log.reviewed_by = reviewer
     task_log.reviewed_at = timezone.now()
@@ -390,6 +415,8 @@ def mark_reviewed(*, task_log: TaskLog, reviewer: ProjectMember) -> TaskLog:
         close_task(
             task=task, closed_by=reviewer, reason="all submissions reviewed"
         )
+    elif task.status == TaskStatus.COMPLETED:
+        _record_contributions(task, verifier_user=reviewer.users.first())
     return task_log
 
 
@@ -406,12 +433,18 @@ def clear_review(
     back. A task a Lead closed by hand is untouched — that completion was
     their judgement, not a sum of verdicts, and the endpoints do not let a
     review be withdrawn on one anyway.
+
+    The exception is a part marked after closing: its review can be withdrawn
+    on a closed task, which stays closed and loses only that part's credit.
     """
     if not task_log.is_reviewed and task_log.reviewed_by_id is None:
         return task_log
     task = task_log.task
+    late = marked_after_closing(task, task_log)
     completed_on_reviews = (
-        task.status == TaskStatus.COMPLETED and all_submissions_reviewed(task)
+        not late
+        and task.status == TaskStatus.COMPLETED
+        and all_submissions_reviewed(task)
     )
     task_log.reviewed_by = None
     task_log.reviewed_at = None
@@ -423,6 +456,8 @@ def clear_review(
     )
     if completed_on_reviews:
         reopen_task(task=task)
+    elif late:
+        _withdraw_member_contributions(task, task_log.assigned_to)
     return task_log
 
 

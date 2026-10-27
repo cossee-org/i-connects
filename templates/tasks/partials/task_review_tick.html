@@ -10,9 +10,11 @@
   sees it read-only.
 
   Once the task is marked completed, a click shows the card's locked notice
-  instead of toggling the box — see task_done_tick.html.
+  instead of toggling the box — see task_done_tick.html. A part marked done
+  after that is the exception (``s.review_locked`` is false): it is still
+  reviewed as usual.
 {% endcomment %}
-{% if marks_locked %}
+{% if s.review_locked %}
   <input type="checkbox" class="completion-tick completion-tick-review"{% if s.reviewed %} checked{% endif %}
          aria-disabled="true" data-locked
          aria-describedby="task-locked-notice"
@@ -42,6 +44,6 @@
          title="Tick to mark reviewed">
 {% else %}
   <input type="checkbox" class="completion-tick completion-tick-review" disabled
-         aria-label="{{ s.member.display_name }}: {% if s.done and not marks_locked %}awaiting review{% else %}not reviewed{% endif %}"
+         aria-label="{{ s.member.display_name }}: {% if s.done and not s.review_locked %}awaiting review{% else %}not reviewed{% endif %}"
          {% if not s.done %}title="Can be reviewed once the part is done"{% endif %}>
 {% endif %}

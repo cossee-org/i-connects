@@ -73,6 +73,7 @@ from apps.tasks.services import (
     close_task,
     mark_own_done,
     mark_reviewed,
+    marked_after_closing,
     move_task,
     reopen_own,
     reopen_task,
@@ -1227,9 +1228,10 @@ def _marks_locked(task) -> bool:
     Lead's click, or by its last review closing it. A Lead who needs to change
     one marks the task Not Complete first.
 
-    An assignee's own mark is the exception: it stays open, so everyone on a
-    task the Lead closed early can still record that they did their part (see
-    ``TaskCompleteView`` and ``TaskUndoOwnView``).
+    Two exceptions keep a task the Lead closed early open to the people still
+    to finish: an assignee's own mark (see ``TaskCompleteView`` and
+    ``TaskUndoOwnView``), and the review of a part marked after closing (see
+    ``services.marked_after_closing``).
     """
     return task.status == TaskStatus.COMPLETED
 
@@ -1269,20 +1271,24 @@ def _task_status_context(task, *, project_member, is_project_manager):
         log = current.get(member.id)
         done = log is not None and log.status == TaskStatus.COMPLETED
         reviewed = log is not None and log.is_reviewed
+        # A part marked after the task closed is still open to review.
+        review_locked = locked and not marked_after_closing(task, log)
         assignee_states.append(
             {
                 "member": member,
                 # Whether *this viewer* may act on *this row's* review, and
                 # (Leads only) on its done mark. Both close once the task is
-                # completed, the same rule the endpoints enforce.
-                "can_review": viewer_reviews and not locked,
+                # completed, the same rule the endpoints enforce — bar the
+                # review of a part marked after that.
+                "can_review": viewer_reviews and not review_locked,
+                "review_locked": review_locked,
                 # Undoing is narrower than making: a reviewer may withdraw
                 # their own verdict and no one else's, while a Lead can clear
                 # any of them. A review whose reviewer's membership row was
                 # deleted has no owner left to withdraw it, so it too is the
                 # Lead's alone.
                 "can_unreview": (
-                    not locked
+                    not review_locked
                     # A task that asks for no review offers no review action,
                     # withdrawal included. A verdict already given stays on
                     # show — see show_review below — it just has no buttons
@@ -1646,7 +1652,7 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseForbidden(
                 "Only a reviewer on this task can review submissions."
             )
-        if _marks_locked(self.task):
+        if _marks_locked(self.task) and not marked_after_closing(self.task, log):
             return HttpResponseForbidden(_LOCKED_MESSAGE)
 
         if request.POST.get("reviewed") in {"0", "false", "no"}:
