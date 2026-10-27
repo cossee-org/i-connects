@@ -121,6 +121,21 @@ def withdraw_contributions_for_task(task: Task) -> int:
     return deleted
 
 
+@transaction.atomic
+def withdraw_member_contributions(task: Task, member: ProjectMember) -> int:
+    """Take back the credit one assignee earned on ``task``.
+
+    For an assignee who undoes their done mark after the task was closed:
+    the task stays closed, so everyone else's credit stands, but the claim
+    this member's mark made goes with it. Hand-entered records stay, as in
+    :func:`withdraw_contributions_for_task`.
+    """
+    deleted, _by_model = ContributionRecord.objects.filter(
+        task=task, task_log__assigned_to=member, added_by_hand=False
+    ).delete()
+    return deleted
+
+
 def get_user_contributions(
     user: User,
     *,

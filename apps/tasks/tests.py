@@ -2829,8 +2829,8 @@ def test_pane_top_bar_carries_mark_completed_and_the_own_row_the_self_mark(clien
 def test_an_assignee_ticks_and_unticks_their_own_part(client, user, other_user):
     """An assignee who is not a Lead ticks their own Done box to mark their
     part and unticks it to undo; the swap brings the box back in its new state.
-    Other people's boxes stay read-only to them, and closing the task freezes
-    their own box too."""
+    Other people's boxes stay read-only to them, and closing the task leaves
+    their own box live."""
     project, task, lead, contrib = _two_assignee_task(user, other_user)
     client.force_login(other_user)
     complete_url = reverse("tasks:complete", kwargs={"pk": task.pk})
@@ -2857,8 +2857,8 @@ def test_an_assignee_ticks_and_unticks_their_own_part(client, user, other_user):
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
     own = _row_for(pane, contrib)
-    assert "Mark your part" not in own and "hx-post" not in own
-    assert "disabled" in own and " checked" in own
+    assert "Mark your part not done" in own and undo_url in own
+    assert " checked" in own and "data-locked" not in own
 
 
 @pytest.mark.django_db
@@ -3862,8 +3862,10 @@ def _done_url(task, member):
 
 
 @pytest.mark.django_db
-def test_completed_task_freezes_the_assignees_own_actions(client, user, other_user):
-    """Rule 1: no marking done and no undoing once the task is completed."""
+def test_completed_task_keeps_the_assignees_own_actions_open(client, user, other_user):
+    """A Lead closing a task early does not stop the assignees still to tick
+    from marking their own part, nor one who marked from undoing it. What a
+    Lead sets for others stays frozen."""
     from apps.tasks.services import mark_own_done
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -3876,18 +3878,98 @@ def test_completed_task_freezes_the_assignees_own_actions(client, user, other_us
 
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Mark your part done" not in pane
-    assert "Mark your part not done" not in pane
+    assert "Mark your part not done" in pane
 
     undo = client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
-    assert undo.status_code == 403
-    assert task.assignees_done_count == 1  # still marked, unchanged
+    assert undo.status_code == 200
+    assert task.assignees_done_count == 0
+    redo = client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    assert redo.status_code == 200
+    assert task.assignees_done_count == 1
 
-    # And the other assignee cannot start a mark either.
+    # The Lead, an assignee too, marks their own part after closing it.
     client.force_login(user)
     marked = client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
-    assert marked.status_code == 403
-    assert task.assignees_done_count == 1
+    assert marked.status_code == 200
+    assert task.assignees_done_count == 2
+    # But clearing someone else's mark still waits for the task to reopen.
+    cleared = client.post(
+        reverse("tasks:member_done", kwargs={"pk": task.pk, "member_pk": contrib.pk}),
+        {"done": "0"},
+        HTTP_HX_REQUEST="true",
+    )
+    assert cleared.status_code == 403
+    assert task.assignees_done_count == 2
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED  # none of this reopened it
+
+
+@pytest.mark.django_db
+def test_every_change_of_a_done_mark_is_audited(client, user, other_user):
+    """Each mark and undo writes an audit row naming who clicked, whose part
+    it was, and whether the task was already closed; a repeated click on a
+    part already done writes nothing new."""
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    complete_url = reverse("tasks:complete", kwargs={"pk": task.pk})
+    undo_url = reverse("tasks:undo", kwargs={"pk": task.pk})
+
+    client.force_login(other_user)
+    client.post(complete_url, HTTP_HX_REQUEST="true")
+    client.post(complete_url, HTTP_HX_REQUEST="true")  # double click
+    client.force_login(user)
+    client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    client.post(complete_url, HTTP_HX_REQUEST="true")
+    client.force_login(other_user)
+    client.post(undo_url, HTTP_HX_REQUEST="true")
+
+    rows = list(
+        AuditLog.objects.filter(
+            action__in=[AuditAction.TASK_PART_DONE, AuditAction.TASK_PART_UNDONE]
+        ).order_by("timestamp", "id")
+    )
+    assert [(r.action, r.actor, r.metadata["assignee_member_id"], r.metadata["after_completion"]) for r in rows] == [
+        (AuditAction.TASK_PART_DONE, other_user, contrib.pk, False),
+        (AuditAction.TASK_PART_DONE, user, lead.pk, True),
+        (AuditAction.TASK_PART_UNDONE, other_user, contrib.pk, True),
+    ]
+    assert all(r.entity_id == task.pk and r.project == project for r in rows)
+
+
+@pytest.mark.django_db
+def test_a_lead_marking_for_someone_is_audited_under_the_lead(client, user, other_user):
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    client.force_login(user)
+    client.post(
+        reverse("tasks:member_done", kwargs={"pk": task.pk, "member_pk": contrib.pk}),
+        {"done": "1"},
+        HTTP_HX_REQUEST="true",
+    )
+    row = AuditLog.objects.get(action=AuditAction.TASK_PART_DONE)
+    assert row.actor == user and row.metadata["assignee_member_id"] == contrib.pk
+
+
+@pytest.mark.django_db
+def test_a_mark_made_after_closing_earns_its_credit(client, user, other_user):
+    """On a project tracking CRediT, a part marked done after the Lead closed
+    the task is credited then, and undoing it takes back only that credit."""
+    from apps.contributions.models import ContributionRecord
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    mark_own_done(task=task, member=lead)
+    client.force_login(user)
+    client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    assert list(ContributionRecord.objects.filter(task=task).values_list("user", flat=True)) == [user.pk]
+
+    client.force_login(other_user)
+    client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    late = ContributionRecord.objects.get(task=task, user=other_user)
+    assert late.verified_by == user  # the Lead who closed the task
+
+    client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    assert list(ContributionRecord.objects.filter(task=task).values_list("user", flat=True)) == [user.pk]
 
 
 @pytest.mark.django_db
@@ -4185,7 +4267,7 @@ def test_completion_heading_carries_an_info_button_explaining_the_procedure(clie
         for step in ("1. Done.", "2. Reviewed.", "3. Completed."):
             assert step in info, step
         completed = info[info.index("3. Completed.") :]
-        assert "locked for everyone" in completed
+        assert "can still tick or untick their own Done" in completed
         assert "4." not in info
         assert "Tick to mark, untick to undo." not in html
         assert "0 of 2 done" not in html
@@ -4198,9 +4280,10 @@ def test_completion_heading_carries_an_info_button_explaining_the_procedure(clie
 
 @pytest.mark.django_db
 def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, other_user):
-    """On a completed task every Done and Reviewed box is locked: it keeps its
-    state, posts nothing, and a click shows a notice that the task has to be
-    marked not complete first. Reopening drops the lock and the notice."""
+    """On a completed task every Reviewed box, and every Done box but the
+    viewer's own, is locked: it keeps its state, posts nothing, and a click
+    shows a notice that the task has to be marked not complete first.
+    Reopening drops the lock and the notice."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -4219,13 +4302,16 @@ def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, oth
     ).content.decode()
     for html in (closed, client.get(_pane_url(project, task)).content.decode()):
         rows = _rows(html)
-        # Two rows, a Done and a Reviewed box each: all four locked.
-        assert rows.count("data-locked") == 4
-        assert rows.count('@click.prevent="showLocked()"') == 4
-        assert "hx-post" not in rows
+        # Two rows, a Done and a Reviewed box each: all locked but the
+        # Lead's own Done box, which is theirs to tick as an assignee.
+        assert rows.count("data-locked") == 3
+        assert rows.count('@click.prevent="showLocked()"') == 3
+        own = _row_for(html, lead)
+        assert own.count("hx-post") == 1
+        assert reverse("tasks:complete", kwargs={"pk": task.pk}) in own
         # The marks already made still read as ticked.
         row = _row_for(html, contrib)
-        assert row.count(" checked") == 2 and "(locked)" in row
+        assert row.count(" checked") == 2 and "(locked)" in row and "hx-post" not in row
         # The notice is there, hidden until a click, and tells a Lead what to do.
         assert 'id="task-locked-notice"' in html and 'x-show="lockedNotice"' in html
         assert "already marked completed" in html
@@ -4235,6 +4321,7 @@ def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, oth
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
     assert "A Lead has to mark it not complete" in pane
+    assert "You can still tick or untick your own part." in pane
 
     client.force_login(user)
     reopened = client.post(

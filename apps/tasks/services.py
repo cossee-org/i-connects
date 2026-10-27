@@ -170,17 +170,36 @@ def mark_own_done(
     ``member``, the assignee marking their own part. A Lead marking someone
     else done passes themselves, so the entry says who really set it rather
     than crediting the assignee with a click they never made.
+
+    The mark is the assignee's statement about their own work, so it stays
+    open after a Lead closes the task: on a task with many assignees, the
+    Lead often closes it before everyone has ticked. A mark made then is
+    credited straight away, the same credit closing would have written had it
+    been there at the time (see :func:`close_task`).
+
+    Every change of the mark writes an audit row, so who marked whose part
+    done, and when, survives the TaskLog being updated in place.
     """
     log = _current_log_for(task, member)
     if log is None:
         log = TaskLog(
             task=task, assigned_to=member, completed_as=CompletedAs.INDIVIDUAL
         )
+    was_done = log.pk is not None and log.status == TaskStatus.COMPLETED
     log.status = TaskStatus.COMPLETED
     log.completed_by = actor or member
     log.completed_as = CompletedAs.INDIVIDUAL
     log.completed_at = timezone.now()
     log.save()
+    if not was_done:
+        _log_mark_action(
+            AuditAction.TASK_PART_DONE, task_log=log, actor_member=actor or member
+        )
+        if task.status == TaskStatus.COMPLETED:
+            closer = task.closed_by
+            _record_contributions(
+                task, verifier_user=closer.users.first() if closer else None
+            )
     return log
 
 
@@ -198,6 +217,9 @@ def reopen_own(
 
     ``actor`` is who clicked, used for the audit row; it defaults to
     ``member``, the assignee undoing their own mark.
+
+    Like marking, undoing stays open on a closed task. The credit closing
+    wrote for this member goes with the mark; everyone else's stays.
     """
     log = _current_log_for(task, member)
     if log is None:
@@ -206,6 +228,7 @@ def reopen_own(
     completed_on_reviews = (
         task.status == TaskStatus.COMPLETED and all_submissions_reviewed(task)
     )
+    was_done = log.status == TaskStatus.COMPLETED
     had_review = log.is_reviewed or log.reviewed_by_id is not None
     log.status = TaskStatus.NOT_COMPLETED
     log.completed_at = None
@@ -221,10 +244,17 @@ def reopen_own(
             actor_member=actor or member,
             reason="the done mark it stood on was reverted",
         )
+    if was_done:
+        _log_mark_action(
+            AuditAction.TASK_PART_UNDONE, task_log=log, actor_member=actor or member
+        )
     if completed_on_reviews:
         # This mark was one of the reviewed submissions the task's completion
         # rested on, and it no longer is.
         reopen_task(task=task)
+    elif task.status == TaskStatus.COMPLETED:
+        # Still closed, by a Lead's hand: only this member's credit goes.
+        _withdraw_member_contributions(task, member)
     return log
 
 
@@ -292,6 +322,13 @@ def _withdraw_contributions(task: Task) -> None:
     from apps.contributions.services import withdraw_contributions_for_task
 
     withdraw_contributions_for_task(task)
+
+
+def _withdraw_member_contributions(task: Task, member: ProjectMember) -> None:
+    """Take back one member's credit on ``task``, late-imported likewise."""
+    from apps.contributions.services import withdraw_member_contributions
+
+    withdraw_member_contributions(task, member)
 
 
 def all_submissions_reviewed(task: Task) -> bool:
@@ -411,6 +448,29 @@ def _log_review_action(
         entity=task,
         project=task.project,
         metadata=metadata,
+    )
+
+
+def _log_mark_action(
+    action, *, task_log: TaskLog, actor_member: ProjectMember | None
+) -> None:
+    """Append an audit row for a done mark set or undone on ``task_log``.
+
+    ``after_completion`` flags a mark changed on a task already closed, so
+    the late ones can be told apart from those the closure counted.
+    """
+    task = task_log.task
+    log_action(
+        action,
+        actor=actor_member.users.first() if actor_member is not None else None,
+        entity=task,
+        project=task.project,
+        metadata={
+            "task_name": task.name,
+            "assignee_member_id": task_log.assigned_to_id,
+            "task_log_id": task_log.pk,
+            "after_completion": task.status == TaskStatus.COMPLETED,
+        },
     )
 
 
