@@ -284,6 +284,17 @@ AWS_SES_REGION_ENDPOINT = env("AWS_SES_REGION_ENDPOINT", "email.us-east-1.amazon
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "i-connects <noreply@iconnects.local>")
 SITE_URL = env("SITE_URL", "")
 
+# Zulip organisations a project may be connected to, by host suffix. Zulip
+# Cloud by default; add a self-hosted server's host here (comma-separated).
+# The allowlist is what stops a Lead pointing the server at an internal host.
+ZULIP_ALLOWED_HOST_SUFFIXES = tuple(
+    h.strip().lower()
+    for h in (env("ZULIP_ALLOWED_HOSTS", "zulipchat.com") or "").split(",")
+    if h.strip()
+)
+# The daily deadline reminder lists tasks due within this many days.
+ZULIP_DEADLINE_WINDOW_DAYS = int(env("ZULIP_DEADLINE_WINDOW_DAYS", "3") or 3)
+
 # Surveys and Communications are hidden for now: their sidebar links and
 # project tabs are not drawn. The pages and routes are untouched, so turning
 # this on brings both back as they were.

@@ -1,8 +1,9 @@
 """Tests for the communications module and the Surveys rename.
 
-The module itself is empty, so what there is to guard is its shape: both
-surfaces answer, the project one is members-only, and the navigation names
-the two modules and reaches them. The label assertions are here because a
+What is guarded here is the module's shape: both surfaces answer, the
+project one is members-only, and the navigation names the two modules and
+reaches them. The project section's team chat (the Zulip connection) is
+tested in ``zulip_tests.py``. The label assertions are here because a
 rename regresses silently — nothing else fails when a tab goes back to
 saying "Forms".
 
@@ -155,7 +156,8 @@ def test_a_member_sees_the_project_communications_section(client, project, pm_us
     content = response.content.decode()
 
     assert response.status_code == 200
-    assert "Coming soon" in content
+    # Not connected to a team chat yet: a lead is offered the connection.
+    assert "Connect this project to Zulip" in content
     # The project chrome comes with it: header, and the tab strip with this
     # tab marked as the one you are on.
     assert project.name in content

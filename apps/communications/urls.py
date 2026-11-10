@@ -19,4 +19,19 @@ urlpatterns = [
         views.ProjectCommunicationsView.as_view(),
         name="project",
     ),
+    path(
+        "projects/<int:project_pk>/communications/zulip/",
+        views.ZulipConnectionSaveView.as_view(),
+        name="zulip_save",
+    ),
+    path(
+        "projects/<int:project_pk>/communications/zulip/disconnect/",
+        views.ZulipDisconnectView.as_view(),
+        name="zulip_disconnect",
+    ),
+    path(
+        "projects/<int:project_pk>/communications/message/",
+        views.TeamMessageView.as_view(),
+        name="team_message",
+    ),
 ]

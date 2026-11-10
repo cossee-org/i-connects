@@ -123,3 +123,46 @@ def cleanup_tmp_files_cron(max_age_hours: int = 24) -> int:
             logger.warning("cleanup_tmp_files_cron: could not remove %s: %s", entry, exc)
     logger.info("cleanup_tmp_files_cron: removed %s entries", removed)
     return removed
+
+
+@shared_task(name="cron.tasks.zulip_deadline_reminder_cron")
+def zulip_deadline_reminder_cron() -> int:
+    """Post each connected project's upcoming deadlines to its Zulip topic.
+
+    One message per project, once a day: the open tasks due within
+    ``ZULIP_DEADLINE_WINDOW_DAYS`` and the ones that went overdue since the
+    last run. A task is listed as overdue once, then left alone — the topic
+    is for the team to talk in, not a wall of the same reminders. Projects
+    with nothing to say get no message.
+    """
+    from apps.integrations import zulip
+    from apps.integrations.models import ZulipConnection
+    from apps.integrations.tasks import post_zulip_message
+    from apps.tasks.models import Task
+
+    now = timezone.now()
+    window = timedelta(days=getattr(settings, "ZULIP_DEADLINE_WINDOW_DAYS", 3))
+
+    count = 0
+    connections = ZulipConnection.objects.filter(
+        enabled=True, notify_deadlines=True
+    ).select_related("project")
+    for connection in connections:
+        open_tasks = (
+            Task.objects.filter(
+                project=connection.project, status=TaskStatus.NOT_COMPLETED
+            )
+            .prefetch_related("assigned_members__users")
+            .order_by("deadline")
+        )
+        content = zulip.deadlines_message(
+            due_soon=list(open_tasks.filter(deadline__gte=now, deadline__lt=now + window)),
+            overdue=list(
+                open_tasks.filter(deadline__gte=now - timedelta(days=1), deadline__lt=now)
+            ),
+        )
+        if content:
+            post_zulip_message.delay(connection.pk, content)
+            count += 1
+    logger.info("zulip_deadline_reminder_cron: posted for %s projects", count)
+    return count

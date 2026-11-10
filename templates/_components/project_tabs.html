@@ -61,6 +61,10 @@
       </svg>
       Surveys
     </a>
+    {% endif %}
+    {# Communications is hidden with Surveys, except on a project that is   #}
+    {# connected to its team chat: there the tab has something to show.     #}
+    {% if show_surveys_and_communications or project.zulip_connection.enabled %}
     <a href="{% url 'communications:project' project_pk=project.pk %}"
        class="project-tab{% if am == 'communications' %} active{% endif %}"
        {% if am == 'communications' %}aria-current="page"{% endif %}>

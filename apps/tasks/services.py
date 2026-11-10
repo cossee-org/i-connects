@@ -181,6 +181,16 @@ def mark_own_done(
     log.completed_as = CompletedAs.INDIVIDUAL
     log.completed_at = timezone.now()
     log.save()
+    try:
+        from apps.integrations import zulip
+
+        zulip.announce(
+            task.project,
+            zulip.TASKS,
+            zulip.task_part_done_message(task, member=member),
+        )
+    except Exception:  # noqa: BLE001 — never let the team chat break a mark
+        pass
     return log
 
 
