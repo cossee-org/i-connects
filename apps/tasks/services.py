@@ -7,7 +7,6 @@ focused on request/response handling and concentrate the mutation logic
 
 from __future__ import annotations
 
-from functools import partial
 from typing import Iterable
 
 from django.db import transaction
@@ -466,6 +465,22 @@ def approve_completion(
 # ---------------------------------------------------------------------------
 # Notification helpers (late-imported to avoid circular imports).
 # ---------------------------------------------------------------------------
+def _queue_assignment_email(user_id: int, task_ids: list[int], assigned_by_id):
+    """Return an ``on_commit`` callback that queues one assignment email.
+
+    A named function, not ``functools.partial``: when a robust callback
+    raises, Django logs it by ``func.__qualname__``, which a partial lacks,
+    so the logging itself raised and the "robust" callback failed the
+    request anyway.
+    """
+    from apps.tasks.tasks import send_task_assigned_email_task
+
+    def queue_task_assigned_email() -> None:
+        send_task_assigned_email_task.delay(user_id, task_ids, assigned_by_id)
+
+    return queue_task_assigned_email
+
+
 def notify_new_assignees(
     assignments: Iterable[tuple[Task, Iterable[int]]], *, assigned_by=None
 ) -> None:
@@ -485,7 +500,6 @@ def notify_new_assignees(
     ``email_task_assigned`` preference, read by the task itself.
     """
     from apps.notifications.services import create_notification
-    from apps.tasks.tasks import send_task_assigned_email_task
 
     task_ids_by_user: dict[int, list[int]] = {}
     for task, member_ids in assignments:
@@ -516,12 +530,7 @@ def notify_new_assignees(
     assigned_by_id = assigned_by.pk if assigned_by is not None else None
     for user_id, task_ids in task_ids_by_user.items():
         transaction.on_commit(
-            partial(
-                send_task_assigned_email_task.delay,
-                user_id,
-                task_ids,
-                assigned_by_id,
-            ),
+            _queue_assignment_email(user_id, task_ids, assigned_by_id),
             # A broker that is down must not fail an assignment already saved.
             robust=True,
         )

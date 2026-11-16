@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 import pytest
@@ -9,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.core import mail
 from django.urls import reverse
 from django.utils import timezone
+from kombu.exceptions import OperationalError
 
 from apps.core.enums import ProjectStatus
 from apps.notifications.models import Notification
@@ -17,6 +19,7 @@ from apps.projects.services import create_project_with_owner
 from apps.tasks.import_csv import import_rows
 from apps.tasks.models import KanbanBoard, Task
 from apps.tasks.services import notify_new_assignees
+from apps.tasks.tasks import send_task_assigned_email_task
 
 
 @pytest.fixture(autouse=True)
@@ -315,6 +318,81 @@ def test_a_failed_csv_import_tells_nobody(
     assert created == 0
     assert mail.outbox == []
     assert not Notification.objects.exists()
+
+
+# ---------------------------------------------------------------------------
+# Broker down
+# ---------------------------------------------------------------------------
+
+
+def _broker_down(monkeypatch):
+    """Make queueing the assignment email fail the way an unreachable Redis does."""
+
+    def boom(*args, **kwargs):
+        raise OperationalError("broker unreachable")
+
+    monkeypatch.setattr(send_task_assigned_email_task, "delay", boom)
+
+
+@pytest.fixture
+def django_log(caplog):
+    """``caplog`` for the "django" logger, which does not propagate to root."""
+    logger = logging.getLogger("django")
+    logger.addHandler(caplog.handler)
+    yield caplog
+    logger.removeHandler(caplog.handler)
+
+
+def _create_task_for(client, project, column, member):
+    return client.post(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        {
+            "name": "Extract effect sizes",
+            "container": column.pk,
+            "contribution_type": "OTHER",
+            "assigned_members": [member.pk],
+        },
+    )
+
+
+@pytest.mark.django_db
+def test_a_broker_outage_after_commit_does_not_fail_the_request(
+    client, user, other_user, django_capture_on_commit_callbacks, monkeypatch, django_log
+):
+    project, column = _make_project(user)
+    bob = _member(project, other_user)
+    _broker_down(monkeypatch)
+
+    client.force_login(user)
+    with django_capture_on_commit_callbacks(execute=True):
+        response = _create_task_for(client, project, column, bob)
+
+    assert response.status_code in (200, 302)
+    assert Task.objects.filter(name="Extract effect sizes").exists()
+    assert _assignment_notifications(other_user).count() == 1
+    assert mail.outbox == []
+    assert "in on_commit()" in django_log.text
+    assert "broker unreachable" in django_log.text
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_broker_outage_outside_a_transaction_does_not_fail_the_request(
+    client, user, other_user, monkeypatch, django_log
+):
+    # No ATOMIC_REQUESTS: on_commit runs the callback immediately, which is
+    # the path production requests take.
+    project, column = _make_project(user)
+    bob = _member(project, other_user)
+    _broker_down(monkeypatch)
+
+    client.force_login(user)
+    response = _create_task_for(client, project, column, bob)
+
+    assert response.status_code in (200, 302)
+    assert Task.objects.filter(name="Extract effect sizes").exists()
+    assert mail.outbox == []
+    assert "in on_commit()" in django_log.text
+    assert "broker unreachable" in django_log.text
 
 
 # ---------------------------------------------------------------------------
