@@ -25,6 +25,7 @@ from apps.audit.services import AuditAction, log_action
 from apps.core.enums import CompletedAs, ContributionType
 from apps.projects.models import ProjectMember
 from apps.tasks.models import KanbanBoard, Task, TaskLog
+from apps.tasks.services import notify_new_assignees
 
 
 REQUIRED_COLUMNS = ["name"]
@@ -126,6 +127,7 @@ def import_rows(
 
     errors: list[str] = []
     created = 0
+    assignments: list[tuple[Task, set[int]]] = []
 
     try:
         with transaction.atomic():
@@ -191,6 +193,9 @@ def import_rows(
                     )
                 if assignee_members:
                     task.assigned_members.set(assignee_members)
+                    assignments.append(
+                        (task, {member.pk for member in assignee_members})
+                    )
                     for member in assignee_members:
                         TaskLog.objects.create(
                             task=task,
@@ -210,6 +215,10 @@ def import_rows(
                     metadata={"name": task.name, "via": "csv_import"},
                 )
                 created += 1
+
+            # One email per assignee listing all their new tasks, sent once
+            # the import commits; a rolled-back import tells nobody.
+            notify_new_assignees(assignments, assigned_by=user)
     except Exception as exc:  # noqa: BLE001 — we want to swallow and report
         return 0, [f"import failed: {exc}"]
 
