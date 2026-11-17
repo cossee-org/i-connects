@@ -1433,7 +1433,7 @@ def test_overdue_pill_on_task_pane_and_page_follows_close_and_reopen(client, pm_
 def test_task_cards_show_only_the_blue_completed_check(client, user, other_user):
     """Every part marked done and every submission reviewed add no icon to
     a card or row; the task marked completed shows the blue check."""
-    from apps.tasks.services import mark_own_done, mark_reviewed
+    from apps.tasks.services import close_task, mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
     task.reviewers.add(lead)
@@ -1447,7 +1447,8 @@ def test_task_cards_show_only_the_blue_completed_check(client, user, other_user)
     mark_own_done(task=task, member=contrib)
     mark_own_done(task=task, member=lead)
     mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
-    mark_reviewed(task_log=_current_log(task, lead), reviewer=lead)  # completes it
+    mark_reviewed(task_log=_current_log(task, lead), reviewer=lead)
+    close_task(task=task, closed_by=lead)
     for url in views:
         page = client.get(url).content.decode()
         assert "All assignees marked their parts done" not in page, url
@@ -2590,7 +2591,9 @@ def test_pane_matrix_treats_an_unreviewed_mark_as_not_reviewed(client, user, oth
 
     assert pane.count('data-mark="yes"') == 1  # the lead's mark, nothing more
     assert pane.count('data-mark="no"') == 1  # the contributor has not marked done
-    assert pane.count('data-mark="pending"') == 1  # the lead's part awaits review
+    # The lead's part awaits review, and (separately) verification.
+    assert pane.count('data-review-cell data-mark="pending"') == 1
+    assert pane.count('data-verify-cell data-mark="pending"') == 1
     assert "data-review-line" not in _row_for(pane, lead)
 
 
@@ -3372,6 +3375,18 @@ MARK_DONE = "'s part done\""
 MARK_NOT_DONE = "'s part not done\""
 MARK_REVIEWED = ' part reviewed"'
 MARK_NOT_REVIEWED = ' part not reviewed"'
+# The Verified box, live for Leads only: "Verify <name>'s contribution" and
+# "Withdraw the verification of <name>'s contribution".
+MARK_VERIFIED = 'aria-label="Verify '
+MARK_NOT_VERIFIED = 'aria-label="Withdraw the verification of '
+
+
+def _verify_url(task, log):
+    return reverse("tasks:verify_log", kwargs={"pk": task.pk, "log_pk": log.pk})
+
+
+def _verify_batch_url(task):
+    return reverse("tasks:verify_batch", kwargs={"pk": task.pk})
 
 
 def _rows(pane):
@@ -3949,32 +3964,44 @@ def test_a_lead_marking_for_someone_is_audited_under_the_lead(client, user, othe
 
 
 @pytest.mark.django_db
-def test_a_mark_made_after_closing_earns_its_credit(client, user, other_user):
-    """On a project tracking CRediT, a part marked done after the Lead closed
-    the task is credited then, and undoing it takes back only that credit."""
+def test_a_mark_made_after_closing_is_credited_once_verified(client, user, other_user):
+    """On a project tracking CRediT, closing writes no credit; a part marked
+    done after the Lead closed the task is credited when a Lead verifies it,
+    and undoing the mark takes back only that credit."""
     from apps.contributions.models import ContributionRecord
-    from apps.tasks.services import mark_own_done
+    from apps.tasks.services import mark_own_done, verify_part
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
     project.contribution_tracking = ContributionTracking.CREDIT
     project.save(update_fields=["contribution_tracking"])
-    mark_own_done(task=task, member=lead)
+    verify_part(task_log=mark_own_done(task=task, member=lead), lead=lead)
     client.force_login(user)
     client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
     assert list(ContributionRecord.objects.filter(task=task).values_list("user", flat=True)) == [user.pk]
 
     client.force_login(other_user)
     client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
-    late = ContributionRecord.objects.get(task=task, user=other_user)
-    assert late.verified_by == user  # the Lead who closed the task
+    assert not ContributionRecord.objects.filter(task=task, user=other_user).exists()
 
+    client.force_login(user)
+    response = client.post(
+        _verify_url(task, _current_log(task, contrib)), {"verified": "1"}, HTTP_HX_REQUEST="true"
+    )
+    assert response.status_code == 200
+    late = ContributionRecord.objects.get(task=task, user=other_user)
+    assert late.verified_by == user  # the Lead who verified it
+
+    client.force_login(other_user)
     client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
     assert list(ContributionRecord.objects.filter(task=task).values_list("user", flat=True)) == [user.pk]
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
 
 
 @pytest.mark.django_db
-def test_completed_task_freezes_the_reviewers_actions(client, user, other_user):
-    """Rule 2: no reviewing and no un-reviewing once the task is completed."""
+def test_completed_task_keeps_the_reviewers_actions_open(client, user, other_user):
+    """Reviewers review and withdraw reviews whether or not the task is
+    completed, and neither reopens it."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -3989,23 +4016,22 @@ def test_completed_task_freezes_the_reviewers_actions(client, user, other_user):
     client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
 
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert MARK_REVIEWED not in pane
-    assert MARK_NOT_REVIEWED not in pane
-    # Nothing is "awaiting" a review that can no longer happen.
-    assert "awaiting review" not in pane
-    # The review already recorded is still reported, name and date included.
+    assert MARK_REVIEWED in _row_for(pane, lead)
+    assert MARK_NOT_REVIEWED in _row_for(pane, contrib)
     assert f"by {lead.display_name}" in _row_for(pane, contrib)
 
     assert client.post(
         _review_url(task, unreviewed_log), {"reviewed": "1"}, HTTP_HX_REQUEST="true"
-    ).status_code == 403
+    ).status_code == 200
     assert client.post(
         _review_url(task, reviewed_log), {"reviewed": "0"}, HTTP_HX_REQUEST="true"
-    ).status_code == 403
+    ).status_code == 200
     reviewed_log.refresh_from_db()
     unreviewed_log.refresh_from_db()
-    assert reviewed_log.is_reviewed
-    assert not unreviewed_log.is_reviewed
+    assert not reviewed_log.is_reviewed
+    assert unreviewed_log.is_reviewed
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
 
 
 @pytest.mark.django_db
@@ -4249,9 +4275,10 @@ def test_each_tick_cell_says_when_and_by_whom_beside_its_box(client, user, other
 
 @pytest.mark.django_db
 def test_completion_heading_carries_an_info_button_explaining_the_procedure(client, user, other_user):
-    """An (i) beside the Completion heading explains done, reviewed and
-    completed (and the lock completing brings), on the pane and the full page; the card itself carries no
-    tick hint and no done count beside the heading."""
+    """An (i) beside the Completion heading explains done, reviewed, verified
+    and completed (and the one lock completing brings), on the pane and the
+    full page; the card itself carries no tick hint and no done count beside
+    the heading."""
     project, task, _lead, _contrib = _two_assignee_task(user, other_user)
     client.force_login(user)
 
@@ -4264,11 +4291,14 @@ def test_completion_heading_carries_an_info_button_explaining_the_procedure(clie
         info = info[: info.index("</ol>")]
         assert 'aria-label="About Completion"' in info
         assert 'x-show="open"' in info
-        for step in ("1. Done.", "2. Reviewed.", "3. Completed."):
+        for step in ("1. Done.", "2. Reviewed.", "3. Verified.", "4. Completed."):
             assert step in info, step
-        completed = info[info.index("3. Completed.") :]
-        assert "can still tick or untick their own Done" in completed
-        assert "4." not in info
+        verified = info[info.index("3. Verified.") : info.index("4. Completed.")]
+        assert "credits them" in verified
+        completed = info[info.index("4. Completed.") :]
+        assert "Assignees can still tick their own Done" in completed
+        assert "Only the Done marks a Lead sets for others are locked" in completed
+        assert "5." not in info
         assert "Tick to mark, untick to undo." not in html
         assert "0 of 2 done" not in html
         # The element x-show hides carries no id: HTMX restores an id'd
@@ -4280,10 +4310,11 @@ def test_completion_heading_carries_an_info_button_explaining_the_procedure(clie
 
 @pytest.mark.django_db
 def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, other_user):
-    """On a completed task every Reviewed box, and every Done box but the
-    viewer's own, is locked: it keeps its state, posts nothing, and a click
-    shows a notice that the task has to be marked not complete first.
-    Reopening drops the lock and the notice."""
+    """On a completed task only the Done boxes a Lead would set for others are
+    locked: they keep their state, post nothing, and a click shows a notice
+    that the task has to be marked not complete first. The viewer's own Done
+    box, the Reviewed boxes and the Verified boxes stay live. Reopening drops
+    the lock and the notice."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -4302,26 +4333,26 @@ def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, oth
     ).content.decode()
     for html in (closed, client.get(_pane_url(project, task)).content.decode()):
         rows = _rows(html)
-        # Two rows, a Done and a Reviewed box each: all locked but the
-        # Lead's own Done box, which is theirs to tick as an assignee.
-        assert rows.count("data-locked") == 3
-        assert rows.count('@click.prevent="showLocked()"') == 3
+        # Only the contributor's Done box is locked for the Lead.
+        assert rows.count("data-locked") == 1
+        assert rows.count('@click.prevent="showLocked()"') == 1
         own = _row_for(html, lead)
-        assert own.count("hx-post") == 1
         assert reverse("tasks:complete", kwargs={"pk": task.pk}) in own
-        # The marks already made still read as ticked.
         row = _row_for(html, contrib)
-        assert row.count(" checked") == 2 and "(locked)" in row and "hx-post" not in row
+        # Done and Reviewed still read as ticked; the Done box is locked,
+        # while the review can still be withdrawn and the part verified.
+        assert row.count(" checked") == 2 and "(locked)" in row
+        assert MARK_NOT_REVIEWED in row and MARK_VERIFIED in row
         # The notice is there, hidden until a click, and tells a Lead what to do.
         assert 'id="task-locked-notice"' in html and 'x-show="lockedNotice"' in html
         assert "already marked completed" in html
         assert "Mark it not complete first" in html
 
-    # Someone who is not a Lead is told a Lead has to reopen it.
+    # An assignee is told what stays open to them.
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "A Lead has to mark it not complete" in pane
-    assert "You can still tick or untick your own part." in pane
+    assert "Assignees can still tick their own part" in pane
+    assert "Mark it not complete first" not in pane
 
     client.force_login(user)
     reopened = client.post(
@@ -4334,11 +4365,11 @@ def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, oth
 
 
 @pytest.mark.django_db
-def test_a_part_marked_after_closing_can_still_be_reviewed(client, user, other_user):
-    """A part marked done after the Lead closed the task is reviewed as usual:
-    its Reviewed box is live, the review earns its credit, and withdrawing it
-    takes back only that credit. The task stays closed throughout. A part that
-    was already marked when the task closed stays locked."""
+def test_a_part_marked_after_closing_is_reviewed_and_verified_as_usual(client, user, other_user):
+    """Every part on a closed task stays open to review and verification,
+    whenever it was marked: the review earns no credit by itself, the Lead's
+    verification does, and withdrawing it takes back only that credit. The
+    task stays closed throughout."""
     from apps.contributions.models import ContributionRecord
     from apps.tasks.services import mark_own_done
 
@@ -4353,30 +4384,28 @@ def test_a_part_marked_after_closing_can_still_be_reviewed(client, user, other_u
     client.force_login(other_user)
     client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
     late_log = _current_log(task, contrib)
-    assert not ContributionRecord.objects.filter(task=task).exists()  # awaits review
+    early_log = _current_log(task, lead)
 
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    late_row = _row_for(pane, contrib)
-    assert _review_url(task, late_log) in late_row and "Awaiting review" in late_row
-    early_row = _row_for(pane, lead)
-    assert "Not reviewed" in early_row and _review_url(task, _current_log(task, lead)) not in early_row
-    assert "Parts marked done after completion can still be reviewed." in pane
+    for member, log in ((contrib, late_log), (lead, early_log)):
+        row = _row_for(pane, member)
+        assert _review_url(task, log) in row and "Awaiting review" in row
+        assert _verify_url(task, log) in row and "Awaiting verification" in row
 
-    early = client.post(
-        _review_url(task, _current_log(task, lead)), {"reviewed": "1"}, HTTP_HX_REQUEST="true"
-    )
-    assert early.status_code == 403
+    for log in (early_log, late_log):
+        reviewed = client.post(_review_url(task, log), {"reviewed": "1"}, HTTP_HX_REQUEST="true")
+        assert reviewed.status_code == 200
+        log.refresh_from_db()
+        assert log.is_reviewed and log.reviewed_by == lead
+    assert not ContributionRecord.objects.filter(task=task).exists()
 
-    reviewed = client.post(_review_url(task, late_log), {"reviewed": "1"}, HTTP_HX_REQUEST="true")
-    assert reviewed.status_code == 200
-    late_log.refresh_from_db()
-    assert late_log.is_reviewed and late_log.reviewed_by == lead
+    verified = client.post(_verify_url(task, late_log), {"verified": "1"}, HTTP_HX_REQUEST="true")
+    assert verified.status_code == 200
     record = ContributionRecord.objects.get(task=task)
     assert record.user == other_user and record.verified_by == user
-    assert AuditLog.objects.filter(action=AuditAction.TASK_REVIEWED).exists()
 
-    withdrawn = client.post(_review_url(task, late_log), {"reviewed": "0"}, HTTP_HX_REQUEST="true")
+    withdrawn = client.post(_verify_url(task, late_log), {"verified": "0"}, HTTP_HX_REQUEST="true")
     assert withdrawn.status_code == 200
     assert not ContributionRecord.objects.filter(task=task).exists()
     task.refresh_from_db()
@@ -4384,22 +4413,20 @@ def test_a_part_marked_after_closing_can_still_be_reviewed(client, user, other_u
 
 
 @pytest.mark.django_db
-def test_undoing_a_late_reviewed_part_leaves_the_task_closed(client, user, other_user):
-    """Even when every part ends up reviewed, undoing one marked after closing
-    does not reopen the task: its completion never rested on that part."""
+def test_undoing_a_reviewed_part_leaves_the_task_closed(client, user, other_user):
+    """Even when every part is reviewed, an assignee undoing their mark does
+    not reopen the task: only a Lead completes or reopens one."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
     task.reviewers.add(lead)
-    mark_own_done(task=task, member=lead)
-    mark_reviewed(task_log=_current_log(task, lead), reviewer=lead)
+    for member in (lead, contrib):
+        mark_own_done(task=task, member=member)
+        mark_reviewed(task_log=_current_log(task, member), reviewer=lead)
     client.force_login(user)
     client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
 
     client.force_login(other_user)
-    client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
-    task.refresh_from_db()  # closed by the request above, not on this instance
-    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
     client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
@@ -4407,12 +4434,7 @@ def test_undoing_a_late_reviewed_part_leaves_the_task_closed(client, user, other
 
 
 def _sole_assignee_task(user, other_user, *, name="Reviewed to done"):
-    """A task with one assignee and the Lead as its only reviewer.
-
-    The plain review case, and the one where completion-on-review matters
-    most: the reviewer is not an assignee, so their All tasks page judges the
-    task by ``Task.status`` alone.
-    """
+    """A task with one assignee and the Lead as its only reviewer."""
     project, col1, _col2 = _make_project_with_board(user)
     lead = _primary_member(project, user)
     contrib = _add_contributor(project, other_user)
@@ -4426,170 +4448,44 @@ def _sole_assignee_task(user, other_user, *, name="Reviewed to done"):
 
 
 @pytest.mark.django_db
-def test_reviewing_the_last_submission_completes_the_task(client, user, other_user):
-    """Every submission signed off means the task is done.
-
-    And done means gone from the lists. A reviewer is not an assignee, so
-    their All tasks page reads ``Task.status`` and nothing else — while that
-    stayed NOT_COMPLETED a fully-reviewed task sat there with nothing left for
-    them to do.
-    """
+def test_reviewing_the_last_submission_leaves_completing_to_a_lead(client, user, other_user):
+    """Every submission signed off does not complete the task by itself: a
+    Lead marks it completed."""
     from apps.tasks.services import mark_own_done
 
     project, task, _lead, contrib = _sole_assignee_task(user, other_user)
     mark_own_done(task=task, member=contrib)
     client.force_login(user)
 
-    # Waiting on the reviewer, so it is on their list.
-    assert task.name in client.get(reverse("tasks:my_list")).content.decode()
-
-    client.post(
-        _review_url(task, _current_log(task, contrib)),
-        {"reviewed": "1", "pane_mode": "1"},
-        HTTP_HX_REQUEST="true",
-    )
-
-    task.refresh_from_db()
-    assert task.status == TaskStatus.COMPLETED
-    assert task.name not in client.get(reverse("tasks:my_list")).content.decode()
-
-
-@pytest.mark.django_db
-def test_the_swap_that_closes_the_task_comes_back_saying_so(client, user, other_user):
-    """The review that closes the task has to report it in the same response.
-
-    The rule flips ``Task.status`` through ``task_log.task``, a different
-    instance from the one the view renders from — so without a re-read the
-    chip and the Lead's toggle came back showing the state from before the
-    click, and caught up only on the next one.
-    """
-    from apps.tasks.services import mark_own_done
-
-    project, task, _lead, contrib = _sole_assignee_task(
-        user, other_user, name="Swapped shut"
-    )
-    mark_own_done(task=task, member=contrib)
-    client.force_login(user)
-
-    closed = client.post(
+    swapped = client.post(
         _review_url(task, _current_log(task, contrib)),
         {"reviewed": "1", "pane_mode": "1"},
         HTTP_HX_REQUEST="true",
     ).content.decode()
-    assert "<span>Complete</span>" in closed, "the chip lagged the click"
-    assert "Mark Not Complete" in closed, "the Lead's toggle lagged the click"
-    assert "Mark Completed" not in closed
-    # Completed, so locked like any completed task: no row actions.
-    assert MARK_NOT_REVIEWED not in closed
-    assert "Marks and reviews are locked" not in closed
-
-    # The Lead's toggle is the way back.
-    reopened = client.post(
-        reverse("tasks:reopen", kwargs={"pk": task.pk}),
-        {"pane_mode": "1"},
-        HTTP_HX_REQUEST="true",
-    ).content.decode()
-    assert "<span>Not Complete</span>" in reopened
-    assert "Mark Completed" in reopened
-    assert MARK_NOT_REVIEWED in reopened
-
-
-@pytest.mark.django_db
-def test_reviewing_one_of_two_submissions_leaves_the_task_open(client, user, other_user):
-    """"All of them" means all: one outstanding submission keeps it open."""
-    from apps.tasks.services import mark_own_done
-
-    project, task, lead, contrib = _two_assignee_task(user, other_user)
-    task.reviewers.add(lead)
-    mark_own_done(task=task, member=contrib)
-    mark_own_done(task=task, member=lead)
-    client.force_login(user)
-
-    client.post(
-        _review_url(task, _current_log(task, contrib)),
-        {"reviewed": "1", "pane_mode": "1"},
-        HTTP_HX_REQUEST="true",
-    )
     task.refresh_from_db()
     assert task.status == TaskStatus.NOT_COMPLETED
+    assert task.closed_by is None
+    assert "Mark Completed" in swapped
+    assert not AuditLog.objects.filter(action=AuditAction.TASK_COMPLETED).exists()
 
-    # The second verdict is the one that finishes it.
-    client.post(
-        _review_url(task, _current_log(task, lead)),
-        {"reviewed": "1", "pane_mode": "1"},
-        HTTP_HX_REQUEST="true",
-    )
+    client.post(reverse("tasks:close", kwargs={"pk": task.pk}), {"pane_mode": "1"}, HTTP_HX_REQUEST="true")
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
 
 
 @pytest.mark.django_db
-def test_a_task_its_reviews_closed_is_locked_like_any_completed_task(client, user, other_user):
-    """Completed is completed, however it got there.
+def test_a_completed_task_freezes_only_the_leads_marks_for_others(client, user, other_user):
+    """On a completed task a Lead cannot set or clear someone else's done
+    mark until they reopen it; clearing it then takes the review and the
+    verification standing on it."""
+    from apps.tasks.services import close_task, mark_own_done, mark_reviewed, verify_part
 
-    The last review closes the task, and from then on its marks and reviews
-    are frozen like those of a task a Lead closed by hand: the rows offer no
-    actions and the endpoints refuse them. A Lead marking it Not Complete is
-    the way back, after which the verdict can be withdrawn.
-    """
-    from apps.tasks.services import mark_own_done
-
-    project, task, _lead, contrib = _sole_assignee_task(user, other_user)
-    mark_own_done(task=task, member=contrib)
+    project, task, lead, contrib = _sole_assignee_task(user, other_user)
+    log = mark_own_done(task=task, member=contrib)
+    mark_reviewed(task_log=log, reviewer=lead)
+    verify_part(task_log=log, lead=lead)
+    close_task(task=task, closed_by=lead)
     client.force_login(user)
-    client.post(
-        _review_url(task, _current_log(task, contrib)),
-        {"reviewed": "1", "pane_mode": "1"},
-        HTTP_HX_REQUEST="true",
-    )
-    task.refresh_from_db()
-    assert task.status == TaskStatus.COMPLETED
-
-    pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Marks and reviews are locked" not in pane
-    assert MARK_NOT_REVIEWED not in pane
-    assert MARK_NOT_DONE not in pane
-
-    refused = client.post(
-        _review_url(task, _current_log(task, contrib)),
-        {"reviewed": "0", "pane_mode": "1"},
-        HTTP_HX_REQUEST="true",
-    )
-    assert refused.status_code == 403
-    assert _current_log(task, contrib).is_reviewed
-
-    client.post(reverse("tasks:reopen", kwargs={"pk": task.pk}), {"pane_mode": "1"}, HTTP_HX_REQUEST="true")
-    response = client.post(
-        _review_url(task, _current_log(task, contrib)),
-        {"reviewed": "0", "pane_mode": "1"},
-        HTTP_HX_REQUEST="true",
-    )
-    assert response.status_code == 200
-    task.refresh_from_db()
-    assert task.status == TaskStatus.NOT_COMPLETED
-    assert not _current_log(task, contrib).is_reviewed
-
-
-@pytest.mark.django_db
-def test_a_task_its_reviews_closed_locks_the_done_marks_too(client, user, other_user):
-    """A completed task freezes the Lead's per-row mark as well.
-
-    Clearing the mark under a verdict is refused while the task is completed;
-    once a Lead reopens it, clearing the mark works and takes the review
-    standing on it with it.
-    """
-    from apps.tasks.services import mark_own_done
-
-    project, task, _lead, contrib = _sole_assignee_task(user, other_user)
-    mark_own_done(task=task, member=contrib)
-    client.force_login(user)
-    client.post(
-        _review_url(task, _current_log(task, contrib)),
-        {"reviewed": "1", "pane_mode": "1"},
-        HTTP_HX_REQUEST="true",
-    )
-    task.refresh_from_db()
-    assert task.status == TaskStatus.COMPLETED
 
     refused = client.post(
         _done_url(task, contrib), {"done": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
@@ -4601,38 +4497,9 @@ def test_a_task_its_reviews_closed_locks_the_done_marks_too(client, user, other_
     client.post(
         _done_url(task, contrib), {"done": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
     )
-    task.refresh_from_db()
-    assert task.status == TaskStatus.NOT_COMPLETED
     log = _current_log(task, contrib)
-    assert log.status == TaskStatus.NOT_COMPLETED and not log.is_reviewed
-
-
-@pytest.mark.django_db
-def test_a_lead_closed_task_is_not_reopened_by_the_review_rule(client, user, other_user):
-    """A Lead's close is a judgement over the verdicts, not a sum of them.
-
-    So it stays closed and stays locked, with an outstanding submission that
-    the rule would never have closed on its own.
-    """
-    from apps.tasks.services import close_task, mark_own_done
-
-    project, task, lead, contrib = _two_assignee_task(user, other_user)
-    task.reviewers.add(lead)
-    mark_own_done(task=task, member=contrib)
-    close_task(task=task, closed_by=lead)
-    client.force_login(user)
-
-    pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Marks and reviews are locked" not in pane
-
-    # Every per-member action is refused, in both directions.
-    for url, data in (
-        (_review_url(task, _current_log(task, contrib)), {"reviewed": "1"}),
-        (_done_url(task, contrib), {"done": "0"}),
-    ):
-        assert client.post(url, data, HTTP_HX_REQUEST="true").status_code == 403
-    task.refresh_from_db()
-    assert task.status == TaskStatus.COMPLETED
+    assert log.status == TaskStatus.NOT_COMPLETED
+    assert not log.is_reviewed and not log.is_verified
 
 
 @pytest.mark.django_db
@@ -5471,22 +5338,6 @@ def test_reopening_clears_who_closed_it(client, user):
 
 
 @pytest.mark.django_db
-def test_a_reviewers_last_signoff_is_named_as_the_closer(client, user, other_user):
-    """The review rule closes the task, so the reviewer is who closed it."""
-    from apps.tasks.services import mark_own_done, mark_reviewed
-
-    project, task, lead, contrib = _two_assignee_task(user, other_user)
-    task.reviewers.add(lead)
-    task.assigned_members.remove(lead)
-    mark_own_done(task=task, member=contrib)
-    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
-
-    task.refresh_from_db()
-    assert task.status == TaskStatus.COMPLETED
-    assert task.closed_by_id == lead.pk
-
-
-@pytest.mark.django_db
 def test_a_closer_whose_membership_is_gone_is_still_reported(client, user, other_user):
     """SET_NULL outlives the row; the page says so rather than going short."""
     project, col1, _col2 = _make_project_with_board(user)
@@ -5573,3 +5424,180 @@ def test_a_new_tasks_editor_saves_itself_when_closed_by_accident(client, user):
     assert Task.objects.filter(project=project, name="Saved on close").exists()
     board = client.get(reverse("tasks:board", kwargs={"project_pk": project.pk})).content.decode()
     assert "Task &#x27;Saved on close&#x27; was saved when its editor closed." in board
+
+
+# ---------------------------------------------------------------------------
+# A Lead verifies each member's contribution — one by one, or in a batch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_the_matrix_has_a_verified_column_live_for_leads_only(client, user, other_user):
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "sortBy('verified')" in _rows(pane)
+    row = _row_for(pane, contrib)
+    assert 'data-verify-cell data-mark="pending"' in row
+    assert MARK_VERIFIED in row and _verify_url(task, _current_log(task, contrib)) in row
+    # The Lead's own part is not done, so there is nothing to verify yet.
+    own = _row_for(pane, lead)
+    assert 'data-verify-cell data-mark="none"' in own and MARK_VERIFIED not in own
+    assert "data-verify-batch" in pane
+
+    # An assignee sees the column, read-only, and no batch actions.
+    client.force_login(other_user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    row = _row_for(pane, contrib)
+    assert 'data-verify-cell data-mark="pending"' in row
+    assert MARK_VERIFIED not in row and "Awaiting verification" in row
+    assert "data-verify-batch" not in pane
+
+
+@pytest.mark.django_db
+def test_a_lead_verifies_and_unverifies_a_part(client, user, other_user):
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    log = mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+
+    swapped = client.post(
+        _verify_url(task, log), {"verified": "1", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    ).content.decode()
+    log.refresh_from_db()
+    assert log.is_verified and log.verified_by == lead
+    row = _row_for(swapped, contrib)
+    assert 'data-verify-cell data-mark="yes"' in row
+    assert f"by {lead.display_name}" in row[row.index("data-verify-cell") :]
+    assert MARK_NOT_VERIFIED in row
+    assert AuditLog.objects.filter(action=AuditAction.TASK_PART_VERIFIED).count() == 1
+
+    client.post(_verify_url(task, log), {"verified": "0", "pane_mode": "1"}, HTTP_HX_REQUEST="true")
+    log.refresh_from_db()
+    assert not log.is_verified and log.verified_by is None
+    assert AuditLog.objects.filter(action=AuditAction.TASK_PART_UNVERIFIED).count() == 1
+
+
+@pytest.mark.django_db
+def test_only_a_lead_can_verify(client, user, other_user):
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    log = mark_own_done(task=task, member=contrib)
+    client.force_login(other_user)
+
+    assert client.post(_verify_url(task, log), {"verified": "1"}, HTTP_HX_REQUEST="true").status_code == 403
+    assert client.post(_verify_batch_url(task), {"scope": "done"}, HTTP_HX_REQUEST="true").status_code == 403
+    log.refresh_from_db()
+    assert not log.is_verified
+
+
+@pytest.mark.django_db
+def test_a_part_not_done_cannot_be_verified(client, user, other_user):
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    log = _current_log(task, contrib)
+    client.force_login(user)
+
+    response = client.post(_verify_url(task, log), {"verified": "1"}, HTTP_HX_REQUEST="true")
+    assert response.status_code == 400
+    log.refresh_from_db()
+    assert not log.is_verified
+
+
+@pytest.mark.django_db
+def test_a_lead_verifies_on_a_completed_task(client, user, other_user):
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    log = mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+    client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert MARK_VERIFIED in _row_for(pane, contrib)
+    response = client.post(_verify_url(task, log), {"verified": "1"}, HTTP_HX_REQUEST="true")
+    assert response.status_code == 200
+    log.refresh_from_db()
+    assert log.is_verified
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+
+@pytest.mark.django_db
+def test_the_batch_buttons_count_and_verify_their_parts(client, user, other_user, pm_user):
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    third = _add_contributor(project, pm_user)
+    task.assigned_members.add(third)
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=contrib)
+    mark_own_done(task=task, member=third)
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+    client.force_login(user)
+
+    detail = reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    for url in (_pane_url(project, task), detail):
+        page = client.get(url).content.decode()
+        batch = page[page.index("data-verify-batch") :]
+        batch = batch[: batch.index("</div>")]
+        assert "All done (2)" in batch and "All reviewed (1)" in batch, url
+        assert ">0 of 3</span>" in page, url  # the Verified bar's count
+
+    swapped = client.post(
+        _verify_batch_url(task), {"scope": "reviewed", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
+    ).content.decode()
+    assert _current_log(task, contrib).is_verified
+    assert not _current_log(task, third).is_verified
+    assert "All done (1)" in swapped and "All reviewed (0)" in swapped
+
+    client.post(_verify_batch_url(task), {"scope": "done", "pane_mode": "1"}, HTTP_HX_REQUEST="true")
+    assert _current_log(task, third).is_verified
+    assert not _current_log(task, lead).is_verified  # never marked done
+
+    refused = client.post(_verify_batch_url(task), {"scope": "all"}, HTTP_HX_REQUEST="true")
+    assert refused.status_code == 400
+
+
+@pytest.mark.django_db
+def test_the_review_batch_button_needs_a_reviewed_task(client, user, other_user):
+    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert 'data-verify-scope="done"' in pane
+    assert 'data-verify-scope="reviewed"' not in pane
+
+
+
+@pytest.mark.django_db
+def test_editing_the_type_carries_onto_verified_credit(client, user, other_user):
+    """Credit can be written while a task is open, so changing its type moves
+    the credit with it."""
+    from apps.contributions.models import ContributionRecord
+    from apps.core.enums import ContributionType
+    from apps.tasks.services import mark_own_done, verify_part
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    verify_part(task_log=mark_own_done(task=task, member=contrib), lead=lead)
+    assert ContributionRecord.objects.get().contribution_type == ContributionType.OTHER
+
+    client.force_login(user)
+    client.post(
+        reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        _task_form_data(
+            task.container,
+            name=task.name,
+            contribution_type=ContributionType.SOFTWARE,
+            assigned_members=[lead.pk, contrib.pk],
+        ),
+    )
+    task.refresh_from_db()
+    assert task.contribution_type == ContributionType.SOFTWARE
+    assert ContributionRecord.objects.get().contribution_type == ContributionType.SOFTWARE

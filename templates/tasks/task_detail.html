@@ -61,7 +61,7 @@
       target: state within it would reset on every mark and review.
     {% endcomment %}
     <div x-data="{ rowsExpanded: false, sortKey: '', sortDesc: false }">
-      {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager assignee_states=status_block.assignee_states done_count=status_block.done_count marks_locked=status_block.marks_locked reviewed_count=status_block.reviewed_count needs_review=status_block.needs_review show_review=status_block.show_review reviewers=status_block.reviewers assignee_count=status_block.assignee_count is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
+      {% include "tasks/partials/task_status_block.html" with task=task is_project_manager=status_block.is_project_manager assignee_states=status_block.assignee_states done_count=status_block.done_count marks_locked=status_block.marks_locked reviewed_count=status_block.reviewed_count verified_count=status_block.verified_count verify_done_count=status_block.verify_done_count verify_reviewed_count=status_block.verify_reviewed_count needs_review=status_block.needs_review show_review=status_block.show_review reviewers=status_block.reviewers assignee_count=status_block.assignee_count is_assignee=status_block.is_assignee my_done=status_block.my_done pane_mode=True %}
     </div>
 
     {% comment %}

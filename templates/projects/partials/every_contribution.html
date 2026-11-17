@@ -29,8 +29,8 @@
           {% include "_components/sortable_header.html" with key="member" label="Member" %}
           {% include "_components/sortable_header.html" with key="task" label="Task" %}
           {% include "_components/sortable_header.html" with key="role" label="Role" %}
-          {% include "_components/sortable_header.html" with key="completed" label="Completed" %}
-          {% include "_components/sortable_header.html" with key="closer" label="Closed by" %}
+          {% include "_components/sortable_header.html" with key="completed" label="Verified" %}
+          {% include "_components/sortable_header.html" with key="closer" label="Verified by" %}
           {% if is_project_manager %}<th scope="col" class="text-right">Actions</th>{% endif %}
         </tr>
       </thead>

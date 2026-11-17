@@ -73,10 +73,13 @@ from apps.tasks.services import (
     close_task,
     mark_own_done,
     mark_reviewed,
-    marked_after_closing,
     move_task,
     reopen_own,
     reopen_task,
+    unverify_part,
+    verify_part,
+    verify_parts,
+    VerifyScope,
 )
 
 
@@ -697,8 +700,7 @@ def _completion_locked(task) -> bool:
     that be rewritten in place would rewrite the record behind the credit.
 
     A lock rather than a wall: completion is reversible, and Mark Not Complete
-    is the action a completed task still offers its Lead. Reversing it also
-    withdraws the credit, so the two move together.
+    is the action a completed task still offers its Lead.
 
     Board position is deliberately left out. Which column a task sits in is
     where it is, not what it is, and dragging a finished task into Done is the
@@ -975,7 +977,11 @@ class TaskUpdateView(
     UpdateView,
 ):
     """Edit a task. Refused while the task stands completed — see
-    :class:`CompletedTaskLockMixin`."""
+    :class:`CompletedTaskLockMixin`.
+
+    Credit can be written while a task is open (a Lead verifies parts as they
+    come in), so a change of contribution type is carried onto that credit.
+    """
 
     template_name = "tasks/task_form.html"
     form_class = TaskForm
@@ -995,7 +1001,12 @@ class TaskUpdateView(
         return kwargs
 
     def form_valid(self, form):
+        old_type = form.initial.get("contribution_type")
         task = form.save()
+        if "contribution_type" in form.changed_data and old_type:
+            from apps.contributions.services import sync_contribution_type
+
+            sync_contribution_type(task, old_type=old_type)
         # Seed Activity & comments entries for any newly-assigned members,
         # mirroring the Assignees ("Change assignees") flow.
         _seed_assignee_logs(task)
@@ -1217,21 +1228,19 @@ class TaskChangeColumnView(
 
 _LOCKED_MESSAGE = (
     "This task is marked completed. A Lead has to mark it not complete before "
-    "its marks and reviews can change."
+    "setting or clearing another member's done mark."
 )
 
 def _marks_locked(task) -> bool:
-    """True once the task is marked completed, freezing what others record.
+    """True once the task is marked completed, freezing the marks a Lead sets
+    for others.
 
-    Reviewing, withdrawing a review, and a Lead setting or clearing someone
-    else's mark all stop there, however the task came to be completed: by a
-    Lead's click, or by its last review closing it. A Lead who needs to change
-    one marks the task Not Complete first.
-
-    Two exceptions keep a task the Lead closed early open to the people still
-    to finish: an assignee's own mark (see ``TaskCompleteView`` and
-    ``TaskUndoOwnView``), and the review of a part marked after closing (see
-    ``services.marked_after_closing``).
+    That is all it freezes. Each assignee's own mark (``TaskCompleteView``,
+    ``TaskUndoOwnView``), the reviewers' reviews (``TaskLogReviewView``) and
+    the Lead's verifications (``TaskLogVerifyView``) stay open on a completed
+    task: closing it is the Lead's call about the task, not a verdict on any
+    one part. A Lead who needs to change someone else's mark marks the task
+    Not Complete first.
     """
     return task.status == TaskStatus.COMPLETED
 
@@ -1239,9 +1248,10 @@ def _marks_locked(task) -> bool:
 def _task_status_context(task, *, project_member, is_project_manager):
     """Context for the completion status block (per-assignee done state).
 
-    Each assignee state carries the two verdicts the pane's completion matrix
-    shows side by side: ``done`` is the member's own mark on their current
-    TaskLog, ``reviewed`` is a reviewer's sign-off on that same submission,
+    Each assignee state carries the three verdicts the pane's completion
+    matrix shows side by side: ``done`` is the member's own mark on their
+    current TaskLog, ``reviewed`` is a reviewer's sign-off on that same
+    submission, and ``verified`` is a Lead's check that credits it, each
     named and dated.
 
     Everything here is derived from the task's *current* assignee and
@@ -1271,29 +1281,24 @@ def _task_status_context(task, *, project_member, is_project_manager):
         log = current.get(member.id)
         done = log is not None and log.status == TaskStatus.COMPLETED
         reviewed = log is not None and log.is_reviewed
-        # A part marked after the task closed is still open to review.
-        review_locked = locked and not marked_after_closing(task, log)
+        verified = log is not None and log.is_verified
         assignee_states.append(
             {
                 "member": member,
-                # Whether *this viewer* may act on *this row's* review, and
-                # (Leads only) on its done mark. Both close once the task is
-                # completed, the same rule the endpoints enforce — bar the
-                # review of a part marked after that.
-                "can_review": viewer_reviews and not review_locked,
-                "review_locked": review_locked,
+                # Whether *this viewer* may act on *this row's* review. Open
+                # whether or not the task is completed.
+                "can_review": viewer_reviews,
                 # Undoing is narrower than making: a reviewer may withdraw
                 # their own verdict and no one else's, while a Lead can clear
                 # any of them. A review whose reviewer's membership row was
                 # deleted has no owner left to withdraw it, so it too is the
                 # Lead's alone.
                 "can_unreview": (
-                    not review_locked
                     # A task that asks for no review offers no review action,
                     # withdrawal included. A verdict already given stays on
                     # show — see show_review below — it just has no buttons
                     # beside it any more.
-                    and needs_review
+                    needs_review
                     and (
                         is_project_manager
                         or (
@@ -1304,7 +1309,14 @@ def _task_status_context(task, *, project_member, is_project_manager):
                         )
                     )
                 ),
+                # A Lead setting or clearing someone's mark is the one action
+                # a completed task still freezes.
                 "can_mark_done": is_project_manager and not locked,
+                # Verifying is the Lead's alone, open on a part marked done
+                # whether or not the task is completed; withdrawing it is
+                # open whenever there is one to withdraw.
+                "can_verify": is_project_manager and done and not verified,
+                "can_unverify": is_project_manager and verified,
                 # The viewer's own row: they tick their own part done (and
                 # untick it) from it, even once the task is completed.
                 "is_viewer": bool(project_member and member.id == project_member.id),
@@ -1331,6 +1343,13 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 "reviewed_at": log.reviewed_at if log is not None else None,
                 # Marked done and still waiting on a reviewer.
                 "awaiting_review": done and not reviewed,
+                "verified": verified,
+                # Null on a verification whose Lead's membership row was
+                # deleted outright; the cell then reports it without a name.
+                "verified_by": log.verified_by if log is not None else None,
+                "verified_at": log.verified_at if log is not None else None,
+                # Marked done and still waiting on a Lead's verification.
+                "awaiting_verification": done and not verified,
             }
         )
     my_state = next(
@@ -1344,15 +1363,26 @@ def _task_status_context(task, *, project_member, is_project_manager):
         "assignee_states": assignee_states,
         "done_count": sum(1 for s in assignee_states if s["done"]),
         "reviewed_count": sum(1 for s in assignee_states if s["reviewed"]),
+        "verified_count": sum(1 for s in assignee_states if s["verified"]),
+        # What the Lead's two batch actions would verify, counted so each
+        # button can say how many and switch off at none.
+        "verify_done_count": sum(
+            1 for s in assignee_states if s["done"] and not s["verified"]
+        ),
+        "verify_reviewed_count": sum(
+            1
+            for s in assignee_states
+            if s["done"] and s["reviewed"] and not s["verified"]
+        ),
         "assignee_count": len(assignee_states),
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
         # Whether the viewer reviews on this task at all. The per-row
         # ``can_review`` above is what actually gates the buttons.
         "viewer_reviews": viewer_reviews,
-        # A completed task's reviews, and the marks a Lead sets for others,
-        # are frozen; each assignee's own mark and the Lead's Mark Not
-        # Complete stay live.
+        # A completed task freezes only the marks a Lead sets for others;
+        # each assignee's own mark, the reviews and the verifications stay
+        # live.
         "marks_locked": locked,
         # Whether review is expected of this task at all — see
         # ``Task.needs_review``. Gates who may review.
@@ -1629,10 +1659,10 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     at once and a member removed from the project loses the action with their
     membership.
 
-    Both directions close once the task is marked completed, like the
-    assignees' own marks, and neither opens at all on a task that asks for no
-    review — the Reviewed column is not drawn there, so the endpoint behind it
-    should not answer either. Withdrawing is the narrower of the two: a
+    Both directions stay open once the task is marked completed — a Lead
+    closing the task is no verdict on any part — and neither opens at all on
+    a task that asks for no review: the Reviewed column is not drawn there,
+    so the endpoint behind it should not answer either. Withdrawing is the narrower of the two: a
     reviewer may take back their own verdict and no one else's, while a Lead
     can clear any review on the task.
 
@@ -1652,9 +1682,6 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseForbidden(
                 "Only a reviewer on this task can review submissions."
             )
-        if _marks_locked(self.task) and not marked_after_closing(self.task, log):
-            return HttpResponseForbidden(_LOCKED_MESSAGE)
-
         if request.POST.get("reviewed") in {"0", "false", "no"}:
             if not self.is_project_manager and not (
                 self.project_member is not None
@@ -1681,6 +1708,82 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             )
             mark_reviewed(task_log=log, reviewer=reviewer)
 
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
+class TaskLogVerifyView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """A Lead verifies one member's contribution, or withdraws that.
+
+    Verifying is what credits the member (``services.verify_part``). It is
+    open on a completed task as much as an open one, and asks for the part to
+    be marked done but not reviewed: a Lead may verify a part the reviewers
+    have not reached.
+
+    POST ``verified=0`` withdraws the verification; anything else records
+    one. The Lead check is inline, as on the sibling log views.
+    """
+
+    def post(self, request, *args, **kwargs):
+        log = get_object_or_404(
+            TaskLog.objects.filter(task=self.task), pk=kwargs["log_pk"]
+        )
+        if not self.is_project_manager:
+            return HttpResponseForbidden(
+                "Only a Lead can verify a member's contribution."
+            )
+        actor = self.project_member or _fallback_member(request.user, self.project)
+        if request.POST.get("verified") in {"0", "false", "no"}:
+            unverify_part(task_log=log, actor=actor)
+        else:
+            if log.status != TaskStatus.COMPLETED:
+                return HttpResponseBadRequest(
+                    "That assignee has not marked their part done yet."
+                )
+            if not self.task.assigned_members.filter(pk=log.assigned_to_id).exists():
+                return HttpResponseBadRequest(
+                    "That member is no longer assigned to this task."
+                )
+            # Only the member's current entry carries their state; an older
+            # one is history, and crediting it would skip what came after.
+            current = (
+                self.task.task_logs.filter(assigned_to_id=log.assigned_to_id)
+                .order_by("-created_at")
+                .first()
+            )
+            if current is None or current.pk != log.pk:
+                return HttpResponseBadRequest(
+                    "That entry is no longer the member's current one."
+                )
+            verify_part(task_log=log, lead=actor)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
+class TaskVerifyBatchView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """A Lead verifies several contributions at once.
+
+    POST ``scope=done`` verifies every part marked done; ``scope=reviewed``
+    every part marked done and reviewed. Parts already verified are skipped,
+    so the action is safe to repeat. See ``services.verify_parts``.
+    """
+
+    def post(self, request, *args, **kwargs):
+        if not self.is_project_manager:
+            return HttpResponseForbidden(
+                "Only a Lead can verify members' contributions."
+            )
+        scope = request.POST.get("scope")
+        if scope not in VerifyScope.ALL:
+            return HttpResponseBadRequest("Choose which parts to verify.")
+        lead = self.project_member or _fallback_member(request.user, self.project)
+        verify_parts(task=self.task, lead=lead, scope=scope)
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,

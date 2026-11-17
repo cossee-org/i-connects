@@ -108,7 +108,6 @@ def complete_task(
     )
 
     completer_user = completed_by.users.first()
-    _record_contributions(task, verifier_user=completer_user)
     log_action(
         AuditAction.TASK_COMPLETED,
         actor=completer_user,
@@ -130,14 +129,13 @@ def complete_task(
 def reopen_task(*, task: Task) -> Task:
     """Reopen a closed task (Lead action), flipping ``Task.status`` back.
 
-    The mirror of :func:`close_task`. The assignees' own marks survive, so a
-    Lead toggling a task closed and open again does not wipe what they
-    recorded — but the credit that closure wrote does not, since a reopened
-    task is no longer finished work for anyone to hold credit for. Closing
-    it again writes the credit back.
+    The mirror of :func:`close_task`, and status-only for the same reason:
+    the assignees' marks, the reviews and the Lead's verifications all
+    survive, and so does the credit those verifications wrote. Credit stands
+    on a Lead verifying each part, not on the task's status.
 
-    Who closed it goes too: the completion it named no longer stands, and
-    the next close writes its own.
+    Who closed it goes: the completion it named no longer stands, and the
+    next close writes its own.
     """
     task.status = TaskStatus.NOT_COMPLETED
     task.closed_by = None
@@ -145,25 +143,7 @@ def reopen_task(*, task: Task) -> Task:
     task.save(
         update_fields=["status", "closed_by", "closed_at", "updated_at"]
     )
-    _withdraw_contributions(task)
     return task
-
-
-def marked_after_closing(task: Task, log: TaskLog | None) -> bool:
-    """True when ``log`` is a part marked done after ``task`` was closed.
-
-    Such a part was never in front of whoever closed the task, so the
-    completion says nothing about it: its reviewers may still review it, and
-    taking its mark or review back leaves the task's completion standing.
-    """
-    return bool(
-        task.status == TaskStatus.COMPLETED
-        and task.closed_at is not None
-        and log is not None
-        and log.status == TaskStatus.COMPLETED
-        and log.completed_at is not None
-        and log.completed_at > task.closed_at
-    )
 
 
 def _current_log_for(task: Task, member: ProjectMember) -> TaskLog | None:
@@ -190,9 +170,8 @@ def mark_own_done(
 
     The mark is the assignee's statement about their own work, so it stays
     open after a Lead closes the task: on a task with many assignees, the
-    Lead often closes it before everyone has ticked. A mark made then is
-    credited straight away, the same credit closing would have written had it
-    been there at the time (see :func:`close_task`).
+    Lead often closes it before everyone has ticked. Marking earns no credit
+    by itself; that waits on a Lead verifying the part (:func:`verify_part`).
 
     Every change of the mark writes an audit row, so who marked whose part
     done, and when, survives the TaskLog being updated in place.
@@ -212,11 +191,6 @@ def mark_own_done(
         _log_mark_action(
             AuditAction.TASK_PART_DONE, task_log=log, actor_member=actor or member
         )
-        if task.status == TaskStatus.COMPLETED:
-            closer = task.closed_by
-            _record_contributions(
-                task, verifier_user=closer.users.first() if closer else None
-            )
     return log
 
 
@@ -226,37 +200,40 @@ def reopen_own(
 ) -> TaskLog | None:
     """Undo a single assignee's INDIVIDUAL-mode completion.
 
-    A review is a verdict on a submission, so withdrawing the submission
-    withdraws the review with it: the reviewer's name and date are cleared
-    rather than left standing over work that is no longer marked done. If the
-    member marks their part done again it comes back unreviewed, waiting on a
+    A review and a verification are verdicts on a submission, so withdrawing
+    the submission withdraws both with it: the names and dates are cleared
+    rather than left standing over work that is no longer marked done, and
+    the credit the verification wrote goes too. If the member marks their
+    part done again it comes back unreviewed and unverified, waiting on a
     fresh look.
 
-    ``actor`` is who clicked, used for the audit row; it defaults to
+    ``actor`` is who clicked, used for the audit rows; it defaults to
     ``member``, the assignee undoing their own mark.
 
-    Like marking, undoing stays open on a closed task. The credit closing
-    wrote for this member goes with the mark; everyone else's stays. A part
-    marked after closing never reopens the task: the completion did not rest
-    on it.
+    Like marking, undoing stays open on a closed task, and never reopens it:
+    the task's completion is the Lead's call, not a sum of the marks.
     """
     log = _current_log_for(task, member)
     if log is None:
         return None
-    # Whether the task's completion rests on its reviews — see clear_review.
-    completed_on_reviews = (
-        not marked_after_closing(task, log)
-        and task.status == TaskStatus.COMPLETED
-        and all_submissions_reviewed(task)
-    )
     was_done = log.status == TaskStatus.COMPLETED
     had_review = log.is_reviewed or log.reviewed_by_id is not None
+    had_verification = log.is_verified or log.verified_by_id is not None
     log.status = TaskStatus.NOT_COMPLETED
     log.completed_at = None
     log.reviewed_by = None
     log.reviewed_at = None
+    log.verified_by = None
+    log.verified_at = None
     log.save(
-        update_fields=["status", "completed_at", "reviewed_by", "reviewed_at"]
+        update_fields=[
+            "status",
+            "completed_at",
+            "reviewed_by",
+            "reviewed_at",
+            "verified_by",
+            "verified_at",
+        ]
     )
     if had_review:
         _log_review_action(
@@ -265,17 +242,18 @@ def reopen_own(
             actor_member=actor or member,
             reason="the done mark it stood on was reverted",
         )
+    if had_verification:
+        _log_verify_action(
+            AuditAction.TASK_PART_UNVERIFIED,
+            task_log=log,
+            actor_member=actor or member,
+            reason="the done mark it stood on was reverted",
+        )
+    _withdraw_member_contributions(task, member)
     if was_done:
         _log_mark_action(
             AuditAction.TASK_PART_UNDONE, task_log=log, actor_member=actor or member
         )
-    if completed_on_reviews:
-        # This mark was one of the reviewed submissions the task's completion
-        # rested on, and it no longer is.
-        reopen_task(task=task)
-    elif task.status == TaskStatus.COMPLETED:
-        # Still closed, by a Lead's hand: only this member's credit goes.
-        _withdraw_member_contributions(task, member)
     return log
 
 
@@ -285,11 +263,9 @@ def close_task(
 ) -> Task:
     """Close a task, finalising ``Task.status`` to COMPLETED.
 
-    Always allowed: a Lead can close a task whenever they judge it done,
-    whether or not every assignee has marked their own part. The other way in
-    is :func:`mark_reviewed` signing off the last outstanding submission,
-    which passes a ``reason`` so the audit row says the task closed itself
-    rather than reading as a Lead's click.
+    A Lead's action, always allowed: a Lead can close a task whenever they
+    judge it done, whether or not every assignee has marked their own part.
+    Nothing closes a task on its own; reviews in particular do not.
 
     Only the task's own status moves. Per-assignee TaskLogs are left exactly
     as they are in *both* completion modes: "marked done" is an assignee's
@@ -300,14 +276,12 @@ def close_task(
     have no self-mark action at all, that means a closed task simply carries
     no individual marks.
 
-    Closing is the ledger event on a project tracking contributions as
-    CRediT: credit is written for each assignee who marked their own part
-    done, and — where the task carries reviewers — had that submission
-    reviewed. See ``contributions.services.record_contributions_for_task``.
-   
+    Closing writes no credit. On a project tracking contributions as CRediT,
+    credit is written per member as a Lead verifies their part
+    (:func:`verify_part`), before or after the task is closed.
+
     The task records who closed it and when, so the page can name them
-    without going to the audit log. ``mark_reviewed`` passes the reviewer
-    whose sign-off finished it, so the name is whoever really did it.
+    without going to the audit log.
     """
     closer_user = closed_by.users.first()
     task.status = TaskStatus.COMPLETED
@@ -316,7 +290,6 @@ def close_task(
     task.save(
         update_fields=["status", "closed_by", "closed_at", "updated_at"]
     )
-    _record_contributions(task, verifier_user=closer_user)
     metadata = {"name": task.name}
     if reason:
         metadata["reason"] = reason
@@ -331,18 +304,11 @@ def close_task(
     return task
 
 
-def _record_contributions(task: Task, *, verifier_user=None) -> None:
-    """Write the closed task's credit, late-imported to dodge a cycle."""
-    from apps.contributions.services import record_contributions_for_task
+def _record_member_contribution(task_log: TaskLog, *, verifier_user=None) -> None:
+    """Write one verified part's credit, late-imported to dodge a cycle."""
+    from apps.contributions.services import record_member_contribution
 
-    record_contributions_for_task(task, verifier_user=verifier_user)
-
-
-def _withdraw_contributions(task: Task) -> None:
-    """Take back a reopened task's credit, late-imported to dodge a cycle."""
-    from apps.contributions.services import withdraw_contributions_for_task
-
-    withdraw_contributions_for_task(task)
+    record_member_contribution(task_log, verifier_user=verifier_user)
 
 
 def _withdraw_member_contributions(task: Task, member: ProjectMember) -> None:
@@ -360,10 +326,8 @@ def all_submissions_reviewed(task: Task) -> bool:
     the task brings an unreviewed row with them, and one taken off stops being
     counted.
 
-    False for a task nobody is assigned to. There are no submissions there to
-    have reviewed, so "all of them are" would close a task on which no work
-    was ever recorded. False, too, for a task that asks for no review: there
-    is no verdict there for a completion to rest on.
+    False for a task nobody is assigned to, and for a task that asks for no
+    review: there are no verdicts there for "all of them" to describe.
     """
     if not task.needs_review:
         return False
@@ -386,8 +350,8 @@ def all_submissions_reviewed(task: Task) -> bool:
 def mark_reviewed(*, task_log: TaskLog, reviewer: ProjectMember) -> TaskLog:
     """Record ``reviewer``'s sign-off on one assignee's submission.
 
-    Peer review is deliberately separate from :func:`approve_completion`: an
-    approval writes an immutable ContributionRecord, while a review is a
+    Peer review is deliberately separate from a Lead's verification
+    (:func:`verify_part`), which is what writes credit: a review is a
     verdict a reviewer can withdraw and an assignee can invalidate by
     reverting their mark. Stamping who and when is all this does, so the
     reversal in :func:`clear_review` really is complete.
@@ -395,9 +359,9 @@ def mark_reviewed(*, task_log: TaskLog, reviewer: ProjectMember) -> TaskLog:
     Callers are responsible for checking that ``reviewer`` may review this
     task and that the submission exists (see ``views.TaskLogReviewView``).
 
-    On a task already closed (a part marked after closing, see
-    :func:`marked_after_closing`), the review is what that part's credit
-    was waiting on, so it is written here, verified by the reviewer.
+    Open whether or not the task is completed, and it changes neither the
+    task's status nor anyone's credit: closing is a Lead's call, and credit
+    waits on a Lead's verification (:func:`verify_part`).
     """
     task_log.reviewed_by = reviewer
     task_log.reviewed_at = timezone.now()
@@ -406,17 +370,6 @@ def mark_reviewed(*, task_log: TaskLog, reviewer: ProjectMember) -> TaskLog:
         AuditAction.TASK_REVIEWED, task_log=task_log, actor_member=reviewer
     )
     _notify_submission_reviewed(task_log=task_log, reviewer=reviewer)
-    # Signing off the last outstanding submission finishes the task. Without
-    # this a fully-reviewed task stayed NOT_COMPLETED, and the task lists judge
-    # "active" by ``Task.status`` for anyone who is not an assignee — so it sat
-    # on its reviewers' All tasks page with nothing left for them to do.
-    task = task_log.task
-    if task.status != TaskStatus.COMPLETED and all_submissions_reviewed(task):
-        close_task(
-            task=task, closed_by=reviewer, reason="all submissions reviewed"
-        )
-    elif task.status == TaskStatus.COMPLETED:
-        _record_contributions(task, verifier_user=reviewer.users.first())
     return task_log
 
 
@@ -428,24 +381,12 @@ def clear_review(
 
     A no-op on an unreviewed entry, so a double-clicked Undo is harmless.
 
-    Withdrawing the last standing verdict on a task that reviews had closed
-    reopens it: completion follows the reviews there, so it has to follow them
-    back. A task a Lead closed by hand is untouched — that completion was
-    their judgement, not a sum of verdicts, and the endpoints do not let a
-    review be withdrawn on one anyway.
-
-    The exception is a part marked after closing: its review can be withdrawn
-    on a closed task, which stays closed and loses only that part's credit.
+    Open whether or not the task is completed. It leaves the task's status,
+    the Lead's verification and the credit alone: verification does not rest
+    on the review (see :func:`verify_part`).
     """
     if not task_log.is_reviewed and task_log.reviewed_by_id is None:
         return task_log
-    task = task_log.task
-    late = marked_after_closing(task, task_log)
-    completed_on_reviews = (
-        not late
-        and task.status == TaskStatus.COMPLETED
-        and all_submissions_reviewed(task)
-    )
     task_log.reviewed_by = None
     task_log.reviewed_at = None
     task_log.save(update_fields=["reviewed_by", "reviewed_at"])
@@ -454,11 +395,140 @@ def clear_review(
         task_log=task_log,
         actor_member=cleared_by,
     )
-    if completed_on_reviews:
-        reopen_task(task=task)
-    elif late:
-        _withdraw_member_contributions(task, task_log.assigned_to)
     return task_log
+
+
+class VerifyScope:
+    """What a batch verification covers — see :func:`verify_parts`."""
+
+    DONE = "done"
+    REVIEWED = "reviewed"
+    ALL = (DONE, REVIEWED)
+
+
+@transaction.atomic
+def verify_part(*, task_log: TaskLog, lead: ProjectMember, batch: str | None = None) -> TaskLog:
+    """A Lead verifies one member's contribution, crediting them for it.
+
+    This is the ledger event: on a project tracking contributions as CRediT
+    it writes the member's ContributionRecord, verified by ``lead``. It is
+    open whether or not the task is completed and does not need a review:
+    a Lead may verify a part the reviewers have not reached.
+
+    A no-op on a part already verified, so a double click writes nothing
+    twice. Callers check that ``lead`` is a Lead, that the part is marked
+    done and that its member is still on the task (see
+    ``views.TaskLogVerifyView``). ``batch`` names the batch action this came
+    from, for the audit row.
+    """
+    if task_log.is_verified:
+        return task_log
+    task_log.verified_by = lead
+    task_log.verified_at = timezone.now()
+    task_log.save(update_fields=["verified_by", "verified_at"])
+    _log_verify_action(
+        AuditAction.TASK_PART_VERIFIED,
+        task_log=task_log,
+        actor_member=lead,
+        batch=batch,
+    )
+    _record_member_contribution(task_log, verifier_user=lead.users.first())
+    return task_log
+
+
+@transaction.atomic
+def unverify_part(*, task_log: TaskLog, actor: ProjectMember | None) -> TaskLog:
+    """Withdraw a Lead's verification, and the credit it wrote.
+
+    Leaves the done mark and any review alone. A no-op on a part that is not
+    verified.
+    """
+    if not task_log.is_verified and task_log.verified_by_id is None:
+        return task_log
+    task_log.verified_by = None
+    task_log.verified_at = None
+    task_log.save(update_fields=["verified_by", "verified_at"])
+    _log_verify_action(
+        AuditAction.TASK_PART_UNVERIFIED, task_log=task_log, actor_member=actor
+    )
+    _withdraw_member_contributions(task_log.task, task_log.assigned_to)
+    return task_log
+
+
+def current_logs(task: Task) -> dict[int, TaskLog]:
+    """Each member's current TaskLog on ``task``, keyed by member id.
+
+    Read off the prefetched set where there is one; newest first, so the
+    first seen per member is their current state.
+    """
+    current: dict[int, TaskLog] = {}
+    for log in task.task_logs.all():
+        current.setdefault(log.assigned_to_id, log)
+    return current
+
+
+def verifiable_parts(task: Task, scope: str) -> list[TaskLog]:
+    """The current, unverified parts a batch verification would cover.
+
+    ``scope`` is :attr:`VerifyScope.DONE` — every part marked done — or
+    :attr:`VerifyScope.REVIEWED` — every part marked done and reviewed. Only
+    the task's current assignees count, in the order the matrix lists them.
+    """
+    current = current_logs(task)
+    parts = []
+    for member in task.assigned_members.all():
+        log = current.get(member.pk)
+        if log is None or log.status != TaskStatus.COMPLETED or log.is_verified:
+            continue
+        if scope == VerifyScope.REVIEWED and not log.is_reviewed:
+            continue
+        parts.append(log)
+    return parts
+
+
+@transaction.atomic
+def verify_parts(*, task: Task, lead: ProjectMember, scope: str) -> list[TaskLog]:
+    """Verify every part in ``scope`` at once; see :func:`verifiable_parts`.
+
+    Each part is verified as :func:`verify_part` would, with its own audit
+    row and credit, the row naming the batch it came from. Returns the parts
+    verified, empty when there was nothing left to verify.
+    """
+    if scope not in VerifyScope.ALL:
+        raise ValueError(f"Unknown verification scope: {scope!r}")
+    parts = verifiable_parts(task, scope)
+    for log in parts:
+        verify_part(task_log=log, lead=lead, batch=scope)
+    return parts
+
+
+def _log_verify_action(
+    action,
+    *,
+    task_log: TaskLog,
+    actor_member: ProjectMember | None,
+    reason: str | None = None,
+    batch: str | None = None,
+) -> None:
+    """Append an audit row for a verification set or withdrawn on ``task_log``."""
+    task = task_log.task
+    metadata = {
+        "task_name": task.name,
+        "assignee_member_id": task_log.assigned_to_id,
+        "task_log_id": task_log.pk,
+        "task_completed": task.status == TaskStatus.COMPLETED,
+    }
+    if reason:
+        metadata["reason"] = reason
+    if batch:
+        metadata["batch"] = batch
+    log_action(
+        action,
+        actor=actor_member.users.first() if actor_member is not None else None,
+        entity=task,
+        project=task.project,
+        metadata=metadata,
+    )
 
 
 def _log_review_action(
@@ -492,7 +562,7 @@ def _log_mark_action(
     """Append an audit row for a done mark set or undone on ``task_log``.
 
     ``after_completion`` flags a mark changed on a task already closed, so
-    the late ones can be told apart from those the closure counted.
+    marks made after the Lead closed it can be told apart.
     """
     task = task_log.task
     log_action(
@@ -519,10 +589,8 @@ def approve_completion(
     """Set approval state on a TaskLog.
 
     A lead's verdict on one assignee's submission, recorded and announced.
-    It does not touch the contributions ledger: closing the task is the
-    ledger event (see :func:`close_task`), and crediting a submission here
-    as well would hand out credit that skipped the reviewers the task
-    carries.
+    It does not touch the contributions ledger: a Lead verifying the part is
+    the ledger event (see :func:`verify_part`).
     """
     task_log.approved = approved
     task_log.save(update_fields=["approved"])
