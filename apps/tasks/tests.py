@@ -3384,11 +3384,6 @@ MARK_NOT_VERIFIED = 'aria-label="Withdraw the verification of '
 def _verify_url(task, log):
     return reverse("tasks:verify_log", kwargs={"pk": task.pk, "log_pk": log.pk})
 
-
-def _verify_batch_url(task):
-    return reverse("tasks:verify_batch", kwargs={"pk": task.pk})
-
-
 def _rows(pane):
     """The Completion card's table of assignee rows in the rendered pane."""
     start = pane.index("data-assignee-rows")
@@ -5427,7 +5422,7 @@ def test_a_new_tasks_editor_saves_itself_when_closed_by_accident(client, user):
 
 
 # ---------------------------------------------------------------------------
-# A Lead verifies each member's contribution — one by one, or in a batch
+# A Lead verifies each member's contribution, one by one
 # ---------------------------------------------------------------------------
 
 
@@ -5447,15 +5442,19 @@ def test_the_matrix_has_a_verified_column_live_for_leads_only(client, user, othe
     # The Lead's own part is not done, so there is nothing to verify yet.
     own = _row_for(pane, lead)
     assert 'data-verify-cell data-mark="none"' in own and MARK_VERIFIED not in own
-    assert "data-verify-batch" in pane
+    # No batch actions: a Lead verifies each member on their own row.
+    assert "data-verify-batch" not in pane and "All done (" not in pane
+    # The Verified bar's count is there on a first render, pane and page alike.
+    detail = reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    for html in (pane, client.get(detail).content.decode()):
+        assert ">0 of 2</span>" in html
 
-    # An assignee sees the column, read-only, and no batch actions.
+    # An assignee sees the column, read-only.
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
     row = _row_for(pane, contrib)
     assert 'data-verify-cell data-mark="pending"' in row
     assert MARK_VERIFIED not in row and "Awaiting verification" in row
-    assert "data-verify-batch" not in pane
 
 
 @pytest.mark.django_db
@@ -5492,7 +5491,6 @@ def test_only_a_lead_can_verify(client, user, other_user):
     client.force_login(other_user)
 
     assert client.post(_verify_url(task, log), {"verified": "1"}, HTTP_HX_REQUEST="true").status_code == 403
-    assert client.post(_verify_batch_url(task), {"scope": "done"}, HTTP_HX_REQUEST="true").status_code == 403
     log.refresh_from_db()
     assert not log.is_verified
 
@@ -5526,52 +5524,6 @@ def test_a_lead_verifies_on_a_completed_task(client, user, other_user):
     assert log.is_verified
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
-
-
-@pytest.mark.django_db
-def test_the_batch_buttons_count_and_verify_their_parts(client, user, other_user, pm_user):
-    from apps.tasks.services import mark_own_done, mark_reviewed
-
-    project, task, lead, contrib = _two_assignee_task(user, other_user)
-    third = _add_contributor(project, pm_user)
-    task.assigned_members.add(third)
-    task.reviewers.add(lead)
-    mark_own_done(task=task, member=contrib)
-    mark_own_done(task=task, member=third)
-    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
-    client.force_login(user)
-
-    detail = reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
-    for url in (_pane_url(project, task), detail):
-        page = client.get(url).content.decode()
-        batch = page[page.index("data-verify-batch") :]
-        batch = batch[: batch.index("</div>")]
-        assert "All done (2)" in batch and "All reviewed (1)" in batch, url
-        assert ">0 of 3</span>" in page, url  # the Verified bar's count
-
-    swapped = client.post(
-        _verify_batch_url(task), {"scope": "reviewed", "pane_mode": "1"}, HTTP_HX_REQUEST="true"
-    ).content.decode()
-    assert _current_log(task, contrib).is_verified
-    assert not _current_log(task, third).is_verified
-    assert "All done (1)" in swapped and "All reviewed (0)" in swapped
-
-    client.post(_verify_batch_url(task), {"scope": "done", "pane_mode": "1"}, HTTP_HX_REQUEST="true")
-    assert _current_log(task, third).is_verified
-    assert not _current_log(task, lead).is_verified  # never marked done
-
-    refused = client.post(_verify_batch_url(task), {"scope": "all"}, HTTP_HX_REQUEST="true")
-    assert refused.status_code == 400
-
-
-@pytest.mark.django_db
-def test_the_review_batch_button_needs_a_reviewed_task(client, user, other_user):
-    project, task, _lead, _contrib = _two_assignee_task(user, other_user)
-    client.force_login(user)
-    pane = client.get(_pane_url(project, task)).content.decode()
-    assert 'data-verify-scope="done"' in pane
-    assert 'data-verify-scope="reviewed"' not in pane
-
 
 
 @pytest.mark.django_db

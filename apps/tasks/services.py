@@ -400,16 +400,8 @@ def clear_review(
     return task_log
 
 
-class VerifyScope:
-    """What a batch verification covers — see :func:`verify_parts`."""
-
-    DONE = "done"
-    REVIEWED = "reviewed"
-    ALL = (DONE, REVIEWED)
-
-
 @transaction.atomic
-def verify_part(*, task_log: TaskLog, lead: ProjectMember, batch: str | None = None) -> TaskLog:
+def verify_part(*, task_log: TaskLog, lead: ProjectMember) -> TaskLog:
     """A Lead verifies one member's contribution, crediting them for it.
 
     This is the ledger event: on a project tracking contributions as CRediT
@@ -420,8 +412,7 @@ def verify_part(*, task_log: TaskLog, lead: ProjectMember, batch: str | None = N
     A no-op on a part already verified, so a double click writes nothing
     twice. Callers check that ``lead`` is a Lead, that the part is marked
     done and that its member is still on the task (see
-    ``views.TaskLogVerifyView``). ``batch`` names the batch action this came
-    from, for the audit row.
+    ``views.TaskLogVerifyView``).
     """
     if task_log.is_verified:
         return task_log
@@ -432,7 +423,6 @@ def verify_part(*, task_log: TaskLog, lead: ProjectMember, batch: str | None = N
         AuditAction.TASK_PART_VERIFIED,
         task_log=task_log,
         actor_member=lead,
-        batch=batch,
     )
     _record_member_contribution(task_log, verifier_user=lead.users.first())
     return task_log
@@ -457,60 +447,12 @@ def unverify_part(*, task_log: TaskLog, actor: ProjectMember | None) -> TaskLog:
     return task_log
 
 
-def current_logs(task: Task) -> dict[int, TaskLog]:
-    """Each member's current TaskLog on ``task``, keyed by member id.
-
-    Read off the prefetched set where there is one; newest first, so the
-    first seen per member is their current state.
-    """
-    current: dict[int, TaskLog] = {}
-    for log in task.task_logs.all():
-        current.setdefault(log.assigned_to_id, log)
-    return current
-
-
-def verifiable_parts(task: Task, scope: str) -> list[TaskLog]:
-    """The current, unverified parts a batch verification would cover.
-
-    ``scope`` is :attr:`VerifyScope.DONE` — every part marked done — or
-    :attr:`VerifyScope.REVIEWED` — every part marked done and reviewed. Only
-    the task's current assignees count, in the order the matrix lists them.
-    """
-    current = current_logs(task)
-    parts = []
-    for member in task.assigned_members.all():
-        log = current.get(member.pk)
-        if log is None or log.status != TaskStatus.COMPLETED or log.is_verified:
-            continue
-        if scope == VerifyScope.REVIEWED and not log.is_reviewed:
-            continue
-        parts.append(log)
-    return parts
-
-
-@transaction.atomic
-def verify_parts(*, task: Task, lead: ProjectMember, scope: str) -> list[TaskLog]:
-    """Verify every part in ``scope`` at once; see :func:`verifiable_parts`.
-
-    Each part is verified as :func:`verify_part` would, with its own audit
-    row and credit, the row naming the batch it came from. Returns the parts
-    verified, empty when there was nothing left to verify.
-    """
-    if scope not in VerifyScope.ALL:
-        raise ValueError(f"Unknown verification scope: {scope!r}")
-    parts = verifiable_parts(task, scope)
-    for log in parts:
-        verify_part(task_log=log, lead=lead, batch=scope)
-    return parts
-
-
 def _log_verify_action(
     action,
     *,
     task_log: TaskLog,
     actor_member: ProjectMember | None,
     reason: str | None = None,
-    batch: str | None = None,
 ) -> None:
     """Append an audit row for a verification set or withdrawn on ``task_log``."""
     task = task_log.task
@@ -522,8 +464,6 @@ def _log_verify_action(
     }
     if reason:
         metadata["reason"] = reason
-    if batch:
-        metadata["batch"] = batch
     log_action(
         action,
         actor=actor_member.users.first() if actor_member is not None else None,

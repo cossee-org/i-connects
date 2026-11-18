@@ -79,8 +79,6 @@ from apps.tasks.services import (
     reopen_task,
     unverify_part,
     verify_part,
-    verify_parts,
-    VerifyScope,
 )
 
 
@@ -1374,16 +1372,6 @@ def _task_status_context(task, *, project_member, is_project_manager):
         "done_count": sum(1 for s in assignee_states if s["done"]),
         "reviewed_count": sum(1 for s in assignee_states if s["reviewed"]),
         "verified_count": sum(1 for s in assignee_states if s["verified"]),
-        # What the Lead's two batch actions would verify, counted so each
-        # button can say how many and switch off at none.
-        "verify_done_count": sum(
-            1 for s in assignee_states if s["done"] and not s["verified"]
-        ),
-        "verify_reviewed_count": sum(
-            1
-            for s in assignee_states
-            if s["done"] and s["reviewed"] and not s["verified"]
-        ),
         "assignee_count": len(assignee_states),
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
@@ -1779,31 +1767,6 @@ class TaskLogVerifyView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                     "That entry is no longer the member's current one."
                 )
             verify_part(task_log=log, lead=actor)
-        return _respond_status_block(
-            request, self.task,
-            project_member=self.project_member,
-            is_project_manager=self.is_project_manager,
-        )
-
-
-class TaskVerifyBatchView(LoginRequiredMixin, TaskMemberAccessMixin, View):
-    """A Lead verifies several contributions at once.
-
-    POST ``scope=done`` verifies every part marked done; ``scope=reviewed``
-    every part marked done and reviewed. Parts already verified are skipped,
-    so the action is safe to repeat. See ``services.verify_parts``.
-    """
-
-    def post(self, request, *args, **kwargs):
-        if not self.is_project_manager:
-            return HttpResponseForbidden(
-                "Only a Lead can verify members' contributions."
-            )
-        scope = request.POST.get("scope")
-        if scope not in VerifyScope.ALL:
-            return HttpResponseBadRequest("Choose which parts to verify.")
-        lead = self.project_member or _fallback_member(request.user, self.project)
-        verify_parts(task=self.task, lead=lead, scope=scope)
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,

@@ -5,8 +5,8 @@
   done_by_self, reviewed, reviewed_by, reviewed_at, awaiting_review,
   verified, verified_by, verified_at, awaiting_verification,
   can_mark_done, can_review, can_unreview, can_verify, can_unverify),
-  done_count, reviewed_count, verified_count, verify_done_count,
-  verify_reviewed_count, assignee_count, is_assignee, my_done,
+  done_count, reviewed_count, verified_count, assignee_count,
+  is_assignee, my_done,
   marks_locked, needs_review, show_review, reviewers.
 {% endcomment %}
 <div id="task-status-block"
@@ -60,7 +60,7 @@
           <ol class="mt-2 flex flex-col gap-2">
             <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished; a Lead can tick it for anyone. Untick to undo.</li>
             <li><span class="font-semibold text-violet-600">2. Reviewed.</span> On a task with reviewers, a reviewer or a Lead ticks Reviewed once a part is done. Whoever reviewed it, or a Lead, can untick it. Undoing a Done mark clears its review.</li>
-            <li><span class="font-semibold text-sky-700">3. Verified.</span> A Lead ticks Verified to confirm a member's contribution, which is what credits them for it. Leads can verify one part at a time, or every part done or every part reviewed at once. Undoing a Done mark clears its verification.</li>
+            <li><span class="font-semibold text-sky-700">3. Verified.</span> A Lead ticks Verified to confirm a member's contribution, which is what credits them for it. Undoing a Done mark clears its verification.</li>
             <li><span class="font-semibold text-brand-navy">4. Completed.</span> A Lead marks the whole task completed with Mark completed at the top. Assignees can still tick their own Done, reviewers can still review, and Leads can still verify after that. Only the Done marks a Lead sets for others are locked; a Lead marks the task not complete to change them.</li>
           </ol>
           </div>
@@ -136,36 +136,6 @@
         </span>
         <span class="text-right text-brand-text/80">{{ verified_count }} of {{ assignee_count }}</span>
       </div>
-
-      {% comment %}
-        The Lead's batch verification: every part marked done, or (on a task
-        under review) every part reviewed, in one click. Each says how many
-        parts it would verify and switches off at none; parts already
-        verified are skipped, so it is safe to repeat.
-      {% endcomment %}
-      {% if is_project_manager %}
-        <div class="mt-3 flex flex-wrap items-center gap-2" data-verify-batch>
-          <span class="text-xs text-brand-text/70 font-medium">Verify</span>
-          <button type="button" class="btn btn-xs btn-outline"
-                  hx-post="{% url 'tasks:verify_batch' pk=task.pk %}"
-                  hx-vals='{"scope": "done", "pane_mode": "1"}'
-                  hx-target="#task-status-block"
-                  hx-swap="outerHTML"
-                  hx-confirm="Verify every part marked done ({{ verify_done_count }})? Each member is credited for their part."
-                  {% if not verify_done_count %}disabled{% endif %}
-                  data-verify-scope="done">All done ({{ verify_done_count }})</button>
-          {% if show_review %}
-            <button type="button" class="btn btn-xs btn-outline"
-                    hx-post="{% url 'tasks:verify_batch' pk=task.pk %}"
-                    hx-vals='{"scope": "reviewed", "pane_mode": "1"}'
-                    hx-target="#task-status-block"
-                    hx-swap="outerHTML"
-                    hx-confirm="Verify every part marked done and reviewed ({{ verify_reviewed_count }})? Each member is credited for their part."
-                    {% if not verify_reviewed_count %}disabled{% endif %}
-                    data-verify-scope="reviewed">All reviewed ({{ verify_reviewed_count }})</button>
-          {% endif %}
-        </div>
-      {% endif %}
 
       {% comment %}
         One table row per assignee, under Assignee / Done / Reviewed (only on

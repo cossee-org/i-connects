@@ -143,11 +143,6 @@ urlpatterns = [
         views.TaskLogVerifyView.as_view(),
         name="verify_log",
     ),
-    path(
-        "tasks/<int:pk>/verify/",
-        views.TaskVerifyBatchView.as_view(),
-        name="verify_batch",
-    ),
     # Board columns
     path(
         "projects/<int:project_pk>/boards/",
