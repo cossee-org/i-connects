@@ -4313,7 +4313,8 @@ def test_completion_heading_carries_an_info_button_explaining_the_procedure(clie
         for step in ("1. Done.", "2. Reviewed.", "3. Verified.", "4. Completed."):
             assert step in info, step
         verified = info[info.index("3. Verified.") : info.index("4. Completed.")]
-        assert "credits them" in verified
+        # This project doesn't track CRediT, so verifying credits nothing.
+        assert "records the sign-off only" in verified
         completed = info[info.index("4. Completed.") :]
         assert "Assignees can still tick their own Done" in completed
         assert "reviewers can review parts marked done after completion" in completed
@@ -5799,3 +5800,39 @@ def test_the_batch_buttons_confirm_in_the_standard_modal(client, user, other_use
     pane = client.get(_pane_url(project, task)).content.decode()
     assert "data-verify-modal" not in pane
     assert "Verify all marked done (0)" in pane
+
+
+@pytest.mark.django_db
+def test_verify_notes_say_what_verifying_means_for_credit(client, user, other_user):
+    """The verify modal, and the Completion help, explain that on a CRediT
+    project verifying is what records a member's contribution under the
+    task's CRediT role; elsewhere it credits nothing."""
+    from apps.core.enums import ContributionType
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+
+    def note(html):
+        start = html.index("data-verify-credit-note")
+        return html[start : html.index("</div>", start)]
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "No CRediT on this project" in note(pane)
+    assert "no contribution is credited" in note(pane)
+
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
+    task.contribution_type = ContributionType.SOFTWARE
+    task.save(update_fields=["contribution_type"])
+    pane = client.get(_pane_url(project, task)).content.decode()
+    credit = note(pane)
+    assert "What verifying means for CRediT" in credit
+    assert "Software" in credit  # the task's CRediT role, by name
+    assert "Nothing is credited until a part is verified" in credit
+    assert "https://credit.niso.org/" in credit
+    help_ = pane[pane.index("3. Verified.") : pane.index("4. Completed.")]
+    assert "On this CRediT project, that is what credits them" in help_
+    assert "(Software)" in help_
+
