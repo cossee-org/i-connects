@@ -139,33 +139,34 @@
 
       {% comment %}
         The Lead's batch verification, under the progress bars: Verify all
-        marked done, and (on a task under review) Verify all marked reviewed,
-        each in one click. Each says how many parts it would verify and
-        switches off at none; parts already verified are skipped, so it is
-        safe to repeat. Open whether or not the task is completed, like
-        verifying one part.
+        marked done, and (on a task under review) Verify all marked reviewed.
+        Each says how many parts it would verify and switches off at none;
+        a click opens its confirmation modal (task_verify_batch_modal.html),
+        which names the members and posts the batch. Parts already verified
+        are skipped, so it is safe to repeat. Open whether or not the task is
+        completed, like verifying one part.
       {% endcomment %}
       {% if is_project_manager %}
         <div class="mt-3 flex flex-wrap items-center gap-2" data-verify-batch>
           <button type="button" class="btn btn-xs btn-outline"
-                  hx-post="{% url 'tasks:verify_batch' pk=task.pk %}"
-                  hx-vals='{"scope": "done", "pane_mode": "1"}'
-                  hx-target="#task-status-block"
-                  hx-swap="outerHTML"
-                  hx-confirm="Verify every part marked done ({{ verify_done_count }})? Each member is credited for their part."
+                  onclick="document.getElementById('verify-done-modal-{{ task.pk }}').showModal()"
+                  aria-haspopup="dialog"
                   {% if not verify_done_count %}disabled{% endif %}
                   data-verify-scope="done">Verify all marked done ({{ verify_done_count }})</button>
           {% if show_review %}
             <button type="button" class="btn btn-xs btn-outline"
-                    hx-post="{% url 'tasks:verify_batch' pk=task.pk %}"
-                    hx-vals='{"scope": "reviewed", "pane_mode": "1"}'
-                    hx-target="#task-status-block"
-                    hx-swap="outerHTML"
-                    hx-confirm="Verify every part marked done and reviewed ({{ verify_reviewed_count }})? Each member is credited for their part."
+                    onclick="document.getElementById('verify-reviewed-modal-{{ task.pk }}').showModal()"
+                    aria-haspopup="dialog"
                     {% if not verify_reviewed_count %}disabled{% endif %}
                     data-verify-scope="reviewed">Verify all marked reviewed ({{ verify_reviewed_count }})</button>
           {% endif %}
         </div>
+        {% if verify_done_count %}
+          {% include "tasks/partials/task_verify_batch_modal.html" with scope="done" count=verify_done_count task=task assignee_states=assignee_states %}
+        {% endif %}
+        {% if show_review and verify_reviewed_count %}
+          {% include "tasks/partials/task_verify_batch_modal.html" with scope="reviewed" count=verify_reviewed_count task=task assignee_states=assignee_states %}
+        {% endif %}
       {% endif %}
 
       {% comment %}

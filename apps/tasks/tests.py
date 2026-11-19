@@ -5754,3 +5754,48 @@ def test_verify_all_marked_done_works_on_a_completed_task(client, user, other_us
     assert _current_log(task, contrib).is_verified
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
+
+
+@pytest.mark.django_db
+def test_the_batch_buttons_confirm_in_the_standard_modal(client, user, other_user, pm_user):
+    """No browser confirm(): each button opens a <dialog class="modal"> styled
+    like the app's other modals, naming the members it would verify, and its
+    Verify button posts the batch."""
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    third = _add_contributor(project, pm_user)
+    task.assigned_members.add(third)
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=contrib)
+    mark_own_done(task=task, member=third)
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+    client.force_login(user)
+
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "hx-confirm" not in pane[pane.index("data-verify-batch") :]
+    for scope, members, absent in (
+        ("done", (contrib, third), (lead,)),
+        ("reviewed", (contrib,), (lead, third)),
+    ):
+        button = pane[pane.index(f'data-verify-scope="{scope}"') - 400 : pane.index(f'data-verify-scope="{scope}"')]
+        assert f"verify-{scope}-modal-{task.pk}').showModal()" in button
+        start = pane.index(f'<dialog id="verify-{scope}-modal-{task.pk}" class="modal"')
+        modal = pane[start : pane.index("</dialog>", start)]
+        assert 'class="modal-box"' in modal and 'class="modal-backdrop"' in modal
+        assert "text-lg font-semibold text-brand-navy" in modal
+        assert "btn bg-brand-coral" in modal and "btn btn-ghost" in modal
+        listed = modal[modal.index("data-verify-modal-members") : modal.index("</ul>")]
+        for member in members:
+            assert member.display_name in listed
+        for member in absent:
+            assert member.display_name not in listed
+        assert f"Verify {len(members)}" in modal
+        assert reverse("tasks:verify_batch", kwargs={"pk": task.pk}) in modal
+        assert f'name="scope" value="{scope}"' in modal
+
+    # Nothing left to verify: the buttons switch off and no modal is drawn.
+    client.post(_verify_batch_url(task), {"scope": "done", "pane_mode": "1"}, HTTP_HX_REQUEST="true")
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert "data-verify-modal" not in pane
+    assert "Verify all marked done (0)" in pane

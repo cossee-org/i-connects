@@ -1,0 +1,55 @@
+{% comment %}
+  Confirmation for one of the Lead's batch verifications, in the app's
+  standard modal: a daisyUI <dialog> with a navy title, the members it
+  would verify, Cancel and a coral primary action, and a click-outside
+  backdrop that closes it (the same shape as the Modify privilege modal).
+
+  Expects ``scope`` ("done" or "reviewed"), ``count`` (how many parts it
+  would verify), ``task`` and ``assignee_states``. Opened by its button in
+  task_status_block.html; Verify posts to tasks:verify_batch and swaps
+  #task-status-block, which this dialog sits inside, so the swap closes it.
+{% endcomment %}
+<dialog id="verify-{{ scope }}-modal-{{ task.pk }}" class="modal"
+        aria-labelledby="verify-{{ scope }}-modal-title-{{ task.pk }}"
+        data-verify-modal="{{ scope }}">
+  <div class="modal-box">
+    <h3 id="verify-{{ scope }}-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
+      {% if scope == "reviewed" %}Verify all marked reviewed{% else %}Verify all marked done{% endif %}
+    </h3>
+    <p class="mt-3 text-brand-text">
+      Verify the contribution{{ count|pluralize }} of
+      {% if scope == "reviewed" %}every part marked done and reviewed{% else %}every part marked done{% endif %}
+      that isn't verified yet? Each member is credited for their part.
+    </p>
+    <ul class="mt-3 flex flex-col gap-1 text-sm text-brand-navy" data-verify-modal-members>
+      {% for s in assignee_states %}
+        {% if s.done and not s.verified %}
+          {% if scope != "reviewed" or s.reviewed %}
+            <li class="flex items-center gap-2">
+              <span class="w-5 h-5 rounded-full bg-brand-navy/80 text-white text-[10px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
+              <span>{{ s.member.display_name }}</span>
+            </li>
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+    </ul>
+    <form method="post"
+          action="{% url 'tasks:verify_batch' pk=task.pk %}"
+          hx-post="{% url 'tasks:verify_batch' pk=task.pk %}"
+          hx-vals='{"pane_mode": "1"}'
+          hx-target="#task-status-block"
+          hx-swap="outerHTML"
+          class="flex gap-2 justify-end mt-6">
+      {% csrf_token %}
+      <input type="hidden" name="scope" value="{{ scope }}">
+      <button type="button" class="btn btn-ghost"
+              onclick="document.getElementById('verify-{{ scope }}-modal-{{ task.pk }}').close()">Cancel</button>
+      <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+        Verify {{ count }}
+      </button>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
