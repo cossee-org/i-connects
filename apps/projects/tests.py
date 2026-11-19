@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.test import override_settings
@@ -404,6 +406,144 @@ def test_project_form_saves_discord_webhook_url(client_logged_in, user):
     assert response.status_code in (301, 302)
     project = Project.objects.get(name="Webhook Project")
     assert project.discord_webhook_url == webhook
+
+
+# ---------------------------------------------------------------------------
+# Only the invitee may open or act on an invitation link
+# ---------------------------------------------------------------------------
+
+
+def _make_user(email, name):
+    from django.utils import timezone
+
+    return get_user_model().objects.create_user(
+        email=email,
+        username=f"{name.lower().replace(' ', '-')}-{email}",
+        password="password123",
+        name=name,
+        email_confirmed_at=timezone.now(),
+    )
+
+
+def _private_invite(owner, **kwargs):
+    project = create_project_with_owner(
+        user=owner,
+        form_data={
+            "name": "Secret Seagrass",
+            "abstract": "Unpublished eelgrass sites.",
+            "status": ProjectStatus.ACTIVE,
+            "is_public": False,
+        },
+    )
+    return create_invitation(
+        project=project, privilege=MemberPrivileges.PROJECT_MANAGER, added_by="Alice", **kwargs
+    )
+
+
+def _invite_url(invitation):
+    return reverse("projects:accept_or_decline", kwargs={"code": invitation.invitation_code})
+
+
+@pytest.mark.django_db
+def test_invitation_link_hidden_from_another_signed_in_user(client, user, other_user):
+    invitation = _private_invite(user, invited_user=other_user)
+    stranger = _make_user("carol@test.com", "Carol")
+    client.force_login(stranger)
+
+    response = client.get(_invite_url(invitation))
+
+    assert response.status_code == 403
+    assert "invites/wrong_account.html" in [t.name for t in response.templates]
+    content = response.content.decode()
+    for secret in ("Secret Seagrass", "Unpublished eelgrass sites.", "Lead", other_user.email):
+        assert secret not in content
+    assert "Accept invitation" not in content
+    assert "carol@test.com" in content  # who is signed in, so they know why
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("action", ["accept", "decline"])
+def test_another_signed_in_user_cannot_accept_or_decline(client, user, other_user, action):
+    invitation = _private_invite(user, invited_user=other_user)
+    stranger = _make_user("carol@test.com", "Carol")
+    client.force_login(stranger)
+
+    response = client.post(_invite_url(invitation), {"action": action})
+
+    assert response.status_code == 403
+    assert Invitation.objects.filter(pk=invitation.pk).exists()
+    assert not ProjectMember.objects.filter(project=invitation.project, users=stranger).exists()
+
+
+@pytest.mark.django_db
+def test_invitee_matched_by_email_in_any_case(client, user, other_user):
+    invitation = _private_invite(user, email=other_user.email.upper())
+    client.force_login(other_user)
+
+    assert client.get(_invite_url(invitation)).status_code == 200
+    response = client.post(_invite_url(invitation), {"action": "accept"})
+
+    assert response.status_code == 302
+    assert ProjectMember.objects.filter(project=invitation.project, users=other_user).exists()
+
+
+@pytest.mark.django_db
+def test_picked_invitee_keeps_invitation_after_changing_email(client, user, other_user):
+    """An invitation to a picked account follows the account, not its address."""
+    invitation = _private_invite(user, invited_user=other_user)
+    other_user.email = "bob.new@test.com"
+    other_user.save(update_fields=["email"])
+    client.force_login(other_user)
+
+    response = client.get(_invite_url(invitation))
+    assert response.status_code == 200
+    assert "Secret Seagrass" in response.content.decode()
+    assert Invitation.objects.addressed_to(other_user).filter(pk=invitation.pk).exists()
+    client.post(_invite_url(invitation), {"action": "accept"})
+    assert ProjectMember.objects.filter(project=invitation.project, users=other_user).exists()
+
+
+@pytest.mark.django_db
+def test_new_holder_of_a_picked_invitees_old_email_is_not_the_invitee(client, user, other_user):
+    invitation = _private_invite(user, invited_user=other_user)
+    old_email = other_user.email
+    other_user.email = "bob.new@test.com"
+    other_user.save(update_fields=["email"])
+    newcomer = _make_user(old_email, "Not Bob")
+    client.force_login(newcomer)
+
+    assert client.get(_invite_url(invitation)).status_code == 403
+    assert not Invitation.objects.addressed_to(newcomer).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("known_code", [True, False])
+def test_signed_out_visitor_is_sent_to_sign_in_for_any_code(client, user, other_user, known_code):
+    if known_code:
+        url = _invite_url(_private_invite(user, invited_user=other_user))
+    else:
+        url = reverse("projects:accept_or_decline", kwargs={"code": "no-such-code"})
+
+    for response in (client.get(url), client.post(url, {"action": "accept"})):
+        assert response.status_code == 302
+        assert response["Location"].startswith(reverse("accounts:login") + "?next=")
+
+
+@pytest.mark.django_db
+def test_sign_out_and_continue_returns_to_the_invitation(client, user, other_user):
+    from urllib.parse import parse_qs, urlparse
+
+    invitation = _private_invite(user, invited_user=other_user)
+    client.force_login(_make_user("carol@test.com", "Carol"))
+    page = client.get(_invite_url(invitation)).content.decode()
+    next_value = re.search(r'name="next" value="([^"]+)"', page).group(1).replace("&amp;", "&")
+
+    response = client.post(reverse("accounts:logout"), {"next": next_value})
+
+    assert "_auth_user_id" not in client.session
+    location = urlparse(response["Location"])
+    assert location.path == reverse("accounts:login")
+    assert parse_qs(location.query)["next"] == [_invite_url(invitation)]
 
 
 @pytest.mark.django_db
