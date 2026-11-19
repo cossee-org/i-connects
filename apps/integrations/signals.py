@@ -2,11 +2,9 @@
 
 The app already writes an audit row for everything worth announcing, so
 that is the one place this listens: a new ``AuditLog`` row for a connected
-project becomes a message. Three things the audit log does not record on
+project becomes a message. Two things the audit log does not record on
 their own are picked up where they happen — a member added to an existing
-task (the assignees relation), a comment (a new ``Comment``), and an
-assignee marking their own part done (``tasks.services.mark_own_done``
-calls :func:`apps.integrations.zulip.announce` itself).
+task (the assignees relation) and a comment (a new ``Comment``).
 
 Every receiver is best-effort: nothing here may fail the change it reports.
 """
@@ -55,6 +53,20 @@ def _task_completed(log: AuditLog):
     if task is None:
         return None
     return zulip.TASKS, zulip.task_completed_message(task, actor=log.actor)
+
+
+def _task_part_done(log: AuditLog):
+    from apps.projects.models import ProjectMember
+
+    task = _task(log)
+    if task is None:
+        return None
+    member = ProjectMember.objects.filter(
+        pk=(log.metadata or {}).get("assignee_member_id")
+    ).first()
+    if member is None:
+        return None
+    return zulip.TASKS, zulip.task_part_done_message(task, member=member)
 
 
 def _task_reviewed(log: AuditLog):
@@ -112,6 +124,7 @@ def _wiki(verb: str):
 _BUILDERS = {
     AuditAction.TASK_CREATED.value: _task_created,
     AuditAction.TASK_COMPLETED.value: _task_completed,
+    AuditAction.TASK_PART_DONE.value: _task_part_done,
     AuditAction.TASK_REVIEWED.value: _task_reviewed,
     AuditAction.TASK_APPROVED.value: _task_approved,
     AuditAction.MEMBER_ADDED.value: _member_added,

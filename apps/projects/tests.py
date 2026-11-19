@@ -1631,9 +1631,9 @@ def test_summary_reports_activity(client, user, other_user):
 
 
 @pytest.mark.django_db
-def test_summary_activity_lists_reviews_and_a_task_its_reviews_finished(client, user, other_user):
+def test_summary_activity_lists_reviews_verifications_and_who_completed(client, user, other_user):
     from apps.tasks.models import KanbanBoard, Task
-    from apps.tasks.services import close_task, mark_own_done, mark_reviewed
+    from apps.tasks.services import close_task, mark_own_done, mark_reviewed, verify_part
 
     project = _make_project(user)
     lead = ProjectMember.objects.filter(project=project, users=user).first()  # Alice
@@ -1664,31 +1664,27 @@ def test_summary_activity_lists_reviews_and_a_task_its_reviews_finished(client, 
     url = reverse("projects:detail", kwargs={"pk": project.pk})
     client.force_login(user)
 
-    # One of two parts reviewed: a review line, and the task is still open.
+    # Every part reviewed: a review line each, and the task stays open — only
+    # a Lead completes a task.
     mark_reviewed(task_log=bob_log, reviewer=lead)
-    activity = client.get(url).context["summary"]["activity"]
-    assert ("Alice", "reviewed Bob's part on", "Reviewed one") in [
-        (e["who"], e["verb"], e["task"].name) for e in activity if e["kind"] == "task"
-    ]
-    assert not any(e.get("after") for e in activity)
-
-    # The last sign-off finishes the task: its own line, above the review,
-    # and no "Alice completed" as though a lead had closed it by hand.
     mark_reviewed(task_log=carol_log, reviewer=lead)
+    reviewed.refresh_from_db()
+    assert reviewed.status == "NOT_COMPLETED"
+
+    verify_part(task_log=bob_log, lead=lead)
     response = client.get(url)
     lines = [
-        (e["who"], e["verb"], e["task"].name, e.get("after", ""))
+        (e["who"], e["verb"], e["task"].name)
         for e in response.context["summary"]["activity"] if e["kind"] == "task"
     ]
-    assert lines[0] == ("", "", "Reviewed one", "was marked done: every part reviewed")
-    assert lines[1] == ("Alice", "reviewed Carol's part on", "Reviewed one", "")
-    assert ("Alice", "completed", "Reviewed one", "") not in lines
-    # A task a lead closed by hand still reads as theirs.
-    assert ("Alice", "completed", "Closed by hand", "") in lines
+    assert lines[0] == ("Alice", "verified Bob's part on", "Reviewed one")
+    assert ("Alice", "reviewed Carol's part on", "Reviewed one") in lines
+    assert ("Alice", "completed", "Reviewed one") not in lines
+    assert ("Alice", "completed", "Closed by hand") in lines
 
     body = response.content.decode()
+    assert "verified Bob&#x27;s part on" in body
     assert "reviewed Bob&#x27;s part on" in body
-    assert "was marked done: every part reviewed" in body
 
 
 @pytest.mark.django_db

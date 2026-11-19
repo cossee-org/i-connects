@@ -198,12 +198,16 @@ def test_progress_on_a_task_is_announced(
         log = mark_own_done(task=task, member=alice)
     assert sent == ["**Alice** marked their part of **Extract the data** as done"]
 
+    # Ticking an already-done part again is not news.
+    with django_capture_on_commit_callbacks(execute=True):
+        mark_own_done(task=task, member=alice)
+    assert len(sent) == 1
+
     with django_capture_on_commit_callbacks(execute=True):
         mark_reviewed(task_log=log, reviewer=lead)
     assert sent[1] == "**PM** reviewed Alice's part of **Extract the data**"
-    # The last review closes the task, which is its own news.
-    assert sent[2] == "The task **Extract the data** is complete (closed by PM)"
-    assert len(sent) == 3
+    # A review leaves closing to a Lead, so it is the only news.
+    assert len(sent) == 2
 
 
 @pytest.mark.django_db
