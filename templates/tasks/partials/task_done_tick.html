@@ -12,9 +12,10 @@
 
   Once the task is marked completed, the marks a Lead sets for others
   freeze; an assignee's own box stays live, so whoever had not ticked when
-  the Lead closed it still can — unless the part was reviewed before the
-  task was completed (``s.review_locked``): undoing it would clear that
-  review, so the box freezes with it. A frozen box stays clickable but never
+  the Lead closed it still can, and whoever had can take it back. Unticking
+  clears the part's review and verification with it, even a review given
+  before completion that no one else can withdraw. A frozen box stays
+  clickable but never
   toggles: a click shows the card's locked notice (``showLocked``, from
   task_status_block.html) instead, saying the task has to be marked not
   complete first.
@@ -27,7 +28,7 @@
          hx-swap="outerHTML"
          aria-label="Mark {% if s.is_viewer %}your{% else %}{{ s.member.display_name }}'s{% endif %} part {% if s.done %}not done{% else %}done{% endif %}"
          title="{% if s.done %}Untick to undo{% else %}Tick to mark done{% endif %}">
-{% elif s.is_viewer and not s.review_locked %}
+{% elif s.is_viewer %}
   <input type="checkbox" class="completion-tick completion-tick-done"{% if s.done %} checked{% endif %}
          hx-post="{% if s.done %}{% url 'tasks:undo' pk=task.pk %}{% else %}{% url 'tasks:complete' pk=task.pk %}{% endif %}"
          hx-vals='{"pane_mode": "1"}'

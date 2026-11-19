@@ -4431,27 +4431,54 @@ def test_a_part_marked_after_closing_is_reviewed_and_verified_as_usual(client, u
 
 
 @pytest.mark.django_db
-def test_a_part_reviewed_before_completion_keeps_its_done_mark(client, user, other_user):
-    """Undoing the mark would clear a review that is locked, so the assignee
-    cannot undo it until a Lead reopens the task; their box is locked too."""
-    from apps.tasks.services import mark_own_done, mark_reviewed
+def test_an_assignee_can_undo_a_part_reviewed_before_completion(client, user, other_user):
+    """The exception to the review lock: an assignee can always take back
+    their own done mark on a closed task. Doing so clears the review given
+    before completion, which no one could withdraw directly, and the Lead's
+    verification and its credit. The task stays completed."""
+    from apps.contributions.models import ContributionRecord
+    from apps.tasks.services import mark_own_done, mark_reviewed, verify_part
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
+    project.contribution_tracking = ContributionTracking.CREDIT
+    project.save(update_fields=["contribution_tracking"])
     task.reviewers.add(lead)
-    mark_own_done(task=task, member=contrib)
-    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+    log = mark_own_done(task=task, member=contrib)
+    mark_reviewed(task_log=log, reviewer=lead)
+    verify_part(task_log=log, lead=lead)
     client.force_login(user)
     client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    assert ContributionRecord.objects.filter(task=task, user=other_user).exists()
 
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
     own = _row_for(pane, contrib)
-    assert reverse("tasks:undo", kwargs={"pk": task.pk}) not in own
-    assert own.count("data-locked") == 2  # Done and Reviewed
-    refused = client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
-    assert refused.status_code == 403
-    log = _current_log(task, contrib)
-    assert log.status == TaskStatus.COMPLETED and log.is_reviewed
+    # Their Done box is live; the Reviewed box beside it stays locked.
+    assert reverse("tasks:undo", kwargs={"pk": task.pk}) in own
+    assert own.count("data-locked") == 1 and "reviewed (locked)" in own
+
+    response = client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    assert response.status_code == 200
+    log.refresh_from_db()
+    assert log.status == TaskStatus.NOT_COMPLETED
+    assert not log.is_reviewed and log.reviewed_by is None
+    assert not log.is_verified and log.verified_by is None
+    assert not ContributionRecord.objects.filter(task=task, user=other_user).exists()
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+    for action in (AuditAction.TASK_REVIEW_CLEARED, AuditAction.TASK_PART_UNVERIFIED):
+        row = AuditLog.objects.get(action=action)
+        assert row.actor == other_user
+        assert row.metadata["reason"] == "the done mark it stood on was reverted"
+
+    # Marked done again, the part comes back unreviewed and unverified, and
+    # open to review — this time after completion, so not locked.
+    client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    client.force_login(user)
+    pane = client.get(_pane_url(project, task)).content.decode()
+    row = _row_for(pane, contrib)
+    assert "Awaiting review" in row and "Awaiting verification" in row
+    assert "data-locked" in row  # only the Done box a Lead cannot set for them
 
 
 @pytest.mark.django_db

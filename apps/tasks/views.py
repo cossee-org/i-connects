@@ -1242,8 +1242,8 @@ _LOCKED_MESSAGE = (
 
 _REVIEW_LOCKED_MESSAGE = (
     "This part was reviewed before the task was marked completed, so its "
-    "review and done mark are locked. A Lead has to mark the task not "
-    "complete before they can change."
+    "review is locked. A Lead has to mark the task not complete before it "
+    "can be withdrawn."
 )
 
 def _marks_locked(task) -> bool:
@@ -1254,9 +1254,10 @@ def _marks_locked(task) -> bool:
     reviewers' reviews (``TaskLogReviewView``) and the Lead's verifications
     (``TaskLogVerifyView``) stay open on a completed task: closing it is the
     Lead's call about the task, not a verdict on any one part. The exception
-    is a review given before the task was completed, which stays locked with
-    the done mark under it (``services.review_locked``). A Lead who needs to
-    change either marks the task Not Complete first.
+    is a review given before the task was completed, which nobody can
+    withdraw (``services.review_locked``) — though the assignee undoing their
+    own mark still clears it. A Lead who needs to change either marks the
+    task Not Complete first.
     """
     return task.status == TaskStatus.COMPLETED
 
@@ -1388,7 +1389,6 @@ def _task_status_context(task, *, project_member, is_project_manager):
         "assignee_count": len(assignee_states),
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
-        "my_review_locked": bool(my_state and my_state["review_locked"]),
         # Whether the viewer reviews on this task at all. The per-row
         # ``can_review`` above is what actually gates the buttons.
         "viewer_reviews": viewer_reviews,
@@ -1479,9 +1479,12 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
 class TaskUndoOwnView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     """An assignee undoes their own INDIVIDUAL-mode completion.
 
-    Open on a completed task, like :class:`TaskCompleteView`, except where a
-    review given before the task was completed rests on the mark: undoing it
-    would clear that review, which stays locked (``services.review_locked``).
+    Open on a completed task, like :class:`TaskCompleteView` — even where a
+    review given before the task was completed rests on the mark, which no
+    one else can withdraw (``services.review_locked``). The mark is the
+    assignee's own statement about their work, so they can always take it
+    back; the review and the verification standing on it go with it, along
+    with the credit the verification wrote. The task stays completed.
     """
 
     def post(self, request, *args, **kwargs):
@@ -1489,13 +1492,6 @@ class TaskUndoOwnView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseBadRequest("No project membership.")
         if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
             return HttpResponseForbidden("Only an assignee can undo their mark.")
-        current = (
-            self.task.task_logs.filter(assigned_to=self.project_member)
-            .order_by("-created_at")
-            .first()
-        )
-        if review_locked(self.task, current):
-            return HttpResponseForbidden(_REVIEW_LOCKED_MESSAGE)
         reopen_own(task=self.task, member=self.project_member)
         return _respond_status_block(
             request, self.task,

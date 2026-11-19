@@ -152,10 +152,14 @@ def review_locked(task: Task, log: TaskLog | None) -> bool:
     """True when ``log``'s review was given before ``task`` was completed.
 
     Such a review was part of what stood when the Lead marked the task
-    completed, so it stays as it is until a Lead reopens the task: it cannot
-    be withdrawn, and the assignee cannot undo the done mark it rests on
-    (that would clear it). A review given after the task was completed is not
-    locked, and can be withdrawn as usual.
+    completed, so nobody can withdraw it until a Lead reopens the task. A
+    review given after the task was completed is not locked, and can be
+    withdrawn as usual.
+
+    The one way past it is the assignee's own: undoing their done mark
+    (:func:`reopen_own`) is open on a closed task whatever its review, and
+    takes the review and the verification with it, since both rest on a
+    mark that no longer stands.
     """
     return bool(
         task.status == TaskStatus.COMPLETED
