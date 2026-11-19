@@ -61,7 +61,7 @@
             <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished; a Lead can tick it for anyone. Untick to undo.</li>
             <li><span class="font-semibold text-violet-600">2. Reviewed.</span> On a task with reviewers, a reviewer or a Lead ticks Reviewed once a part is done. Whoever reviewed it, or a Lead, can untick it. Undoing a Done mark clears its review.</li>
             <li><span class="font-semibold text-sky-700">3. Verified.</span> A Lead ticks Verified to confirm a member's contribution, which is what credits them for it. Undoing a Done mark clears its verification.</li>
-            <li><span class="font-semibold text-brand-navy">4. Completed.</span> A Lead marks the whole task completed with Mark completed at the top. Assignees can still tick their own Done, reviewers can still review, and Leads can still verify after that. Only the Done marks a Lead sets for others are locked; a Lead marks the task not complete to change them.</li>
+            <li><span class="font-semibold text-brand-navy">4. Completed.</span> A Lead marks the whole task completed with Mark completed at the top. Assignees can still tick their own Done, reviewers can still review, and Leads can still verify after that. Reviews given before the task was completed are locked, along with the Done marks under them, and so are the Done marks a Lead sets for others; a Lead marks the task not complete to change them. A review given after completion can still be unticked.</li>
           </ol>
           </div>
         </div>
@@ -87,7 +87,9 @@
     {% endcomment %}
     {% if not pane_mode and is_assignee %}
       <div class="flex items-center gap-2">
-        {% if my_done %}
+        {% if my_done and my_review_locked %}
+          <span class="text-xs text-brand-text/60">Reviewed before completion; locked</span>
+        {% elif my_done %}
           <button class="btn btn-ghost btn-sm"
                   hx-post="{% url 'tasks:undo' pk=task.pk %}"
                   hx-target="#task-status-block"
@@ -359,9 +361,9 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
             </svg>
             <span>
-              This task is already marked completed, so a Lead can't set or clear other members' Done marks.
-              {% if is_project_manager %}Mark it not complete first to change them.{% endif %}
-              Assignees can still tick their own part, and reviews and verifications stay open.
+              This task is already marked completed, so reviews given before then, the Done marks under them, and the Done marks a Lead sets for others are locked.
+              {% if is_project_manager %}Mark it not complete first to change them.{% else %}A Lead has to mark it not complete before they can change.{% endif %}
+              Other parts can still be marked done, reviewed and verified, and a review given after completion can still be withdrawn.
             </span>
           </p>
         </div>

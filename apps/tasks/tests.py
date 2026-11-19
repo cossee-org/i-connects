@@ -3994,9 +3994,11 @@ def test_a_mark_made_after_closing_is_credited_once_verified(client, user, other
 
 
 @pytest.mark.django_db
-def test_completed_task_keeps_the_reviewers_actions_open(client, user, other_user):
-    """Reviewers review and withdraw reviews whether or not the task is
-    completed, and neither reopens it."""
+def test_completed_task_locks_earlier_reviews_and_keeps_later_ones_open(client, user, other_user):
+    """On a completed task, a review given before it was completed is locked:
+    it cannot be withdrawn. Parts still unreviewed can be reviewed, and a
+    review given after completion can be withdrawn. None of it reopens the
+    task."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -4012,21 +4014,39 @@ def test_completed_task_keeps_the_reviewers_actions_open(client, user, other_use
 
     pane = client.get(_pane_url(project, task)).content.decode()
     assert MARK_REVIEWED in _row_for(pane, lead)
-    assert MARK_NOT_REVIEWED in _row_for(pane, contrib)
-    assert f"by {lead.display_name}" in _row_for(pane, contrib)
+    early_row = _row_for(pane, contrib)
+    assert MARK_NOT_REVIEWED not in early_row
+    assert "reviewed (locked)" in early_row
+    assert f"by {lead.display_name}" in early_row
 
+    # The earlier review cannot be withdrawn, even by a Lead.
+    refused = client.post(
+        _review_url(task, reviewed_log), {"reviewed": "0"}, HTTP_HX_REQUEST="true"
+    )
+    assert refused.status_code == 403
+    reviewed_log.refresh_from_db()
+    assert reviewed_log.is_reviewed
+
+    # The unreviewed part is reviewed after completion, and that review can
+    # still be withdrawn.
     assert client.post(
         _review_url(task, unreviewed_log), {"reviewed": "1"}, HTTP_HX_REQUEST="true"
     ).status_code == 200
+    pane = client.get(_pane_url(project, task)).content.decode()
+    assert MARK_NOT_REVIEWED in _row_for(pane, lead)
+    assert client.post(
+        _review_url(task, unreviewed_log), {"reviewed": "0"}, HTTP_HX_REQUEST="true"
+    ).status_code == 200
+    unreviewed_log.refresh_from_db()
+    assert not unreviewed_log.is_reviewed
+    task.refresh_from_db()
+    assert task.status == TaskStatus.COMPLETED
+
+    # Reopening the task lifts the lock.
+    client.post(reverse("tasks:reopen", kwargs={"pk": task.pk}))
     assert client.post(
         _review_url(task, reviewed_log), {"reviewed": "0"}, HTTP_HX_REQUEST="true"
     ).status_code == 200
-    reviewed_log.refresh_from_db()
-    unreviewed_log.refresh_from_db()
-    assert not reviewed_log.is_reviewed
-    assert unreviewed_log.is_reviewed
-    task.refresh_from_db()
-    assert task.status == TaskStatus.COMPLETED
 
 
 @pytest.mark.django_db
@@ -4292,7 +4312,8 @@ def test_completion_heading_carries_an_info_button_explaining_the_procedure(clie
         assert "credits them" in verified
         completed = info[info.index("4. Completed.") :]
         assert "Assignees can still tick their own Done" in completed
-        assert "Only the Done marks a Lead sets for others are locked" in completed
+        assert "Reviews given before the task was completed are locked" in completed
+        assert "A review given after completion can still be unticked" in completed
         assert "5." not in info
         assert "Tick to mark, untick to undo." not in html
         assert "0 of 2 done" not in html
@@ -4305,11 +4326,11 @@ def test_completion_heading_carries_an_info_button_explaining_the_procedure(clie
 
 @pytest.mark.django_db
 def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, other_user):
-    """On a completed task only the Done boxes a Lead would set for others are
-    locked: they keep their state, post nothing, and a click shows a notice
-    that the task has to be marked not complete first. The viewer's own Done
-    box, the Reviewed boxes and the Verified boxes stay live. Reopening drops
-    the lock and the notice."""
+    """On a completed task the Done boxes a Lead would set for others, and the
+    Reviewed box of a part reviewed before completion, are locked: they keep
+    their state, post nothing, and a click shows a notice that the task has
+    to be marked not complete first. The viewer's own Done box and the
+    Verified boxes stay live. Reopening drops the lock and the notice."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -4328,25 +4349,27 @@ def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, oth
     ).content.decode()
     for html in (closed, client.get(_pane_url(project, task)).content.decode()):
         rows = _rows(html)
-        # Only the contributor's Done box is locked for the Lead.
-        assert rows.count("data-locked") == 1
-        assert rows.count('@click.prevent="showLocked()"') == 1
+        # The contributor's Done box and their earlier review are locked
+        # for the Lead.
+        assert rows.count("data-locked") == 2
+        assert rows.count('@click.prevent="showLocked()"') == 2
         own = _row_for(html, lead)
         assert reverse("tasks:complete", kwargs={"pk": task.pk}) in own
         row = _row_for(html, contrib)
-        # Done and Reviewed still read as ticked; the Done box is locked,
-        # while the review can still be withdrawn and the part verified.
-        assert row.count(" checked") == 2 and "(locked)" in row
-        assert MARK_NOT_REVIEWED in row and MARK_VERIFIED in row
+        # Done and Reviewed still read as ticked and are locked; the part
+        # can still be verified.
+        assert row.count(" checked") == 2 and "reviewed (locked)" in row
+        assert MARK_NOT_REVIEWED not in row and MARK_VERIFIED in row
         # The notice is there, hidden until a click, and tells a Lead what to do.
         assert 'id="task-locked-notice"' in html and 'x-show="lockedNotice"' in html
         assert "already marked completed" in html
         assert "Mark it not complete first" in html
 
-    # An assignee is told what stays open to them.
+    # An assignee is told a Lead has to reopen it.
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Assignees can still tick their own part" in pane
+    assert "A Lead has to mark it not complete" in pane
+    assert "a review given after completion can still be withdrawn" in pane
     assert "Mark it not complete first" not in pane
 
     client.force_login(user)
@@ -4408,24 +4431,50 @@ def test_a_part_marked_after_closing_is_reviewed_and_verified_as_usual(client, u
 
 
 @pytest.mark.django_db
-def test_undoing_a_reviewed_part_leaves_the_task_closed(client, user, other_user):
-    """Even when every part is reviewed, an assignee undoing their mark does
-    not reopen the task: only a Lead completes or reopens one."""
+def test_a_part_reviewed_before_completion_keeps_its_done_mark(client, user, other_user):
+    """Undoing the mark would clear a review that is locked, so the assignee
+    cannot undo it until a Lead reopens the task; their box is locked too."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
     task.reviewers.add(lead)
-    for member in (lead, contrib):
-        mark_own_done(task=task, member=member)
-        mark_reviewed(task_log=_current_log(task, member), reviewer=lead)
+    mark_own_done(task=task, member=contrib)
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
     client.force_login(user)
     client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
 
     client.force_login(other_user)
-    client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    pane = client.get(_pane_url(project, task)).content.decode()
+    own = _row_for(pane, contrib)
+    assert reverse("tasks:undo", kwargs={"pk": task.pk}) not in own
+    assert own.count("data-locked") == 2  # Done and Reviewed
+    refused = client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    assert refused.status_code == 403
+    log = _current_log(task, contrib)
+    assert log.status == TaskStatus.COMPLETED and log.is_reviewed
+
+
+@pytest.mark.django_db
+def test_undoing_a_part_reviewed_after_completion_leaves_the_task_closed(client, user, other_user):
+    """A part marked and reviewed after the Lead completed the task stays open
+    to its assignee: undoing it clears that later review, and the task stays
+    closed — only a Lead completes or reopens one."""
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    client.force_login(user)
+    client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    mark_own_done(task=task, member=contrib)
+    mark_reviewed(task_log=_current_log(task, contrib), reviewer=lead)
+
+    client.force_login(other_user)
+    response = client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    assert response.status_code == 200
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
-    assert not _current_log(task, contrib).is_reviewed
+    log = _current_log(task, contrib)
+    assert log.status == TaskStatus.NOT_COMPLETED and not log.is_reviewed
 
 
 def _sole_assignee_task(user, other_user, *, name="Reviewed to done"):

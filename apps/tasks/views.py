@@ -77,6 +77,7 @@ from apps.tasks.services import (
     notify_new_assignees,
     reopen_own,
     reopen_task,
+    review_locked,
     unverify_part,
     verify_part,
 )
@@ -1239,16 +1240,23 @@ _LOCKED_MESSAGE = (
     "setting or clearing another member's done mark."
 )
 
+_REVIEW_LOCKED_MESSAGE = (
+    "This part was reviewed before the task was marked completed, so its "
+    "review and done mark are locked. A Lead has to mark the task not "
+    "complete before they can change."
+)
+
 def _marks_locked(task) -> bool:
     """True once the task is marked completed, freezing the marks a Lead sets
     for others.
 
-    That is all it freezes. Each assignee's own mark (``TaskCompleteView``,
-    ``TaskUndoOwnView``), the reviewers' reviews (``TaskLogReviewView``) and
-    the Lead's verifications (``TaskLogVerifyView``) stay open on a completed
-    task: closing it is the Lead's call about the task, not a verdict on any
-    one part. A Lead who needs to change someone else's mark marks the task
-    Not Complete first.
+    Each assignee's own mark (``TaskCompleteView``, ``TaskUndoOwnView``), the
+    reviewers' reviews (``TaskLogReviewView``) and the Lead's verifications
+    (``TaskLogVerifyView``) stay open on a completed task: closing it is the
+    Lead's call about the task, not a verdict on any one part. The exception
+    is a review given before the task was completed, which stays locked with
+    the done mark under it (``services.review_locked``). A Lead who needs to
+    change either marks the task Not Complete first.
     """
     return task.status == TaskStatus.COMPLETED
 
@@ -1290,9 +1298,13 @@ def _task_status_context(task, *, project_member, is_project_manager):
         done = log is not None and log.status == TaskStatus.COMPLETED
         reviewed = log is not None and log.is_reviewed
         verified = log is not None and log.is_verified
+        # A review given before the task was completed stays as it was, and
+        # so does the done mark it rests on.
+        locked_review = review_locked(task, log)
         assignee_states.append(
             {
                 "member": member,
+                "review_locked": locked_review,
                 # Whether *this viewer* may act on *this row's* review. Open
                 # whether or not the task is completed.
                 "can_review": viewer_reviews,
@@ -1302,11 +1314,12 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # deleted has no owner left to withdraw it, so it too is the
                 # Lead's alone.
                 "can_unreview": (
+                    not locked_review
                     # A task that asks for no review offers no review action,
                     # withdrawal included. A verdict already given stays on
                     # show — see show_review below — it just has no buttons
                     # beside it any more.
-                    needs_review
+                    and needs_review
                     and (
                         is_project_manager
                         or (
@@ -1375,12 +1388,13 @@ def _task_status_context(task, *, project_member, is_project_manager):
         "assignee_count": len(assignee_states),
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
+        "my_review_locked": bool(my_state and my_state["review_locked"]),
         # Whether the viewer reviews on this task at all. The per-row
         # ``can_review`` above is what actually gates the buttons.
         "viewer_reviews": viewer_reviews,
-        # A completed task freezes only the marks a Lead sets for others;
-        # each assignee's own mark, the reviews and the verifications stay
-        # live.
+        # A completed task freezes the marks a Lead sets for others, and the
+        # reviews given before it was completed with the marks under them;
+        # the rest stays live.
         "marks_locked": locked,
         # Whether review is expected of this task at all — see
         # ``Task.needs_review``. Gates who may review.
@@ -1465,7 +1479,9 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
 class TaskUndoOwnView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     """An assignee undoes their own INDIVIDUAL-mode completion.
 
-    Open on a completed task, like :class:`TaskCompleteView`.
+    Open on a completed task, like :class:`TaskCompleteView`, except where a
+    review given before the task was completed rests on the mark: undoing it
+    would clear that review, which stays locked (``services.review_locked``).
     """
 
     def post(self, request, *args, **kwargs):
@@ -1473,6 +1489,13 @@ class TaskUndoOwnView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseBadRequest("No project membership.")
         if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
             return HttpResponseForbidden("Only an assignee can undo their mark.")
+        current = (
+            self.task.task_logs.filter(assigned_to=self.project_member)
+            .order_by("-created_at")
+            .first()
+        )
+        if review_locked(self.task, current):
+            return HttpResponseForbidden(_REVIEW_LOCKED_MESSAGE)
         reopen_own(task=self.task, member=self.project_member)
         return _respond_status_block(
             request, self.task,
@@ -1667,12 +1690,15 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     at once and a member removed from the project loses the action with their
     membership.
 
-    Both directions stay open once the task is marked completed — a Lead
-    closing the task is no verdict on any part — and neither opens at all on
-    a task that asks for no review: the Reviewed column is not drawn there,
-    so the endpoint behind it should not answer either. Withdrawing is the narrower of the two: a
-    reviewer may take back their own verdict and no one else's, while a Lead
-    can clear any review on the task.
+    Reviewing stays open once the task is marked completed — a Lead closing
+    the task is no verdict on any part — and so does withdrawing a review
+    given after that. A review given before the task was completed is locked
+    until a Lead reopens it (``services.review_locked``). Neither direction
+    opens at all on a task that asks for no review: the Reviewed column is not
+    drawn there, so the endpoint behind it should not answer either.
+    Withdrawing is also narrower in who may: a reviewer may take back their
+    own verdict and no one else's, while a Lead can clear any review on the
+    task.
 
     POST ``reviewed=0`` withdraws the review; anything else records one.
     """
@@ -1699,6 +1725,8 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                     "Only the reviewer who signed this off, or a Lead, can "
                     "withdraw it."
                 )
+            if review_locked(self.task, log):
+                return HttpResponseForbidden(_REVIEW_LOCKED_MESSAGE)
             clear_review(task_log=log, cleared_by=self.project_member)
         else:
             if not log.is_reviewable:

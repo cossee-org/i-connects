@@ -9,9 +9,20 @@
   withdrawn by whoever gave it or a Lead (``s.can_unreview``). Everyone else
   sees it read-only.
 
-  Open whether or not the task is marked completed.
+  Open whether or not the task is marked completed, with one exception: a
+  review given before the task was completed is locked (``s.review_locked``).
+  Its box stays ticked and clickable but never toggles; a click shows the
+  card's locked notice instead — see task_done_tick.html. A review given
+  after completion can still be withdrawn.
 {% endcomment %}
-{% if s.reviewed %}
+{% if s.review_locked %}
+  <input type="checkbox" class="completion-tick completion-tick-review" checked
+         aria-disabled="true" data-locked
+         aria-describedby="task-locked-notice"
+         aria-label="{{ s.member.display_name }}: reviewed (locked)"
+         title="Locked: reviewed before the task was marked completed"
+         @click.prevent="showLocked()">
+{% elif s.reviewed %}
   {% if s.can_unreview %}
     <input type="checkbox" class="completion-tick completion-tick-review" checked
            hx-post="{% url 'tasks:review_log' pk=task.pk log_pk=s.log.pk %}"

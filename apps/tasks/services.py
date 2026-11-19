@@ -148,6 +148,24 @@ def reopen_task(*, task: Task) -> Task:
     return task
 
 
+def review_locked(task: Task, log: TaskLog | None) -> bool:
+    """True when ``log``'s review was given before ``task`` was completed.
+
+    Such a review was part of what stood when the Lead marked the task
+    completed, so it stays as it is until a Lead reopens the task: it cannot
+    be withdrawn, and the assignee cannot undo the done mark it rests on
+    (that would clear it). A review given after the task was completed is not
+    locked, and can be withdrawn as usual.
+    """
+    return bool(
+        task.status == TaskStatus.COMPLETED
+        and task.closed_at is not None
+        and log is not None
+        and log.reviewed_at is not None
+        and log.reviewed_at <= task.closed_at
+    )
+
+
 def _current_log_for(task: Task, member: ProjectMember) -> TaskLog | None:
     """The member's most-recent TaskLog on this task (their current state)."""
     return (
@@ -383,9 +401,11 @@ def clear_review(
 
     A no-op on an unreviewed entry, so a double-clicked Undo is harmless.
 
-    Open whether or not the task is completed. It leaves the task's status,
-    the Lead's verification and the credit alone: verification does not rest
-    on the review (see :func:`verify_part`).
+    Open on a completed task for a review given after it was completed; one
+    given before stays locked (see :func:`review_locked`, which callers
+    check). It leaves the task's status, the Lead's verification and the
+    credit alone: verification does not rest on the review (see
+    :func:`verify_part`).
     """
     if not task_log.is_reviewed and task_log.reviewed_by_id is None:
         return task_log
