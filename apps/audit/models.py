@@ -78,6 +78,10 @@ class AuditAction(models.TextChoices):
     TASK_REJECTED = "task.rejected", "Task completion rejected"
     TASK_REVIEWED = "task.reviewed", "Task submission reviewed"
     TASK_REVIEW_CLEARED = "task.review_cleared", "Task submission review cleared"
+    TASK_PART_DONE = "task.part_done", "Task part marked done"
+    TASK_PART_UNDONE = "task.part_undone", "Task part done mark undone"
+    TASK_PART_VERIFIED = "task.part_verified", "Task contribution verified"
+    TASK_PART_UNVERIFIED = "task.part_unverified", "Task contribution verification withdrawn"
 
     # ---- Wiki ---------------------------------------------------------------
     WIKI_PAGE_CREATED = "wiki.page_created", "Wiki page created"

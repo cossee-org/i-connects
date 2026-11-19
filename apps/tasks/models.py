@@ -370,6 +370,27 @@ class TaskLog(models.Model):
             "review, and when the assignee reverts their own done mark."
         ),
     )
+    verified_by = models.ForeignKey(
+        "projects.ProjectMember",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="task_logs_verified",
+        help_text=(
+            "The Lead who verified this member's contribution, which is what "
+            "credits them for it. Nulled only if the Lead's membership row is "
+            "deleted outright; the credit they wrote stands."
+        ),
+    )
+    verified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When a Lead verified this contribution. Null means not verified: "
+            "the pair is cleared when the Lead withdraws the verification, and "
+            "when the assignee reverts their own done mark."
+        ),
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -378,6 +399,7 @@ class TaskLog(models.Model):
             models.Index(fields=["assigned_to"]),
             models.Index(fields=["completed_by"]),
             models.Index(fields=["reviewed_by"]),
+            models.Index(fields=["verified_by"]),
         ]
 
     def __str__(self) -> str:
@@ -392,6 +414,15 @@ class TaskLog(models.Model):
         which is the Lead's ledger-writing verdict on the full detail page.
         """
         return self.reviewed_at is not None
+
+    @property
+    def is_verified(self) -> bool:
+        """True when a Lead has verified this contribution.
+
+        ``verified_at`` is the flag, set and cleared together with
+        ``verified_by``, as ``reviewed_at`` is for reviews.
+        """
+        return self.verified_at is not None
 
     @property
     def is_reviewable(self) -> bool:
