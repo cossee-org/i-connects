@@ -148,6 +148,41 @@ def reopen_task(*, task: Task) -> Task:
     return task
 
 
+def marked_after_closing(task: Task, log: TaskLog | None) -> bool:
+    """True when ``log`` is a part marked done after ``task`` was completed.
+
+    On a completed task only such a part is open to a new review: one that
+    was already marked when the Lead completed the task was in front of
+    them then, and stays as it stood — reviewed or not — until a Lead
+    reopens it. A part with no completion time (marked before that field
+    existed) counts as marked before.
+    """
+    return bool(
+        task.status == TaskStatus.COMPLETED
+        and task.closed_at is not None
+        and log is not None
+        and log.status == TaskStatus.COMPLETED
+        and log.completed_at is not None
+        and log.completed_at > task.closed_at
+    )
+
+
+def review_closed(task: Task, log: TaskLog | None) -> bool:
+    """True when a completed task no longer takes a review on ``log``.
+
+    That is an unreviewed part marked done before the task was completed —
+    see :func:`marked_after_closing`. Its assignee can still undo and redo
+    the mark, which brings it back as marked after closing, and reviewable.
+    """
+    return bool(
+        task.status == TaskStatus.COMPLETED
+        and log is not None
+        and log.status == TaskStatus.COMPLETED
+        and not log.is_reviewed
+        and not marked_after_closing(task, log)
+    )
+
+
 def review_locked(task: Task, log: TaskLog | None) -> bool:
     """True when ``log``'s review was given before ``task`` was completed.
 

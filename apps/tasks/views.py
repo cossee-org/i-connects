@@ -77,6 +77,7 @@ from apps.tasks.services import (
     notify_new_assignees,
     reopen_own,
     reopen_task,
+    review_closed,
     review_locked,
     unverify_part,
     verify_part,
@@ -1240,6 +1241,12 @@ _LOCKED_MESSAGE = (
     "setting or clearing another member's done mark."
 )
 
+_REVIEW_CLOSED_MESSAGE = (
+    "This part was marked done before the task was marked completed, so it "
+    "can no longer be reviewed. A Lead has to mark the task not complete "
+    "first."
+)
+
 _REVIEW_LOCKED_MESSAGE = (
     "This part was reviewed before the task was marked completed, so its "
     "review is locked. A Lead has to mark the task not complete before it "
@@ -1253,10 +1260,12 @@ def _marks_locked(task) -> bool:
     Each assignee's own mark (``TaskCompleteView``, ``TaskUndoOwnView``), the
     reviewers' reviews (``TaskLogReviewView``) and the Lead's verifications
     (``TaskLogVerifyView``) stay open on a completed task: closing it is the
-    Lead's call about the task, not a verdict on any one part. The exception
-    is a review given before the task was completed, which nobody can
+    Lead's call about the task, not a verdict on any one part. The exceptions
+    are a review given before the task was completed, which nobody can
     withdraw (``services.review_locked``) — though the assignee undoing their
-    own mark still clears it. A Lead who needs to change either marks the
+    own mark still clears it — and a part marked before the task was
+    completed and left unreviewed, which can no longer be reviewed
+    (``services.review_closed``); only parts marked after completion are. A Lead who needs to change either marks the
     task Not Complete first.
     """
     return task.status == TaskStatus.COMPLETED
@@ -1302,13 +1311,17 @@ def _task_status_context(task, *, project_member, is_project_manager):
         # A review given before the task was completed stays as it was, and
         # so does the done mark it rests on.
         locked_review = review_locked(task, log)
+        # A part marked before the task was completed and left unreviewed
+        # takes no review now; one marked after it does.
+        closed_review = review_closed(task, log)
         assignee_states.append(
             {
                 "member": member,
                 "review_locked": locked_review,
+                "review_closed": closed_review,
                 # Whether *this viewer* may act on *this row's* review. Open
-                # whether or not the task is completed.
-                "can_review": viewer_reviews,
+                # on a completed task only for a part marked after it.
+                "can_review": viewer_reviews and not closed_review,
                 # Undoing is narrower than making: a reviewer may withdraw
                 # their own verdict and no one else's, while a Lead can clear
                 # any of them. A review whose reviewer's membership row was
@@ -1686,10 +1699,11 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     at once and a member removed from the project loses the action with their
     membership.
 
-    Reviewing stays open once the task is marked completed — a Lead closing
-    the task is no verdict on any part — and so does withdrawing a review
-    given after that. A review given before the task was completed is locked
-    until a Lead reopens it (``services.review_locked``). Neither direction
+    On a completed task, a part marked done after it was completed can be
+    reviewed, and that review withdrawn. A part already marked when the task
+    was completed stays as it stood until a Lead reopens the task: unreviewed
+    it takes no review (``services.review_closed``), reviewed it cannot be
+    withdrawn (``services.review_locked``). Neither direction
     opens at all on a task that asks for no review: the Reviewed column is not
     drawn there, so the endpoint behind it should not answer either.
     Withdrawing is also narrower in who may: a reviewer may take back their
@@ -1729,6 +1743,8 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                 return HttpResponseBadRequest(
                     "That assignee has not marked their part done yet."
                 )
+            if review_closed(self.task, log):
+                return HttpResponseForbidden(_REVIEW_CLOSED_MESSAGE)
             # Reviewing someone who has since been taken off the task would
             # write a verdict the matrix no longer has a row for.
             if not self.task.assigned_members.filter(pk=log.assigned_to_id).exists():

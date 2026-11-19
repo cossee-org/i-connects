@@ -14,6 +14,10 @@
   Its box stays ticked and clickable but never toggles; a click shows the
   card's locked notice instead — see task_done_tick.html. A review given
   after completion can still be withdrawn.
+
+  Likewise, a part marked done before the task was completed and left
+  unreviewed takes no review any more (``s.review_closed``): its box is
+  locked, unticked. Only parts marked after completion can be reviewed.
 {% endcomment %}
 {% if s.review_locked %}
   <input type="checkbox" class="completion-tick completion-tick-review" checked
@@ -21,6 +25,13 @@
          aria-describedby="task-locked-notice"
          aria-label="{{ s.member.display_name }}: reviewed (locked)"
          title="Locked: reviewed before the task was marked completed"
+         @click.prevent="showLocked()">
+{% elif s.review_closed %}
+  <input type="checkbox" class="completion-tick completion-tick-review"
+         aria-disabled="true" data-locked
+         aria-describedby="task-locked-notice"
+         aria-label="{{ s.member.display_name }}: not reviewed (locked)"
+         title="Locked: marked done before the task was marked completed"
          @click.prevent="showLocked()">
 {% elif s.reviewed %}
   {% if s.can_unreview %}

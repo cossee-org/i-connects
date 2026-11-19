@@ -3996,9 +3996,8 @@ def test_a_mark_made_after_closing_is_credited_once_verified(client, user, other
 @pytest.mark.django_db
 def test_completed_task_locks_earlier_reviews_and_keeps_later_ones_open(client, user, other_user):
     """On a completed task, a review given before it was completed is locked:
-    it cannot be withdrawn. Parts still unreviewed can be reviewed, and a
-    review given after completion can be withdrawn. None of it reopens the
-    task."""
+    it cannot be withdrawn. A part marked after completion can be reviewed,
+    and that review withdrawn. None of it reopens the task."""
     from apps.tasks.services import mark_own_done, mark_reviewed
 
     project, task, lead, contrib = _two_assignee_task(user, other_user)
@@ -4006,11 +4005,11 @@ def test_completed_task_locks_earlier_reviews_and_keeps_later_ones_open(client, 
     mark_own_done(task=task, member=contrib)
     reviewed_log = _current_log(task, contrib)
     mark_reviewed(task_log=reviewed_log, reviewer=lead)
-    mark_own_done(task=task, member=lead)
-    unreviewed_log = _current_log(task, lead)
 
     client.force_login(user)
     client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+    mark_own_done(task=task, member=lead)  # marked after completion
+    unreviewed_log = _current_log(task, lead)
 
     pane = client.get(_pane_url(project, task)).content.decode()
     assert MARK_REVIEWED in _row_for(pane, lead)
@@ -4027,7 +4026,7 @@ def test_completed_task_locks_earlier_reviews_and_keeps_later_ones_open(client, 
     reviewed_log.refresh_from_db()
     assert reviewed_log.is_reviewed
 
-    # The unreviewed part is reviewed after completion, and that review can
+    # The part marked after completion is reviewed, and that review can
     # still be withdrawn.
     assert client.post(
         _review_url(task, unreviewed_log), {"reviewed": "1"}, HTTP_HX_REQUEST="true"
@@ -4312,7 +4311,9 @@ def test_completion_heading_carries_an_info_button_explaining_the_procedure(clie
         assert "credits them" in verified
         completed = info[info.index("4. Completed.") :]
         assert "Assignees can still tick their own Done" in completed
-        assert "Reviews given before the task was completed are locked" in completed
+        assert "reviewers can review parts marked done after completion" in completed
+        assert "a review given then is locked" in completed
+        assert "a part left unreviewed can no longer be reviewed" in completed
         assert "A review given after completion can still be unticked" in completed
         assert "5." not in info
         assert "Tick to mark, untick to undo." not in html
@@ -4369,7 +4370,7 @@ def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, oth
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
     assert "A Lead has to mark it not complete" in pane
-    assert "a review given after completion can still be withdrawn" in pane
+    assert "parts marked done after completion can still be reviewed" in pane
     assert "Mark it not complete first" not in pane
 
     client.force_login(user)
@@ -4384,8 +4385,9 @@ def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, oth
 
 @pytest.mark.django_db
 def test_a_part_marked_after_closing_is_reviewed_and_verified_as_usual(client, user, other_user):
-    """Every part on a closed task stays open to review and verification,
-    whenever it was marked: the review earns no credit by itself, the Lead's
+    """On a closed task, a part marked done after closing is reviewed as
+    usual, while an unreviewed part marked before closing takes no review.
+    Both can be verified: the review earns no credit by itself, the Lead's
     verification does, and withdrawing it takes back only that credit. The
     task stays closed throughout."""
     from apps.contributions.models import ContributionRecord
@@ -4406,16 +4408,23 @@ def test_a_part_marked_after_closing_is_reviewed_and_verified_as_usual(client, u
 
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    for member, log in ((contrib, late_log), (lead, early_log)):
-        row = _row_for(pane, member)
-        assert _review_url(task, log) in row and "Awaiting review" in row
+    late_row = _row_for(pane, contrib)
+    assert _review_url(task, late_log) in late_row and "Awaiting review" in late_row
+    early_row = _row_for(pane, lead)
+    assert _review_url(task, early_log) not in early_row
+    assert "not reviewed (locked)" in early_row and "Not reviewed" in early_row
+    for row, log in ((late_row, late_log), (early_row, early_log)):
         assert _verify_url(task, log) in row and "Awaiting verification" in row
 
-    for log in (early_log, late_log):
-        reviewed = client.post(_review_url(task, log), {"reviewed": "1"}, HTTP_HX_REQUEST="true")
-        assert reviewed.status_code == 200
-        log.refresh_from_db()
-        assert log.is_reviewed and log.reviewed_by == lead
+    refused = client.post(_review_url(task, early_log), {"reviewed": "1"}, HTTP_HX_REQUEST="true")
+    assert refused.status_code == 403
+    early_log.refresh_from_db()
+    assert not early_log.is_reviewed
+
+    reviewed = client.post(_review_url(task, late_log), {"reviewed": "1"}, HTTP_HX_REQUEST="true")
+    assert reviewed.status_code == 200
+    late_log.refresh_from_db()
+    assert late_log.is_reviewed and late_log.reviewed_by == lead
     assert not ContributionRecord.objects.filter(task=task).exists()
 
     verified = client.post(_verify_url(task, late_log), {"verified": "1"}, HTTP_HX_REQUEST="true")
@@ -5629,3 +5638,41 @@ def test_editing_the_type_carries_onto_verified_credit(client, user, other_user)
     task.refresh_from_db()
     assert task.contribution_type == ContributionType.SOFTWARE
     assert ContributionRecord.objects.get().contribution_type == ContributionType.SOFTWARE
+
+
+@pytest.mark.django_db
+def test_a_part_marked_before_completion_takes_no_review_until_remarked_or_reopened(client, user, other_user):
+    """An unreviewed part already marked when the Lead completed the task
+    takes no review. It opens again if its assignee undoes and redoes the
+    mark (it is then marked after completion), or if a Lead reopens the task."""
+    from apps.tasks.services import mark_own_done
+
+    project, task, lead, contrib = _two_assignee_task(user, other_user)
+    task.reviewers.add(lead)
+    mark_own_done(task=task, member=contrib)
+    client.force_login(user)
+    client.post(reverse("tasks:close", kwargs={"pk": task.pk}))
+
+    review = lambda: client.post(  # noqa: E731
+        _review_url(task, _current_log(task, contrib)), {"reviewed": "1"}, HTTP_HX_REQUEST="true"
+    )
+    assert review().status_code == 403
+    assert MARK_REVIEWED not in _row_for(client.get(_pane_url(project, task)).content.decode(), contrib)
+
+    # The assignee redoes the mark: now it was marked after completion.
+    client.force_login(other_user)
+    client.post(reverse("tasks:undo", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    client.post(reverse("tasks:complete", kwargs={"pk": task.pk}), HTTP_HX_REQUEST="true")
+    client.force_login(user)
+    assert MARK_REVIEWED in _row_for(client.get(_pane_url(project, task)).content.decode(), contrib)
+    assert review().status_code == 200
+    assert _current_log(task, contrib).is_reviewed
+
+    # And on another part marked before completion, reopening lifts it.
+    other = _sole_assignee_task(user, other_user, name="Reopened")[1]
+    mark_own_done(task=other, member=other.assigned_members.get())
+    client.post(reverse("tasks:close", kwargs={"pk": other.pk}))
+    part = other.task_logs.get()
+    assert client.post(_review_url(other, part), {"reviewed": "1"}, HTTP_HX_REQUEST="true").status_code == 403
+    client.post(reverse("tasks:reopen", kwargs={"pk": other.pk}))
+    assert client.post(_review_url(other, part), {"reviewed": "1"}, HTTP_HX_REQUEST="true").status_code == 200
