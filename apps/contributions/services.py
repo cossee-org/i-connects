@@ -177,10 +177,19 @@ def get_contribution_tiles(
     that shape. Feeds ``_components/contribution_card.html`` on both the
     researcher profile and the Contributions module, so the two show the
     same card rather than two views of the same numbers.
+
+    The legacy ``WRITING`` type is no longer a role anyone can be credited
+    with, so it is left off unless this user actually holds credit under
+    it — a zero there is not part of anyone's shape.
     """
     counts = get_user_contribution_counts_by_type(user, project=project)
     labels = dict(ContributionType.choices)
-    return [(labels[v], counts.get(v, 0)) for v in sort_contribution_types(labels)]
+    values = [
+        v
+        for v in sort_contribution_types(labels)
+        if v != ContributionType.WRITING or counts.get(v, 0)
+    ]
+    return [(labels[v], counts.get(v, 0)) for v in values]
 
 
 def get_user_credit_projects(user: User) -> list[Project]:
