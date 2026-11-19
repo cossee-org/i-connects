@@ -45,6 +45,8 @@ from apps.tasks.services import (
     reopen_task,
     unverify_part,
     verify_part,
+    verify_parts,
+    VerifyScope,
 )
 
 
@@ -177,6 +179,7 @@ def test_verifying_twice_writes_one_record(user):
 
     verify_part(task_log=log, lead=pm_member)
     verify_part(task_log=log, lead=pm_member)
+    verify_parts(task=task, lead=pm_member, scope=VerifyScope.DONE)
 
     assert ContributionRecord.objects.filter(user=user).count() == 1
 
@@ -206,6 +209,73 @@ def test_verifying_on_a_closed_task_credits_the_member(user, other_user):
     assert ContributionRecord.objects.filter(user=other_user).exists()
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# Batch verification
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_verifying_all_done_credits_every_part_marked_done(user, other_user, pm_user):
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    bob = _member_for(project, pm_user)
+    task = _make_task(project, col, lead, assignees=[alice, bob, lead])
+    mark_own_done(task=task, member=alice)
+    mark_own_done(task=task, member=bob)  # the Lead's own part is not done
+
+    verified = verify_parts(task=task, lead=lead, scope=VerifyScope.DONE)
+
+    assert {log.assigned_to_id for log in verified} == {alice.pk, bob.pk}
+    assert set(ContributionRecord.objects.values_list("user_id", flat=True)) == {
+        other_user.id,
+        pm_user.id,
+    }
+
+
+@pytest.mark.django_db
+def test_verifying_all_reviewed_skips_parts_not_reviewed(user, other_user, pm_user):
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    bob = _member_for(project, pm_user)
+    task = _make_task(project, col, lead, assignees=[alice, bob], reviewers=[lead])
+    alice_log = mark_own_done(task=task, member=alice)
+    mark_own_done(task=task, member=bob)
+    mark_reviewed(task_log=alice_log, reviewer=lead)
+
+    verified = verify_parts(task=task, lead=lead, scope=VerifyScope.REVIEWED)
+
+    assert [log.pk for log in verified] == [alice_log.pk]
+    assert set(ContributionRecord.objects.values_list("user_id", flat=True)) == {
+        other_user.id
+    }
+
+
+@pytest.mark.django_db
+def test_a_batch_writes_an_audit_row_per_part_naming_the_batch(user, other_user, pm_user):
+    project, col, lead = _make_project(user)
+    alice = _member_for(project, other_user)
+    bob = _member_for(project, pm_user)
+    task = _make_task(project, col, lead, assignees=[alice, bob])
+    mark_own_done(task=task, member=alice)
+    mark_own_done(task=task, member=bob)
+
+    verify_parts(task=task, lead=lead, scope=VerifyScope.DONE)
+
+    rows = AuditLog.objects.filter(action=AuditAction.TASK_PART_VERIFIED)
+    assert rows.count() == 2
+    assert {row.metadata["assignee_member_id"] for row in rows} == {alice.pk, bob.pk}
+    assert all(row.metadata["batch"] == "done" for row in rows)
+    assert all(row.actor_id == user.pk for row in rows)
+
+
+@pytest.mark.django_db
+def test_an_unknown_batch_scope_is_refused(user):
+    project, col, lead = _make_project(user)
+    task = _make_task(project, col, lead, assignees=[lead])
+    with pytest.raises(ValueError):
+        verify_parts(task=task, lead=lead, scope="everything")
 
 
 # ---------------------------------------------------------------------------
@@ -845,7 +915,7 @@ def test_a_correction_is_not_overwritten_when_the_part_is_verified_again(client,
         {"contribution_type": ContributionType.SOFTWARE},
     )
     close_task(task=task, closed_by=pm)
-    verify_part(task_log=task.task_logs.get(assigned_to=pm), lead=pm)
+    verify_parts(task=task, lead=pm, scope=VerifyScope.DONE)
 
     record.refresh_from_db()
     assert record.contribution_type == ContributionType.SOFTWARE

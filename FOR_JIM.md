@@ -52,7 +52,8 @@ roles.
 
 A lead verifying a member's part is the ledger event. Each task's
 Completion table has a **Verified** column beside Done and Reviewed: a lead
-ticks it for each member, and a `ContributionRecord` is written for that
+ticks it for one member, or uses **Verify all marked done** (or **Verify all
+marked reviewed**) under the progress bars, and a `ContributionRecord` is written for that
 member. A part must be marked done to be verified; a review is not required.
 Withdrawing the verification, or the assignee undoing their done mark,
 takes that credit back. Closing and reopening the task write and withdraw
@@ -300,8 +301,8 @@ reachable only by URL today.
    - Add a kanban column, then create a task; note the "Task type" select,
      offering CRediT's 14 roles (it appears only on a CRediT project), and
      the "Require review" tickbox that reveals the Reviewers field.
-   - Assign yourself, mark your own part done, tick Verified on your row,
-     then close the task as lead.
+   - Assign yourself, mark your own part done, tick Verified on your row
+     (or Verify all marked done), then close the task as lead.
    - With the task completed, Edit and Delete are gone and the header names
      who closed it and when; Mark Not Complete brings the buttons back and
      takes the attribution away.
