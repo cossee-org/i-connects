@@ -274,6 +274,71 @@ def test_resend_invitation_regenerates_code_and_resends_email(user):
     ).exists()
 
 
+# ---------------------------------------------------------------------------
+# Invitations show the privilege label (Lead / Member), not the stored value
+# ---------------------------------------------------------------------------
+
+PRIVILEGE_LABELS = [
+    (MemberPrivileges.CONTRIBUTOR, "Member"),
+    (MemberPrivileges.PROJECT_MANAGER, "Lead"),
+]
+
+
+def _invite(user, privilege, **kwargs):
+    project = create_project_with_owner(
+        user=user,
+        form_data={"name": "Labels", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    return create_invitation(project=project, privilege=privilege, added_by="Alice", **kwargs)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("privilege,label", PRIVILEGE_LABELS)
+def test_invitation_email_names_the_privilege_label(user, privilege, label):
+    from django.core import mail
+
+    mail.outbox.clear()
+    _invite(user, privilege, email="new@test.com")
+
+    assert len(mail.outbox) == 1
+    message = mail.outbox[0]
+    html = message.alternatives[0][0]
+    assert f"on i-connects as a {label}." in message.body
+    assert f"as\n  a <em>{label}</em>." in html
+    for body in (message.body, html):
+        assert privilege.value not in body
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("privilege,label", PRIVILEGE_LABELS)
+def test_invitation_accept_page_names_the_privilege_label(client, user, other_user, privilege, label):
+    invitation = _invite(user, privilege, invited_user=other_user)
+    client.force_login(other_user)
+
+    response = client.get(
+        reverse("projects:accept_or_decline", kwargs={"code": invitation.invitation_code})
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert f"\n        {label}\n      </span>" in content
+    assert f">\n        {privilege.value}\n" not in content
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("privilege,label", PRIVILEGE_LABELS)
+def test_my_invitations_list_names_the_privilege_label(client, user, other_user, privilege, label):
+    _invite(user, privilege, invited_user=other_user)
+    client.force_login(other_user)
+
+    response = client.get(reverse("projects:my_invitations"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert f"\n                  {label}\n                </span>" in content
+    assert f">\n                  {privilege.value}\n" not in content
+
+
 @pytest.mark.django_db
 def test_resend_invitation_view_requires_project_manager(client, user, other_user):
     project = _make_project(user)
@@ -631,8 +696,10 @@ def test_detail_shows_request_to_join_button_for_non_members(client, user, other
     response = client.get(reverse("projects:detail", kwargs={"pk": project.pk}))
     assert response.status_code == 200
     content = response.content.decode()
-    assert "Request to join as member" in content
-    assert "Request to join as lead" in content
+    # The modal the button opens asks which privilege (Lead or Member) to
+    # request, so the button itself names none.
+    assert "Request to join" in content
+    assert "contributor" not in content.lower().split("request to join", 1)[1][:40]
 
 
 # ---------------------------------------------------------------------------
