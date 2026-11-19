@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
@@ -337,7 +338,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         # --- Invitation requests (invitations addressed to the current user) ---
         invitation_requests = list(
-            Invitation.objects.filter(email__iexact=(user.email or "").lower())
+            Invitation.objects.addressed_to(user)
             .select_related("project")
             .order_by("-created_at")
         )
@@ -785,12 +786,10 @@ class ProjectDetailView(DetailView):
                     status=JoinRequestStatus.PENDING,
                 ).first()
             )
-            user_email = (self.request.user.email or "").lower()
             context["pending_invitation"] = (
-                Invitation.objects.filter(
-                    project=project,
-                    email__iexact=user_email,
-                ).first()
+                Invitation.objects.addressed_to(self.request.user)
+                .filter(project=project)
+                .first()
             )
             if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
                 context["pending_join_request_count"] = JoinRequest.objects.filter(
@@ -1423,24 +1422,47 @@ class MyInvitationsView(LoginRequiredMixin, ListView):
     context_object_name = "invitations"
 
     def get_queryset(self):
-        email = (self.request.user.email or "").lower()
         return (
-            Invitation.objects.filter(email__iexact=email)
+            Invitation.objects.addressed_to(self.request.user)
             .select_related("project")
             .order_by("-created_at")
         )
 
 
 class AcceptOrDeclineInviteView(View):
-    """Single URL that handles showing, accepting, and declining an invite."""
+    """Single URL that handles showing, accepting, and declining an invite.
+
+    Only the invitee may see or act on an invitation. Anyone else who is
+    signed in -- say, on a shared computer -- gets a page saying the link
+    belongs to another account, with nothing about the project, and a way to
+    sign out and come back to the link as the right person.
+    """
 
     template_name = "invites/accept.html"
+    wrong_account_template = "invites/wrong_account.html"
+
+    def _invitation_or_response(self, request, code):
+        """Return ``(invitation, None)`` for the invitee, else ``(None, response)``."""
+        # Sign-in comes first, so a signed-out visitor learns nothing about
+        # whether the code exists.
+        if not request.user.is_authenticated:
+            return None, redirect_to_login(request.path)
+        invitation = get_object_or_404(
+            Invitation.objects.select_related("project"), invitation_code=code
+        )
+        if not invitation.is_addressed_to(request.user):
+            return None, render(
+                request,
+                self.wrong_account_template,
+                {"invitation_path": request.path},
+                status=403,
+            )
+        return invitation, None
 
     def get(self, request, code):
-        invitation = get_object_or_404(Invitation, invitation_code=code)
-        if not request.user.is_authenticated:
-            login_url = reverse("account_login")
-            return HttpResponseRedirect(f"{login_url}?next={request.path}")
+        invitation, response = self._invitation_or_response(request, code)
+        if response is not None:
+            return response
         return render(
             request,
             self.template_name,
@@ -1448,18 +1470,10 @@ class AcceptOrDeclineInviteView(View):
         )
 
     def post(self, request, code):
-        if not request.user.is_authenticated:
-            login_url = reverse("account_login")
-            return HttpResponseRedirect(f"{login_url}?next={request.path}")
-        invitation = get_object_or_404(Invitation, invitation_code=code)
+        invitation, response = self._invitation_or_response(request, code)
+        if response is not None:
+            return response
         action = request.POST.get("action", "accept")
-
-        # Only the invited email may act on the invitation.
-        user_email = (request.user.email or "").lower()
-        if invitation.email.lower() != user_email:
-            raise PermissionDenied(
-                "This invitation is addressed to a different account."
-            )
 
         if action == "decline":
             decline_invitation(invitation=invitation, user=request.user)
@@ -1827,7 +1841,6 @@ class RequestsView(LoginRequiredMixin, TemplateView):
 
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        user_email = (user.email or "").lower()
 
         current_q = self.request.GET.get("q", "").strip()
         current_status = self.request.GET.get("status", "")
@@ -1849,7 +1862,7 @@ class RequestsView(LoginRequiredMixin, TemplateView):
         ).values_list("project_id", flat=True)
 
         incoming_jr_qs = JoinRequest.objects.filter(project_id__in=pm_project_ids)
-        incoming_inv_qs = Invitation.objects.filter(email__iexact=user_email)
+        incoming_inv_qs = Invitation.objects.addressed_to(user)
         outgoing_jr_qs = JoinRequest.objects.filter(user=user)
         # Invitations sent out to others, for projects the user manages.
         outgoing_inv_qs = Invitation.objects.filter(project_id__in=pm_project_ids)
