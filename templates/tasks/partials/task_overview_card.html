@@ -51,7 +51,10 @@
         </svg>
         Task type
       </dt>
-      <dd class="text-brand-text">{{ task.get_contribution_type_display }}</dd>
+      <dd class="text-brand-text">
+        {{ task.get_contribution_type_display }}
+        {% with own=task.assignee_contribution_types.count %}{% if own %}<span class="text-brand-text/60" data-own-type-count="{{ own }}">&middot; {{ own }} with own type</span>{% endif %}{% endwith %}
+      </dd>
     {% endif %}
     <dt class="flex items-center gap-2 text-brand-text/60">
       {# view-columns #}

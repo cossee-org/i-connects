@@ -17,6 +17,7 @@ from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
 from apps.tasks.models import (
     ActivityEvent,
+    AssigneeContributionType,
     AssigneeDeadline,
     KanbanBoard,
     Task,
@@ -822,6 +823,113 @@ def clear_member_dates(
     )
     _notify_member_dates(task=task, member=member, entry=None, lead=actor)
     return True
+
+
+@transaction.atomic
+def set_member_contribution_type(
+    *,
+    task: Task,
+    member: ProjectMember,
+    lead: ProjectMember | None,
+    contribution_type: str | None,
+) -> AssigneeContributionType | None:
+    """A Lead gives one assignee their own contribution type on ``task``, or
+    with None puts them back on the task's.
+
+    The type replaces the task's for ``member`` alone: their credit is
+    recorded under it when their part is verified, and credit already
+    written for them moves with it (see
+    :func:`apps.contributions.services.sync_member_contribution_type`). A
+    type equal to the task's is still kept as their own, so they stay on it
+    if the task's type changes later. Callers check that ``lead`` is a Lead,
+    ``member`` is assigned and the type is a valid one
+    (``views.TaskMemberContributionTypeView``).
+
+    Writes an audit row naming the old and new type, and tells the member.
+    A no-op, with nothing written, when nothing changes. Returns the entry,
+    or None once the member follows the task's type.
+    """
+    from apps.contributions.services import sync_member_contribution_type
+
+    existing = AssigneeContributionType.objects.filter(
+        task=task, member=member
+    ).first()
+    old_own = existing.contribution_type if existing else None
+    if (contribution_type or None) == old_own:
+        return existing
+    old_effective = old_own or task.contribution_type
+    if contribution_type:
+        entry = existing or AssigneeContributionType(task=task, member=member)
+        entry.contribution_type = contribution_type
+        entry.set_by = lead
+        entry.save()
+        new_effective = contribution_type
+        action = AuditAction.TASK_MEMBER_TYPE_SET
+    else:
+        existing.delete()
+        entry = None
+        new_effective = task.contribution_type
+        action = AuditAction.TASK_MEMBER_TYPE_CLEARED
+    moved = sync_member_contribution_type(
+        task, member, old_type=old_effective, new_type=new_effective
+    )
+    log_action(
+        action,
+        actor=lead.users.first() if lead is not None else None,
+        entity=task,
+        project=task.project,
+        metadata={
+            "task_name": task.name,
+            "assignee_member_id": member.pk,
+            "contribution_type": contribution_type,
+            "previous_contribution_type": old_own,
+            "task_contribution_type": task.contribution_type,
+            "records_moved": moved,
+        },
+    )
+    _notify_member_type(
+        task=task, member=member, contribution_type=new_effective,
+        own=entry is not None, lead=lead,
+    )
+    return entry
+
+
+def _notify_member_type(
+    *,
+    task: Task,
+    member: ProjectMember,
+    contribution_type: str,
+    own: bool,
+    lead: ProjectMember | None,
+) -> None:
+    """Tell the member the type their part is credited under changed."""
+    try:
+        from apps.notifications.services import create_notification
+    except Exception:  # pragma: no cover
+        return
+
+    user_ids = set(member.users.values_list("id", flat=True))
+    if lead is not None:
+        user_ids.difference_update(lead.users.values_list("id", flat=True))
+    if not user_ids:
+        return
+    from apps.core.enums import ContributionType
+
+    label = ContributionType(contribution_type).label
+    if own:
+        title = f"Your contribution type changed: {task.name}"
+        body = f"Your part is now credited as {label}."
+    else:
+        title = f"Your individual contribution type was removed: {task.name}"
+        body = f"The task's type applies to you again: {label}."
+    create_notification(
+        users=list(user_ids),
+        title=title,
+        body=body,
+        project=task.project,
+        route="tasks:detail",
+        route_kwargs={"project_pk": task.project_id, "pk": task.pk},
+    )
 
 
 class TaskDateChange:

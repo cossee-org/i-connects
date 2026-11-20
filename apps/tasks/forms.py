@@ -277,7 +277,8 @@ class TaskForm(forms.ModelForm):
         field.label = "Task type"
         field.help_text = (
             "The CRediT role this task's contributors are credited with "
-            "when it is completed."
+            "when their part is verified. A Lead can give an assignee a "
+            "different role of their own from the task's completion table."
         )
         current = self.instance.contribution_type if self.instance.pk else None
         choices = credit_role_choices(current)

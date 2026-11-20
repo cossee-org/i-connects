@@ -153,6 +153,11 @@ urlpatterns = [
         views.TaskMemberDatesView.as_view(),
         name="member_dates",
     ),
+    path(
+        "tasks/<int:pk>/member-type/",
+        views.TaskMemberContributionTypeView.as_view(),
+        name="member_type",
+    ),
     # Board columns
     path(
         "projects/<int:project_pk>/boards/",

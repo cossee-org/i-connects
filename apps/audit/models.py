@@ -84,6 +84,14 @@ class AuditAction(models.TextChoices):
     TASK_PART_UNVERIFIED = "task.part_unverified", "Task contribution verification withdrawn"
     TASK_DEADLINE_SET = "task.deadline_set", "Individual task dates set"
     TASK_DEADLINE_CLEARED = "task.deadline_cleared", "Individual task dates removed"
+    TASK_MEMBER_TYPE_SET = (
+        "task.member_type_set",
+        "Individual contribution type set",
+    )
+    TASK_MEMBER_TYPE_CLEARED = (
+        "task.member_type_cleared",
+        "Individual contribution type removed",
+    )
 
     # ---- Wiki ---------------------------------------------------------------
     WIKI_PAGE_CREATED = "wiki.page_created", "Wiki page created"

@@ -75,6 +75,10 @@ def record_member_contribution(
     the verification time is stored as ``closed_at``, the moment the credit
     became final.
 
+    The credit is filed under the member's effective type
+    (``Task.contribution_type_for``): their own, when a Lead gave them one,
+    else the task's.
+
     Idempotent: the ``(task, user)`` unique constraint plus ``get_or_create``
     means verifying twice writes no second row, and a record a Lead entered
     by hand for the same person is left as it is.
@@ -83,6 +87,7 @@ def record_member_contribution(
     if not task.project.tracks_credit:
         return []
     when = task_log.verified_at or timezone.now()
+    contribution_type = task.contribution_type_for(task_log.assigned_to)
     created: list[ContributionRecord] = []
     for user in task_log.assigned_to.users.all():
         obj, was_created = ContributionRecord.objects.get_or_create(
@@ -91,7 +96,7 @@ def record_member_contribution(
             defaults=dict(
                 task_log=task_log,
                 project=task.project,
-                contribution_type=task.contribution_type,
+                contribution_type=contribution_type,
                 verified_by=verifier_user,
                 closed_at=when,
             ),
@@ -122,13 +127,40 @@ def sync_contribution_type(task: Task, *, old_type: str) -> int:
     changing the type afterwards would otherwise leave verified records filed
     under the old one. Only records still under ``old_type`` move: one a Lead
     corrected by hand to another role keeps that correction, and
-    hand-entered records keep their own.
+    hand-entered records keep their own. Neither does the credit of a member
+    a Lead gave a type of their own: the task's type is not theirs.
     """
     if old_type == task.contribution_type:
         return 0
+    own_type_members = task.assignee_contribution_types.values("member_id")
+    return (
+        ContributionRecord.objects.filter(
+            task=task, added_by_hand=False, contribution_type=old_type
+        )
+        .exclude(task_log__assigned_to__in=own_type_members)
+        .update(contribution_type=task.contribution_type)
+    )
+
+
+def sync_member_contribution_type(
+    task: Task, member: ProjectMember, *, old_type: str, new_type: str
+) -> int:
+    """Carry a change of one member's effective type onto their credit.
+
+    A Lead giving a member a type of their own, changing it, or putting them
+    back on the task's, after their part was already verified would
+    otherwise leave that credit under the old type. As with
+    :func:`sync_contribution_type`, only the automatic records still under
+    ``old_type`` move; hand-entered and hand-corrected ones stay.
+    """
+    if old_type == new_type:
+        return 0
     return ContributionRecord.objects.filter(
-        task=task, added_by_hand=False, contribution_type=old_type
-    ).update(contribution_type=task.contribution_type)
+        task=task,
+        task_log__assigned_to=member,
+        added_by_hand=False,
+        contribution_type=old_type,
+    ).update(contribution_type=new_type)
 
 
 def get_user_contributions(

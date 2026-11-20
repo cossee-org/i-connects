@@ -33,6 +33,7 @@
             <li class="flex items-center gap-2">
               <span class="w-5 h-5 rounded-full bg-brand-navy/80 text-white text-[10px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
               <span>{{ s.member.display_name }}</span>
+              {% if s.tracks_credit and s.own_type %}<span class="text-xs text-brand-text/60" data-verify-own-type>(as {{ s.contribution_type_label }})</span>{% endif %}
             </li>
           {% endif %}
         {% endif %}
@@ -45,7 +46,8 @@
           Verifying is your sign-off, as a Lead, that each member did their part.
           It records their contribution under this task's CRediT role,
           <span class="font-semibold text-brand-navy">{{ task.get_contribution_type_display }}</span>,
-          on the project's Contribution Tracking page and on their own Contributions page.
+          on the project's Contribution Tracking page and on their own Contributions page
+          — or under their own role, for a member a Lead gave one (shown beside their name).
           Nothing is credited until a part is verified. Unticking Verified later, or the
           member undoing their Done mark, removes the contribution again.
           <a href="https://credit.niso.org/" target="_blank" rel="noopener noreferrer"

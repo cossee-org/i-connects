@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import KanbanBoard, Milestone, Task, TaskLog
+from .models import AssigneeContributionType, KanbanBoard, Milestone, Task, TaskLog
 
 
 @admin.register(KanbanBoard)
@@ -27,3 +27,10 @@ class TaskLogAdmin(admin.ModelAdmin):
     list_display = ("id", "task", "assigned_to", "completed_by", "status", "completed_as", "created_at")
     search_fields = ("task__name",)
     list_filter = ("status", "completed_as", "approved")
+
+
+@admin.register(AssigneeContributionType)
+class AssigneeContributionTypeAdmin(admin.ModelAdmin):
+    list_display = ("id", "task", "member", "contribution_type", "set_by", "updated_at")
+    search_fields = ("task__name",)
+    list_filter = ("contribution_type",)
