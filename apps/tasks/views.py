@@ -1527,10 +1527,25 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # task's), or None when they have no own dates — the dialog
                 # then starts on the Lead's system timezone.
                 "own_timezone": individual.timezone if individual else None,
-                # The zone their own dates are in — their own, else the
-                # task's — as the picker labels it, for the line under
-                # their name.
-                "timezone_label": _zone_label(own_zone),
+                # The zones of the dates on their line, as the picker
+                # labels them: the deadline's (else the start's), and the
+                # start's when it is in another zone than the deadline.
+                "timezone_label": _zone_label(
+                    own_zone if own_deadline or (own_start and not effective_deadline)
+                    else task.timezone
+                ),
+                # Whether that deadline's (or start's) zone is their own.
+                "timezone_is_own": bool(
+                    individual
+                    and individual.timezone
+                    and (own_deadline or (own_start and not effective_deadline))
+                ),
+                "start_timezone_label": (
+                    _zone_label(own_zone)
+                    if own_start and effective_deadline and not own_deadline
+                    and own_zone != task.timezone
+                    else ""
+                ),
                 # Late on their own deadline: open task, part not done.
                 "overdue": bool(
                     effective_deadline is not None

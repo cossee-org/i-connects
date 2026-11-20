@@ -6,7 +6,7 @@
   verified, verified_by, verified_at, awaiting_verification,
   can_mark_done, can_review, can_unreview, can_verify, can_unverify,
   individual, own_start, own_deadline, start_date, deadline, start_tz,
-  deadline_tz, own_timezone, timezone_label, overdue,
+  deadline_tz, own_timezone, timezone_label, start_timezone_label, timezone_is_own, overdue,
   can_set_dates, own_start_input, own_deadline_input, tracks_credit,
   own_type, contribution_type, contribution_type_label, can_set_type),
   pending_dates_count, can_set_dates, can_set_type, own_type_count,
@@ -347,19 +347,13 @@
                   {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
                 </div>
                 {% comment %}
-                  The timezone the member's dates are in: their own, kept
-                  with their own dates, else the task's. Left out when
-                  neither the task nor the member has a date.
-                {% endcomment %}
-                {% if s.individual or s.start_date or s.deadline %}
-                  <div class="mt-1 text-xs text-brand-text/70"
-                       data-member-timezone="{% if s.individual.timezone %}own{% else %}task{% endif %}">Timezone: {{ s.timezone_label }}{% if s.individual.timezone %} &middot; own timezone{% endif %}</div>
-                {% endif %}
-                {% comment %}
                   The member's dates, under their name: "Starts Nov 20 ·" when
                   they have their own start date, then their deadline —
-                  either their own or the task's — with "own deadline" /
-                  "own start" / "own dates" saying which are theirs (the
+                  either their own or the task's — then the timezone they
+                  are in (their own, else the task's; a start in another
+                  zone than the deadline names its own), with "own
+                  deadline" / "own start" / "own dates" (and "own
+                  timezone") saying which are theirs (the
                   tooltip names who set them, the task's dates and the
                   reason). Red with an Overdue pill once the deadline has
                   passed and their part is still not done. A Lead gets Set
@@ -372,7 +366,7 @@
                        data-member-start="{% if s.own_start %}own{% elif s.start_date %}task{% else %}none{% endif %}">
                     {% if s.own_start or s.deadline %}
                       <span class="{% if s.overdue %}text-error font-medium{% else %}text-brand-text/70{% endif %}"
-                            {% if s.individual %}title="Individual dates{% if s.individual.set_by %} set by {{ s.individual.set_by.display_name }}{% endif %}{% if task.start_date or task.deadline %} (task: {% if task.start_date %}starts {{ task.start_date|in_zone:task.timezone|date:"M j, Y g:i A T" }}{% if task.deadline %}, {% endif %}{% endif %}{% if task.deadline %}due {{ task.deadline|in_zone:task.timezone|date:"M j, Y g:i A T" }}{% endif %}){% endif %}{% if s.individual.timezone %}; own dates in {{ s.individual.timezone }}{% endif %}{% if s.individual.reason %}: {{ s.individual.reason }}{% endif %}"{% endif %}>{% if s.own_start %}Starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}{% if s.deadline %} &middot; {% endif %}{% endif %}{% if s.deadline %}Due {{ s.deadline|in_zone:s.deadline_tz|date:"M j" }}{% endif %}{% if s.individual %} &middot; own {% if s.own_start and s.own_deadline %}dates{% elif s.own_start %}start{% else %}deadline{% endif %}{% endif %}</span>
+                            {% if s.individual %}title="Individual dates{% if s.individual.set_by %} set by {{ s.individual.set_by.display_name }}{% endif %}{% if task.start_date or task.deadline %} (task: {% if task.start_date %}starts {{ task.start_date|in_zone:task.timezone|date:"M j, Y g:i A T" }}{% if task.deadline %}, {% endif %}{% endif %}{% if task.deadline %}due {{ task.deadline|in_zone:task.timezone|date:"M j, Y g:i A T" }}{% endif %}){% endif %}{% if s.individual.timezone %}; own dates in {{ s.individual.timezone }}{% endif %}{% if s.individual.reason %}: {{ s.individual.reason }}{% endif %}"{% endif %}>{% if s.own_start %}Starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}{% if s.start_timezone_label %} &middot; <span data-member-start-timezone>{{ s.start_timezone_label }}</span>{% endif %}{% if s.deadline %} &middot; {% endif %}{% endif %}{% if s.deadline %}Due {{ s.deadline|in_zone:s.deadline_tz|date:"M j" }}{% endif %} &middot; <span data-member-timezone="{% if s.timezone_is_own %}own{% else %}task{% endif %}">{{ s.timezone_label }}</span>{% if s.individual %} &middot; own {% if s.own_start and s.own_deadline %}dates{% elif s.own_start %}start{% else %}deadline{% endif %}{% if s.individual.timezone %}, own timezone{% endif %}{% endif %}</span>
                       {% if s.overdue %}
                         <span class="inline-flex items-center rounded px-1 py-0.5 bg-error/10 text-error text-[10px] font-semibold leading-none" data-member-overdue>Overdue</span>
                       {% endif %}

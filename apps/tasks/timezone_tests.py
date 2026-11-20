@@ -514,13 +514,34 @@ def test_completion_table_names_each_members_timezone(client, pm_user, zoned):
         reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
     ).content.decode()
 
+    # One line each: the date, the zone it is in, and which are their own.
     assert (
-        'data-member-timezone="own">Timezone: (UTC+09:00) Tokyo, Japan'
-        " &middot; own timezone</div>"
+        'Due Jan 20 &middot; <span data-member-timezone="own">(UTC+09:00) Tokyo, '
+        "Japan</span> &middot; own deadline, own timezone</span>"
     ) in content
     assert (
-        'data-member-timezone="task">Timezone: (UTC\u221207:00) Denver, '
-        "United States of America</div>"
+        'Due Jan 15 &middot; <span data-member-timezone="task">(UTC\u221207:00) '
+        "Denver, United States of America</span></span>"
+    ) in content
+
+
+@pytest.mark.django_db
+def test_an_own_start_in_another_zone_names_its_zone(client, pm_user, zoned):
+    _project, task, lead, ari, _bo = zoned
+    set_member_dates(
+        task=task, member=ari, lead=lead, timezone="Asia/Tokyo",
+        start_date=_at(TOKYO, 2027, 1, 10, 9, 0),
+    )
+    client.force_login(pm_user)
+
+    content = client.get(
+        reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
+    ).content.decode()
+
+    assert (
+        "Starts Jan 10 &middot; <span data-member-start-timezone>(UTC+09:00) Tokyo, "
+        "Japan</span> &middot; Due Jan 15 &middot; "
+        '<span data-member-timezone="task">(UTC\u221207:00) Denver'
     ) in content
 
 
