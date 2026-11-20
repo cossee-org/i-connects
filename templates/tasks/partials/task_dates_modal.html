@@ -15,9 +15,14 @@
     value        their own deadline, likewise
     reason       the note on their own dates, if any
     hasPersonal  whether they have own dates, which offers Remove
+    timezone     the zone saved with their own dates: "" for "Same as
+                 task", or null when they have no own dates (and for
+                 scope "pending") — the picker then starts on the Lead's
+                 system timezone (_components/timezone_select.html)
 
-  For one member the pickers hold their own dates only, so a date left
-  empty follows the task's and emptying both removes them. For everyone not
+  For one member the pickers hold their own dates only, in the zone that
+  governs them, so a date left empty follows the task's and emptying both
+  removes them. For everyone not
   done the pickers start empty, and a date left empty is left as each
   member has it.
 
@@ -31,6 +36,7 @@
 
   Expects ``task`` and ``assignee_states``.
 {% endcomment %}
+{% load task_tags %}
 <dialog id="dates-modal-{{ task.pk }}" class="modal"
         aria-labelledby="dates-modal-title-{{ task.pk }}"
         data-dates-modal
@@ -44,8 +50,8 @@
     <p class="mt-3 text-sm text-brand-text">
       {% if task.start_date or task.deadline %}
         The task
-        {% if task.start_date %}starts <span class="font-semibold text-brand-navy">{{ task.start_date|date:"M j, Y g:i A" }}</span>{% if task.deadline %} and {% endif %}{% endif %}
-        {% if task.deadline %}is due <span class="font-semibold text-brand-navy">{{ task.deadline|date:"M j, Y g:i A" }}</span>{% endif %},
+        {% if task.start_date %}starts <span class="font-semibold text-brand-navy">{{ task.start_date|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>{% if task.deadline %} and {% endif %}{% endif %}
+        {% if task.deadline %}is due <span class="font-semibold text-brand-navy">{{ task.deadline|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>{% endif %},
         and that still holds for the task.
       {% else %}
         The task has no dates of its own.
@@ -59,7 +65,7 @@
           <li class="flex items-center gap-2">
             <span class="w-5 h-5 rounded-full bg-brand-navy/80 text-white text-[10px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
             <span>{{ s.member.display_name }}</span>
-            {% if s.individual %}<span class="text-xs text-brand-text/60">(now {% if s.own_start %}starts {{ s.own_start|date:"M j" }}{% if s.own_deadline %}, {% endif %}{% endif %}{% if s.own_deadline %}due {{ s.own_deadline|date:"M j" }}{% endif %})</span>{% endif %}
+            {% if s.individual %}<span class="text-xs text-brand-text/60">(now {% if s.own_start %}starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}{% if s.own_deadline %}, {% endif %}{% endif %}{% if s.own_deadline %}due {{ s.own_deadline|in_zone:s.deadline_tz|date:"M j" }}{% endif %})</span>{% endif %}
           </li>
         {% endif %}
       {% endfor %}
@@ -89,6 +95,9 @@
                  x-model="value" data-deadline-input>
         </label>
       </div>
+      {% with task_zone_label="Same as task ("|add:task.timezone|add:")" pk_s=task.pk|stringformat:"s" %}
+        {% include "_components/timezone_select.html" with name="timezone" id="dates-timezone-"|add:pk_s managed=True inherit_label=task_zone_label help="The dates above are in this timezone." %}
+      {% endwith %}
       <label class="flex flex-col gap-1 text-sm">
         <span class="font-medium text-brand-navy">Reason <span class="font-normal text-brand-text/60">(optional)</span></span>
         <input type="text" name="reason" maxlength="500"

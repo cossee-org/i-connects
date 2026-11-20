@@ -1,0 +1,66 @@
+{% comment %}
+  A timezone picker that starts on the user's system timezone.
+
+    {% include "_components/timezone_select.html" with name="timezone" id="id_timezone" saved=form.timezone.value label="Timezone" %}
+
+  Params:
+    name           the field name the select submits
+    id             the select's id (for its label)
+    saved          the zone already saved, if any. When empty, the picker
+                   starts on the system timezone the browser reports
+                   (Intl.DateTimeFormat().resolvedOptions().timeZone), read
+                   through ``timezone_aliases_json`` for old names such as
+                   Asia/Calcutta. If the list has no such zone, it stays on
+                   the server's default.
+    label          the visible label (default "Timezone")
+    help           help text under the select
+    errors         the field's errors, if any
+    inherit_label  set to offer a first "Same as task (…)" option whose
+                   value is "" (the member-dates dialog)
+    managed        set when the enclosing dialog decides the zone each time
+                   it opens: the picker then listens for the ``open-dates``
+                   window event and reads ``timezone`` off its detail —
+                   null (or missing) for "nothing saved", which starts on
+                   the system timezone, "" for "Same as task", else a zone.
+
+  Without script the select keeps what the server rendered: the saved zone,
+  or a first empty option that the server reads as its own ``TIME_ZONE``.
+  The note under the select says which zone is the system's, so the Lead
+  can see where the default came from and change it.
+{% endcomment %}
+{% load task_tags %}
+{% timezone_options saved as groups %}
+{% default_timezone_name as server_zone %}
+<div class="form-control w-full mb-3"
+     x-data="timezoneSelect({% if managed %}undefined{% elif saved %}'{{ saved|escapejs }}'{% else %}null{% endif %})"
+     {% if managed %}@open-dates.window="apply($event.detail.timezone === undefined ? null : $event.detail.timezone)"{% endif %}
+     data-timezone-picker>
+  <label for="{{ id }}" class="label py-0.5 pb-1">
+    <span class="label-text text-sm text-brand-navy font-medium">{{ label|default:"Timezone" }}</span>
+  </label>
+  <select id="{{ id }}" name="{{ name }}" class="select select-bordered w-full"
+          x-ref="select" @change="refresh()"
+          data-tz-aliases="{% timezone_aliases_json %}"
+          data-timezone-select>
+    {% if inherit_label %}
+      <option value=""{% if not saved %} selected{% endif %}>{{ inherit_label }}</option>
+    {% elif not saved %}
+      <option value="" selected>Server default ({{ server_zone }})</option>
+    {% endif %}
+    {% for region, options in groups %}
+      {% if region %}<optgroup label="{{ region }}">{% endif %}
+      {% for value, text in options %}
+        <option value="{{ value }}"{% if value == saved %} selected{% endif %}>{{ text }}</option>
+      {% endfor %}
+      {% if region %}</optgroup>{% endif %}
+    {% endfor %}
+  </select>
+  <label class="label pt-1">
+    <span class="label-text-alt text-brand-text/60">
+      <span x-show="note" x-text="note" x-cloak data-timezone-note></span>{% if help %}<span x-show="note" x-cloak> &middot; </span>{{ help }}{% endif %}
+    </span>
+  </label>
+  {% if errors %}
+    <label class="label pt-1"><span class="label-text-alt text-error">{{ errors|join:" " }}</span></label>
+  {% endif %}
+</div>

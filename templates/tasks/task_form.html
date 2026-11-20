@@ -110,12 +110,17 @@
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
 
+    {# The zone the start and due dates are in: the Lead's system timezone for a new task, the saved one when editing. #}
+    <div class="md:col-span-2">
+      {% include "_components/timezone_select.html" with name=form.timezone.html_name id=form.timezone.auto_id saved=form.timezone.value label=form.timezone.label help=form.timezone.help_text errors=form.timezone.errors %}
+    </div>
+
     {# Members' own start dates / deadlines: what happens to them when the task's date moves. #}
     {% if form.individual_start_dates %}
-      {% include "tasks/partials/individual_dates_panel.html" with kind="start_date" choice=form.individual_start_dates date_field=form.start_date original=form.original_start_date rows=form.individual_start_rows noun="start date" %}
+      {% include "tasks/partials/individual_dates_panel.html" with kind="start_date" choice=form.individual_start_dates date_field=form.start_date original=form.original_start_input original_zone=form.original_zone_name rows=form.individual_start_rows noun="start date" %}
     {% endif %}
     {% if form.individual_deadlines %}
-      {% include "tasks/partials/individual_dates_panel.html" with kind="deadline" choice=form.individual_deadlines date_field=form.deadline original=form.original_deadline rows=form.individual_deadline_rows noun="deadline" %}
+      {% include "tasks/partials/individual_dates_panel.html" with kind="deadline" choice=form.individual_deadlines date_field=form.deadline original=form.original_deadline_input original_zone=form.original_zone_name rows=form.individual_deadline_rows noun="deadline" %}
     {% endif %}
 
     <div class="md:col-span-2">

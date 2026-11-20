@@ -203,6 +203,63 @@
   </script>
 
   {% comment %}
+    Timezone picker (_components/timezone_select.html): starts on the user's
+    system timezone unless a zone is already saved. ``saved`` is the saved
+    zone, null when there is none (start on the system's), or undefined when
+    the enclosing dialog calls apply() itself each time it opens. A system
+    zone the list lacks is looked up in the select's alias map (old names
+    such as Asia/Calcutta); failing that the select keeps what the server
+    rendered.
+  {% endcomment %}
+  <script>
+    window.systemTimezone = function () {
+      try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; }
+    };
+    window.timezoneSelect = function (saved) {
+      return {
+        systemZone: "",
+        note: "",
+        init: function () {
+          this.systemZone = window.systemTimezone();
+          if (saved !== undefined) this.apply(saved); else this.refresh();
+        },
+        // The listed option for ``zone``, under its own or its current name.
+        match: function (zone) {
+          if (!zone) return "";
+          var select = this.$refs.select, aliases = {};
+          try { aliases = JSON.parse(select.dataset.tzAliases || "{}"); } catch (e) {}
+          var names = [zone, aliases[zone]];
+          for (var i = 0; i < names.length; i++) {
+            for (var j = 0; j < select.options.length; j++) {
+              if (names[i] && select.options[j].value === names[i]) return names[i];
+            }
+          }
+          return "";
+        },
+        apply: function (value) {
+          var select = this.$refs.select;
+          if (value === null || value === undefined) {
+            var match = this.match(this.systemZone);
+            if (match) select.value = match;
+          } else {
+            select.value = value;
+          }
+          this.refresh();
+          // Tell listeners outside the picker (the task form's individual
+          // dates panel) the zone may have changed.
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        },
+        refresh: function () {
+          var match = this.match(this.systemZone);
+          if (!this.systemZone) this.note = "";
+          else if (match && this.$refs.select.value === match) this.note = "Your system timezone";
+          else this.note = "Your system timezone is " + (match || this.systemZone).replace(/_/g, " ");
+        },
+      };
+    };
+  </script>
+
+  {% comment %}
     Header sort for a plain table, in the browser: x-data="sortableRows()" on
     the <table>, x-ref="rows" on its <tbody>, a _components/sortable_header.html
     per sortable column, and on each row data-order (the server's order) and

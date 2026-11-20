@@ -65,6 +65,7 @@ from apps.tasks.forms import (
     TaskMilestoneForm,
 )
 from apps.tasks.ics import build_ics
+from apps.tasks.timezones import picker_value
 from apps.tasks.import_csv import import_rows, parse_csv
 from apps.tasks.import_form import TaskImportForm
 from apps.tasks.mixins import (
@@ -76,6 +77,7 @@ from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskA
 from apps.tasks.services import (
     UNSET,
     apply_task_date_change,
+    rezone_following_members,
     approve_completion,
     clear_member_dates,
     clear_review,
@@ -789,16 +791,14 @@ class TaskCreateView(
         # A date range picked on the calendar view (?start_date=&deadline=,
         # both YYYY-MM-DD) pre-fills the new task's span; the user still
         # fills in the rest and saves — nothing is created automatically.
+        # Clock times with no zone attached: they are read in whichever zone
+        # the Lead saves the task in (their system timezone by default).
         start_date_param = parse_date(self.request.GET.get("start_date") or "")
         if start_date_param:
-            initial["start_date"] = timezone.make_aware(
-                datetime.combine(start_date_param, time.min)
-            )
+            initial["start_date"] = datetime.combine(start_date_param, time.min)
         deadline_param = parse_date(self.request.GET.get("deadline") or "")
         if deadline_param:
-            initial["deadline"] = timezone.make_aware(
-                datetime.combine(deadline_param, time(23, 59))
-            )
+            initial["deadline"] = datetime.combine(deadline_param, time(23, 59))
         return initial
 
     def form_valid(self, form):
@@ -1033,6 +1033,16 @@ class TaskUpdateView(
         # Read before saving: only members this edit adds hear about it.
         previous_ids = _assignee_ids(self.object)
         task = form.save()
+        actor = self.project_member or _fallback_member(self.request.user, self.project)
+        # A new timezone: members whose own dates follow the task's zone keep
+        # their clock times in it, as the task's dates do.
+        if form.zone_changed():
+            rezone_following_members(
+                task=task,
+                old_zone=form.original_zone_name,
+                new_zone=task.timezone,
+                actor=actor,
+            )
         # A moved start or due date asks what happens to members' own dates
         # of that kind (TaskForm.individual_*): shift, keep or remove them.
         for date_field, choice in form.changed_individual_dates():
@@ -1042,8 +1052,8 @@ class TaskUpdateView(
                 old_value=form.original_dates[date_field],
                 new_value=getattr(task, date_field),
                 choice=choice,
-                actor=self.project_member
-                or _fallback_member(self.request.user, self.project),
+                actor=actor,
+                old_zone=form.original_zone_name,
             )
         if "contribution_type" in form.changed_data and old_type:
             from apps.contributions.services import sync_contribution_type
@@ -1061,7 +1071,14 @@ class TaskUpdateView(
             actor=self.request.user,
             entity=task,
             project=task.project,
-            metadata={"name": task.name},
+            metadata={
+                "name": task.name,
+                **(
+                    {"timezone": task.timezone, "previous_timezone": form.original_zone_name}
+                    if form.zone_changed()
+                    else {}
+                ),
+            },
         )
         if self.request.headers.get("HX-Request"):
             response = render(
@@ -1125,7 +1142,8 @@ class TaskImportView(
             return self.form_invalid(form)
 
         created, row_errors = import_rows(
-            self.project, rows, user=self.request.user
+            self.project, rows, user=self.request.user,
+            timezone=form.cleaned_data.get("timezone") or None,
         )
 
         if created == 0 and row_errors and row_errors[0].startswith("import failed"):
@@ -1356,9 +1374,10 @@ def _task_status_context(task, *, project_member, is_project_manager):
     # task has no dates left to keep.
     can_set_dates = is_project_manager and task.status != TaskStatus.COMPLETED
 
-    def picker(value):
-        """A date as the Lead's date picker (datetime-local) takes it."""
-        return timezone.localtime(value).strftime("%Y-%m-%dT%H:%M") if value else ""
+    def picker(value, zone):
+        """A date as the Lead's date picker (datetime-local) takes it, in
+        ``zone``."""
+        return picker_value(value, zone)
 
     assignee_states = []
     for member in assignees:
@@ -1372,6 +1391,8 @@ def _task_status_context(task, *, project_member, is_project_manager):
         own_start = individual.start_date if individual else None
         own_deadline = individual.deadline if individual else None
         effective_deadline = own_deadline or task.deadline
+        # The zone governing the member's own dates: theirs, else the task's.
+        own_zone = (individual.timezone if individual else "") or task.timezone
         reviewed = log is not None and log.is_reviewed
         verified = log is not None and log.is_verified
         # A review given before the task was completed stays as it was, and
@@ -1462,6 +1483,14 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 "own_deadline": own_deadline,
                 "start_date": own_start or task.start_date,
                 "deadline": effective_deadline,
+                # The zone each of those is shown in: the member's own for
+                # an own date, the task's for one they follow.
+                "start_tz": own_zone if own_start else task.timezone,
+                "deadline_tz": own_zone if own_deadline else task.timezone,
+                # The zone saved with their own dates ("" follows the
+                # task's), or None when they have no own dates — the dialog
+                # then starts on the Lead's system timezone.
+                "own_timezone": individual.timezone if individual else None,
                 # Late on their own deadline: open task, part not done.
                 "overdue": bool(
                     effective_deadline is not None
@@ -1472,8 +1501,8 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 "can_set_dates": can_set_dates,
                 # Pre-fill the Lead's dialog with the member's own dates
                 # only: a date left empty there follows the task's.
-                "own_start_input": picker(own_start),
-                "own_deadline_input": picker(own_deadline),
+                "own_start_input": picker(own_start, own_zone),
+                "own_deadline_input": picker(own_deadline, own_zone),
                 # The type their credit is filed under: their own, when a
                 # Lead set one (``AssigneeContributionType``), else the
                 # task's. ``own_type`` is the entry, None when they follow
@@ -2018,6 +2047,7 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             )
         start_date = form.cleaned_data["start_date"]
         deadline = form.cleaned_data["deadline"]
+        zone = form.cleaned_data["timezone"]
         reason = form.cleaned_data["reason"]
         if scope == "pending":
             if not set_pending_dates(
@@ -2025,6 +2055,7 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                 lead=lead,
                 start_date=UNSET if start_date is None else start_date,
                 deadline=UNSET if deadline is None else deadline,
+                timezone=zone,
                 reason=reason or None,
             ):
                 return HttpResponseBadRequest(
@@ -2033,7 +2064,8 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         else:
             set_member_dates(
                 task=self.task, member=member, lead=lead,
-                start_date=start_date, deadline=deadline, reason=reason,
+                start_date=start_date, deadline=deadline, timezone=zone,
+                reason=reason,
             )
         return _respond_status_block(
             request, self.task,

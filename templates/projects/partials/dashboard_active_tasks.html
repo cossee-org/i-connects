@@ -1,3 +1,4 @@
+{% load task_tags %}
 {% comment %}
 The active-task rows of the dashboard's "Active tasks and requests"
 list — tasks assigned to the current user and tasks they review, merged,
@@ -47,7 +48,7 @@ heading of its own.
                        stroke-width="1.8" stroke="currentColor" class="w-3 h-3 shrink-0" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                   </svg>
-                  {% if task.my_deadline < now %}Overdue &middot; {% else %}Due {% endif %}{{ task.my_deadline|date:"M j" }}{% if task.my_deadline != task.deadline %} (yours){% endif %}
+                  {% if task.my_deadline < now %}Overdue &middot; {% else %}Due {% endif %}{{ task.my_deadline|in_zone:task.my_deadline_tz|date:"M j" }}{% if task.my_deadline != task.deadline %} (yours){% endif %}
                 </span>
               {% endif %}
             </div>

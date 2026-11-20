@@ -7,6 +7,13 @@ from django.db.models import Exists, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from apps.core.enums import AutoAssignNew, CompletedAs, ContributionType, TaskStatus
+from apps.tasks.timezones import default_zone_name, get_zone, validate_timezone
+
+
+def default_task_timezone() -> str:
+    """A task's zone when none is chosen: the server's ``TIME_ZONE``. The
+    task form preselects the Lead's system timezone instead."""
+    return default_zone_name()
 
 
 class KanbanBoard(models.Model):
@@ -99,18 +106,24 @@ class TaskQuerySet(models.QuerySet):
 
     def with_my_deadline(self, user):
         """Annotate ``my_deadline``: ``user``'s individual deadline on each
-        task where a Lead set one, else the task's own deadline."""
-        from django.db.models import F
-        from django.db.models.functions import Coalesce
+        task where a Lead set one, else the task's own deadline — and
+        ``my_deadline_tz``, the zone that governs it: the member's own zone
+        where they have one with their own deadline, else the task's."""
+        from django.db.models import F, Value
+        from django.db.models.functions import Coalesce, NullIf
 
-        personal = (
-            AssigneeDeadline.objects.filter(
-                task_id=OuterRef("pk"), member__users=user, deadline__isnull=False
-            )
-            .order_by("deadline")
-            .values("deadline")[:1]
+        personal = AssigneeDeadline.objects.filter(
+            task_id=OuterRef("pk"), member__users=user, deadline__isnull=False
+        ).order_by("deadline")
+        return self.annotate(
+            my_deadline=Coalesce(
+                Subquery(personal.values("deadline")[:1]), F("deadline")
+            ),
+            my_deadline_tz=Coalesce(
+                NullIf(Subquery(personal.values("timezone")[:1]), Value("")),
+                F("timezone"),
+            ),
         )
-        return self.annotate(my_deadline=Coalesce(Subquery(personal), F("deadline")))
 
     def overdue_for(self, user, now=None):
         """Open tasks past ``user``'s own deadline on them. Annotates
@@ -155,6 +168,17 @@ class Task(models.Model):
     # Task metadata
     deadline = models.DateTimeField(null=True, blank=True)
     start_date = models.DateTimeField(null=True, blank=True)
+    timezone = models.CharField(
+        max_length=64,
+        default=default_task_timezone,
+        validators=[validate_timezone],
+        help_text=(
+            "IANA timezone governing the task's start and due dates: the "
+            "Lead's clock time is read in it, and the dates are shown in it. "
+            "An assignee's own dates may carry a zone of their own "
+            "(``AssigneeDeadline.timezone``)."
+        ),
+    )
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     tags = models.JSONField(null=True, blank=True)
@@ -380,6 +404,35 @@ class Task(models.Model):
             for d in self.assignee_deadlines.all()
             if d.start_date is not None
         }
+
+    @property
+    def tz(self):
+        """The ``ZoneInfo`` governing the task's own dates."""
+        return get_zone(self.timezone)
+
+    def _own_entry(self, member):
+        if member is None or member.pk is None:
+            return None
+        for entry in self.assignee_deadlines.all():
+            if entry.member_id == member.pk:
+                return entry
+        return None
+
+    def start_zone_for(self, member):
+        """The zone governing ``member``'s start date: their own zone when
+        they have their own start date, else the task's."""
+        entry = self._own_entry(member)
+        if entry is not None and entry.start_date is not None:
+            return entry.tz
+        return self.tz
+
+    def deadline_zone_for(self, member):
+        """The zone governing ``member``'s deadline: their own zone when they
+        have their own deadline, else the task's."""
+        entry = self._own_entry(member)
+        if entry is not None and entry.deadline is not None:
+            return entry.tz
+        return self.tz
 
     def start_date_for(self, member):
         """``member``'s effective start date: their individual one, if a Lead
@@ -628,6 +681,17 @@ class AssigneeDeadline(models.Model):
     )
     start_date = models.DateTimeField(null=True, blank=True)
     deadline = models.DateTimeField(null=True, blank=True)
+    timezone = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        validators=[validate_timezone],
+        help_text=(
+            "IANA timezone governing this member's own dates. Empty follows "
+            "the task's zone. A date the member follows from the task stays "
+            "in the task's zone."
+        ),
+    )
     reason = models.CharField(max_length=500, blank=True, default="")
     set_by = models.ForeignKey(
         "projects.ProjectMember",
@@ -650,6 +714,12 @@ class AssigneeDeadline(models.Model):
 
     def __str__(self) -> str:
         return f"Individual dates for member {self.member_id} on task {self.task_id}"
+
+    @property
+    def tz(self):
+        """The ``ZoneInfo`` governing this member's own dates: their own
+        zone, else the task's."""
+        return get_zone(self.timezone or self.task.timezone)
 
 
 class AssigneeContributionType(models.Model):

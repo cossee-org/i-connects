@@ -1,46 +1,58 @@
 {% comment %}
   Asked on the task form (editing only) when some assignees have their own
   start date or deadline — one panel per kind, included by task_form.html.
-  Hidden until the Lead changes the task's matching date, then asks what
-  happens to those members' own dates: shift them by the same amount
-  (previewed per member), keep their dates, or remove them so they follow
-  the task's new date. Shift needs a date on both sides; with either
-  missing it is switched off and Keep is chosen. TaskForm insists on an
-  answer whenever the date changes, so the question is asked every time,
-  with or without script.
+  Hidden until the Lead changes the task's matching date (or its timezone,
+  which moves it in time), then asks what happens to those members' own
+  dates: shift them by the same amount on the clock (previewed per member),
+  keep their dates, or remove them so they follow the task's new date.
+  Shift needs a date on both sides; with either missing it is switched off
+  and Keep is chosen. TaskForm insists on an answer whenever the date
+  changes, so the question is asked every time, with or without script.
+
+  The preview works on clock times alone (each read as if in UTC), which is
+  how the server shifts: by the distance on the clock, in the zone that
+  governs each member's date (``timezones.carried_own_date``).
 
   Expects kind ("start_date" / "deadline"), choice (the bound choice field),
   date_field (the task's bound date field it watches), original (the task's
-  date before this edit), rows ((member, own date) pairs) and noun ("start
-  date" / "deadline").
+  date before this edit, as the picker writes it, in original_zone — the
+  task's zone before this edit), rows ((member, own date, the zone it is in,
+  its clock time there) rows) and noun ("start date" / "deadline").
 {% endcomment %}
 <fieldset class="md:col-span-2 mb-3 rounded-lg border border-brand-light/60 bg-brand-lighter/40 p-3"
           data-individual-dates="{{ kind }}"
           x-data="{
-            original: '{% if original %}{{ original|date:"Y-m-d\TH:i" }}{% endif %}',
+            original: '{{ original|default:""|escapejs }}',
+            originalZone: '{{ original_zone|default:""|escapejs }}',
             current: '',
+            zone: '',
             choice: '{{ choice.value|default:"keep" }}',
-            get changed() { return this.current !== this.original },
+            get changed() { return this.current !== this.original || (!!(this.current || this.original) && !!this.zone && this.zone !== this.originalZone) },
             get canShift() { return !!(this.original && this.current) },
             shifted(value) {
-              const d = new Date(new Date(value).getTime() + (new Date(this.current) - new Date(this.original)))
-              return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+              const clock = (v) => new Date(v + 'Z').getTime()
+              const d = new Date(clock(value) + (clock(this.current) - clock(this.original)))
+              return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
             },
           }"
-          x-init="const input = $el.closest('form').querySelector('[name={{ date_field.html_name }}]');
-                  const sync = () => { current = input.value; if (!canShift && choice === 'shift') choice = 'keep' };
-                  sync(); input.addEventListener('input', sync); input.addEventListener('change', sync)"
+          x-init="const form = $el.closest('form');
+                  const input = form.querySelector('[name={{ date_field.html_name }}]');
+                  const zoneInput = form.querySelector('[name=timezone]');
+                  const sync = () => { current = input.value; zone = zoneInput ? zoneInput.value : ''; if (!canShift && choice === 'shift') choice = 'keep' };
+                  sync(); input.addEventListener('input', sync); input.addEventListener('change', sync);
+                  if (zoneInput) zoneInput.addEventListener('change', sync)"
           x-show="changed{% if choice.errors %} || true{% endif %}" x-cloak>
   <legend class="sr-only">{{ choice.label }}</legend>
   <p class="text-sm font-medium text-brand-navy">
     {% with n=rows|length %}{{ n }} assignee{{ n|pluralize:" has,s have" }} their own {{ noun }}{{ n|pluralize }}. What should happen to {{ n|pluralize:"it,them" }}?{% endwith %}
   </p>
   <ul class="mt-2 flex flex-col gap-1 text-sm" data-individual-date-members>
-    {% for member, own in rows %}
+    {% load task_tags %}
+    {% for member, own, own_zone, own_input in rows %}
       <li class="flex flex-wrap items-baseline gap-x-2">
         <span class="text-brand-navy">{{ member.display_name }}</span>
-        <span class="text-brand-text/70">{{ own|date:"M j, Y" }}</span>
-        <span class="text-brand-text/70" x-show="choice === 'shift' && canShift" x-cloak>&rarr; <span class="font-medium text-brand-navy" x-text="shifted('{{ own|date:"Y-m-d\TH:i" }}')"></span></span>
+        <span class="text-brand-text/70" title="{{ own|in_zone:own_zone|date:"M j, Y g:i A T" }}">{{ own|in_zone:own_zone|date:"M j, Y" }}</span>
+        <span class="text-brand-text/70" x-show="choice === 'shift' && canShift" x-cloak>&rarr; <span class="font-medium text-brand-navy" x-text="shifted('{{ own_input }}')"></span></span>
         <span class="text-brand-text/70" x-show="choice === 'clear'" x-cloak>&rarr; <span class="font-medium text-brand-navy">follows the task's</span></span>
       </li>
     {% endfor %}
