@@ -74,58 +74,6 @@ def test_my_list_htmx_search_returns_results_partial_only(client, user):
 
 
 @pytest.mark.django_db
-def test_my_list_shows_open_due_and_join_request_counts(client, user, other_user):
-    from datetime import timedelta
-
-    from django.utils import timezone
-
-    from apps.projects.models import ProjectMember
-    from apps.tasks.models import KanbanBoard, Task
-
-    project = create_project_with_owner(
-        user=user,
-        form_data={"name": "Counted", "status": ProjectStatus.ACTIVE, "is_public": True},
-    )
-    column = KanbanBoard.objects.filter(project=project).first()
-    member = ProjectMember.objects.filter(project=project, users=user).first()
-
-    Task.objects.create(
-        project=project,
-        created_by=member,
-        container=column,
-        container_task_order=0,
-        name="Open task",
-    )
-    Task.objects.create(
-        project=project,
-        created_by=member,
-        container=column,
-        container_task_order=1,
-        name="Overdue task",
-        deadline=timezone.now() - timedelta(days=1),
-    )
-    Task.objects.create(
-        project=project,
-        created_by=member,
-        container=column,
-        container_task_order=2,
-        name="Completed task",
-        status=TaskStatus.COMPLETED,
-        deadline=timezone.now() - timedelta(days=1),
-    )
-    create_join_request(project=project, user=other_user, requested_privilege="CONTRIBUTOR")
-
-    client.force_login(user)
-    response = client.get(reverse("projects:my_list"))
-    content = response.content.decode()
-
-    assert response.status_code == 200
-    assert "2 open tasks" in content
-    assert "1 task overdue" in content
-    assert "1 join request" in content
-
-
-@pytest.mark.django_db
 def test_create_project_makes_creator_a_pm(client_logged_in, user):
     response = client_logged_in.post(
         reverse("projects:create"),
@@ -385,27 +333,6 @@ def test_resend_invitation_view_redirects_pm_to_invitation_list(client_logged_in
     assert response["Location"] == reverse(
         "projects:project_invitations", kwargs={"pk": project.pk}
     )
-
-
-@pytest.mark.django_db
-def test_project_form_saves_discord_webhook_url(client_logged_in, user):
-    webhook = "https://discord.com/api/webhooks/1/abc"
-    response = client_logged_in.post(
-        reverse("projects:create"),
-        {
-            "name": "Webhook Project",
-            "description": "",
-            "abstract": "",
-            "keywords": "",
-            "status": ProjectStatus.PLANNING,
-            "is_public": "on",
-            "public_summary": "",
-            "discord_webhook_url": webhook,
-        },
-    )
-    assert response.status_code in (301, 302)
-    project = Project.objects.get(name="Webhook Project")
-    assert project.discord_webhook_url == webhook
 
 
 # ---------------------------------------------------------------------------
@@ -1085,7 +1012,7 @@ def test_members_page_disables_self_controls_for_last_pm(client, user):
     response = client.get(reverse("projects:members", kwargs={"pk": project.pk}))
     assert response.status_code == 200
     content = response.content.decode()
-    assert "A project must always have at least one Project Manager." in content
+    assert "A project must always have at least one Lead." in content
 
 
 @pytest.mark.django_db

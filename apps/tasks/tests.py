@@ -220,13 +220,14 @@ def test_assigning_new_member_seeds_tasklog(client, user, other_user):
     assert response.status_code == 200
     assert TaskLog.objects.filter(task=task, assigned_to=extra_member).count() == 1
     assert TaskLog.objects.filter(task=task, assigned_to=pm_member).count() == 1
-    # The response asks the page to refresh the activity timeline.
+    # The response asks the page to refresh the Completion block.
     assert response["HX-Trigger"] == "assignees-changed"
 
-    # The activity endpoint now renders a thread for the new member.
-    activity = client.get(reverse("tasks:activity", kwargs={"pk": task.pk}))
-    new_log = TaskLog.objects.get(task=task, assigned_to=extra_member)
-    assert f'id="task-log-{new_log.pk}"' in activity.content.decode()
+    # The Completion block now renders a row for the new member.
+    block = client.get(
+        reverse("tasks:status_block", kwargs={"pk": task.pk}), {"pane": "1"}
+    )
+    assert f'data-assignee-row="{extra_member.pk}"' in block.content.decode()
 
     # Re-submitting with the same members does not duplicate logs.
     client.post(
@@ -291,9 +292,11 @@ def test_assigning_backfills_member_missing_a_tasklog(client, user, other_user):
         HTTP_HX_REQUEST="true",
     )
     assert response.status_code == 200
-    seeded_log = TaskLog.objects.get(task=task, assigned_to=no_log_member)
-    activity = client.get(reverse("tasks:activity", kwargs={"pk": task.pk}))
-    assert f'id="task-log-{seeded_log.pk}"' in activity.content.decode()
+    assert TaskLog.objects.filter(task=task, assigned_to=no_log_member).count() == 1
+    block = client.get(
+        reverse("tasks:status_block", kwargs={"pk": task.pk}), {"pane": "1"}
+    )
+    assert f'data-assignee-row="{no_log_member.pk}"' in block.content.decode()
 
 
 @pytest.mark.django_db
@@ -499,7 +502,7 @@ def test_member_can_view_comment_and_complete(client, user, other_user):
         name="Viewable",
     )
     task.assigned_members.add(contrib_member)
-    log = TaskLog.objects.create(task=task, assigned_to=contrib_member)
+    TaskLog.objects.create(task=task, assigned_to=contrib_member)
     client.force_login(other_user)
 
     # View the task detail.
@@ -510,11 +513,11 @@ def test_member_can_view_comment_and_complete(client, user, other_user):
 
     # Post a comment.
     comment = client.post(
-        reverse("comments:create", kwargs={"task_pk": task.pk, "log_pk": log.pk}),
+        reverse("comments:create", kwargs={"task_pk": task.pk}),
         {"content": "Looks good"},
     )
     assert comment.status_code in (200, 201)
-    assert task.task_logs.get(pk=log.pk).comments.filter(content="Looks good").exists()
+    assert task.comments.filter(content="Looks good", author=contrib_member).exists()
 
     # Mark the task done (members are allowed to).
     done = client.post(reverse("tasks:complete", kwargs={"pk": task.pk}))
