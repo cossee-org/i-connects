@@ -52,7 +52,7 @@ from apps.tasks.calendar import (
     shift_date,
 )
 from apps.tasks.forms import (
-    AssigneeDeadlineForm,
+    AssigneeDatesForm,
     KanbanBoardForm,
     MilestoneForm,
     TaskAssignForm,
@@ -69,9 +69,10 @@ from apps.tasks.mixins import (
 )
 from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
 from apps.tasks.services import (
-    apply_task_deadline_change,
+    UNSET,
+    apply_task_date_change,
     approve_completion,
-    clear_member_deadline,
+    clear_member_dates,
     clear_review,
     close_task,
     mark_own_done,
@@ -82,8 +83,8 @@ from apps.tasks.services import (
     reopen_task,
     review_closed,
     review_locked,
-    set_member_deadline,
-    set_pending_deadlines,
+    set_member_dates,
+    set_pending_dates,
     unverify_part,
     verify_part,
     verify_parts,
@@ -1024,14 +1025,15 @@ class TaskUpdateView(
         # Read before saving: only members this edit adds hear about it.
         previous_ids = _assignee_ids(self.object)
         task = form.save()
-        # A moved due date asks what happens to members' own deadlines
-        # (TaskForm.individual_deadlines): shift, keep or remove them.
-        if "individual_deadlines" in form.fields and form.deadline_changed:
-            apply_task_deadline_change(
+        # A moved start or due date asks what happens to members' own dates
+        # of that kind (TaskForm.individual_*): shift, keep or remove them.
+        for date_field, choice in form.changed_individual_dates():
+            apply_task_date_change(
                 task=task,
-                old_deadline=form.original_deadline,
-                new_deadline=task.deadline,
-                choice=form.cleaned_data.get("individual_deadlines") or "keep",
+                field=date_field,
+                old_value=form.original_dates[date_field],
+                new_value=getattr(task, date_field),
+                choice=choice,
                 actor=self.project_member
                 or _fallback_member(self.request.user, self.project),
             )
@@ -1328,17 +1330,24 @@ def _task_status_context(task, *, project_member, is_project_manager):
         needs_review and (is_project_manager or task.is_reviewer(project_member))
     )
     locked = _marks_locked(task)
-    personal_deadlines = {d.member_id: d for d in task.assignee_deadlines.all()}
+    individual_dates = {d.member_id: d for d in task.assignee_deadlines.all()}
     now = timezone.now()
-    # A Lead sets individual deadlines while the task is open; a completed
-    # task has no deadline left to meet.
-    can_set_deadlines = is_project_manager and task.status != TaskStatus.COMPLETED
+    # A Lead sets members' own dates while the task is open; a completed
+    # task has no dates left to keep.
+    can_set_dates = is_project_manager and task.status != TaskStatus.COMPLETED
+
+    def picker(value):
+        """A date as the Lead's date picker (datetime-local) takes it."""
+        return timezone.localtime(value).strftime("%Y-%m-%dT%H:%M") if value else ""
+
     assignee_states = []
     for member in assignees:
         log = current.get(member.id)
         done = log is not None and log.status == TaskStatus.COMPLETED
-        personal = personal_deadlines.get(member.id)
-        effective_deadline = personal.deadline if personal else task.deadline
+        individual = individual_dates.get(member.id)
+        own_start = individual.start_date if individual else None
+        own_deadline = individual.deadline if individual else None
+        effective_deadline = own_deadline or task.deadline
         reviewed = log is not None and log.is_reviewed
         verified = log is not None and log.is_verified
         # A review given before the task was completed stays as it was, and
@@ -1420,7 +1429,14 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 "awaiting_verification": done and not verified,
                 # The member's own deadline, when a Lead set one: it replaces
                 # the task's for them alone (``AssigneeDeadline``).
-                "personal_deadline": personal,
+                # The member's own dates, when a Lead set them
+                # (``AssigneeDeadline``): each replaces the task's for them
+                # alone. ``start_date`` / ``deadline`` are what holds for
+                # them, own or the task's.
+                "individual": individual,
+                "own_start": own_start,
+                "own_deadline": own_deadline,
+                "start_date": own_start or task.start_date,
                 "deadline": effective_deadline,
                 # Late on their own deadline: open task, part not done.
                 "overdue": bool(
@@ -1429,15 +1445,11 @@ def _task_status_context(task, *, project_member, is_project_manager):
                     and not done
                     and task.status != TaskStatus.COMPLETED
                 ),
-                "can_set_deadline": can_set_deadlines,
-                # Pre-fills the Lead's deadline picker (datetime-local) —
-                # left empty once it has passed, since the picker only
-                # takes a date still to come.
-                "deadline_input": (
-                    timezone.localtime(effective_deadline).strftime("%Y-%m-%dT%H:%M")
-                    if effective_deadline is not None and effective_deadline > now
-                    else ""
-                ),
+                "can_set_dates": can_set_dates,
+                # Pre-fill the Lead's dialog with the member's own dates
+                # only: a date left empty there follows the task's.
+                "own_start_input": picker(own_start),
+                "own_deadline_input": picker(own_deadline),
             }
         )
     my_state = next(
@@ -1464,14 +1476,9 @@ def _task_status_context(task, *, project_member, is_project_manager):
         ),
         "assignee_count": len(assignee_states),
         # The Lead's "Set deadline for all not done" covers these members.
-        "pending_deadline_count": sum(1 for s in assignee_states if not s["done"]),
-        # ...and its picker starts at the task deadline, if still to come.
-        "task_deadline_input": (
-            timezone.localtime(task.deadline).strftime("%Y-%m-%dT%H:%M")
-            if task.deadline is not None and task.deadline > now
-            else ""
-        ),
-        "can_set_deadlines": can_set_deadlines,
+        # The Lead's "Set dates for all not done" covers these members.
+        "pending_dates_count": sum(1 for s in assignee_states if not s["done"]),
+        "can_set_dates": can_set_dates,
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
         # Whether the viewer reviews on this task at all. The per-row
@@ -1913,33 +1920,34 @@ class TaskVerifyBatchView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         )
 
 
-class TaskDeadlineView(LoginRequiredMixin, TaskMemberAccessMixin, View):
-    """A Lead sets or removes individual deadlines on a task.
+class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """A Lead sets or removes members' own start dates and deadlines.
 
-    POST ``member=<id>`` with ``deadline`` (and an optional ``reason``) gives
-    that assignee their own deadline; add ``action=clear`` to remove it and
-    put them back on the task's. POST ``scope=pending`` with ``deadline``
-    gives the same deadline to every assignee who has not marked their part
-    done. An individual deadline may be earlier or later than the task's,
-    which still holds for the task and everyone else.
+    POST ``member=<id>`` with ``start_date`` and/or ``deadline`` (and an
+    optional ``reason``) sets that assignee's own dates; a date left empty
+    follows the task's, and both empty removes them. ``action=clear`` removes
+    them outright. POST ``scope=pending`` with either date gives it to every
+    assignee who has not marked their part done; a date left empty is left
+    as each member has it. Each date may be earlier or later than the
+    task's, which still holds for the task and everyone else.
 
-    Refused on a completed task: there is no deadline left to meet.
+    Refused on a completed task: there are no dates left to keep.
     """
 
     def post(self, request, *args, **kwargs):
         if not self.is_project_manager:
             return HttpResponseForbidden(
-                "Only a Lead can change a member's deadline."
+                "Only a Lead can change a member's dates."
             )
         if self.task.status == TaskStatus.COMPLETED:
             return HttpResponseForbidden(
                 "This task is marked completed. Mark it not complete before "
-                "changing anyone's deadline."
+                "changing anyone's dates."
             )
         lead = self.project_member or _fallback_member(request.user, self.project)
-        scope = request.POST.get("scope")
-        member = None
-        if scope != "pending":
+        scope = "pending" if request.POST.get("scope") == "pending" else "member"
+        member = current = None
+        if scope == "member":
             member = self.task.assigned_members.filter(
                 pk=request.POST.get("member") or 0
             ).first()
@@ -1948,30 +1956,38 @@ class TaskDeadlineView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                     "That member is not assigned to this task."
                 )
             if request.POST.get("action") == "clear":
-                clear_member_deadline(task=self.task, member=member, actor=lead)
+                clear_member_dates(task=self.task, member=member, actor=lead)
                 return _respond_status_block(
                     request, self.task,
                     project_member=self.project_member,
                     is_project_manager=self.is_project_manager,
                 )
-        form = AssigneeDeadlineForm(request.POST)
+            current = self.task.assignee_deadlines.filter(member=member).first()
+        form = AssigneeDatesForm(
+            request.POST, task=self.task, scope=scope, current=current
+        )
         if not form.is_valid():
             return HttpResponseBadRequest(
                 " ".join(str(e) for errors in form.errors.values() for e in errors)
             )
+        start_date = form.cleaned_data["start_date"]
         deadline = form.cleaned_data["deadline"]
         reason = form.cleaned_data["reason"]
-        if member is None:
-            if not set_pending_deadlines(
-                task=self.task, deadline=deadline, lead=lead, reason=reason
+        if scope == "pending":
+            if not set_pending_dates(
+                task=self.task,
+                lead=lead,
+                start_date=UNSET if start_date is None else start_date,
+                deadline=UNSET if deadline is None else deadline,
+                reason=reason or None,
             ):
                 return HttpResponseBadRequest(
                     "Every assignee has already marked their part done."
                 )
         else:
-            set_member_deadline(
-                task=self.task, member=member, deadline=deadline, lead=lead,
-                reason=reason,
+            set_member_dates(
+                task=self.task, member=member, lead=lead,
+                start_date=start_date, deadline=deadline, reason=reason,
             )
         return _respond_status_block(
             request, self.task,

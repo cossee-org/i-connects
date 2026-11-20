@@ -47,9 +47,10 @@ def due_hint(task, member=None):
     says that.
 
     Pass the viewer's ``ProjectMember`` (``task|due_hint:project_member``):
-    when a Lead gave them an individual deadline, the hint speaks to theirs
-    instead — "Your deadline Mar 19 · 4 days left", or "Your deadline
-    passed Mar 12" — since the dates beside it are the task's.
+    when a Lead gave them their own dates, the hint speaks to those instead,
+    since the dates beside it are the task's — "Your start Nov 20", then
+    "Your deadline Nov 25 · 4 days left" or "Your deadline passed Nov 12",
+    joined with a middle dot.
     """
     from django.utils import timezone
 
@@ -57,17 +58,22 @@ def due_hint(task, member=None):
 
     if task.status == TaskStatus.COMPLETED:
         return ""
-    personal = None
+    own_start = own_deadline = None
     if member and getattr(member, "pk", None):
-        personal = task.personal_deadlines().get(member.pk)
-    if personal is not None:
-        date = timezone.localtime(personal).strftime("%b %-d")
-        if personal < timezone.now():
-            return f"Your deadline passed {date}"
-        return f"Your deadline {date} · {_days_left(personal)}"
-    if not task.deadline or task.is_past_due:
-        return ""
-    return _days_left(task.deadline)
+        own_start = task.personal_start_dates().get(member.pk)
+        own_deadline = task.personal_deadlines().get(member.pk)
+    parts = []
+    if own_start is not None:
+        parts.append(f"Your start {timezone.localtime(own_start):%b %-d}")
+    if own_deadline is not None:
+        date = f"{timezone.localtime(own_deadline):%b %-d}"
+        if own_deadline < timezone.now():
+            parts.append(f"Your deadline passed {date}")
+        else:
+            parts.append(f"Your deadline {date} · {_days_left(own_deadline)}")
+    elif task.deadline and not task.is_past_due:
+        parts.append(_days_left(task.deadline))
+    return " · ".join(parts)
 
 
 def _days_left(deadline) -> str:

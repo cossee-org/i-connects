@@ -21,10 +21,10 @@ from apps.projects.models import ProjectMember, ProjectPrivilege
 from apps.projects.services import create_project_with_owner
 from apps.tasks.models import AssigneeDeadline, KanbanBoard, Task, TaskLog
 from apps.tasks.services import (
-    clear_member_deadline,
+    clear_member_dates,
     mark_own_done,
-    set_member_deadline,
-    set_pending_deadlines,
+    set_member_dates,
+    set_pending_dates,
 )
 
 
@@ -72,7 +72,7 @@ def _setup(lead_user, *others, deadline_days=-2):
 
 def _post(client, task, **data):
     return client.post(
-        reverse("tasks:member_deadline", kwargs={"pk": task.pk}),
+        reverse("tasks:member_dates", kwargs={"pk": task.pk}),
         {"pane_mode": "1", **data},
         HTTP_HX_REQUEST="true",
     )
@@ -181,7 +181,7 @@ def test_deadline_refused_on_a_completed_task(client, pm_user, other_user):
 @pytest.mark.django_db
 def test_lead_removes_an_individual_deadline(client, pm_user, other_user):
     _project, task, lead, [bob] = _setup(pm_user, other_user)
-    set_member_deadline(
+    set_member_dates(
         task=task, member=bob, deadline=timezone.now() + timedelta(days=3), lead=lead
     )
     client.force_login(pm_user)
@@ -199,9 +199,9 @@ def test_setting_and_removing_write_audit_rows_and_tell_the_member(pm_user, othe
     first = timezone.now() + timedelta(days=3)
     second = timezone.now() + timedelta(days=6)
 
-    set_member_deadline(task=task, member=bob, deadline=first, lead=lead, reason="Ill")
-    set_member_deadline(task=task, member=bob, deadline=second, lead=lead, reason="Ill")
-    clear_member_deadline(task=task, member=bob, actor=lead)
+    set_member_dates(task=task, member=bob, deadline=first, lead=lead, reason="Ill")
+    set_member_dates(task=task, member=bob, deadline=second, lead=lead, reason="Ill")
+    clear_member_dates(task=task, member=bob, actor=lead)
 
     rows = list(
         AuditLog.objects.filter(
@@ -228,8 +228,8 @@ def test_setting_and_removing_write_audit_rows_and_tell_the_member(pm_user, othe
 def test_setting_the_same_deadline_twice_writes_nothing_new(pm_user, other_user):
     _project, task, lead, [bob] = _setup(pm_user, other_user)
     when = timezone.now() + timedelta(days=3)
-    set_member_deadline(task=task, member=bob, deadline=when, lead=lead)
-    set_member_deadline(task=task, member=bob, deadline=when, lead=lead)
+    set_member_dates(task=task, member=bob, deadline=when, lead=lead)
+    set_member_dates(task=task, member=bob, deadline=when, lead=lead)
     assert AuditLog.objects.filter(action=AuditAction.TASK_DEADLINE_SET).count() == 1
 
 
@@ -237,7 +237,7 @@ def test_setting_the_same_deadline_twice_writes_nothing_new(pm_user, other_user)
 def test_unassigning_drops_the_individual_deadline(pm_user, user, other_user):
     _project, task, lead, [alice, bob] = _setup(pm_user, user, other_user)
     for m in (alice, bob):
-        set_member_deadline(
+        set_member_dates(
             task=task, member=m, deadline=timezone.now() + timedelta(days=3), lead=lead
         )
 
@@ -299,7 +299,7 @@ def test_task_is_extended_when_everyone_still_working_has_a_later_deadline(
     assert task.is_overdue and not task.is_extended
 
     # One of two still working has an extension: still overdue.
-    set_member_deadline(task=task, member=alice, deadline=later, lead=lead)
+    set_member_dates(task=task, member=alice, deadline=later, lead=lead)
     assert task.is_overdue and not task.is_extended
     assert list(Task.objects.overdue()) == [task]
     assert not Task.objects.extended().exists()
@@ -314,7 +314,7 @@ def test_task_is_extended_when_everyone_still_working_has_a_later_deadline(
 @pytest.mark.django_db
 def test_extension_that_has_itself_passed_makes_the_task_overdue_again(pm_user, other_user):
     _project, task, lead, [bob] = _setup(pm_user, other_user, deadline_days=-5)
-    entry = set_member_deadline(
+    entry = set_member_dates(
         task=task, member=bob, deadline=timezone.now() + timedelta(days=1), lead=lead
     )
     assert task.is_extended
@@ -338,7 +338,7 @@ def test_task_with_nobody_assigned_or_everyone_done_stays_overdue(pm_user, other
 @pytest.mark.django_db
 def test_earlier_individual_deadline_does_not_make_the_task_overdue(pm_user, other_user):
     _project, task, lead, [bob] = _setup(pm_user, other_user, deadline_days=10)
-    entry = set_member_deadline(
+    entry = set_member_dates(
         task=task, member=bob, deadline=timezone.now() + timedelta(days=1), lead=lead
     )
     AssigneeDeadline.objects.filter(pk=entry.pk).update(
@@ -352,7 +352,7 @@ def test_earlier_individual_deadline_does_not_make_the_task_overdue(pm_user, oth
 @pytest.mark.django_db
 def test_board_shows_extended_and_filters_it(client, pm_user, other_user):
     project, task, lead, [bob] = _setup(pm_user, other_user)
-    set_member_deadline(
+    set_member_dates(
         task=task, member=bob, deadline=timezone.now() + timedelta(days=3), lead=lead
     )
     client.force_login(pm_user)
@@ -373,7 +373,7 @@ def test_project_overview_does_not_count_an_extended_task_overdue(client, pm_use
     url = reverse("projects:detail", kwargs={"pk": project.pk})
     assert client.get(url).context["overdue_count"] == 1
 
-    set_member_deadline(
+    set_member_dates(
         task=task, member=bob, deadline=timezone.now() + timedelta(days=3), lead=lead
     )
     assert client.get(url).context["overdue_count"] == 0
@@ -387,7 +387,7 @@ def test_project_overview_does_not_count_an_extended_task_overdue(client, pm_use
 @pytest.mark.django_db
 def test_dashboard_overdue_follows_the_users_own_deadline(client, pm_user, user, other_user):
     _project, task, lead, [alice, bob] = _setup(pm_user, user, other_user)
-    set_member_deadline(
+    set_member_dates(
         task=task, member=bob, deadline=timezone.now() + timedelta(days=3), lead=lead
     )
     dashboard = reverse("projects:dashboard")
@@ -413,7 +413,7 @@ def test_my_tasks_shows_and_sorts_by_the_users_own_deadline(client, pm_user, oth
     )
     later_task.assigned_members.add(bob)
     # Bob's own deadline on the first task comes before the second task's.
-    set_member_deadline(
+    set_member_dates(
         task=task, member=bob, deadline=timezone.now() + timedelta(days=2), lead=lead
     )
     client.force_login(other_user)
@@ -430,7 +430,7 @@ def test_digest_lists_only_tasks_past_the_users_own_deadline(pm_user, user, othe
     from apps.notifications.tasks import _overdue_tasks_for
 
     _project, task, lead, [alice, bob] = _setup(pm_user, user, other_user)
-    set_member_deadline(
+    set_member_dates(
         task=task, member=bob, deadline=timezone.now() + timedelta(days=3), lead=lead
     )
     assert _overdue_tasks_for(other_user) == []
@@ -447,7 +447,7 @@ def test_overdue_reminder_skips_members_on_a_later_deadline(
         u.email_overdue_task_frequency = EmailFrequency.DAILY
         u.save()
     _project, task, lead, [alice, bob] = _setup(pm_user, user, other_user)
-    set_member_deadline(
+    set_member_dates(
         task=task, member=bob, deadline=timezone.now() + timedelta(days=3), lead=lead
     )
     queued = []
@@ -464,7 +464,7 @@ def test_overdue_reminder_skips_members_on_a_later_deadline(
 @pytest.mark.django_db
 def test_due_hint_speaks_to_the_viewers_own_deadline(client, pm_user, other_user):
     project, task, lead, [bob] = _setup(pm_user, other_user, deadline_days=10)
-    set_member_deadline(
+    set_member_dates(
         task=task, member=bob, deadline=timezone.now() + timedelta(days=3), lead=lead
     )
     url = reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk})
@@ -490,16 +490,16 @@ def test_lead_sees_deadline_controls_and_member_does_not(client, pm_user, other_
 
     client.force_login(pm_user)
     content = client.get(url).content.decode()
-    assert f'data-set-deadline="{bob.pk}"' in content
-    assert "data-deadline-all" in content
-    assert "data-deadline-modal" in content
+    assert f'data-set-dates="{bob.pk}"' in content
+    assert "data-dates-all" in content
+    assert "data-dates-modal" in content
     # Bob's part is late on the task deadline.
     assert "data-member-overdue" in content
 
     client.force_login(other_user)
     content = client.get(url).content.decode()
-    assert "data-set-deadline" not in content
-    assert "data-deadline-modal" not in content
+    assert "data-set-dates" not in content
+    assert "data-dates-modal" not in content
 
 
 # ---------------------------------------------------------------------------
@@ -531,7 +531,7 @@ def moved(pm_user, user, other_user):
     project, task, lead, [ari, bo] = _setup(pm_user, user, other_user, deadline_days=2)
     task.deadline = _minute(task.deadline)
     task.save()
-    own = set_member_deadline(
+    own = set_member_dates(
         task=task, member=bo, deadline=task.deadline + timedelta(days=7), lead=lead,
         reason="Conference",
     )
@@ -546,13 +546,13 @@ def test_edit_form_offers_the_choice_only_when_members_have_their_own(
     project, task, lead, [bo] = _setup(pm_user, other_user, deadline_days=2)
     url = reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk})
     client.force_login(pm_user)
-    assert "data-individual-deadlines" not in client.get(url).content.decode()
+    assert 'data-individual-dates="deadline"' not in client.get(url).content.decode()
 
-    set_member_deadline(
+    set_member_dates(
         task=task, member=bo, deadline=task.deadline + timedelta(days=7), lead=lead
     )
     content = client.get(url).content.decode()
-    assert "data-individual-deadlines" in content
+    assert 'data-individual-dates="deadline"' in content
     assert "Shift them by the same amount" in content
     assert 'value="shift"' in content
 
@@ -669,3 +669,270 @@ def test_member_taken_off_in_the_same_edit_is_not_shifted_back(client, pm_user, 
     )
 
     assert not AssigneeDeadline.objects.exists()
+
+
+# ---------------------------------------------------------------------------
+# Individual start dates
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_lead_sets_only_an_individual_start_date(client, pm_user, other_user):
+    _project, task, _lead, [bob] = _setup(pm_user, other_user, deadline_days=10)
+    start = timezone.now() + timedelta(days=3)
+    client.force_login(pm_user)
+
+    response = _post(client, task, member=bob.pk, start_date=_local_input(start), deadline="")
+
+    assert response.status_code == 200
+    entry = AssigneeDeadline.objects.get(task=task, member=bob)
+    assert entry.deadline is None
+    assert abs(entry.start_date - start) < timedelta(minutes=1)
+    assert task.start_date_for(bob) == entry.start_date
+    # Only a start of their own: they still follow the task's deadline.
+    assert task.deadline_for(bob) == task.deadline
+    content = response.content.decode()
+    assert 'data-member-start="own"' in content
+    assert 'data-member-deadline="task"' in content
+    assert "own start" in content
+
+
+@pytest.mark.django_db
+def test_start_date_may_be_in_the_past(client, pm_user, other_user):
+    _project, task, _lead, [bob] = _setup(pm_user, other_user, deadline_days=10)
+    client.force_login(pm_user)
+
+    response = _post(
+        client, task, member=bob.pk,
+        start_date=_local_input(timezone.now() - timedelta(days=3)),
+    )
+
+    assert response.status_code == 200
+    assert AssigneeDeadline.objects.get(member=bob).start_date < timezone.now()
+
+
+@pytest.mark.django_db
+def test_start_after_the_members_deadline_is_refused(client, pm_user, other_user):
+    _project, task, _lead, [bob] = _setup(pm_user, other_user, deadline_days=5)
+    client.force_login(pm_user)
+
+    # After the task's deadline, which is the one Bo follows.
+    response = _post(
+        client, task, member=bob.pk,
+        start_date=_local_input(timezone.now() + timedelta(days=7)),
+    )
+    assert response.status_code == 400
+    assert "on or before the deadline" in response.content.decode()
+
+    # With a later deadline of his own it is fine.
+    response = _post(
+        client, task, member=bob.pk,
+        start_date=_local_input(timezone.now() + timedelta(days=7)),
+        deadline=_local_input(timezone.now() + timedelta(days=9)),
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_a_passed_own_deadline_can_be_sent_back_with_a_new_start(client, pm_user, other_user):
+    _project, task, lead, [bob] = _setup(pm_user, other_user, deadline_days=-5)
+    entry = set_member_dates(
+        task=task, member=bob, lead=lead, deadline=timezone.now() + timedelta(days=1)
+    )
+    passed = timezone.now() - timedelta(days=1)
+    AssigneeDeadline.objects.filter(pk=entry.pk).update(deadline=passed)
+    client.force_login(pm_user)
+
+    response = _post(
+        client, task, member=bob.pk,
+        start_date=_local_input(timezone.now() - timedelta(days=4)),
+        deadline=_local_input(passed),
+    )
+
+    assert response.status_code == 200
+    assert AssigneeDeadline.objects.get(member=bob).start_date is not None
+
+
+@pytest.mark.django_db
+def test_emptying_one_date_keeps_the_other_and_both_removes_them(client, pm_user, other_user):
+    _project, task, lead, [bob] = _setup(pm_user, other_user, deadline_days=10)
+    start = timezone.now() + timedelta(days=2)
+    set_member_dates(
+        task=task, member=bob, lead=lead, start_date=start,
+        deadline=timezone.now() + timedelta(days=12),
+    )
+    client.force_login(pm_user)
+
+    _post(client, task, member=bob.pk, start_date=_local_input(start), deadline="")
+    entry = AssigneeDeadline.objects.get(member=bob)
+    assert entry.deadline is None and entry.start_date is not None
+
+    _post(client, task, member=bob.pk, start_date="", deadline="")
+    assert not AssigneeDeadline.objects.exists()
+    assert AuditLog.objects.filter(action=AuditAction.TASK_DEADLINE_CLEARED).count() == 1
+
+
+@pytest.mark.django_db
+def test_set_dates_for_all_not_done_leaves_empty_dates_as_they_are(
+    client, pm_user, user, other_user
+):
+    _project, task, lead, [ari, bo] = _setup(pm_user, user, other_user, deadline_days=10)
+    bo_deadline = timezone.now() + timedelta(days=14)
+    set_member_dates(task=task, member=bo, lead=lead, deadline=bo_deadline, reason="Ill")
+    start = timezone.now() + timedelta(days=1)
+    client.force_login(pm_user)
+
+    response = _post(client, task, scope="pending", start_date=_local_input(start))
+
+    assert response.status_code == 200
+    ari_entry = AssigneeDeadline.objects.get(member=ari)
+    bo_entry = AssigneeDeadline.objects.get(member=bo)
+    assert ari_entry.deadline is None and ari_entry.start_date is not None
+    assert bo_entry.deadline == bo_deadline and bo_entry.start_date is not None
+    assert bo_entry.reason == "Ill"
+
+
+@pytest.mark.django_db
+def test_set_dates_for_all_needs_at_least_one_date(client, pm_user, other_user):
+    _project, task, _lead, [bob] = _setup(pm_user, other_user)
+    client.force_login(pm_user)
+
+    response = _post(client, task, scope="pending", start_date="", deadline="")
+
+    assert response.status_code == 400
+    assert "start date or a deadline" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_own_start_date_alone_does_not_extend_the_task(pm_user, other_user):
+    _project, task, lead, [bob] = _setup(pm_user, other_user, deadline_days=-2)
+    set_member_dates(
+        task=task, member=bob, lead=lead, start_date=timezone.now() - timedelta(days=5)
+    )
+    assert task.is_overdue and not task.is_extended
+    assert list(Task.objects.overdue()) == [task]
+    assert list(Task.objects.overdue_for(other_user)) == [task]
+
+
+@pytest.mark.django_db
+def test_due_hint_names_the_viewers_own_start(client, pm_user, other_user):
+    project, task, lead, [bob] = _setup(pm_user, other_user, deadline_days=10)
+    set_member_dates(
+        task=task, member=bob, lead=lead, start_date=timezone.now() + timedelta(days=3)
+    )
+    url = reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk})
+    client.force_login(other_user)
+
+    content = client.get(url).content.decode()
+
+    assert "Your start" in content
+    assert "days left" in content
+
+
+@pytest.fixture
+def moved_start(pm_user, user, other_user):
+    """A task starting in 2 days, due in 20; Bo starts 3 days after the task
+    and has his own deadline too. The tests move the task's start 5 days."""
+    project, task, lead, [ari, bo] = _setup(pm_user, user, other_user, deadline_days=20)
+    task.start_date = _minute(timezone.now() + timedelta(days=2))
+    task.deadline = _minute(task.deadline)
+    task.save()
+    own = set_member_dates(
+        task=task, member=bo, lead=lead,
+        start_date=task.start_date + timedelta(days=3),
+        deadline=task.deadline + timedelta(days=4),
+    )
+    return project, task, ari, bo, own, task.start_date + timedelta(days=5)
+
+
+@pytest.mark.django_db
+def test_edit_form_offers_the_start_choice_only_for_own_start_dates(
+    client, pm_user, other_user
+):
+    project, task, lead, [bo] = _setup(pm_user, other_user, deadline_days=10)
+    url = reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk})
+    set_member_dates(
+        task=task, member=bo, lead=lead, deadline=task.deadline + timedelta(days=1)
+    )
+    client.force_login(pm_user)
+    content = client.get(url).content.decode()
+    assert 'data-individual-dates="deadline"' in content
+    assert 'data-individual-dates="start_date"' not in content
+
+    set_member_dates(task=task, member=bo, lead=lead, start_date=timezone.now())
+    content = client.get(url).content.decode()
+    assert 'data-individual-dates="start_date"' in content
+    assert "follow the task&#x27;s start date" in content
+
+
+@pytest.mark.django_db
+def test_shifting_the_start_moves_own_starts_only(client, pm_user, moved_start):
+    project, task, ari, bo, own, new_start = moved_start
+    old_own_start, old_own_deadline = own.start_date, own.deadline
+    client.force_login(pm_user)
+
+    response = _edit(
+        client, project, task, [ari, bo],
+        start_date=_local_input(new_start), deadline=_local_input(task.deadline),
+        individual_start_dates="shift",
+    )
+
+    assert response.status_code == 302
+    own.refresh_from_db()
+    assert own.start_date == old_own_start + timedelta(days=5)
+    assert own.deadline == old_own_deadline
+    row = AuditLog.objects.filter(action=AuditAction.TASK_DEADLINE_SET).latest("id")
+    assert row.metadata["batch"] == "task_start_date_shift"
+    assert row.metadata["previous_start_date"] == old_own_start.isoformat()
+
+
+@pytest.mark.django_db
+def test_removing_own_starts_keeps_own_deadlines(client, pm_user, moved_start):
+    project, task, ari, bo, own, new_start = moved_start
+    old_own_deadline = own.deadline
+    client.force_login(pm_user)
+
+    _edit(
+        client, project, task, [ari, bo],
+        start_date=_local_input(new_start), deadline=_local_input(task.deadline),
+        individual_start_dates="clear",
+    )
+
+    own.refresh_from_db()
+    assert own.start_date is None
+    assert own.deadline == old_own_deadline
+
+
+@pytest.mark.django_db
+def test_moving_the_start_without_a_choice_is_refused(client, pm_user, moved_start):
+    project, task, ari, bo, own, new_start = moved_start
+    old_start = task.start_date
+    client.force_login(pm_user)
+
+    response = _edit(
+        client, project, task, [ari, bo],
+        start_date=_local_input(new_start), deadline=_local_input(task.deadline),
+    )
+
+    assert response.status_code == 200
+    assert "Some assignees have their own start date" in response.content.decode()
+    task.refresh_from_db()
+    assert task.start_date == old_start
+
+
+@pytest.mark.django_db
+def test_moving_both_dates_applies_each_choice(client, pm_user, moved_start):
+    project, task, ari, bo, own, new_start = moved_start
+    old_own_start = own.start_date
+    client.force_login(pm_user)
+
+    _edit(
+        client, project, task, [ari, bo],
+        start_date=_local_input(new_start),
+        deadline=_local_input(task.deadline + timedelta(days=2)),
+        individual_start_dates="keep", individual_deadlines="clear",
+    )
+
+    own.refresh_from_db()
+    assert own.start_date == old_own_start
+    assert own.deadline is None

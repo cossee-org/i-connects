@@ -149,9 +149,9 @@ urlpatterns = [
         name="verify_batch",
     ),
     path(
-        "tasks/<int:pk>/deadlines/",
-        views.TaskDeadlineView.as_view(),
-        name="member_deadline",
+        "tasks/<int:pk>/member-dates/",
+        views.TaskMemberDatesView.as_view(),
+        name="member_dates",
     ),
     # Board columns
     path(

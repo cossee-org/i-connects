@@ -104,65 +104,12 @@
     {% include "_components/form_field.html" with field=form.start_date %}
     {% include "_components/form_field.html" with field=form.deadline %}
 
-    {% comment %}
-      Individual deadlines (editing only, and only on a task where a Lead
-      gave some assignees their own): hidden until the Lead changes the due
-      date, then asks what happens to those members' deadlines — shift them
-      by the same amount (previewed per member), keep their dates, or remove
-      them so they follow the new due date. Shift needs a date on both
-      sides; with either missing it is switched off and Keep is chosen.
-      TaskForm.individual_deadlines insists on an answer whenever the date
-      changes, so the question is asked every time, with or without script.
-    {% endcomment %}
+    {# Members' own start dates / deadlines: what happens to them when the task's date moves. #}
+    {% if form.individual_start_dates %}
+      {% include "tasks/partials/individual_dates_panel.html" with kind="start_date" choice=form.individual_start_dates date_field=form.start_date original=form.original_start_date rows=form.individual_start_rows noun="start date" %}
+    {% endif %}
     {% if form.individual_deadlines %}
-      <fieldset class="md:col-span-2 mb-3 rounded-lg border border-brand-light/60 bg-brand-lighter/40 p-3"
-                data-individual-deadlines
-                x-data="{
-                  original: '{% if form.original_deadline %}{{ form.original_deadline|date:"Y-m-d\TH:i" }}{% endif %}',
-                  current: '',
-                  choice: '{{ form.individual_deadlines.value|default:"keep" }}',
-                  get changed() { return this.current !== this.original },
-                  get canShift() { return !!(this.original && this.current) },
-                  shifted(value) {
-                    const d = new Date(new Date(value).getTime() + (new Date(this.current) - new Date(this.original)))
-                    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-                  },
-                }"
-                x-init="const input = $el.closest('form').querySelector('[name={{ form.deadline.html_name }}]');
-                        const sync = () => { current = input.value; if (!canShift && choice === 'shift') choice = 'keep' };
-                        sync(); input.addEventListener('input', sync); input.addEventListener('change', sync)"
-                x-show="changed{% if form.individual_deadlines.errors %} || true{% endif %}" x-cloak>
-        <legend class="sr-only">Individual deadlines</legend>
-        <p class="text-sm font-medium text-brand-navy">
-          {% with n=form.individual_deadline_entries|length %}{{ n }} assignee{{ n|pluralize:" has,s have" }} their own deadline{{ n|pluralize }}. What should happen to {{ n|pluralize:"it,them" }}?{% endwith %}
-        </p>
-        <ul class="mt-2 flex flex-col gap-1 text-sm" data-individual-deadline-members>
-          {% for entry in form.individual_deadline_entries %}
-            <li class="flex flex-wrap items-baseline gap-x-2">
-              <span class="text-brand-navy">{{ entry.member.display_name }}</span>
-              <span class="text-brand-text/70">{{ entry.deadline|date:"M j, Y" }}</span>
-              <span class="text-brand-text/70" x-show="choice === 'shift' && canShift" x-cloak>&rarr; <span class="font-medium text-brand-navy" x-text="shifted('{{ entry.deadline|date:"Y-m-d\TH:i" }}')"></span></span>
-              <span class="text-brand-text/70" x-show="choice === 'clear'" x-cloak>&rarr; <span class="font-medium text-brand-navy">follows the due date</span></span>
-            </li>
-          {% endfor %}
-        </ul>
-        <div class="mt-3 flex flex-col gap-1.5">
-          {% for radio in form.individual_deadlines %}
-            <label class="flex items-center gap-2 text-sm cursor-pointer"
-                   {% if radio.data.value == "shift" %}:class="{ 'opacity-50 cursor-not-allowed': !canShift }"{% endif %}>
-              <input type="radio" class="radio radio-sm"
-                     name="{{ form.individual_deadlines.html_name }}"
-                     value="{{ radio.data.value }}"
-                     x-model="choice"
-                     {% if radio.data.value == "shift" %}:disabled="!canShift"{% endif %}>
-              <span>{{ radio.choice_label }}</span>
-            </label>
-          {% endfor %}
-        </div>
-        {% if form.individual_deadlines.errors %}
-          <p class="text-xs text-error mt-2">{{ form.individual_deadlines.errors|join:" " }}</p>
-        {% endif %}
-      </fieldset>
+      {% include "tasks/partials/individual_dates_panel.html" with kind="deadline" choice=form.individual_deadlines date_field=form.deadline original=form.original_deadline rows=form.individual_deadline_rows noun="deadline" %}
     {% endif %}
 
     <div class="md:col-span-2">

@@ -104,7 +104,9 @@ class TaskQuerySet(models.QuerySet):
         from django.db.models.functions import Coalesce
 
         personal = (
-            AssigneeDeadline.objects.filter(task_id=OuterRef("pk"), member__users=user)
+            AssigneeDeadline.objects.filter(
+                task_id=OuterRef("pk"), member__users=user, deadline__isnull=False
+            )
             .order_by("deadline")
             .values("deadline")[:1]
         )
@@ -361,8 +363,30 @@ class Task(models.Model):
         return self._deadline_state() == "extended"
 
     def personal_deadlines(self) -> dict:
-        """Each member's individual deadline on this task, keyed by member id."""
-        return {d.member_id: d.deadline for d in self.assignee_deadlines.all()}
+        """Each member's individual deadline on this task, keyed by member id
+        (members with only an individual start date are left out)."""
+        return {
+            d.member_id: d.deadline
+            for d in self.assignee_deadlines.all()
+            if d.deadline is not None
+        }
+
+    def personal_start_dates(self) -> dict:
+        """Each member's individual start date on this task, keyed by member id."""
+        return {
+            d.member_id: d.start_date
+            for d in self.assignee_deadlines.all()
+            if d.start_date is not None
+        }
+
+    def start_date_for(self, member):
+        """``member``'s effective start date: their individual one, if a Lead
+        set it, else the task's. None when neither exists."""
+        if member is not None and member.pk is not None:
+            personal = self.personal_start_dates().get(member.pk)
+            if personal is not None:
+                return personal
+        return self.start_date
 
     def deadline_for(self, member):
         """``member``'s effective deadline: their individual one, if a Lead set
@@ -563,12 +587,16 @@ class TaskLog(models.Model):
 
 
 class AssigneeDeadline(models.Model):
-    """An individual deadline a Lead set for one assignee on a task.
+    """Individual dates a Lead set for one assignee on a task: their own
+    start date, their own deadline, or both.
 
-    The task's own ``deadline`` still holds for the task and for every other
-    assignee; this one replaces it for ``member`` alone, and may be earlier or
-    later. It belongs to the assignment: taking the member off the task
-    deletes it (``apps.tasks.signals``).
+    The task's own ``start_date`` and ``deadline`` still hold for the task and
+    for every other assignee; each date set here replaces the task's for
+    ``member`` alone, and may be earlier or later. A date left empty follows
+    the task's. The row exists only while at least one of the two is set
+    (``services.set_member_dates`` deletes it otherwise). It belongs to the
+    assignment: taking the member off the task deletes it
+    (``apps.tasks.signals``).
     """
 
     task = models.ForeignKey(
@@ -579,7 +607,8 @@ class AssigneeDeadline(models.Model):
         on_delete=models.CASCADE,
         related_name="individual_deadlines",
     )
-    deadline = models.DateTimeField()
+    start_date = models.DateTimeField(null=True, blank=True)
+    deadline = models.DateTimeField(null=True, blank=True)
     reason = models.CharField(max_length=500, blank=True, default="")
     set_by = models.ForeignKey(
         "projects.ProjectMember",
@@ -587,7 +616,7 @@ class AssigneeDeadline(models.Model):
         null=True,
         blank=True,
         related_name="+",
-        help_text="The Lead who last set this deadline.",
+        help_text="The Lead who last set these dates.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -601,7 +630,7 @@ class AssigneeDeadline(models.Model):
         indexes = [models.Index(fields=["member", "deadline"])]
 
     def __str__(self) -> str:
-        return f"Deadline {self.deadline:%Y-%m-%d} for member {self.member_id} on task {self.task_id}"
+        return f"Individual dates for member {self.member_id} on task {self.task_id}"
 
 
 class ActivityEvent(models.TextChoices):
