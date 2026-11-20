@@ -123,8 +123,11 @@ def test_create_form_starts_on_the_system_timezone(client, pm_user, other_user):
     # Nothing saved: the picker's script picks the system timezone, and the
     # server's default is what is sent without script.
     assert "timezoneSelect(null)" in content
-    assert '<option value="" selected>Server default (UTC)</option>' in content
-    assert '<option value="America/Denver">' in content
+    assert "Server default (UTC)</option>" in content
+    assert "Type to search for a city or country" in content
+    # The full list is fetched, not written into the form.
+    assert reverse("tasks:timezones") in content
+    assert 'value="America/Denver"' not in content
 
 
 @pytest.mark.django_db
@@ -136,7 +139,10 @@ def test_edit_form_shows_the_dates_in_the_tasks_zone(client, pm_user, zoned):
 
     assert 'value="2027-01-15T17:00"' in content
     assert "timezoneSelect('America/Denver')" in content
-    assert '<option value="America/Denver" selected>' in content
+    assert (
+        '<option value="America/Denver" selected '
+        'data-display="(UTC\u221207:00) Denver, United States of America">'
+    ) in content
     assert "Server default" not in content
 
 
@@ -467,6 +473,32 @@ def test_import_reads_deadlines_in_the_rows_or_the_chosen_zone(pm_user, other_us
     form_zone = Task.objects.get(name="Form zone")
     assert (form_zone.timezone, form_zone.deadline) == (
         "America/Denver", _at(DENVER, 2027, 1, 15, 0, 0)
+    )
+
+
+@pytest.mark.django_db
+def test_zone_list_finds_zones_by_city_or_country(client, pm_user):
+    client.force_login(pm_user)
+
+    response = client.get(reverse("tasks:timezones"))
+
+    assert response.status_code == 200
+    assert "max-age=3600" in response["Cache-Control"]
+    data = response.json()
+    assert data["aliases"]["Asia/Calcutta"] == "Asia/Kolkata"
+    by_zone = {o["value"]: o for o in data["options"]}
+    edmonton = by_zone["America/Edmonton"]
+    assert edmonton["label"] == "Edmonton, Canada"
+    assert edmonton["display"].endswith(") Edmonton, Canada")
+    for word in ("Edmonton", "Canada", "CA", "America/Edmonton"):
+        assert word in edmonton["search"]
+    # Countries are searchable by their other names too.
+    assert "UK" in by_zone["Europe/London"]["search"].split()
+    assert "USA" in by_zone["America/New_York"]["search"].split()
+    # Ordered by offset, west to east.
+    offsets = [o["offset"] for o in data["options"]]
+    assert offsets.index(by_zone["America/Denver"]["offset"]) < offsets.index(
+        by_zone["Asia/Tokyo"]["offset"]
     )
 
 

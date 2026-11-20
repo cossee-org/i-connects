@@ -9,6 +9,8 @@ from apps.tasks import views
 app_name = "tasks"
 
 urlpatterns = [
+    # The timezone picker's list of zones (JSON, cached by the browser)
+    path("tasks/timezones.json", views.TimezoneListView.as_view(), name="timezones"),
     # All tasks (cross-project)
     path(
         "tasks/",

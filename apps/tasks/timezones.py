@@ -16,6 +16,7 @@ server's ``settings.TIME_ZONE`` is used, as before zones existed.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from functools import lru_cache
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
@@ -240,34 +241,176 @@ def _offset_label(offset: timedelta) -> str:
     return f"UTC{sign}{hours:02d}:{mins:02d}"
 
 
-@lru_cache(maxsize=4)
-def _grouped_choices(hour_key: str) -> tuple:
-    now = dj_timezone.now()
-    groups: dict[str, list[tuple[str, str]]] = {}
-    for name in sorted(_known()):
-        region, _, place = name.partition("/")
-        if region not in _REGIONS or not place or name in ALIASES:
-            continue
-        offset = now.astimezone(ZoneInfo(name)).utcoffset() or timedelta(0)
-        label = f"{place.replace('_', ' ')} ({_offset_label(offset)})"
-        groups.setdefault(region, []).append((name, label))
-    return tuple(
-        (region, tuple(groups[region])) for region in _REGIONS if region in groups
+# Extra words a country can be searched by, beyond its name and code.
+COUNTRY_SYNONYMS = {
+    "US": "USA America",
+    "GB": "UK Britain England Scotland Wales",
+    "AE": "UAE Emirates",
+    "KR": "South Korea",
+    "KP": "North Korea",
+    "RU": "Russia",
+    "NL": "Holland",
+    "CZ": "Czechia",
+}
+
+
+def _tab_rows(filename: str) -> list[list[str]]:
+    """The rows of one of the tz database's ``.tab`` files: from the
+    ``tzdata`` package, else the system's copy. Empty when neither has it."""
+    text = ""
+    try:
+        from importlib.resources import files
+
+        text = files("tzdata.zoneinfo").joinpath(filename).read_text(encoding="utf-8")
+    except Exception:
+        try:
+            with open(f"/usr/share/zoneinfo/{filename}", encoding="utf-8") as handle:
+                text = handle.read()
+        except OSError:
+            return []
+    return [
+        line.split("\t") for line in text.splitlines() if line and not line.startswith("#")
+    ]
+
+
+@lru_cache(maxsize=1)
+def _zone_places() -> dict[str, tuple[str, str]]:
+    """Each zone the picker lists, as ``{zone: (country code, note)}``: the
+    tz database's ``zone.tab``, one entry per zone, with notes such as
+    "Mountain - AB, BC(E)". Falls back to every zone in the listed regions,
+    with no country, when the table is missing."""
+    places = {
+        row[2]: (row[0], row[3] if len(row) > 3 else "")
+        for row in _tab_rows("zone.tab")
+        if len(row) >= 3 and row[2] in _known()
+    }
+    if not places:
+        places = {
+            name: ("", "")
+            for name in _known()
+            if name.partition("/")[0] in _REGIONS and "/" in name and name not in ALIASES
+        }
+    return places
+
+
+@lru_cache(maxsize=1)
+def _tab_country_names() -> dict[str, str]:
+    return {row[0]: row[1] for row in _tab_rows("iso3166.tab") if len(row) >= 2}
+
+
+def _country_name(code: str) -> str:
+    if not code:
+        return ""
+    try:
+        from django_countries import countries
+
+        name = countries.name(code)
+    except Exception:  # pragma: no cover - settings not ready
+        name = ""
+    return str(name or _tab_country_names().get(code, code))
+
+
+def _city(zone: str) -> str:
+    return zone.rsplit("/", 1)[-1].replace("_", " ")
+
+
+def _option(zone: str, now: datetime) -> dict:
+    """One picker entry: the zone, how it is labelled, and the words it is
+    found by (city, country, its code and other names, the zone's name and
+    note, its abbreviation and offset)."""
+    if zone == "UTC":
+        code, note, city, country = "", "", "UTC", "Coordinated Universal Time"
+    else:
+        code, note = _zone_places().get(zone, ("", ""))
+        city, country = _city(zone), _country_name(code)
+    local = now.astimezone(ZoneInfo(zone))
+    offset = local.utcoffset() or timedelta(0)
+    offset_label = _offset_label(offset)
+    abbr = local.tzname() or ""
+    label = f"{city}, {country}" if country and country != city else city
+    minutes = int(offset.total_seconds() // 60)
+    hours, mins = divmod(abs(minutes), 60)
+    sign = "+" if minutes >= 0 else "-"
+    search = " ".join(
+        part
+        for part in (
+            city,
+            country,
+            code,
+            COUNTRY_SYNONYMS.get(code, ""),
+            # The tz database's own name for the country, without its
+            # bracketed parts ("Virgin Islands (UK)" is not the UK).
+            re.sub(r"\s*\(.*?\)", "", _tab_country_names().get(code, "")),
+            zone.replace("_", " "),
+            zone,
+            note,
+            abbr if abbr[:1].isalpha() else "",
+            offset_label.replace("\u2212", "-"),
+            f"utc{sign}{hours}" + (f":{mins:02d}" if mins else ""),
+            f"gmt{sign}{hours}" + (f":{mins:02d}" if mins else ""),
+        )
+        if part
     )
+    # The tz database's notes sometimes open with the abbreviation
+    # ("CST - AB, BC(E)"); it is shown once.
+    if abbr and note.startswith(f"{abbr} - "):
+        note = note[len(abbr) + 3:]
+    detail = " \u00b7 ".join(
+        dict.fromkeys(
+            part
+            for part in (abbr if abbr[:1].isalpha() else "", note, zone)
+            if part and part != city
+        )
+    )
+    return {
+        "value": zone,
+        "label": label,
+        "offset": offset_label,
+        "display": f"({offset_label}) {label}",
+        "detail": detail,
+        "search": search,
+        "sort": (minutes, label.lower()),
+    }
 
 
-def timezone_choices(extra: str | None = None) -> list[tuple[str, list]]:
-    """The picker's options as ``(group label, [(name, label), ...])``,
-    grouped by region, each labelled with its offset right now. The first
-    group, with no label, holds UTC and ``extra``: a saved zone the list
-    leaves out (an old "US/Eastern" style name), offered so that opening a
-    form never quietly changes it."""
-    regions = _grouped_choices(dj_timezone.now().strftime("%Y%m%d%H"))
-    top = [("UTC", "UTC (UTC+00:00)")]
-    listed = {"UTC"} | {name for _r, options in regions for name, _l in options}
-    if extra and extra not in listed:
-        top.append((extra, extra))
-    return [("", top)] + [(region, list(options)) for region, options in regions]
+@lru_cache(maxsize=4)
+def _options(hour_key: str) -> tuple:
+    now = dj_timezone.now()
+    options = [_option(zone, now) for zone in ["UTC", *_zone_places()]]
+    return tuple(sorted(options, key=lambda option: option["sort"]))
+
+
+def timezone_choices(extra: str | None = None) -> list[dict]:
+    """The picker's entries, ordered by their offset right now, then by
+    name. Each is a dict: ``value`` (the IANA name), ``label`` ("Edmonton,
+    Canada"), ``offset`` ("UTC\u221206:00"), ``display`` (both, as the
+    picker shows its choice), ``detail`` (abbreviation, the tz database's
+    note and the zone's name) and ``search`` (the words it is found by).
+
+    ``extra``, a saved zone the list leaves out (an old "US/Eastern" style
+    name), is offered too, so opening a form never quietly changes it."""
+    options = list(_options(dj_timezone.now().strftime("%Y%m%d%H")))
+    if extra and extra not in {option["value"] for option in options}:
+        try:
+            options.insert(0, _option(extra, dj_timezone.now()))
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return options
+
+
+def timezone_option(value) -> dict | None:
+    """The picker's entry for ``value`` (as in :func:`timezone_choices`), for
+    the form to show the saved zone before the full list has loaded. None
+    when ``value`` is empty or not a known zone."""
+    if not value or canonical(value) is None:
+        return None
+    for option in _options(dj_timezone.now().strftime("%Y%m%d%H")):
+        if option["value"] == value:
+            return option
+    try:
+        return _option(value, dj_timezone.now())
+    except (ZoneInfoNotFoundError, ValueError):
+        return None
 
 
 class TimezoneField(forms.CharField):

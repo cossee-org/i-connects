@@ -20,6 +20,7 @@ from django.http import (
     HttpResponse,
     HttpResponseBadRequest,
     HttpResponseForbidden,
+    JsonResponse,
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import resolve, reverse, Resolver404
@@ -1121,6 +1122,31 @@ class TaskUpdateView(
         ):
             context["next_url"] = next_url
         return context
+
+
+class TimezoneListView(LoginRequiredMixin, View):
+    """The timezone picker's entries, as JSON: every zone with its city,
+    country, offset right now and the words it is searched by, plus the old
+    zone names browsers may report (``timezones.timezone_choices``,
+    ``timezones.ALIASES``). Fetched once per page by the picker
+    (``_components/timezone_select.html``) rather than written into every
+    form, and cached for an hour since the offsets move only with daylight
+    saving."""
+
+    def get(self, request, *args, **kwargs):
+        from apps.tasks.timezones import ALIASES, timezone_choices
+
+        fields = ("value", "label", "offset", "display", "detail", "search")
+        response = JsonResponse(
+            {
+                "options": [
+                    {key: option[key] for key in fields} for option in timezone_choices()
+                ],
+                "aliases": ALIASES,
+            }
+        )
+        response["Cache-Control"] = "private, max-age=3600"
+        return response
 
 
 class TaskImportView(

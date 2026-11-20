@@ -203,45 +203,128 @@
   </script>
 
   {% comment %}
-    Timezone picker (_components/timezone_select.html): starts on the user's
-    system timezone unless a zone is already saved. ``saved`` is the saved
-    zone, null when there is none (start on the system's), or undefined when
-    the enclosing dialog calls apply() itself each time it opens. A system
-    zone the list lacks is looked up in the select's alias map (old names
-    such as Asia/Calcutta); failing that the select keeps what the server
-    rendered.
+    Timezone picker (_components/timezone_select.html): a search box for a
+    city or country over a native <select>, which stays the field the form
+    submits. It starts on the user's system timezone unless a zone is
+    already saved. ``saved`` is the saved zone, null when there is none
+    (start on the system's), or undefined when the enclosing dialog calls
+    apply() itself each time it opens. A system zone the list lacks is
+    looked up in the select's alias map (old names such as Asia/Calcutta);
+    failing that it is added to the list under its own name, since the
+    server accepts any zone the tz database knows.
+
+    Search matches every word typed against the start of a word in the
+    entry's city, country (and its code and other names), zone name, note,
+    abbreviation or offset, ignoring case and accents. Entries whose city
+    starts with what was typed come first, then those with a word that is
+    exactly it (a country code or other name such as "UK", an abbreviation
+    such as "MST"), then those whose country starts with it; each group
+    keeps the list's order, by offset.
   {% endcomment %}
   <script>
     window.systemTimezone = function () {
       try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; }
     };
+    // The picker's list of zones, fetched once per page and shared.
+    window.timezoneList = function (url) {
+      if (!window._timezoneList) {
+        window._timezoneList = fetch(url, { credentials: "same-origin" })
+          .then(function (r) { return r.ok ? r.json() : { options: [] }; })
+          .then(function (data) { return data.options || []; })
+          .catch(function () { window._timezoneList = null; return []; });
+      }
+      return window._timezoneList;
+    };
     window.timezoneSelect = function (saved) {
+      var fold = function (text) {
+        return String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      };
+      var words = function (text) { return fold(text).split(/[\s,/()·]+/).filter(Boolean); };
+      var entry = function (o) {
+        var label = o.label || o.display || o.value;
+        return {
+          value: o.value,
+          label: label,
+          offset: o.offset || "",
+          display: o.display || label,
+          detail: o.detail || "",
+          city: fold(label.split(",")[0]),
+          country: fold(label.split(",").slice(1).join(",")).trim(),
+          words: words([label, o.search, o.value].join(" ")),
+        };
+      };
       return {
+        ready: false,
+        open: false,
+        loading: true,
+        query: "",
+        active: 0,
+        options: [],
+        value: "",
+        display: "",
         systemZone: "",
+        systemMatch: "",
         note: "",
         init: function () {
+          var self = this, select = this.$refs.select;
           this.systemZone = window.systemTimezone();
+          this.systemMatch = this.canonical(this.systemZone);
+          // Until the list loads, offer what the select already holds.
+          this.options = Array.prototype.map.call(select.options, function (o) {
+            return entry({ value: o.value, label: o.dataset.display || o.textContent, display: o.dataset.display || o.textContent });
+          });
+          this.ready = true;
           if (saved !== undefined) this.apply(saved); else this.refresh();
-        },
-        // The listed option for ``zone``, under its own or its current name.
-        match: function (zone) {
-          if (!zone) return "";
-          var select = this.$refs.select, aliases = {};
-          try { aliases = JSON.parse(select.dataset.tzAliases || "{}"); } catch (e) {}
-          var names = [zone, aliases[zone]];
-          for (var i = 0; i < names.length; i++) {
-            for (var j = 0; j < select.options.length; j++) {
-              if (names[i] && select.options[j].value === names[i]) return names[i];
+          window.timezoneList(select.dataset.tzUrl).then(function (list) {
+            var local = self.options.filter(function (o) { return o.value === ""; });
+            self.options = local.concat(list.map(entry));
+            self.loading = false;
+            // A system zone the server's list does not know is not offered:
+            // if it was put in as the default, fall back to the server's.
+            if (list.length && self.systemMatch && !self.find(self.systemMatch)) {
+              var unknown = self.systemMatch;
+              self.systemMatch = "";
+              if (select.value === unknown) {
+                select.remove(select.selectedIndex);
+                select.selectedIndex = 0;
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+              }
             }
-          }
-          return "";
+            // The saved or system zone, labelled as the list labels it.
+            Array.prototype.forEach.call(select.options, function (o) {
+              var known = self.find(o.value);
+              if (o.value && known) { o.textContent = known.display; o.dataset.display = known.display; }
+            });
+            self.refresh();
+          });
+        },
+        find: function (value) {
+          for (var i = 0; i < this.options.length; i++) if (this.options[i].value === value) return this.options[i];
+          return null;
+        },
+        // ``zone`` under the name the list uses (old names such as
+        // Asia/Calcutta through the alias map), or "" for no real place.
+        canonical: function (zone) {
+          if (!zone || /^Etc\//.test(zone) || !/^[A-Za-z]+\/[A-Za-z0-9_+\-\/]+$/.test(zone)) return "";
+          var aliases = {};
+          try { aliases = JSON.parse(this.$refs.select.dataset.tzAliases || "{}"); } catch (e) {}
+          return aliases[zone] || zone;
+        },
+        // Make sure the select can hold ``value`` (a zone from the list).
+        ensure: function (value) {
+          var select = this.$refs.select;
+          if (value === null || value === undefined) return;
+          for (var j = 0; j < select.options.length; j++) if (select.options[j].value === value) return;
+          var known = this.find(value), text = known ? known.display : value.replace(/_/g, " ");
+          var option = new Option(text, value);
+          option.dataset.display = text;
+          select.add(option);
         },
         apply: function (value) {
           var select = this.$refs.select;
-          if (value === null || value === undefined) {
-            var match = this.match(this.systemZone);
-            if (match) select.value = match;
-          } else {
+          if (value === null || value === undefined) value = this.systemMatch || null;
+          if (value !== null) {
+            this.ensure(value);
             select.value = value;
           }
           this.refresh();
@@ -250,10 +333,70 @@
           select.dispatchEvent(new Event("change", { bubbles: true }));
         },
         refresh: function () {
-          var match = this.match(this.systemZone);
+          var select = this.$refs.select, current = select.options[select.selectedIndex];
+          this.value = select.value;
+          this.display = current ? (current.dataset.display || current.textContent) : "";
+          var match = this.systemMatch;
           if (!this.systemZone) this.note = "";
-          else if (match && this.$refs.select.value === match) this.note = "Your system timezone";
+          else if (match && select.value === match) this.note = "Your system timezone";
           else this.note = "Your system timezone is " + (match || this.systemZone).replace(/_/g, " ");
+        },
+        get results() {
+          var terms = words(this.query);
+          if (!terms.length) return this.options;
+          var q = fold(this.query.trim());
+          var hits = this.options.filter(function (o) {
+            return terms.every(function (t) {
+              return o.words.some(function (w) { return w.indexOf(t) === 0; });
+            });
+          });
+          // City first, then a word matched whole (a country's code or
+          // other name, "UK"; an abbreviation, "MST"), then the country.
+          var rank = function (o) {
+            if (o.city.indexOf(q) === 0) return 0;
+            if (o.words.indexOf(q) !== -1) return 1;
+            if (o.country.indexOf(q) === 0) return 2;
+            return 3;
+          };
+          return hits
+            .map(function (o, i) { return [rank(o), i, o]; })
+            .sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; })
+            .map(function (x) { return x[2]; });
+        },
+        toggle: function () { this.open ? this.close() : this.show(); },
+        show: function () {
+          this.open = true;
+          this.query = "";
+          var self = this;
+          this.active = Math.max(0, this.results.findIndex(function (o) { return o.value === self.value; }));
+          this.$nextTick(function () {
+            self.$refs.search.focus();
+            self.scrollActive();
+          });
+        },
+        close: function () { this.open = false; },
+        move: function (step) {
+          var n = this.results.length;
+          if (!n) return;
+          this.active = (this.active + step + n) % n;
+          this.scrollActive();
+        },
+        scrollActive: function () {
+          var self = this;
+          this.$nextTick(function () {
+            var item = self.$refs.list && self.$refs.list.querySelectorAll("[role=option]")[self.active];
+            if (item && item.scrollIntoView) item.scrollIntoView({ block: "nearest" });
+          });
+        },
+        pick: function (option) {
+          if (!option) return;
+          this.apply(option.value);
+          this.close();
+          var button = this.$root.querySelector("[data-timezone-button]");
+          if (button) button.focus();
+        },
+        useSystem: function () {
+          if (this.systemMatch) this.pick({ value: this.systemMatch });
         },
       };
     };

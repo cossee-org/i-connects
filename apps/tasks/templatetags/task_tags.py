@@ -11,12 +11,13 @@ register = template.Library()
 
 
 @register.simple_tag
-def timezone_options(extra=None):
-    """The timezone picker's option groups — see
-    ``apps.tasks.timezones.timezone_choices``."""
-    from apps.tasks.timezones import timezone_choices
+def timezone_option(value):
+    """The timezone picker's entry for one zone (see
+    ``apps.tasks.timezones.timezone_option``), or None when ``value`` is
+    empty or unknown."""
+    from apps.tasks.timezones import timezone_option as option
 
-    return timezone_choices(extra or None)
+    return option(value)
 
 
 @register.simple_tag
