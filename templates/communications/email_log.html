@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Email log &mdash; {{ project.name }}{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6">
+    {% include "_components/project_header.html" %}
+  </header>
+{% endblock %}
+
+{% block content %}
+{# Laid out like Pending invitation requests: back to the tab, then the heading. #}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <a href="{% url 'projects:members' pk=project.pk %}"
+     class="btn btn-sm btn-ghost text-brand-navy">&larr; All contributors</a>
+</div>
+
+<div class="flex items-center gap-2 mb-5">
+  <h2 class="text-lg font-semibold text-brand-navy">Email log</h2>
+  {% include "_components/info_popover.html" with label="Email log" body="The emails i-CONNECTS sent about this project, newest first: invitations, join requests, task assignments, mailing list messages and announcements. Sent means the email left i-CONNECTS; it cannot tell whether it reached the inbox or a spam folder. Only Leads can see this page." %}
+</div>
+
+{# The filters apply as soon as one changes; the button is for when scripting is off. #}
+<form method="get" class="flex flex-wrap items-end gap-3 mb-5">
+  <div>
+    <label for="email-log-member" class="block text-xs font-medium text-brand-text/70 mb-1">Member</label>
+    <select id="email-log-member" name="member" class="select select-bordered select-sm"
+            onchange="this.form.submit()">
+      <option value="">All members</option>
+      {% for member in members %}
+        <option value="{{ member.pk }}"{% if selected_member.pk == member.pk %} selected{% endif %}>{{ member.name|default:member.email }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="email-log-kind" class="block text-xs font-medium text-brand-text/70 mb-1">Email</label>
+    <select id="email-log-kind" name="kind" class="select select-bordered select-sm"
+            onchange="this.form.submit()">
+      <option value="">All emails</option>
+      {% for value, label in kind_choices %}
+        <option value="{{ value }}"{% if selected_kind == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <noscript><button type="submit" class="btn btn-sm btn-ghost text-brand-navy">Filter</button></noscript>
+  {% if selected_member or selected_kind %}
+    <a href="{% url 'communications:email_log' project_pk=project.pk %}"
+       class="btn btn-sm btn-ghost text-brand-navy">Clear filters</a>
+  {% endif %}
+</form>
+
+{% if emails %}
+  <div class="brand-card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th scope="col">Sent</th>
+            <th scope="col">To</th>
+            <th scope="col">Email</th>
+            <th scope="col">Subject</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for email in emails %}
+            <tr class="hover:bg-brand-lighter/40 align-middle">
+              <td class="whitespace-nowrap">
+                {% include "_components/local_time.html" with at=email.sent_at css="text-xs text-brand-text/70" %}
+              </td>
+              <td>
+                {% if email.recipient %}
+                  <a href="{% url 'public_profile' pk=email.recipient.pk %}"
+                     class="block font-medium text-brand-navy hover:text-brand-coral">{{ email.recipient.name|default:email.to_email }}</a>
+                  {% if email.recipient.name %}<div class="text-xs text-brand-text/60">{{ email.to_email }}</div>{% endif %}
+                {% else %}
+                  {# An address with no account, such as an invitation not yet accepted. #}
+                  <div class="font-medium text-brand-navy">{{ email.to_email }}</div>
+                {% endif %}
+              </td>
+              <td class="text-xs text-brand-text/80 whitespace-nowrap">{{ email.get_kind_display }}</td>
+              <td class="text-xs text-brand-text/80">{{ email.subject }}</td>
+              <td class="text-xs whitespace-nowrap">
+                {% if email.status == "failed" %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-error/10 text-error"
+                        {% if email.error %}title="{{ email.error }}"{% endif %}>Failed</span>
+                {% else %}
+                  <span class="text-brand-text/70">Sent</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if is_paginated %}
+    <div class="join mt-8 flex justify-center">
+      {% if page_obj.has_previous %}
+        <a class="join-item btn btn-sm" href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Prev</a>
+      {% endif %}
+      <span class="join-item btn btn-sm btn-active">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      </span>
+      {% if page_obj.has_next %}
+        <a class="join-item btn btn-sm" href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </div>
+  {% endif %}
+{% else %}
+  {% if selected_member or selected_kind %}
+    {% include "_components/empty_state.html" with title="No emails match" body="No email in this project's log matches these filters." %}
+  {% else %}
+    {% include "_components/empty_state.html" with title="No emails yet" body="Emails sent about this project will be listed here. Emails sent before the log was introduced are not included." %}
+  {% endif %}
+{% endif %}
+{% endblock %}

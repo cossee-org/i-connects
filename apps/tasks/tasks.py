@@ -8,6 +8,7 @@ from celery import shared_task
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
+from apps.communications.models import EmailKind
 from apps.core.emails import absolute_url, send_templated_email
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,10 @@ def send_task_assigned_email_task(
     assigned_by = (
         User.objects.filter(pk=assigned_by_id).first() if assigned_by_id else None
     )
+    # One email can list several tasks; they share a project in practice (an
+    # assignment or an import happens inside one), and the log row carries it.
+    projects = {task.project for task in tasks}
+    project = projects.pop() if len(projects) == 1 else None
     context = {
         "user": user,
         "assigned_by": assigned_by,
@@ -73,4 +78,6 @@ def send_task_assigned_email_task(
         text_template="emails/task_assigned/body.txt",
         context=context,
         to=[user.email],
+        kind=EmailKind.TASK_ASSIGNED,
+        project=project,
     )

@@ -8,6 +8,7 @@ from celery import shared_task
 from django.conf import settings
 from django.urls import NoReverseMatch, reverse
 
+from apps.communications.models import EmailKind
 from apps.core.emails import send_templated_email
 
 logger = logging.getLogger(__name__)
@@ -53,4 +54,6 @@ def send_invitation_email_task(invitation_id: int) -> None:
         text_template="projects/emails/invitation.txt",
         context=context,
         to=[invitation.email],
+        kind=EmailKind.INVITATION,
+        project=invitation.project,
     )

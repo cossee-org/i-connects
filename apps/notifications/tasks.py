@@ -17,6 +17,7 @@ from celery import shared_task
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from apps.communications.models import EmailKind
 from apps.core.emails import send_templated_email
 from apps.core.enums import EmailFrequency, TaskStatus
 
@@ -94,6 +95,7 @@ def send_digest_email_task(user_id: int, frequency: str = "daily") -> None:
         text_template="emails/digest/body.txt",
         context=context,
         to=[user.email],
+        kind=EmailKind.DIGEST,
     )
 
 
@@ -127,6 +129,8 @@ def broadcast_announcement_task(announcement_id: int) -> None:
             text_template="emails/announcement/body.txt",
             context=context,
             to=[email],
+            kind=EmailKind.ANNOUNCEMENT,
+            project=announcement.project,
         )
 
 

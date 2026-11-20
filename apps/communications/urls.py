@@ -19,4 +19,9 @@ urlpatterns = [
         views.ProjectCommunicationsView.as_view(),
         name="project",
     ),
+    path(
+        "projects/<int:project_pk>/communications/emails/",
+        views.ProjectEmailLogView.as_view(),
+        name="email_log",
+    ),
 ]

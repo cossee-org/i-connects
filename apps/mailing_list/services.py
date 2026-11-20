@@ -17,6 +17,8 @@ from django.db import transaction
 from django.template.loader import render_to_string
 
 from apps.audit.services import AuditAction, log_action
+from apps.communications.models import EmailKind
+from apps.communications.services import send_logged
 from apps.projects.models import ProjectMember
 
 from .models import MailingListMessage
@@ -60,7 +62,7 @@ def _send_one(
         reply_to=reply_to,
     )
     msg.attach_alternative(html_body, "text/html")
-    msg.send(fail_silently=False)
+    send_logged(msg, kind=EmailKind.MAILING_LIST, project=project)
 
 
 @transaction.atomic

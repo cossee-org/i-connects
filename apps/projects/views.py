@@ -24,6 +24,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET
 
 from apps.audit.services import AuditAction, log_action
+from apps.communications.services import last_sent_by_user
 from apps.contributions.services import (
     get_project_contributions,
     get_project_contributions_matrix,
@@ -943,6 +944,9 @@ def _member_rows(project, *, viewer=None):
     When ``viewer`` is supplied, each row is annotated with ``is_self`` so
     the template can disable PM-mutating controls on the viewer's own row
     when the last-PM invariant would otherwise be broken.
+
+    ``last_email`` is when the member was last sent an email about the
+    project (``None`` if never). The template shows it to Leads only.
     """
     members = (
         ProjectMember.objects.filter(project=project, deleted=False)
@@ -954,6 +958,8 @@ def _member_rows(project, *, viewer=None):
         for p in ProjectPrivilege.objects.filter(project=project)
     }
     viewer_id = getattr(viewer, "id", None) if viewer is not None else None
+    members = list(members)
+    last_emails = last_sent_by_user(project, [m.users.first() for m in members])
     rows = []
     for m in members:
         primary_user = m.users.first()
@@ -969,6 +975,9 @@ def _member_rows(project, *, viewer=None):
                 "privilege": effective,
                 "is_self": (
                     primary_user is not None and primary_user.id == viewer_id
+                ),
+                "last_email": (
+                    last_emails.get(primary_user.id) if primary_user else None
                 ),
             }
         )
@@ -994,6 +1003,9 @@ def _render_member_row(request, project, member, *, oob=False):
         "user": primary_user,
         "privilege": privilege,
         "is_self": primary_user is not None and primary_user.id == request.user.id,
+        "last_email": last_sent_by_user(project, [primary_user]).get(
+            primary_user.id if primary_user else None
+        ),
     }
     return render_to_string(
         "projects/member_row.html",

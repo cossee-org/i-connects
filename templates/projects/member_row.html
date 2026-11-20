@@ -1,7 +1,7 @@
 {% load project_tags %}
 {% comment %}
 One row in the project members table. HTMX fragment — do NOT wrap in an extends tag.
-Context: row {member, user, privilege, is_self}, project, user_privilege, viewer_is_last_pm,
+Context: row {member, user, privilege, is_self, last_email}, project, user_privilege, viewer_is_last_pm,
 and oob to send it as an htmx out-of-band swap (projects.views._viewer_row_oob).
 {% endcomment %}
 {% comment %}
@@ -14,7 +14,8 @@ and oob to send it as an htmx out-of-band swap (projects.views._viewer_row_oob).
     data-sort-name="{% if row.user %}{{ row.user.name|default:row.user.email|lower }}{% else %}{{ row.member.name|default:'unnamed'|lower }}{% endif %}"
     data-sort-privilege="{% if row.privilege == 'PROJECT_MANAGER' %}0{% elif row.privilege == 'CONTRIBUTOR' %}1{% else %}2{% endif %}"
     data-sort-roles="{% for r in row.member.roles.all %}{{ r.name|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}"
-    data-sort-joined="{{ row.member.created_at|date:'U' }}">
+    data-sort-joined="{{ row.member.created_at|date:'U' }}"
+    data-sort-lastemail="{{ row.last_email|date:'U' }}">
   <td>
     <div class="flex items-center gap-2">
       {% if row.user %}
@@ -56,6 +57,20 @@ and oob to send it as an htmx out-of-band swap (projects.views._viewer_row_oob).
     keeps their membership, so this stays the date they first joined.
   {% endcomment %}
   <td class="text-xs text-brand-text/70 whitespace-nowrap">{{ row.member.created_at|date:"M j, Y" }}</td>
+  {% comment %}
+    Last email: when i-connects last sent this person an email about the
+    project, for Leads only. It opens the email log narrowed to them.
+  {% endcomment %}
+  {% if user_privilege == "PROJECT_MANAGER" %}
+  <td class="text-xs text-brand-text/70 whitespace-nowrap">
+    {% if row.last_email %}
+      <a href="{% url 'communications:email_log' project_pk=project.pk %}?member={{ row.user.pk }}"
+         class="text-brand-navy hover:text-brand-coral">{{ row.last_email|date:"M j, Y" }}</a>
+    {% else %}
+      <span class="text-brand-text/50">&mdash;</span>
+    {% endif %}
+  </td>
+  {% endif %}
   <td class="text-right">
     {% if user_privilege == "PROJECT_MANAGER" %}
     <div class="flex justify-end gap-2">

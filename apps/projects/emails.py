@@ -9,9 +9,12 @@ from __future__ import annotations
 import logging
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.urls import NoReverseMatch, reverse
+
+from apps.communications.models import EmailKind
+from apps.communications.services import send_logged
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +37,26 @@ def _absolute_url(path: str) -> str:
         )
         return path
     return f"{site}{path}"
+
+
+def _send(*, subject, body_text, body_html, recipients, kind, project) -> None:
+    """Send one project email and record it in the project's email log.
+
+    One message per recipient, so nobody sees the others' addresses and each
+    send succeeds or fails, and is logged, on its own. A failure never
+    reaches the caller: these emails go out in the middle of a request, and
+    an invitation or a decision must not be lost because the mail server is
+    down. The failure is in the email log instead.
+    """
+    for recipient in recipients:
+        message = EmailMultiAlternatives(
+            subject=subject,
+            body=body_text,
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            to=[recipient],
+        )
+        message.attach_alternative(body_html, "text/html")
+        send_logged(message, kind=kind, project=project, fail_silently=True)
 
 
 def _invitation_url(invitation) -> str:
@@ -59,13 +82,13 @@ def send_invitation_email(invitation) -> None:
     subject = render_to_string("projects/emails/invitation_subject.txt", context).strip()
     body_text = render_to_string("projects/emails/invitation.txt", context)
     body_html = render_to_string("projects/emails/invitation.html", context)
-    send_mail(
+    _send(
         subject=subject,
-        message=body_text,
-        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-        recipient_list=[invitation.email],
-        html_message=body_html,
-        fail_silently=True,
+        body_text=body_text,
+        body_html=body_html,
+        recipients=[invitation.email],
+        kind=EmailKind.INVITATION,
+        project=invitation.project,
     )
 
 
@@ -108,13 +131,13 @@ def send_join_request_email_to_pms(*, join_request, pm_user_ids) -> None:
     ).strip()
     body_text = render_to_string("projects/emails/join_request.txt", context)
     body_html = render_to_string("projects/emails/join_request.html", context)
-    send_mail(
+    _send(
         subject=subject,
-        message=body_text,
-        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-        recipient_list=recipients,
-        html_message=body_html,
-        fail_silently=True,
+        body_text=body_text,
+        body_html=body_html,
+        recipients=recipients,
+        kind=EmailKind.JOIN_REQUEST,
+        project=project,
     )
 
 
@@ -150,11 +173,11 @@ def send_join_request_decision_email(*, join_request, approved: bool) -> None:
     body_html = render_to_string(
         f"projects/emails/{template_stem}.html", context
     )
-    send_mail(
+    _send(
         subject=subject,
-        message=body_text,
-        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-        recipient_list=[recipient],
-        html_message=body_html,
-        fail_silently=True,
+        body_text=body_text,
+        body_html=body_html,
+        recipients=[recipient],
+        kind=EmailKind.JOIN_REQUEST_DECISION,
+        project=project,
     )
