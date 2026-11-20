@@ -108,6 +108,30 @@ class MemberMultiSelect(forms.SelectMultiple):
         )
 
 
+def _when(value) -> str:
+    from django.utils import timezone
+
+    return timezone.localtime(value).strftime("%b %-d, %Y %-I:%M %p")
+
+
+def start_after_deadline_problems(rows) -> list[str]:
+    """One sentence per member whose start would fall after their deadline.
+
+    ``rows`` are ``(member, start, deadline)`` — the dates each member would
+    end up with, their own where they have one, else the task's. A start
+    equal to the deadline is fine, and a missing date on either side has
+    nothing to compare. A start must never come after the deadline, for the
+    task or for any member (see ``TaskForm.clean`` and
+    ``AssigneeDatesForm.clean``).
+    """
+    return [
+        f"{member.display_name} would start {_when(start)}, after their "
+        f"deadline ({_when(deadline)})."
+        for member, start, deadline in rows
+        if start is not None and deadline is not None and start > deadline
+    ]
+
+
 class TaskForm(forms.ModelForm):
     """Create / update a Task.
 
@@ -287,6 +311,7 @@ class TaskForm(forms.ModelForm):
             if self.instance.pk
             else []
         )
+        self.individual_entries = entries
         self.original_dates = {}
         self.individual_rows = {}
         for date_field, choice_field in self.INDIVIDUAL_DATE_CHOICES.items():
@@ -332,6 +357,24 @@ class TaskForm(forms.ModelForm):
     def _to_minute(value):
         return value.replace(second=0, microsecond=0) if value else None
 
+    def _resulting_own_date(self, entry, date_field: str, new_value):
+        """The own ``date_field`` ``entry``'s member would have after this
+        edit: shifted, kept or removed as the Lead chose, when the task's
+        date moved; as it is otherwise."""
+        own = getattr(entry, date_field)
+        choice_field = self.INDIVIDUAL_DATE_CHOICES[date_field]
+        if own is None or choice_field not in self.fields:
+            return own
+        if not self.date_changed(date_field):
+            return own
+        choice = self.cleaned_data.get(choice_field) or "keep"
+        old_value = self.original_dates[date_field]
+        if choice == "shift" and old_value is not None and new_value is not None:
+            return own + (new_value - old_value)
+        if choice == "clear":
+            return None
+        return own
+
     def date_changed(self, date_field: str) -> bool:
         """Whether this edit moves, sets or clears the task's ``date_field``.
 
@@ -352,6 +395,51 @@ class TaskForm(forms.ModelForm):
             for date_field, choice_field in self.INDIVIDUAL_DATE_CHOICES.items()
             if choice_field in self.fields and self.date_changed(date_field)
         ]
+
+    def _check_member_date_order(self, cleaned) -> None:
+        """No member may end up starting after their deadline.
+
+        Checked when this edit moves the task's start or due date, on the
+        dates each member still on the task would end up with: their own,
+        shifted, kept or removed as the Lead chose, else the task's new
+        ones. The error goes on the panels the Lead answered (or, where no
+        panel applies — say the task's start moved past a member's own
+        deadline — on the task date that moved), so it shows where the
+        choice is made.
+        """
+        changed = [f for f in ("start_date", "deadline") if self.date_changed(f)]
+        watched = ["start_date", "deadline", *self.INDIVIDUAL_DATE_CHOICES.values()]
+        if (
+            not changed
+            or not self.individual_entries
+            or any(name in self.errors for name in watched)
+        ):
+            return
+        start = cleaned.get("start_date")
+        deadline = cleaned.get("deadline")
+        assigned = cleaned.get("assigned_members")
+        assigned_ids = None if assigned is None else {m.pk for m in assigned}
+        rows = []
+        for entry in self.individual_entries:
+            if assigned_ids is not None and entry.member_id not in assigned_ids:
+                continue  # taken off the task: their own dates go with them
+            own_start = self._resulting_own_date(entry, "start_date", start)
+            own_deadline = self._resulting_own_date(entry, "deadline", deadline)
+            rows.append((entry.member, own_start or start, own_deadline or deadline))
+        problems = start_after_deadline_problems(rows)
+        if not problems:
+            return
+        message = " ".join(problems) + (
+            " A start date must be on or before the deadline: choose differently "
+            "for their own dates, or change the task's dates."
+        )
+        targets = [
+            self.INDIVIDUAL_DATE_CHOICES[f]
+            for f in changed
+            if self.INDIVIDUAL_DATE_CHOICES[f] in self.fields
+        ] or changed
+        for target in targets:
+            self.add_error(target, message)
 
     def clean_contribution_type(self):
         """An unpicked task type falls back to the model's own default."""
@@ -402,6 +490,8 @@ class TaskForm(forms.ModelForm):
                     )
                     + f" Keep or remove the individual {names[date_field]}s instead.",
                 )
+
+        self._check_member_date_order(cleaned)
 
         if cleaned.get("requires_review"):
             if not cleaned.get("reviewers"):
@@ -535,11 +625,16 @@ class AssigneeDatesForm(forms.Form):
     )
     reason = forms.CharField(required=False, max_length=500)
 
-    def __init__(self, *args, task, scope="member", current=None, **kwargs):
+    def __init__(
+        self, *args, task, scope="member", current=None, pending=(), **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self.task = task
         self.scope = scope
         self.current = current  # the member's AssigneeDeadline, if any
+        # scope "pending": (member, their AssigneeDeadline or None) for each
+        # assignee not yet done — whose dates a date left empty keeps.
+        self.pending = list(pending)
 
     @staticmethod
     def _minute(value):
@@ -562,16 +657,38 @@ class AssigneeDatesForm(forms.Form):
             and deadline <= timezone.now()
         ):
             self.add_error("deadline", "Choose a deadline in the future.")
-        # The member's resulting dates: an empty one follows the task's (or,
-        # for everyone not done, the task's is the best common reference).
-        effective_start = start or self.task.start_date
-        effective_deadline = deadline or self.task.deadline
-        if effective_start and effective_deadline and effective_start > effective_deadline:
-            self.add_error(
-                "start_date",
-                "The start date must be on or before the deadline ("
-                + timezone.localtime(effective_deadline).strftime("%b %-d, %Y %-I:%M %p")
-                + ").",
-            )
+        # The dates each member ends up with must keep start <= deadline.
+        # For one member an empty date follows the task's; for everyone not
+        # done it is left as each member has it (their own, else the task's).
+        if self.scope == "pending":
+            rows = [
+                (
+                    member,
+                    start or (entry and entry.start_date) or self.task.start_date,
+                    deadline or (entry and entry.deadline) or self.task.deadline,
+                )
+                for member, entry in self.pending
+            ]
+            problems = start_after_deadline_problems(rows)
+            if problems:
+                self.add_error(
+                    "start_date" if start is not None else "deadline",
+                    " ".join(problems)
+                    + " A start date must be on or before the deadline.",
+                )
+        else:
+            effective_start = start or self.task.start_date
+            effective_deadline = deadline or self.task.deadline
+            if (
+                effective_start
+                and effective_deadline
+                and effective_start > effective_deadline
+            ):
+                self.add_error(
+                    "start_date",
+                    "The start date must be on or before the deadline ("
+                    + _when(effective_deadline)
+                    + ").",
+                )
         return cleaned
 

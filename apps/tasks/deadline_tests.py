@@ -936,3 +936,159 @@ def test_moving_both_dates_applies_each_choice(client, pm_user, moved_start):
     own.refresh_from_db()
     assert own.start_date == old_own_start
     assert own.deadline is None
+
+
+# ---------------------------------------------------------------------------
+# A start date never falls after the deadline — for any member
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_shifting_own_starts_past_kept_own_deadlines_is_refused(client, pm_user, moved_start):
+    """The task starts on day 2 and is due on day 20; Bo starts on day 5 and
+    is due on day 15 (both his own). Moving the task's start 12 days later
+    and shifting his start puts it on day 17, after his own deadline, which
+    is kept."""
+    project, task, ari, bo, own, _new = moved_start
+    lead = ProjectMember.objects.filter(project=project, users=pm_user).first()
+    own = set_member_dates(
+        task=task, member=bo, lead=lead, deadline=task.deadline - timedelta(days=5)
+    )
+    old_start, old_own_start = task.start_date, own.start_date
+    late_start = task.start_date + timedelta(days=12)
+    client.force_login(pm_user)
+
+    response = _edit(
+        client, project, task, [ari, bo],
+        start_date=_local_input(late_start), deadline=_local_input(task.deadline),
+        individual_start_dates="shift",
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "would start" in content and "after their deadline" in content
+    assert bo.display_name in content
+    task.refresh_from_db()
+    own.refresh_from_db()
+    assert task.start_date == old_start
+    assert own.start_date == old_own_start
+
+    # Keeping his start instead is fine.
+    response = _edit(
+        client, project, task, [ari, bo],
+        start_date=_local_input(late_start), deadline=_local_input(task.deadline),
+        individual_start_dates="keep",
+    )
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_shifting_own_deadlines_before_kept_own_starts_is_refused(client, pm_user, moved_start):
+    project, task, ari, bo, own, _new = moved_start
+    # Pull the task deadline in so Bo's shifted deadline lands before his start.
+    early = task.deadline - timedelta(days=22)  # Bo due day 2, but starts day 5
+    client.force_login(pm_user)
+
+    response = _edit(
+        client, project, task, [ari, bo],
+        start_date="", deadline=_local_input(early),
+        individual_start_dates="keep", individual_deadlines="shift",
+    )
+
+    assert response.status_code == 200
+    assert "after their deadline" in response.content.decode()
+
+    # Removing his own deadline puts him on the task's, still before his start.
+    response = _edit(
+        client, project, task, [ari, bo],
+        start_date="", deadline=_local_input(early),
+        individual_start_dates="keep", individual_deadlines="clear",
+    )
+    assert response.status_code == 200
+
+    # Removing his own start as well is fine.
+    response = _edit(
+        client, project, task, [ari, bo],
+        start_date="", deadline=_local_input(early),
+        individual_start_dates="clear", individual_deadlines="clear",
+    )
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_task_start_moved_past_an_own_deadline_is_refused(client, pm_user, user, other_user):
+    """No panel applies — Bo has only his own (earlier) deadline — so the
+    error goes on the task's start date."""
+    project, task, lead, [ari, bo] = _setup(pm_user, user, other_user, deadline_days=20)
+    task.deadline = _minute(task.deadline)
+    task.save()
+    set_member_dates(task=task, member=bo, lead=lead, deadline=task.deadline - timedelta(days=10))
+    client.force_login(pm_user)
+
+    response = _edit(
+        client, project, task, [ari, bo],
+        start_date=_local_input(task.deadline - timedelta(days=5)),
+        deadline=_local_input(task.deadline),
+    )
+
+    assert response.status_code == 200
+    assert "after their deadline" in response.content.decode()
+    assert response.context["form"].errors["start_date"]
+
+
+@pytest.mark.django_db
+def test_member_taken_off_is_not_checked(client, pm_user, user, other_user):
+    project, task, lead, [ari, bo] = _setup(pm_user, user, other_user, deadline_days=20)
+    task.deadline = _minute(task.deadline)
+    task.save()
+    set_member_dates(task=task, member=bo, lead=lead, deadline=task.deadline - timedelta(days=10))
+    client.force_login(pm_user)
+
+    response = _edit(
+        client, project, task, [ari],
+        start_date=_local_input(task.deadline - timedelta(days=5)),
+        deadline=_local_input(task.deadline),
+    )
+
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_set_dates_for_all_checks_each_members_own_dates(client, pm_user, user, other_user):
+    _project, task, lead, [ari, bo] = _setup(pm_user, user, other_user, deadline_days=20)
+    # Bo's own deadline is in 5 days; the task's in 20.
+    set_member_dates(task=task, member=bo, lead=lead, deadline=timezone.now() + timedelta(days=5))
+    client.force_login(pm_user)
+
+    # A common start in 10 days fits Ari (task deadline) but not Bo.
+    response = _post(
+        client, task, scope="pending",
+        start_date=_local_input(timezone.now() + timedelta(days=10)),
+    )
+    assert response.status_code == 400
+    content = response.content.decode()
+    assert bo.display_name in content and ari.display_name not in content
+    assert not AssigneeDeadline.objects.filter(member=ari).exists()
+
+    # A common deadline before Bo's... and Ari's own start.
+    set_member_dates(task=task, member=ari, lead=lead, start_date=timezone.now() + timedelta(days=8))
+    response = _post(
+        client, task, scope="pending",
+        deadline=_local_input(timezone.now() + timedelta(days=6)),
+    )
+    assert response.status_code == 400
+    assert ari.display_name in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_start_equal_to_deadline_is_allowed(client, pm_user, other_user):
+    _project, task, _lead, [bob] = _setup(pm_user, other_user, deadline_days=10)
+    same = timezone.now() + timedelta(days=4)
+    client.force_login(pm_user)
+
+    response = _post(
+        client, task, member=bob.pk,
+        start_date=_local_input(same), deadline=_local_input(same),
+    )
+
+    assert response.status_code == 200

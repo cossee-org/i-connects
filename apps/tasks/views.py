@@ -79,6 +79,7 @@ from apps.tasks.services import (
     mark_reviewed,
     move_task,
     notify_new_assignees,
+    pending_members,
     reopen_own,
     reopen_task,
     review_closed,
@@ -1963,8 +1964,13 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                     is_project_manager=self.is_project_manager,
                 )
             current = self.task.assignee_deadlines.filter(member=member).first()
+        pending = ()
+        if scope == "pending":
+            own = {d.member_id: d for d in self.task.assignee_deadlines.all()}
+            pending = [(m, own.get(m.id)) for m in pending_members(self.task)]
         form = AssigneeDatesForm(
-            request.POST, task=self.task, scope=scope, current=current
+            request.POST, task=self.task, scope=scope, current=current,
+            pending=pending,
         )
         if not form.is_valid():
             return HttpResponseBadRequest(
