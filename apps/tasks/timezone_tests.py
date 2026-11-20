@@ -514,7 +514,8 @@ def test_removing_own_dates_removes_their_zone(client, pm_user, zoned):
 @pytest.mark.django_db
 def test_start_and_deadline_in_different_zones_compare_as_moments(client, pm_user, zoned):
     """The task is due Jan 15 5:00 PM MST (Jan 16 00:00 UTC). 8:00 AM Jan 16
-    in Tokyo is an hour earlier; 10:00 AM is an hour later."""
+    in Tokyo is an hour earlier; 10:00 AM is an hour later. The refusal
+    states both in the member's timezone."""
     _project, task, _lead, ari, _bo = zoned
     client.force_login(pm_user)
 
@@ -523,7 +524,31 @@ def test_start_and_deadline_in_different_zones_compare_as_moments(client, pm_use
 
     refused = _post(client, task, member=ari.pk, timezone="Asia/Tokyo", start_date="2027-01-16T10:00")
     assert refused.status_code == 400
-    assert "Jan 15, 2027 5:00 PM MST" in refused.content.decode()
+    assert (
+        "The start date (Jan 16, 2027 10:00 AM JST) must be on or before the "
+        "deadline (Jan 16, 2027 9:00 AM JST)."
+    ) in refused.content.decode()
+
+
+@pytest.mark.django_db
+def test_own_deadline_may_come_before_the_tasks_start(client, pm_user, zoned):
+    """A collaborator far ahead in time may be given a deadline that falls
+    before the task's start: with no start of their own, nothing is
+    checked."""
+    _project, task, _lead, ari, _bo = zoned
+    task.start_date = _at(DENVER, 2027, 1, 15, 9, 0)  # Jan 16 01:00 in Tokyo
+    task.save()
+    client.force_login(pm_user)
+
+    response = _post(
+        client, task, member=ari.pk, timezone="Asia/Tokyo",
+        deadline_0="2027-01-15", deadline_1="17:00",  # Jan 15 01:00 in Denver
+    )
+
+    assert response.status_code == 200
+    own = AssigneeDeadline.objects.get(member=ari)
+    assert own.deadline < task.start_date
+    assert own.start_date is None
 
 
 @pytest.mark.django_db

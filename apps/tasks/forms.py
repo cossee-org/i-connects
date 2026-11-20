@@ -128,7 +128,14 @@ def _when(value, zone=None) -> str:
 
 
 def start_after_deadline_problems(rows) -> list[str]:
-    """One sentence per member whose start would fall after their deadline.
+    """One sentence per member whose own start would fall after their deadline.
+
+    The one rule for a member's dates: when they have a start date of their
+    own, the deadline they end up with (their own, else the task's) must be
+    on or after it. A member who follows the task's start is not checked —
+    their own deadline may be earlier than the task's start or due date, to
+    suit collaborators in other timezones. Callers pass only members with an
+    own start.
 
     ``rows`` are ``(member, start, deadline)`` — the dates each member would
     end up with, their own where they have one, else the task's — or
@@ -487,15 +494,18 @@ class TaskForm(forms.ModelForm):
         ]
 
     def _check_member_date_order(self, cleaned) -> None:
-        """No member may end up starting after their deadline.
+        """No member with a start of their own may end up starting after
+        their deadline.
 
-        Checked when this edit moves the task's start or due date, on the
-        dates each member still on the task would end up with: their own,
-        shifted, kept or removed as the Lead chose, else the task's new
-        ones. The error goes on the panels the Lead answered (or, where no
-        panel applies — say the task's start moved past a member's own
-        deadline — on the task date that moved), so it shows where the
-        choice is made.
+        Checked when this edit moves the task's start or due date (or its
+        zone), on the dates each member still on the task would end up with:
+        their own, shifted, kept or removed as the Lead chose, else the
+        task's new ones. Only members left with an own start are checked
+        (``start_after_deadline_problems``): one following the task's start
+        may have an own deadline before it. The error goes on the panels the
+        Lead answered (or, where no panel applies — say the task's due date
+        moved before a member's own start — on the task date that moved), so
+        it shows where the choice is made.
         """
         changed = [f for f in ("start_date", "deadline") if self.date_changed(f)]
         watched = [
@@ -516,15 +526,12 @@ class TaskForm(forms.ModelForm):
             if assigned_ids is not None and entry.member_id not in assigned_ids:
                 continue  # taken off the task: their own dates go with them
             own_start = self._resulting_own_date(entry, "start_date", start)
+            if own_start is None:
+                continue  # follows the task's start: nothing to check
             own_deadline = self._resulting_own_date(entry, "deadline", deadline)
             own_zone = entry.timezone or self.new_zone_name
-            rows.append((
-                entry.member,
-                own_start or start,
-                own_deadline or deadline,
-                own_zone if own_start else self.new_zone_name,
-                own_zone if own_deadline else self.new_zone_name,
-            ))
+            # Both shown in the zone the member's own dates are in.
+            rows.append((entry.member, own_start, own_deadline or deadline, own_zone, own_zone))
         problems = start_after_deadline_problems(rows)
         if not problems:
             return
@@ -708,10 +715,10 @@ class AssigneeDatesForm(forms.Form):
     everyone not yet done (``scope="pending"``) an empty date means "leave
     each member's as it is", so at least one is needed.
 
-    A deadline has to be in the future when it is being changed: one already
-    stored, and passed, may be sent back untouched alongside a new start
-    date. A start date must not fall after the deadline the member ends up
-    with.
+    The one rule: a start date of the member's own must not fall after the
+    deadline they end up with (their own, else the task's), compared as
+    moments and reported in the member's timezone. Their deadline may be
+    earlier than the task's start or due date, and may be in the past.
 
     ``timezone`` governs the member's own dates: the dates are read in it,
     and shown in it afterwards. Empty means "Same as task": the task's zone.
@@ -760,8 +767,6 @@ class AssigneeDatesForm(forms.Form):
         return value.replace(second=0, microsecond=0) if value else None
 
     def clean(self):
-        from django.utils import timezone
-
         cleaned = super().clean()
         if self.errors:
             return cleaned
@@ -798,29 +803,21 @@ class AssigneeDatesForm(forms.Form):
                 f"Set a start date or deadline for {name} first \u2014 a "
                 "contributor's timezone applies to their own dates."
             )
-        stored = self.current.deadline if self.current else None
-        if (
-            deadline is not None
-            and self._minute(deadline) != self._minute(stored)
-            and deadline <= timezone.now()
-        ):
-            self.add_error("deadline", "Choose a deadline in the future.")
-        # The dates each member ends up with must keep start <= deadline.
-        # For one member an empty date follows the task's; for everyone not
-        # done it is left as each member has it (their own, else the task's).
-        task_zone = self.task.timezone
+        # The one rule: a start of the member's own must be on or before the
+        # deadline they end up with. For one member an empty date follows
+        # the task's; for everyone not done it is left as each member has it
+        # (their own, else the task's). Shown in the member's timezone.
         if self.scope == "pending":
             rows = []
+            # Every member gets the dialog's zone, so their dates read in it.
+            zone = self.zone_name
             for member, entry in self.pending:
-                kept_zone = (entry and entry.timezone) or task_zone
                 own_start = start or (entry and entry.start_date)
+                if not own_start:
+                    continue  # follows the task's start
                 own_deadline = deadline or (entry and entry.deadline)
                 rows.append((
-                    member,
-                    own_start or self.task.start_date,
-                    own_deadline or self.task.deadline,
-                    (self.zone_name if start else kept_zone) if own_start else task_zone,
-                    (self.zone_name if deadline else kept_zone) if own_deadline else task_zone,
+                    member, own_start, own_deadline or self.task.deadline, zone, zone,
                 ))
             problems = start_after_deadline_problems(rows)
             if problems:
@@ -829,21 +826,15 @@ class AssigneeDatesForm(forms.Form):
                     " ".join(problems)
                     + " A start date must be on or before the deadline.",
                 )
-        else:
-            effective_start = start or self.task.start_date
+        elif start is not None:
             effective_deadline = deadline or self.task.deadline
-            if (
-                effective_start
-                and effective_deadline
-                and effective_start > effective_deadline
-            ):
+            if effective_deadline is not None and start > effective_deadline:
                 self.add_error(
                     "start_date",
-                    "The start date must be on or before the deadline ("
-                    + _when(
-                        effective_deadline,
-                        self.zone_name if deadline else task_zone,
-                    )
+                    "The start date ("
+                    + _when(start, self.zone_name)
+                    + ") must be on or before the deadline ("
+                    + _when(effective_deadline, self.zone_name)
                     + ").",
                 )
         return cleaned
