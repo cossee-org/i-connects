@@ -478,6 +478,40 @@ def test_in_zone_filter_formats_in_the_given_zone():
 
 
 @pytest.mark.django_db
+def test_task_card_shows_the_times_and_the_timezone(client, pm_user, zoned):
+    project, task, *_ = zoned
+    task.start_date = _at(DENVER, 2027, 1, 11, 9, 0)
+    task.save()
+    client.force_login(pm_user)
+
+    content = client.get(
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk})
+    ).content.decode()
+
+    assert "Jan 11, 2027 9:00 AM – Jan 15, 2027 5:00 PM MST" in content
+    assert (
+        "data-task-timezone>(UTC\u221207:00) Denver, United States of America</dd>"
+    ) in content
+
+
+def test_task_when_formats():
+    from apps.tasks.templatetags.task_tags import task_when
+
+    task = Task(timezone="America/Denver")
+    assert task_when(task) == ""
+    task.deadline = _at(DENVER, 2027, 1, 15, 17, 0)
+    assert task_when(task) == "Due Jan 15, 2027 5:00 PM MST"
+    task.start_date = _at(DENVER, 2027, 1, 15, 9, 0)
+    assert task_when(task) == "Jan 15, 2027 9:00 AM – 5:00 PM MST"
+    # Across the change to daylight time, each date names its own.
+    task.start_date = _at(DENVER, 2027, 3, 10, 9, 0)
+    task.deadline = _at(DENVER, 2027, 3, 19, 17, 0)
+    assert task_when(task) == "Mar 10, 2027 9:00 AM MST – Mar 19, 2027 5:00 PM MDT"
+    task.deadline = None
+    assert task_when(task) == "Starts Mar 10, 2027 9:00 AM MST"
+
+
+@pytest.mark.django_db
 def test_calendar_places_a_task_on_its_own_day(pm_user, zoned):
     _project, task, *_ = zoned
     task.deadline = _at(DENVER, 2027, 1, 15, 23, 0)  # Jan 16 06:00 UTC

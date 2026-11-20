@@ -1996,7 +1996,7 @@ def test_pane_pills_share_one_row_above_the_dates(client, user):
     assert (
         pane.index("High priority")
         < pane.index("Not Complete")
-        < pane.index("Mar 10, 2026 – Mar 12, 2026")
+        < pane.index("Mar 10, 2026 12:00 AM – Mar 12, 2026 12:00 AM UTC")
         < pane.index("Kanban column")
     ), "expected High priority, completion, the dates, then the Kanban column row"
     if project.tracks_credit:
@@ -2927,7 +2927,7 @@ def test_full_task_page_orders_its_sections_like_the_pane(client, user, other_us
 
     start = detail.index('id="task-summary"')
     card = detail[start : detail.index("</section>", start)]
-    for piece in ("Moded", "High priority", "Not Complete", "Mar 10, 2026 – Mar 12, 2026",
+    for piece in ("Moded", "High priority", "Not Complete", "Mar 10, 2026 12:00 AM – Mar 12, 2026 12:00 AM UTC",
                   "Created by", "Some description."):
         assert piece in card, f"the task's card is missing {piece}"
 

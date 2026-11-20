@@ -39,6 +39,36 @@ def default_timezone_name():
 
 
 @register.filter
+def task_when(task):
+    """A task's dates with their times, in the task's own timezone, for the
+    task card: "Nov 15, 2026 9:00 AM – Nov 30, 2026 5:00 PM MST". The
+    zone's abbreviation is given once, or on each date when they differ (a
+    span across a daylight-saving change); a span within one day names the
+    day once ("Nov 15, 2026 9:00 AM – 5:00 PM MST"). A task with one date
+    says which it is ("Due Nov 30, 2026 5:00 PM MST"). Empty for a task
+    with no dates."""
+    day_fmt, time_fmt = "%b %-d, %Y", "%-I:%M %p"
+    zone = task.tz
+    start = task.start_date.astimezone(zone) if task.start_date else None
+    end = task.deadline.astimezone(zone) if task.deadline else None
+    if start is None and end is None:
+        return ""
+    if start is None or end is None:
+        when = end or start
+        prefix = "Due" if end is not None else "Starts"
+        return f"{prefix} {when:{day_fmt}} {when:{time_fmt}} {when.tzname()}"
+    if start > end:
+        start, end = end, start
+    same_abbr = start.tzname() == end.tzname()
+    first = f"{start:{day_fmt}} {start:{time_fmt}}" + ("" if same_abbr else f" {start.tzname()}")
+    if start.date() == end.date():
+        second = f"{end:{time_fmt}}"
+    else:
+        second = f"{end:{day_fmt}} {end:{time_fmt}}"
+    return f"{first} \u2013 {second} {end.tzname()}"
+
+
+@register.filter
 def in_zone(value, zone):
     """``value`` in ``zone`` (an IANA name; empty or unknown falls back to
     the server's), for the ``date`` filter to format as it stands rather
