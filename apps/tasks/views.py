@@ -66,7 +66,12 @@ from apps.tasks.forms import (
     TaskMilestoneForm,
 )
 from apps.tasks.ics import build_ics
-from apps.tasks.timezones import DEFAULT_DUE_TIME, DEFAULT_START_TIME, picker_value
+from apps.tasks.timezones import (
+    DEFAULT_DUE_TIME,
+    DEFAULT_START_TIME,
+    picker_value,
+    timezone_option,
+)
 from apps.tasks.import_csv import import_rows, parse_csv
 from apps.tasks.import_form import TaskImportForm
 from apps.tasks.mixins import (
@@ -1401,6 +1406,10 @@ def _task_status_context(task, *, project_member, is_project_manager):
     # task has no dates left to keep.
     can_set_dates = is_project_manager and task.status != TaskStatus.COMPLETED
 
+    def _zone_label(name):
+        option = timezone_option(name)
+        return option["display"] if option else name
+
     def picker(value, zone):
         """A date as the Lead's date picker (datetime-local) takes it, in
         ``zone``."""
@@ -1518,6 +1527,10 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # task's), or None when they have no own dates — the dialog
                 # then starts on the Lead's system timezone.
                 "own_timezone": individual.timezone if individual else None,
+                # The zone their own dates are in — their own, else the
+                # task's — as the picker labels it, for the line under
+                # their name.
+                "timezone_label": _zone_label(own_zone),
                 # Late on their own deadline: open task, part not done.
                 "overdue": bool(
                     effective_deadline is not None

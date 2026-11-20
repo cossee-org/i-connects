@@ -6,7 +6,7 @@
   verified, verified_by, verified_at, awaiting_verification,
   can_mark_done, can_review, can_unreview, can_verify, can_unverify,
   individual, own_start, own_deadline, start_date, deadline, start_tz,
-  deadline_tz, own_timezone, overdue,
+  deadline_tz, own_timezone, timezone_label, overdue,
   can_set_dates, own_start_input, own_deadline_input, tracks_credit,
   own_type, contribution_type, contribution_type_label, can_set_type),
   pending_dates_count, can_set_dates, can_set_type, own_type_count,
@@ -347,6 +347,15 @@
                   {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
                 </div>
                 {% comment %}
+                  The timezone the member's dates are in: their own, kept
+                  with their own dates, else the task's. Left out when
+                  neither the task nor the member has a date.
+                {% endcomment %}
+                {% if s.individual or s.start_date or s.deadline %}
+                  <div class="mt-1 text-xs text-brand-text/70"
+                       data-member-timezone="{% if s.individual.timezone %}own{% else %}task{% endif %}">Timezone: {{ s.timezone_label }}{% if s.individual.timezone %} &middot; own timezone{% endif %}</div>
+                {% endif %}
+                {% comment %}
                   The member's dates, under their name: "Starts Nov 20 ·" when
                   they have their own start date, then their deadline —
                   either their own or the task's — with "own deadline" /
@@ -391,7 +400,7 @@
                        data-member-type="{% if s.own_type %}own{% else %}task{% endif %}"
                        data-member-type-value="{{ s.contribution_type }}">
                     <span class="text-brand-text/70"
-                          {% if s.own_type %}title="Individual contribution type{% if s.own_type.set_by %} set by {{ s.own_type.set_by.display_name }}{% endif %} (task: {{ task.get_contribution_type_display }})"{% endif %}>Type: <span class="text-brand-navy font-medium">{{ s.contribution_type_label }}</span>{% if s.own_type %} &middot; own type{% endif %}</span>
+                          {% if s.own_type %}title="Individual contribution type{% if s.own_type.set_by %} set by {{ s.own_type.set_by.display_name }}{% endif %} (task: {{ task.get_contribution_type_display }})"{% endif %}>Type: {{ s.contribution_type_label }}{% if s.own_type %} &middot; own type{% endif %}</span>
                     {% if s.can_set_type %}
                       <button type="button" class="text-brand-navy font-medium hover:underline"
                               @click="$dispatch('open-member-type', { member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', value: '{% if s.own_type %}{{ s.own_type.contribution_type }}{% endif %}', hasOwn: {% if s.own_type %}true{% else %}false{% endif %} })"

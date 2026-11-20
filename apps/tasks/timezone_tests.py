@@ -501,6 +501,29 @@ def test_dialog_starts_on_the_system_zone_unless_one_is_saved(client, pm_user, z
     assert "is due <span class=\"font-semibold text-brand-navy\">Jan 15, 2027 5:00 PM MST</span>" in content
 
 
+@pytest.mark.django_db
+def test_completion_table_names_each_members_timezone(client, pm_user, zoned):
+    _project, task, lead, ari, bo = zoned
+    set_member_dates(
+        task=task, member=ari, lead=lead, timezone="Asia/Tokyo",
+        deadline=_at(TOKYO, 2027, 1, 20, 9, 0),
+    )
+    client.force_login(pm_user)
+
+    content = client.get(
+        reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
+    ).content.decode()
+
+    assert (
+        'data-member-timezone="own">Timezone: (UTC+09:00) Tokyo, Japan'
+        " &middot; own timezone</div>"
+    ) in content
+    assert (
+        'data-member-timezone="task">Timezone: (UTC\u221207:00) Denver, '
+        "United States of America</div>"
+    ) in content
+
+
 # ---------------------------------------------------------------------------
 # Showing dates
 # ---------------------------------------------------------------------------
