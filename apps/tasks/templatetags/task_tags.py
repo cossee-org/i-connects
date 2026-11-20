@@ -40,17 +40,40 @@ def task_dates(task):
 
 
 @register.filter
-def due_hint(task):
+def due_hint(task, member=None):
     """How long an open task has left, beside its dates: "4 days left",
     "1 day left" or "Due today". Empty for a task with no deadline, one
-    already completed, and one past due — the Overdue pill says that."""
+    already completed, and one past due — the Overdue (or Extended) pill
+    says that.
+
+    Pass the viewer's ``ProjectMember`` (``task|due_hint:project_member``):
+    when a Lead gave them an individual deadline, the hint speaks to theirs
+    instead — "Your deadline Mar 19 · 4 days left", or "Your deadline
+    passed Mar 12" — since the dates beside it are the task's.
+    """
     from django.utils import timezone
 
     from apps.core.enums import TaskStatus
 
-    if not task.deadline or task.status == TaskStatus.COMPLETED or task.is_overdue:
+    if task.status == TaskStatus.COMPLETED:
         return ""
-    days = (timezone.localdate(task.deadline) - timezone.localdate()).days
+    personal = None
+    if member and getattr(member, "pk", None):
+        personal = task.personal_deadlines().get(member.pk)
+    if personal is not None:
+        date = timezone.localtime(personal).strftime("%b %-d")
+        if personal < timezone.now():
+            return f"Your deadline passed {date}"
+        return f"Your deadline {date} · {_days_left(personal)}"
+    if not task.deadline or task.is_past_due:
+        return ""
+    return _days_left(task.deadline)
+
+
+def _days_left(deadline) -> str:
+    from django.utils import timezone
+
+    days = (timezone.localdate(deadline) - timezone.localdate()).days
     if days <= 0:
         return "Due today"
     return f"{days} day{'' if days == 1 else 's'} left"

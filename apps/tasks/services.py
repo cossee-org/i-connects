@@ -15,7 +15,14 @@ from django.utils import timezone
 from apps.audit.services import AuditAction, log_action
 from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
-from apps.tasks.models import ActivityEvent, KanbanBoard, Task, TaskActivity, TaskLog
+from apps.tasks.models import (
+    ActivityEvent,
+    AssigneeDeadline,
+    KanbanBoard,
+    Task,
+    TaskActivity,
+    TaskLog,
+)
 
 
 @transaction.atomic
@@ -682,6 +689,172 @@ def approve_completion(
     _notify_task_approval(task_log=task_log, approved=approved)
 
     return task_log
+
+
+# ---------------------------------------------------------------------------
+# Individual deadlines
+# ---------------------------------------------------------------------------
+def pending_members(task: Task) -> list[ProjectMember]:
+    """The task's assignees who have not marked their part done."""
+    current = current_logs(task)
+    return [
+        member
+        for member in task.assigned_members.all()
+        if (log := current.get(member.id)) is None
+        or log.status != TaskStatus.COMPLETED
+    ]
+
+
+@transaction.atomic
+def set_member_deadline(
+    *,
+    task: Task,
+    member: ProjectMember,
+    deadline,
+    lead: ProjectMember | None,
+    reason: str = "",
+    batch: bool = False,
+) -> AssigneeDeadline:
+    """A Lead gives one assignee their own deadline on ``task``.
+
+    It replaces the task deadline for that member alone, and may be earlier
+    or later than it; the task deadline still holds for the task and for
+    everyone else. Setting it again overwrites it. Callers check that
+    ``lead`` is a Lead and ``member`` is assigned (``views.TaskDeadlineView``).
+
+    Writes an audit row naming the old and new dates, and tells the member.
+    A no-op, with nothing written, when the deadline and reason are unchanged.
+    """
+    reason = (reason or "").strip()
+    existing = AssigneeDeadline.objects.filter(task=task, member=member).first()
+    if existing and existing.deadline == deadline and existing.reason == reason:
+        return existing
+    previous = existing.deadline if existing else None
+    entry = existing or AssigneeDeadline(task=task, member=member)
+    entry.deadline = deadline
+    entry.reason = reason
+    entry.set_by = lead
+    entry.save()
+    _log_deadline_action(
+        AuditAction.TASK_DEADLINE_SET,
+        task=task,
+        member=member,
+        actor_member=lead,
+        deadline=deadline,
+        previous=previous,
+        reason=reason,
+        batch=batch,
+    )
+    _notify_member_deadline(task=task, member=member, deadline=deadline, lead=lead)
+    return entry
+
+
+@transaction.atomic
+def set_pending_deadlines(
+    *, task: Task, deadline, lead: ProjectMember | None, reason: str = ""
+) -> list[ProjectMember]:
+    """Give every assignee not yet done the same individual deadline.
+
+    Members who have marked their part done are left as they are. Returns
+    the members it covered.
+    """
+    members = pending_members(task)
+    for member in members:
+        set_member_deadline(
+            task=task, member=member, deadline=deadline, lead=lead,
+            reason=reason, batch=True,
+        )
+    return members
+
+
+@transaction.atomic
+def clear_member_deadline(
+    *, task: Task, member: ProjectMember, actor: ProjectMember | None
+) -> bool:
+    """Remove ``member``'s individual deadline, putting them back on the
+    task's. Returns False, writing nothing, when they had none."""
+    existing = AssigneeDeadline.objects.filter(task=task, member=member).first()
+    if existing is None:
+        return False
+    previous = existing.deadline
+    existing.delete()
+    _log_deadline_action(
+        AuditAction.TASK_DEADLINE_CLEARED,
+        task=task,
+        member=member,
+        actor_member=actor,
+        deadline=None,
+        previous=previous,
+    )
+    _notify_member_deadline(task=task, member=member, deadline=None, lead=actor)
+    return True
+
+
+def _log_deadline_action(
+    action,
+    *,
+    task: Task,
+    member: ProjectMember,
+    actor_member: ProjectMember | None,
+    deadline,
+    previous,
+    reason: str = "",
+    batch: bool = False,
+) -> None:
+    """Append an audit row for an individual deadline set or removed."""
+    metadata = {
+        "task_name": task.name,
+        "assignee_member_id": member.pk,
+        "deadline": deadline.isoformat() if deadline else None,
+        "previous_deadline": previous.isoformat() if previous else None,
+        "task_deadline": task.deadline.isoformat() if task.deadline else None,
+    }
+    if reason:
+        metadata["reason"] = reason
+    if batch:
+        metadata["batch"] = "pending"
+    log_action(
+        action,
+        actor=actor_member.users.first() if actor_member is not None else None,
+        entity=task,
+        project=task.project,
+        metadata=metadata,
+    )
+
+
+def _notify_member_deadline(
+    *, task: Task, member: ProjectMember, deadline, lead: ProjectMember | None
+) -> None:
+    """Tell the member their deadline on ``task`` changed (in-app)."""
+    try:
+        from apps.notifications.services import create_notification
+    except Exception:  # pragma: no cover
+        return
+
+    user_ids = set(member.users.values_list("id", flat=True))
+    if lead is not None:
+        user_ids.difference_update(lead.users.values_list("id", flat=True))
+    if not user_ids:
+        return
+    if deadline is not None:
+        when = timezone.localtime(deadline).strftime("%b %-d, %Y %-I:%M %p")
+        title = f"Your deadline changed: {task.name}"
+        body = f"Your part is now due {when}."
+    else:
+        title = f"Your individual deadline was removed: {task.name}"
+        if task.deadline:
+            when = timezone.localtime(task.deadline).strftime("%b %-d, %Y %-I:%M %p")
+            body = f"The task deadline applies to you again: {when}."
+        else:
+            body = "The task has no deadline."
+    create_notification(
+        users=list(user_ids),
+        title=title,
+        body=body,
+        project=task.project,
+        route="tasks:detail",
+        route_kwargs={"project_pk": task.project_id, "pk": task.pk},
+    )
 
 
 # ---------------------------------------------------------------------------

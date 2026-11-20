@@ -368,3 +368,32 @@ class TaskMilestoneForm(forms.Form):
         super().__init__(*args, **kwargs)
         if project is not None:
             self.fields["milestone"].queryset = Milestone.objects.filter(project=project)
+
+
+class AssigneeDeadlineForm(forms.Form):
+    """A Lead's individual deadline for one assignee, or for every assignee
+    not yet done (``views.TaskDeadlineView``). Earlier or later than the
+    task's own deadline, but not in the past."""
+
+    deadline = forms.DateTimeField(
+        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"],
+        widget=forms.DateTimeInput(
+            attrs={"type": "datetime-local", "class": _daisy_input},
+            format="%Y-%m-%dT%H:%M",
+        ),
+        error_messages={"required": "Choose a deadline."},
+    )
+    reason = forms.CharField(
+        required=False,
+        max_length=500,
+        widget=forms.TextInput(attrs={"class": _daisy_input}),
+    )
+
+    def clean_deadline(self):
+        from django.utils import timezone
+
+        deadline = self.cleaned_data["deadline"]
+        if deadline <= timezone.now():
+            raise forms.ValidationError("Choose a deadline in the future.")
+        return deadline
+

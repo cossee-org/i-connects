@@ -1,0 +1,102 @@
+{% comment %}
+  The Lead's individual-deadline dialog, in the app's standard modal: a
+  daisyUI <dialog> with a navy title, Cancel and a coral primary action, and
+  a click-outside backdrop that closes it (the same shape as
+  task_verify_batch_modal.html).
+
+  One dialog serves the whole completion table. It opens on an
+  ``open-deadline`` window event, whose detail fills it in:
+
+    scope        "member" for one assignee, "pending" for every assignee
+                 not yet done
+    member       the assignee's ProjectMember id (scope "member")
+    name         their display name, for the title
+    value        the picker's starting value (YYYY-MM-DDTHH:MM, local)
+    reason       the note already on their individual deadline, if any
+    hasPersonal  whether they have one, which offers Remove
+
+  Each row's Set deadline / Change button and the "Set deadline for all not
+  done" button in task_status_block.html dispatch it. Saving posts to
+  tasks:member_deadline and swaps #task-status-block, which this dialog sits
+  inside, so the swap closes it. A refusal (a date in the past, say) comes
+  back as a 400 whose text is shown above the buttons. Remove posts the same
+  form with action=clear (htmx sends the enclosing form's fields with it).
+
+  Expects ``task`` and ``assignee_states``.
+{% endcomment %}
+<dialog id="deadline-modal-{{ task.pk }}" class="modal"
+        aria-labelledby="deadline-modal-title-{{ task.pk }}"
+        data-deadline-modal
+        x-data="{ scope: 'member', member: '', name: '', value: '', reason: '', hasPersonal: false, error: '',
+                  minValue() { const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16) } }"
+        @open-deadline.window="Object.assign($data, $event.detail, { error: '' }); $el.showModal()">
+  <div class="modal-box">
+    <h3 id="deadline-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
+      <span x-show="scope === 'member'">Deadline for <span x-text="name"></span></span>
+      <span x-show="scope === 'pending'" x-cloak>Set a deadline for everyone not done</span>
+    </h3>
+    <p class="mt-3 text-sm text-brand-text">
+      {% if task.deadline %}
+        The task is due <span class="font-semibold text-brand-navy">{{ task.deadline|date:"M j, Y g:i A" }}</span>, and that still holds for the task.
+      {% else %}
+        The task has no deadline of its own.
+      {% endif %}
+      <span x-show="scope === 'member'">An individual deadline replaces it for this member only, and can be earlier or later.</span>
+      <span x-show="scope === 'pending'" x-cloak>Each member below gets this as their individual deadline, earlier or later than the task's. Members already done are left as they are.</span>
+    </p>
+    <ul class="mt-3 flex flex-col gap-1 text-sm text-brand-navy" x-show="scope === 'pending'" x-cloak data-deadline-modal-members>
+      {% for s in assignee_states %}
+        {% if not s.done %}
+          <li class="flex items-center gap-2">
+            <span class="w-5 h-5 rounded-full bg-brand-navy/80 text-white text-[10px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
+            <span>{{ s.member.display_name }}</span>
+            {% if s.personal_deadline %}<span class="text-xs text-brand-text/60">(now due {{ s.deadline|date:"M j" }})</span>{% endif %}
+          </li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+    <form method="post"
+          action="{% url 'tasks:member_deadline' pk=task.pk %}"
+          hx-post="{% url 'tasks:member_deadline' pk=task.pk %}"
+          hx-vals='{"pane_mode": "1"}'
+          hx-target="#task-status-block"
+          hx-swap="outerHTML"
+          @htmx:response-error.camel="error = $event.detail.xhr.responseText"
+          class="mt-4 flex flex-col gap-3">
+      {% csrf_token %}
+      <input type="hidden" name="scope" :value="scope">
+      <input type="hidden" name="member" :value="member">
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="font-medium text-brand-navy">Deadline</span>
+        <input type="datetime-local" name="deadline" required
+               class="input input-bordered w-full"
+               x-model="value" :min="minValue()" data-deadline-input>
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="font-medium text-brand-navy">Reason <span class="font-normal text-brand-text/60">(optional)</span></span>
+        <input type="text" name="reason" maxlength="500"
+               class="input input-bordered w-full"
+               x-model="reason" placeholder="e.g. Away at a conference">
+      </label>
+      <p class="text-sm text-error" role="alert" x-show="error" x-text="error" x-cloak data-deadline-error></p>
+      <div class="flex flex-wrap gap-2 justify-end mt-2">
+        <button type="button" class="btn btn-ghost mr-auto text-error"
+                x-show="scope === 'member' && hasPersonal" x-cloak
+                hx-post="{% url 'tasks:member_deadline' pk=task.pk %}"
+                hx-vals='{"pane_mode": "1", "action": "clear"}'
+                hx-target="#task-status-block"
+                hx-swap="outerHTML"
+                data-deadline-clear>Remove individual deadline</button>
+        <button type="button" class="btn btn-ghost"
+                @click="$el.closest('dialog').close()">Cancel</button>
+        <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+          <span x-show="scope === 'member'">Save deadline</span>
+          <span x-show="scope === 'pending'" x-cloak>Set for all not done</span>
+        </button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>

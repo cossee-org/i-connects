@@ -148,6 +148,11 @@ urlpatterns = [
         views.TaskVerifyBatchView.as_view(),
         name="verify_batch",
     ),
+    path(
+        "tasks/<int:pk>/deadlines/",
+        views.TaskDeadlineView.as_view(),
+        name="member_deadline",
+    ),
     # Board columns
     path(
         "projects/<int:project_pk>/boards/",

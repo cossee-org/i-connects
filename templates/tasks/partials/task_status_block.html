@@ -4,7 +4,9 @@
   assignee_states (each with member, log, done, done_at, done_by,
   done_by_self, reviewed, reviewed_by, reviewed_at, awaiting_review,
   verified, verified_by, verified_at, awaiting_verification,
-  can_mark_done, can_review, can_unreview, can_verify, can_unverify),
+  can_mark_done, can_review, can_unreview, can_verify, can_unverify,
+  personal_deadline, deadline, overdue, can_set_deadline, deadline_input),
+  pending_deadline_count, task_deadline_input, can_set_deadlines,
   done_count, reviewed_count, verified_count, verify_done_count,
   verify_reviewed_count, assignee_count, is_assignee, my_done,
   marks_locked, needs_review, show_review, reviewers.
@@ -148,6 +150,18 @@
       {% endcomment %}
       {% if is_project_manager %}
         <div class="mt-3 flex flex-wrap items-center gap-2" data-verify-batch>
+          {% comment %}
+            Every assignee not yet done gets the same individual deadline —
+            earlier or later than the task's. Opens the deadline dialog at
+            the end of this block (task_deadline_modal.html).
+          {% endcomment %}
+          {% if can_set_deadlines %}
+            <button type="button" class="btn btn-xs btn-outline"
+                    @click="$dispatch('open-deadline', { scope: 'pending', member: '', name: '', value: '{{ task_deadline_input }}', reason: '', hasPersonal: false })"
+                    aria-haspopup="dialog"
+                    {% if not pending_deadline_count %}disabled{% endif %}
+                    data-deadline-all>Set deadline for all not done ({{ pending_deadline_count }})</button>
+          {% endif %}
           <button type="button" class="btn btn-xs btn-outline"
                   onclick="document.getElementById('verify-done-modal-{{ task.pk }}').showModal()"
                   aria-haspopup="dialog"
@@ -327,6 +341,32 @@
                   <span class="text-sm font-medium text-brand-navy break-words min-w-0" data-assignee-name>{{ s.member.display_name }}</span>
                   {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
                 </div>
+                {% comment %}
+                  The member's deadline, under their name: their individual
+                  one when a Lead set it ("· own deadline"), else the task's.
+                  Red with an Overdue pill once it has passed and their part
+                  is still not done. A Lead gets Set deadline beside it,
+                  which opens the deadline dialog for this row.
+                {% endcomment %}
+                {% if s.personal_deadline or s.deadline and not s.done or s.can_set_deadline %}
+                  <div class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs" data-member-deadline="{% if s.personal_deadline %}own{% elif s.deadline %}task{% else %}none{% endif %}">
+                    {% if s.deadline %}
+                      <span class="{% if s.overdue %}text-error font-medium{% else %}text-brand-text/70{% endif %}"
+                            {% if s.personal_deadline %}title="Individual deadline{% if s.personal_deadline.set_by %} set by {{ s.personal_deadline.set_by.display_name }}{% endif %}{% if task.deadline %} (task due {{ task.deadline|date:"M j, Y g:i A" }}){% endif %}{% if s.personal_deadline.reason %}: {{ s.personal_deadline.reason }}{% endif %}"{% endif %}>Due {{ s.deadline|date:"M j" }}{% if s.personal_deadline %} &middot; own deadline{% endif %}</span>
+                      {% if s.overdue %}
+                        <span class="inline-flex items-center rounded px-1 py-0.5 bg-error/10 text-error text-[10px] font-semibold leading-none" data-member-overdue>Overdue</span>
+                      {% endif %}
+                    {% elif s.can_set_deadline %}
+                      <span class="text-brand-text/50">No deadline</span>
+                    {% endif %}
+                    {% if s.can_set_deadline %}
+                      <button type="button" class="text-brand-navy font-medium hover:underline"
+                              @click="$dispatch('open-deadline', { scope: 'member', member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', value: '{{ s.deadline_input }}', reason: '{{ s.personal_deadline.reason|default:''|escapejs }}', hasPersonal: {% if s.personal_deadline %}true{% else %}false{% endif %} })"
+                              aria-haspopup="dialog"
+                              data-set-deadline="{{ s.member.pk }}">{% if s.personal_deadline %}Change<span class="sr-only"> {{ s.member.display_name }}'s deadline</span>{% else %}Set deadline<span class="sr-only"> for {{ s.member.display_name }}</span>{% endif %}</button>
+                    {% endif %}
+                  </div>
+                {% endif %}
               </td>
               <td data-done-cell data-mark="{% if s.done %}yes{% else %}no{% endif %}">
                 <div class="completion-mark">
@@ -371,6 +411,9 @@
         </tbody>
       </table>
       </div>
+      {% if can_set_deadlines %}
+        {% include "tasks/partials/task_deadline_modal.html" with task=task assignee_states=assignee_states %}
+      {% endif %}
       {% if assignee_count > 3 %}
         <button type="button"
                 class="mt-1 text-xs font-medium text-brand-navy hover:underline"
@@ -432,6 +475,9 @@
             {% else %}
               <span class="inline-block w-4 h-4 rounded-full border border-brand-light" aria-hidden="true"></span>
               <span class="text-brand-text/70">{{ s.member.display_name }}</span>
+            {% endif %}
+            {% if s.personal_deadline %}
+              <span class="text-xs {% if s.overdue %}text-error{% else %}text-brand-text/60{% endif %}">&middot; due {{ s.deadline|date:"M j" }} (own deadline)</span>
             {% endif %}
           </li>
         {% endfor %}
