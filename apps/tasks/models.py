@@ -269,8 +269,10 @@ class Task(models.Model):
         choices=ContributionType.choices,
         default=ContributionType.OTHER,
         help_text=(
-            "CRediT-aligned contribution type used when a ContributionRecord "
-            "is created on task approval."
+            "CRediT-aligned contribution type an assignee's credit is "
+            "recorded under when a Lead verifies their part — unless a Lead "
+            "gave that assignee a type of their own "
+            "(``AssigneeContributionType``)."
         ),
     )
 
@@ -396,6 +398,23 @@ class Task(models.Model):
             if personal is not None:
                 return personal
         return self.deadline
+
+    def personal_contribution_types(self) -> dict:
+        """Each member's own contribution type on this task, keyed by member
+        id — only members a Lead gave one (``AssigneeContributionType``)."""
+        return {
+            o.member_id: o.contribution_type
+            for o in self.assignee_contribution_types.all()
+        }
+
+    def contribution_type_for(self, member) -> str:
+        """``member``'s effective contribution type: their own, if a Lead set
+        one, else the task's. This is what their credit is recorded under."""
+        if member is not None and member.pk is not None:
+            own = self.personal_contribution_types().get(member.pk)
+            if own:
+                return own
+        return self.contribution_type
 
     @property
     def assignee_count(self) -> int:
@@ -631,6 +650,57 @@ class AssigneeDeadline(models.Model):
 
     def __str__(self) -> str:
         return f"Individual dates for member {self.member_id} on task {self.task_id}"
+
+
+class AssigneeContributionType(models.Model):
+    """A contribution type a Lead set for one assignee on a task.
+
+    The task's own ``contribution_type`` still holds for the task and for
+    every other assignee; the type set here replaces it for ``member`` alone,
+    so their credit is recorded under it when their part is verified
+    (``Task.contribution_type_for``). The row exists only while the member has
+    a type of their own: putting them back on the task's deletes it
+    (``services.set_member_contribution_type``). It belongs to the
+    assignment: taking the member off the task deletes it
+    (``apps.tasks.signals``).
+    """
+
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name="assignee_contribution_types"
+    )
+    member = models.ForeignKey(
+        "projects.ProjectMember",
+        on_delete=models.CASCADE,
+        related_name="individual_contribution_types",
+    )
+    contribution_type = models.CharField(
+        max_length=32,
+        choices=ContributionType.choices,
+    )
+    set_by = models.ForeignKey(
+        "projects.ProjectMember",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The Lead who last set this type.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["task", "member"],
+                name="unique_assignee_contribution_type",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"Contribution type {self.contribution_type} for member "
+            f"{self.member_id} on task {self.task_id}"
+        )
 
 
 class ActivityEvent(models.TextChoices):

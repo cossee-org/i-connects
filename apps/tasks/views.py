@@ -40,7 +40,12 @@ from django.views.generic import (
 
 from apps.audit.services import AuditAction, log_action
 from apps.comments.forms import CommentForm
-from apps.core.enums import CompletedAs, TaskStatus
+from apps.core.enums import (
+    CompletedAs,
+    ContributionType,
+    TaskStatus,
+    credit_role_choices,
+)
 from apps.projects.models import Project, ProjectMember
 from apps.tasks.calendar import (
     VIEWS as CALENDAR_VIEWS,
@@ -84,6 +89,7 @@ from apps.tasks.services import (
     reopen_task,
     review_closed,
     review_locked,
+    set_member_contribution_type,
     set_member_dates,
     set_pending_dates,
     unverify_part,
@@ -890,6 +896,7 @@ class TaskDetailPaneView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
                 "reviewers",
                 "task_logs__reviewed_by",
                 "assignee_deadlines",
+                "assignee_contribution_types",
                 "task_logs__completed_by",
                 "comments__author",
             ),
@@ -926,7 +933,7 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            .prefetch_related("assigned_members", "reviewers", "task_logs__comments__author", "task_logs__reviewed_by", "assignee_deadlines", "task_logs__completed_by", "comments__author", "activities__actor", "activities__member")
+            .prefetch_related("assigned_members", "reviewers", "task_logs__comments__author", "task_logs__reviewed_by", "assignee_deadlines", "assignee_contribution_types", "task_logs__completed_by", "comments__author", "activities__actor", "activities__member")
             .filter(project=self.project),
             pk=kwargs["pk"],
         )
@@ -1332,6 +1339,18 @@ def _task_status_context(task, *, project_member, is_project_manager):
     )
     locked = _marks_locked(task)
     individual_dates = {d.member_id: d for d in task.assignee_deadlines.all()}
+    # Each member's own contribution type, on CRediT projects only: the type
+    # means nothing anywhere else. A Lead may change it whether or not the
+    # task is completed — it only decides what their credit is filed under,
+    # and credit stays correctable after completion.
+    tracks_credit = task.project.tracks_credit
+    own_types = (
+        {o.member_id: o for o in task.assignee_contribution_types.all()}
+        if tracks_credit
+        else {}
+    )
+    type_labels = dict(ContributionType.choices)
+    can_set_type = bool(is_project_manager and tracks_credit)
     now = timezone.now()
     # A Lead sets members' own dates while the task is open; a completed
     # task has no dates left to keep.
@@ -1346,6 +1365,10 @@ def _task_status_context(task, *, project_member, is_project_manager):
         log = current.get(member.id)
         done = log is not None and log.status == TaskStatus.COMPLETED
         individual = individual_dates.get(member.id)
+        own_type = own_types.get(member.id)
+        effective_type = (
+            own_type.contribution_type if own_type else task.contribution_type
+        )
         own_start = individual.start_date if individual else None
         own_deadline = individual.deadline if individual else None
         effective_deadline = own_deadline or task.deadline
@@ -1451,6 +1474,17 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # only: a date left empty there follows the task's.
                 "own_start_input": picker(own_start),
                 "own_deadline_input": picker(own_deadline),
+                # The type their credit is filed under: their own, when a
+                # Lead set one (``AssigneeContributionType``), else the
+                # task's. ``own_type`` is the entry, None when they follow
+                # the task's.
+                "tracks_credit": tracks_credit,
+                "own_type": own_type,
+                "contribution_type": effective_type,
+                "contribution_type_label": type_labels.get(
+                    effective_type, effective_type
+                ),
+                "can_set_type": can_set_type,
             }
         )
     my_state = next(
@@ -1480,6 +1514,12 @@ def _task_status_context(task, *, project_member, is_project_manager):
         # The Lead's "Set dates for all not done" covers these members.
         "pending_dates_count": sum(1 for s in assignee_states if not s["done"]),
         "can_set_dates": can_set_dates,
+        # The Lead's per-member contribution type dialog, on CRediT projects.
+        "can_set_type": can_set_type,
+        "own_type_count": len(own_types),
+        "contribution_type_choices": (
+            _member_type_choices(task, own_types.values()) if can_set_type else []
+        ),
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
         # Whether the viewer reviews on this task at all. The per-row
@@ -1995,6 +2035,75 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                 task=self.task, member=member, lead=lead,
                 start_date=start_date, deadline=deadline, reason=reason,
             )
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
+def _member_type_choices(task, own_types) -> list[tuple[str, str]]:
+    """The types a Lead can give one member: the CRediT roles plus "Other",
+    and any type the task or a member already has, so opening the dialog
+    never quietly rewrites a legacy one."""
+    choices = credit_role_choices(task.contribution_type)
+    values = {value for value, _label in choices}
+    labels = dict(ContributionType.choices)
+    for value in [ContributionType.OTHER, *(o.contribution_type for o in own_types)]:
+        if value not in values and value in labels:
+            choices.append((value, labels[value]))
+            values.add(value)
+    return choices
+
+
+class TaskMemberContributionTypeView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """A Lead gives one assignee their own contribution type, or puts them
+    back on the task's.
+
+    POST ``member=<id>`` with ``contribution_type=<value>`` sets that
+    assignee's own type; an empty ``contribution_type`` or ``action=clear``
+    removes it, so the task's type applies to them again. Credit already
+    verified for them moves with the change (see
+    ``services.set_member_contribution_type``).
+
+    Open whether or not the task is completed: the type only decides what
+    the member's credit is filed under, and credit stays correctable. Only
+    on projects tracking contributions as CRediT.
+    """
+
+    def post(self, request, *args, **kwargs):
+        if not self.is_project_manager:
+            return HttpResponseForbidden(
+                "Only a Lead can change a member's contribution type."
+            )
+        if not self.project.tracks_credit:
+            return HttpResponseBadRequest(
+                "This project does not track contributions as CRediT."
+            )
+        member = self.task.assigned_members.filter(
+            pk=request.POST.get("member") or 0
+        ).first()
+        if member is None:
+            return HttpResponseBadRequest("That member is not assigned to this task.")
+        value = (request.POST.get("contribution_type") or "").strip()
+        if request.POST.get("action") == "clear":
+            value = ""
+        if value:
+            current = self.task.assignee_contribution_types.filter(
+                member=member
+            ).first()
+            allowed = {
+                v for v, _label in _member_type_choices(
+                    self.task, [current] if current else []
+                )
+            }
+            if value not in allowed:
+                return HttpResponseBadRequest("Choose a valid contribution type.")
+        lead = self.project_member or _fallback_member(request.user, self.project)
+        set_member_contribution_type(
+            task=self.task, member=member, lead=lead,
+            contribution_type=value or None,
+        )
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,
