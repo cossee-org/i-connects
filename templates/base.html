@@ -418,11 +418,12 @@
   {% comment %}
     The member-dates dialog (tasks/partials/task_dates_modal.html). Each date
     is a day and a time. For one member, a date they have no own value for
-    starts on the task's — the same moment, shown in the timezone picked in
-    the dialog, and kept in step with it until the Lead edits that date —
-    so the Lead sees what the member follows and changes only what should
-    differ; the server treats a date sent back at the task's moment as "follow
-    the task" (forms.AssigneeDatesForm). A date the task does not have
+    starts on the task's — the same moment, shown in the timezone the
+    dialog opens on — so the Lead sees what the member follows and changes
+    only what should differ; the server treats a date sent back at the
+    task's moment as "follow the task" (forms.AssigneeDatesForm). Picking
+    another timezone afterwards leaves the dates and times as they are:
+    they are saved as that clock time in the new zone. A date the task does not have
     either starts empty, day and time; picking a day fills in the task
     form's default time (9:00 AM to start, 5:00 PM to be due), and clearing
     it clears the time. For everyone not done, the dates start empty: an
@@ -477,10 +478,11 @@
           this.dueDay = due[0]; this.dueTime = due[1];
           this.startFollows = this.scope === "member" && !detail.start && cfg.taskStart != null;
           this.dueFollows = this.scope === "member" && !detail.value && cfg.taskDue != null;
-          this.refill();
-          // The timezone picker applies its zone on the same event.
+          // The timezone picker applies its zone on the same event, so the
+          // task's dates are read in it once it has; after that a change of
+          // zone keeps the clock times as they are.
           var self = this;
-          this.$nextTick(function () { self.refill(); });
+          this.$nextTick(function () { self.refill(); self.startFollows = self.dueFollows = false; });
         },
         zone: function () {
           var select = this.$root.querySelector("select[name=timezone]");

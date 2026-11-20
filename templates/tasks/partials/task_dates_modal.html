@@ -21,8 +21,10 @@
                  system timezone (_components/timezone_select.html)
 
   For one member each date holds their own, in the zone that governs it;
-  one they have no own value for starts on the task's, in the zone picked
-  (memberDatesDialog in base.html), and a date sent back at the task's
+  one they have no own value for starts on the task's, as the same moment
+  in the zone the dialog opens on (memberDatesDialog in base.html). Picking
+  another timezone leaves the dates and times as they are: they are saved
+  as that clock time in the new zone. A date sent back at the task's
   moment, or emptied, follows the task's. Emptying both removes their own
   dates. For everyone not
   done the pickers start empty, and a date left empty is left as each
@@ -43,8 +45,7 @@
         aria-labelledby="dates-modal-title-{{ task.pk }}"
         data-dates-modal
         x-data="memberDatesDialog({ taskZone: '{{ task.timezone|escapejs }}', taskStart: {% if task.start_date %}{{ task.start_date|date:'U' }}000{% else %}null{% endif %}, taskDue: {% if task.deadline %}{{ task.deadline|date:'U' }}000{% else %}null{% endif %} })"
-        @open-dates.window="open($event.detail); $el.showModal()"
-        @change="if ($event.target.name === 'timezone') refill()">
+        @open-dates.window="open($event.detail); $el.showModal()">
   <div class="modal-box">
     <h3 id="dates-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
       <span x-show="scope === 'member'">Dates for <span x-text="name"></span></span>
