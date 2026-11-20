@@ -108,6 +108,30 @@ class MemberMultiSelect(forms.SelectMultiple):
         )
 
 
+def _when(value) -> str:
+    from django.utils import timezone
+
+    return timezone.localtime(value).strftime("%b %-d, %Y %-I:%M %p")
+
+
+def start_after_deadline_problems(rows) -> list[str]:
+    """One sentence per member whose start would fall after their deadline.
+
+    ``rows`` are ``(member, start, deadline)`` — the dates each member would
+    end up with, their own where they have one, else the task's. A start
+    equal to the deadline is fine, and a missing date on either side has
+    nothing to compare. A start must never come after the deadline, for the
+    task or for any member (see ``TaskForm.clean`` and
+    ``AssigneeDatesForm.clean``).
+    """
+    return [
+        f"{member.display_name} would start {_when(start)}, after their "
+        f"deadline ({_when(deadline)})."
+        for member, start, deadline in rows
+        if start is not None and deadline is not None and start > deadline
+    ]
+
+
 class TaskForm(forms.ModelForm):
     """Create / update a Task.
 
@@ -137,6 +161,34 @@ class TaskForm(forms.ModelForm):
             format="%Y-%m-%dT%H:%M",
         ),
     )
+    # Asked only when editing a task some assignees have their own start
+    # date / deadline on, and only acted on when the task's matching date
+    # changes: what happens to those members' own dates. See
+    # ``_init_individual_dates``.
+    individual_start_dates = forms.ChoiceField(
+        required=False,
+        choices=[
+            ("shift", "Shift them by the same amount"),
+            ("keep", "Keep their dates as they are"),
+            ("clear", "Remove them, so they follow the task's start date"),
+        ],
+        widget=forms.RadioSelect,
+    )
+    individual_deadlines = forms.ChoiceField(
+        required=False,
+        choices=[
+            ("shift", "Shift them by the same amount"),
+            ("keep", "Keep their dates as they are"),
+            ("clear", "Remove them, so they follow the task's due date"),
+        ],
+        widget=forms.RadioSelect,
+    )
+
+    # Task date field -> the choice field asking about members' own dates.
+    INDIVIDUAL_DATE_CHOICES = {
+        "start_date": "individual_start_dates",
+        "deadline": "individual_deadlines",
+    }
 
     class Meta:
         model = Task
@@ -197,6 +249,7 @@ class TaskForm(forms.ModelForm):
         # not the model's default "{name} (project {id})" representation.
         self.fields["container"].label_from_instance = lambda obj: obj.name
         self._init_task_type(project)
+        self._init_individual_dates()
         if project is not None:
             self.fields["container"].queryset = KanbanBoard.objects.filter(project=project)
             members = (
@@ -241,6 +294,153 @@ class TaskForm(forms.ModelForm):
         if not self.instance.pk and "contribution_type" not in self.initial:
             field.initial = ""
 
+    def _init_individual_dates(self):
+        """Offer each individual-dates choice when editing a task some members
+        have that kind of own date on; drop the field otherwise.
+
+        ``individual_rows[field]`` lists ``(member, own date)`` for the panel.
+        Shifting is preselected where it can apply (the task has that date
+        now, so there is an amount to shift by); otherwise keeping them is.
+        """
+        entries = (
+            list(
+                self.instance.assignee_deadlines.select_related("member")
+                .prefetch_related("member__users")
+                .order_by("id")
+            )
+            if self.instance.pk
+            else []
+        )
+        self.individual_entries = entries
+        self.original_dates = {}
+        self.individual_rows = {}
+        for date_field, choice_field in self.INDIVIDUAL_DATE_CHOICES.items():
+            original = getattr(self.instance, date_field) if self.instance.pk else None
+            self.original_dates[date_field] = original
+            rows = sorted(
+                (
+                    (e.member, getattr(e, date_field))
+                    for e in entries
+                    if getattr(e, date_field) is not None
+                ),
+                key=lambda row: row[1],
+            )
+            self.individual_rows[date_field] = rows
+            if not rows:
+                self.fields.pop(choice_field, None)
+                continue
+            field = self.fields[choice_field]
+            field.label = (
+                "Individual start dates" if date_field == "start_date" else "Individual deadlines"
+            )
+            if choice_field not in self.initial:
+                field.initial = "shift" if original else "keep"
+
+    # Read by the template and the view.
+    @property
+    def original_start_date(self):
+        return self.original_dates.get("start_date")
+
+    @property
+    def original_deadline(self):
+        return self.original_dates.get("deadline")
+
+    @property
+    def individual_start_rows(self):
+        return self.individual_rows.get("start_date", [])
+
+    @property
+    def individual_deadline_rows(self):
+        return self.individual_rows.get("deadline", [])
+
+    @staticmethod
+    def _to_minute(value):
+        return value.replace(second=0, microsecond=0) if value else None
+
+    def _resulting_own_date(self, entry, date_field: str, new_value):
+        """The own ``date_field`` ``entry``'s member would have after this
+        edit: shifted, kept or removed as the Lead chose, when the task's
+        date moved; as it is otherwise."""
+        own = getattr(entry, date_field)
+        choice_field = self.INDIVIDUAL_DATE_CHOICES[date_field]
+        if own is None or choice_field not in self.fields:
+            return own
+        if not self.date_changed(date_field):
+            return own
+        choice = self.cleaned_data.get(choice_field) or "keep"
+        old_value = self.original_dates[date_field]
+        if choice == "shift" and old_value is not None and new_value is not None:
+            return own + (new_value - old_value)
+        if choice == "clear":
+            return None
+        return own
+
+    def date_changed(self, date_field: str) -> bool:
+        """Whether this edit moves, sets or clears the task's ``date_field``.
+
+        Compared to the minute, the picker's precision, so a date stored
+        with seconds is not "changed" by a re-save.
+        """
+        if not hasattr(self, "cleaned_data") or date_field not in self.cleaned_data:
+            return False
+        return self._to_minute(self.cleaned_data[date_field]) != self._to_minute(
+            self.original_dates.get(date_field)
+        )
+
+    def changed_individual_dates(self):
+        """``(date field, choice)`` for each task date this edit moved that
+        some members have their own of — what the view carries over."""
+        return [
+            (date_field, self.cleaned_data.get(choice_field) or "keep")
+            for date_field, choice_field in self.INDIVIDUAL_DATE_CHOICES.items()
+            if choice_field in self.fields and self.date_changed(date_field)
+        ]
+
+    def _check_member_date_order(self, cleaned) -> None:
+        """No member may end up starting after their deadline.
+
+        Checked when this edit moves the task's start or due date, on the
+        dates each member still on the task would end up with: their own,
+        shifted, kept or removed as the Lead chose, else the task's new
+        ones. The error goes on the panels the Lead answered (or, where no
+        panel applies — say the task's start moved past a member's own
+        deadline — on the task date that moved), so it shows where the
+        choice is made.
+        """
+        changed = [f for f in ("start_date", "deadline") if self.date_changed(f)]
+        watched = ["start_date", "deadline", *self.INDIVIDUAL_DATE_CHOICES.values()]
+        if (
+            not changed
+            or not self.individual_entries
+            or any(name in self.errors for name in watched)
+        ):
+            return
+        start = cleaned.get("start_date")
+        deadline = cleaned.get("deadline")
+        assigned = cleaned.get("assigned_members")
+        assigned_ids = None if assigned is None else {m.pk for m in assigned}
+        rows = []
+        for entry in self.individual_entries:
+            if assigned_ids is not None and entry.member_id not in assigned_ids:
+                continue  # taken off the task: their own dates go with them
+            own_start = self._resulting_own_date(entry, "start_date", start)
+            own_deadline = self._resulting_own_date(entry, "deadline", deadline)
+            rows.append((entry.member, own_start or start, own_deadline or deadline))
+        problems = start_after_deadline_problems(rows)
+        if not problems:
+            return
+        message = " ".join(problems) + (
+            " A start date must be on or before the deadline: choose differently "
+            "for their own dates, or change the task's dates."
+        )
+        targets = [
+            self.INDIVIDUAL_DATE_CHOICES[f]
+            for f in changed
+            if self.INDIVIDUAL_DATE_CHOICES[f] in self.fields
+        ] or changed
+        for target in targets:
+            self.add_error(target, message)
+
     def clean_contribution_type(self):
         """An unpicked task type falls back to the model's own default."""
         return self.cleaned_data.get("contribution_type") or ContributionType.OTHER
@@ -263,6 +463,35 @@ class TaskForm(forms.ModelForm):
             self.add_error(
                 "start_date", "Start date must be before or equal to the due date."
             )
+
+        # Moving the start or due date of a task some members have their own
+        # of asks the Lead what happens to those, every time.
+        names = {"start_date": "start date", "deadline": "deadline"}
+        task_names = {"start_date": "start date", "deadline": "due date"}
+        for date_field, choice_field in self.INDIVIDUAL_DATE_CHOICES.items():
+            if choice_field not in self.fields or not self.date_changed(date_field):
+                continue
+            choice = cleaned.get(choice_field)
+            new_value = cleaned.get(date_field)
+            if not choice:
+                self.add_error(
+                    choice_field,
+                    f"Some assignees have their own {names[date_field]}. Choose "
+                    "whether to shift, keep or remove them.",
+                )
+            elif choice == "shift" and not (new_value and self.original_dates[date_field]):
+                self.add_error(
+                    choice_field,
+                    "There is no change of date to shift by: the task "
+                    + (
+                        f"had no {task_names[date_field]}."
+                        if new_value
+                        else f"no longer has a {task_names[date_field]}."
+                    )
+                    + f" Keep or remove the individual {names[date_field]}s instead.",
+                )
+
+        self._check_member_date_order(cleaned)
 
         if cleaned.get("requires_review"):
             if not cleaned.get("reviewers"):
@@ -368,3 +597,98 @@ class TaskMilestoneForm(forms.Form):
         super().__init__(*args, **kwargs)
         if project is not None:
             self.fields["milestone"].queryset = Milestone.objects.filter(project=project)
+
+
+class AssigneeDatesForm(forms.Form):
+    """A Lead's own start date and/or deadline for one assignee, or for every
+    assignee not yet done (``views.TaskMemberDatesView``).
+
+    Each date may be earlier or later than the task's. For one member
+    (``scope="member"``) the dialog shows their current own dates, so an
+    empty date means "follow the task's" and both empty removes them. For
+    everyone not yet done (``scope="pending"``) an empty date means "leave
+    each member's as it is", so at least one is needed.
+
+    A deadline has to be in the future when it is being changed: one already
+    stored, and passed, may be sent back untouched alongside a new start
+    date. A start date must not fall after the deadline the member ends up
+    with.
+    """
+
+    start_date = forms.DateTimeField(
+        required=False,
+        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"],
+    )
+    deadline = forms.DateTimeField(
+        required=False,
+        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"],
+    )
+    reason = forms.CharField(required=False, max_length=500)
+
+    def __init__(
+        self, *args, task, scope="member", current=None, pending=(), **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self.task = task
+        self.scope = scope
+        self.current = current  # the member's AssigneeDeadline, if any
+        # scope "pending": (member, their AssigneeDeadline or None) for each
+        # assignee not yet done — whose dates a date left empty keeps.
+        self.pending = list(pending)
+
+    @staticmethod
+    def _minute(value):
+        return value.replace(second=0, microsecond=0) if value else None
+
+    def clean(self):
+        from django.utils import timezone
+
+        cleaned = super().clean()
+        if self.errors:
+            return cleaned
+        start = cleaned.get("start_date")
+        deadline = cleaned.get("deadline")
+        if self.scope == "pending" and start is None and deadline is None:
+            raise forms.ValidationError("Choose a start date or a deadline.")
+        stored = self.current.deadline if self.current else None
+        if (
+            deadline is not None
+            and self._minute(deadline) != self._minute(stored)
+            and deadline <= timezone.now()
+        ):
+            self.add_error("deadline", "Choose a deadline in the future.")
+        # The dates each member ends up with must keep start <= deadline.
+        # For one member an empty date follows the task's; for everyone not
+        # done it is left as each member has it (their own, else the task's).
+        if self.scope == "pending":
+            rows = [
+                (
+                    member,
+                    start or (entry and entry.start_date) or self.task.start_date,
+                    deadline or (entry and entry.deadline) or self.task.deadline,
+                )
+                for member, entry in self.pending
+            ]
+            problems = start_after_deadline_problems(rows)
+            if problems:
+                self.add_error(
+                    "start_date" if start is not None else "deadline",
+                    " ".join(problems)
+                    + " A start date must be on or before the deadline.",
+                )
+        else:
+            effective_start = start or self.task.start_date
+            effective_deadline = deadline or self.task.deadline
+            if (
+                effective_start
+                and effective_deadline
+                and effective_start > effective_deadline
+            ):
+                self.add_error(
+                    "start_date",
+                    "The start date must be on or before the deadline ("
+                    + _when(effective_deadline)
+                    + ").",
+                )
+        return cleaned
+

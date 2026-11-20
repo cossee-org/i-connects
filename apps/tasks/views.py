@@ -52,6 +52,7 @@ from apps.tasks.calendar import (
     shift_date,
 )
 from apps.tasks.forms import (
+    AssigneeDatesForm,
     KanbanBoardForm,
     MilestoneForm,
     TaskAssignForm,
@@ -68,17 +69,23 @@ from apps.tasks.mixins import (
 )
 from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
 from apps.tasks.services import (
+    UNSET,
+    apply_task_date_change,
     approve_completion,
+    clear_member_dates,
     clear_review,
     close_task,
     mark_own_done,
     mark_reviewed,
     move_task,
     notify_new_assignees,
+    pending_members,
     reopen_own,
     reopen_task,
     review_closed,
     review_locked,
+    set_member_dates,
+    set_pending_dates,
     unverify_part,
     verify_part,
     verify_parts,
@@ -118,8 +125,10 @@ class MyTaskListView(LoginRequiredMixin, ListView):
     _SORT_MAP = {
         "newest": "-created_at",
         "oldest": "created_at",
-        "deadline_asc": "deadline",
-        "deadline_desc": "-deadline",
+        # The user's own deadline: their individual one where a Lead set
+        # it, else the task's (``TaskQuerySet.with_my_deadline``).
+        "deadline_asc": "my_deadline",
+        "deadline_desc": "-my_deadline",
         "name_asc": "name",
         "name_desc": "-name",
     }
@@ -145,7 +154,7 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         )
         return Task.objects.filter(
             Q(assigned_members__users=user) | Q(reviewers__users=user)
-        ).annotate(
+        ).with_my_deadline(user).annotate(
             user_log_status=latest_log_status,
             is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
             is_reviewing=Exists(user_member_qs.filter(reviewed_tasks=OuterRef("pk"))),
@@ -214,7 +223,7 @@ class MyTaskListView(LoginRequiredMixin, ListView):
 
         sort = self.request.GET.get("sort", "newest")
         if sort in ("deadline_asc", "deadline_desc"):
-            qs = qs.filter(deadline__isnull=False)
+            qs = qs.filter(my_deadline__isnull=False)
         order = self._SORT_MAP.get(sort, "-created_at")
         return qs.order_by(order, "id")
 
@@ -301,6 +310,7 @@ def _fmt_short(d) -> str:
 BOARD_FILTERS = (
     ("", "All"),
     ("overdue", "Overdue"),
+    ("extended", "Extended"),
     ("high_priority", "High Priority"),
     ("completed", "Completed"),
     ("not_completed", "Not Completed"),
@@ -320,12 +330,14 @@ def _board_filter(request) -> str:
 
 
 def _apply_board_filter(tasks, value: str):
-    """Narrow ``tasks`` to the board filter ``value``. Overdue is
-    ``Task.is_overdue`` as a query: still open past its deadline."""
+    """Narrow ``tasks`` to the board filter ``value``. Overdue and Extended
+    are ``Task.is_overdue`` / ``Task.is_extended`` as queries: still open
+    past the task deadline, and Extended when every assignee not yet done
+    has an individual deadline still to come."""
     if value == "overdue":
-        return tasks.filter(deadline__lt=timezone.now()).exclude(
-            status=TaskStatus.COMPLETED
-        )
+        return tasks.overdue()
+    if value == "extended":
+        return tasks.extended()
     if value == "high_priority":
         return tasks.filter(is_priority=True)
     if value == "completed":
@@ -339,7 +351,7 @@ def _kanban_columns(request, project):
     """The board's columns, each with its tasks prefetched (narrowed by the
     board filter, so a column's count matches its cards)."""
     tasks = _apply_board_filter(
-        Task.objects.prefetch_related("assigned_members", "reviewers"),
+        Task.objects.prefetch_related("assigned_members", "reviewers", "assignee_deadlines", "task_logs"),
         _board_filter(request),
     )
     return (
@@ -357,7 +369,7 @@ def _calendar_context(request, project) -> dict:
     tasks = (
         Task.objects.filter(project=project)
         .filter(Q(deadline__isnull=False) | Q(start_date__isnull=False))
-        .prefetch_related("assigned_members", "reviewers")
+        .prefetch_related("assigned_members", "reviewers", "assignee_deadlines", "task_logs")
     )
     tasks = _apply_board_filter(tasks, _board_filter(request))
 
@@ -477,7 +489,9 @@ def _list_view_context(request, project, columns) -> dict:
         assignee = ""
 
     tasks = Task.objects.filter(project=project).prefetch_related(
-        "assigned_members", "reviewers"
+        # The last two let a past-due task tell Overdue from Extended
+        # (``Task.is_overdue``) without a query of its own.
+        "assigned_members", "reviewers", "assignee_deadlines", "task_logs"
     )
 
     if q:
@@ -587,7 +601,7 @@ def _table_view_context(request, project) -> dict:
     tasks = (
         Task.objects.filter(project=project)
         .select_related("container")
-        .prefetch_related("assigned_members", "reviewers")
+        .prefetch_related("assigned_members", "reviewers", "assignee_deadlines", "task_logs")
         .annotate(
             n_assignees=Count("assigned_members", distinct=True),
             n_reviewers=Count("reviewers", distinct=True),
@@ -875,6 +889,7 @@ class TaskDetailPaneView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
                 "assigned_members",
                 "reviewers",
                 "task_logs__reviewed_by",
+                "assignee_deadlines",
                 "task_logs__completed_by",
                 "comments__author",
             ),
@@ -911,7 +926,7 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            .prefetch_related("assigned_members", "reviewers", "task_logs__comments__author", "task_logs__reviewed_by", "task_logs__completed_by", "comments__author", "activities__actor", "activities__member")
+            .prefetch_related("assigned_members", "reviewers", "task_logs__comments__author", "task_logs__reviewed_by", "assignee_deadlines", "task_logs__completed_by", "comments__author", "activities__actor", "activities__member")
             .filter(project=self.project),
             pk=kwargs["pk"],
         )
@@ -1011,6 +1026,18 @@ class TaskUpdateView(
         # Read before saving: only members this edit adds hear about it.
         previous_ids = _assignee_ids(self.object)
         task = form.save()
+        # A moved start or due date asks what happens to members' own dates
+        # of that kind (TaskForm.individual_*): shift, keep or remove them.
+        for date_field, choice in form.changed_individual_dates():
+            apply_task_date_change(
+                task=task,
+                field=date_field,
+                old_value=form.original_dates[date_field],
+                new_value=getattr(task, date_field),
+                choice=choice,
+                actor=self.project_member
+                or _fallback_member(self.request.user, self.project),
+            )
         if "contribution_type" in form.changed_data and old_type:
             from apps.contributions.services import sync_contribution_type
 
@@ -1304,10 +1331,24 @@ def _task_status_context(task, *, project_member, is_project_manager):
         needs_review and (is_project_manager or task.is_reviewer(project_member))
     )
     locked = _marks_locked(task)
+    individual_dates = {d.member_id: d for d in task.assignee_deadlines.all()}
+    now = timezone.now()
+    # A Lead sets members' own dates while the task is open; a completed
+    # task has no dates left to keep.
+    can_set_dates = is_project_manager and task.status != TaskStatus.COMPLETED
+
+    def picker(value):
+        """A date as the Lead's date picker (datetime-local) takes it."""
+        return timezone.localtime(value).strftime("%Y-%m-%dT%H:%M") if value else ""
+
     assignee_states = []
     for member in assignees:
         log = current.get(member.id)
         done = log is not None and log.status == TaskStatus.COMPLETED
+        individual = individual_dates.get(member.id)
+        own_start = individual.start_date if individual else None
+        own_deadline = individual.deadline if individual else None
+        effective_deadline = own_deadline or task.deadline
         reviewed = log is not None and log.is_reviewed
         verified = log is not None and log.is_verified
         # A review given before the task was completed stays as it was, and
@@ -1387,6 +1428,29 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 "verified_at": log.verified_at if log is not None else None,
                 # Marked done and still waiting on a Lead's verification.
                 "awaiting_verification": done and not verified,
+                # The member's own deadline, when a Lead set one: it replaces
+                # the task's for them alone (``AssigneeDeadline``).
+                # The member's own dates, when a Lead set them
+                # (``AssigneeDeadline``): each replaces the task's for them
+                # alone. ``start_date`` / ``deadline`` are what holds for
+                # them, own or the task's.
+                "individual": individual,
+                "own_start": own_start,
+                "own_deadline": own_deadline,
+                "start_date": own_start or task.start_date,
+                "deadline": effective_deadline,
+                # Late on their own deadline: open task, part not done.
+                "overdue": bool(
+                    effective_deadline is not None
+                    and effective_deadline < now
+                    and not done
+                    and task.status != TaskStatus.COMPLETED
+                ),
+                "can_set_dates": can_set_dates,
+                # Pre-fill the Lead's dialog with the member's own dates
+                # only: a date left empty there follows the task's.
+                "own_start_input": picker(own_start),
+                "own_deadline_input": picker(own_deadline),
             }
         )
     my_state = next(
@@ -1412,6 +1476,10 @@ def _task_status_context(task, *, project_member, is_project_manager):
             if s["done"] and s["reviewed"] and not s["verified"]
         ),
         "assignee_count": len(assignee_states),
+        # The Lead's "Set deadline for all not done" covers these members.
+        # The Lead's "Set dates for all not done" covers these members.
+        "pending_dates_count": sum(1 for s in assignee_states if not s["done"]),
+        "can_set_dates": can_set_dates,
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
         # Whether the viewer reviews on this task at all. The per-row
@@ -1451,6 +1519,8 @@ def _respond_status_block(request, task, *, project_member, is_project_manager):
             task, project_member=project_member, is_project_manager=is_project_manager
         )
         ctx["pane_mode"] = pane_mode
+        # The due hint swapped out of band speaks to the viewer's own deadline.
+        ctx["project_member"] = project_member
         # The side pane sends surface=pane with every request made inside it
         # (an inherited hx-vals on its root), so pieces that are laid out
         # differently there come back in the pane's shape.
@@ -1844,6 +1914,87 @@ class TaskVerifyBatchView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseBadRequest("Choose which parts to verify.")
         lead = self.project_member or _fallback_member(request.user, self.project)
         verify_parts(task=self.task, lead=lead, scope=scope)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
+class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """A Lead sets or removes members' own start dates and deadlines.
+
+    POST ``member=<id>`` with ``start_date`` and/or ``deadline`` (and an
+    optional ``reason``) sets that assignee's own dates; a date left empty
+    follows the task's, and both empty removes them. ``action=clear`` removes
+    them outright. POST ``scope=pending`` with either date gives it to every
+    assignee who has not marked their part done; a date left empty is left
+    as each member has it. Each date may be earlier or later than the
+    task's, which still holds for the task and everyone else.
+
+    Refused on a completed task: there are no dates left to keep.
+    """
+
+    def post(self, request, *args, **kwargs):
+        if not self.is_project_manager:
+            return HttpResponseForbidden(
+                "Only a Lead can change a member's dates."
+            )
+        if self.task.status == TaskStatus.COMPLETED:
+            return HttpResponseForbidden(
+                "This task is marked completed. Mark it not complete before "
+                "changing anyone's dates."
+            )
+        lead = self.project_member or _fallback_member(request.user, self.project)
+        scope = "pending" if request.POST.get("scope") == "pending" else "member"
+        member = current = None
+        if scope == "member":
+            member = self.task.assigned_members.filter(
+                pk=request.POST.get("member") or 0
+            ).first()
+            if member is None:
+                return HttpResponseBadRequest(
+                    "That member is not assigned to this task."
+                )
+            if request.POST.get("action") == "clear":
+                clear_member_dates(task=self.task, member=member, actor=lead)
+                return _respond_status_block(
+                    request, self.task,
+                    project_member=self.project_member,
+                    is_project_manager=self.is_project_manager,
+                )
+            current = self.task.assignee_deadlines.filter(member=member).first()
+        pending = ()
+        if scope == "pending":
+            own = {d.member_id: d for d in self.task.assignee_deadlines.all()}
+            pending = [(m, own.get(m.id)) for m in pending_members(self.task)]
+        form = AssigneeDatesForm(
+            request.POST, task=self.task, scope=scope, current=current,
+            pending=pending,
+        )
+        if not form.is_valid():
+            return HttpResponseBadRequest(
+                " ".join(str(e) for errors in form.errors.values() for e in errors)
+            )
+        start_date = form.cleaned_data["start_date"]
+        deadline = form.cleaned_data["deadline"]
+        reason = form.cleaned_data["reason"]
+        if scope == "pending":
+            if not set_pending_dates(
+                task=self.task,
+                lead=lead,
+                start_date=UNSET if start_date is None else start_date,
+                deadline=UNSET if deadline is None else deadline,
+                reason=reason or None,
+            ):
+                return HttpResponseBadRequest(
+                    "Every assignee has already marked their part done."
+                )
+        else:
+            set_member_dates(
+                task=self.task, member=member, lead=lead,
+                start_date=start_date, deadline=deadline, reason=reason,
+            )
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,

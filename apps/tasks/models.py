@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.db import models
+from django.db.models import Exists, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from apps.core.enums import AutoAssignNew, CompletedAs, ContributionType, TaskStatus
@@ -59,7 +60,89 @@ class Milestone(models.Model):
         return self.name
 
 
+class TaskQuerySet(models.QuerySet):
+    """Deadline states as queries, matching ``Task.is_overdue`` / ``is_extended``.
+
+    A task past its deadline and still open is *extended* when every assignee
+    who has not marked their part done holds an individual deadline that is
+    still to come (see :class:`AssigneeDeadline`); otherwise it is *overdue*.
+    """
+
+    def past_due(self, now=None):
+        """Open tasks whose task-level deadline has passed (overdue or extended)."""
+        now = now or timezone.now()
+        return self.filter(deadline__lt=now).exclude(status=TaskStatus.COMPLETED)
+
+    @staticmethod
+    def _deadline_states(now):
+        pending = pending_assignments().filter(task_id=OuterRef("pk"))
+        uncovered = pending.filter(
+            ~Exists(
+                AssigneeDeadline.objects.filter(
+                    task_id=OuterRef("task_id"),
+                    member_id=OuterRef("projectmember_id"),
+                    deadline__gte=now,
+                )
+            )
+        )
+        return Exists(pending), Exists(uncovered)
+
+    def overdue(self, now=None):
+        now = now or timezone.now()
+        has_pending, has_uncovered = self._deadline_states(now)
+        return self.past_due(now).filter(~has_pending | has_uncovered)
+
+    def extended(self, now=None):
+        now = now or timezone.now()
+        has_pending, has_uncovered = self._deadline_states(now)
+        return self.past_due(now).filter(has_pending & ~has_uncovered)
+
+    def with_my_deadline(self, user):
+        """Annotate ``my_deadline``: ``user``'s individual deadline on each
+        task where a Lead set one, else the task's own deadline."""
+        from django.db.models import F
+        from django.db.models.functions import Coalesce
+
+        personal = (
+            AssigneeDeadline.objects.filter(
+                task_id=OuterRef("pk"), member__users=user, deadline__isnull=False
+            )
+            .order_by("deadline")
+            .values("deadline")[:1]
+        )
+        return self.annotate(my_deadline=Coalesce(Subquery(personal), F("deadline")))
+
+    def overdue_for(self, user, now=None):
+        """Open tasks past ``user``'s own deadline on them. Annotates
+        ``my_deadline`` (see :meth:`with_my_deadline`)."""
+        now = now or timezone.now()
+        return (
+            self.with_my_deadline(user)
+            .filter(my_deadline__lt=now)
+            .exclude(status=TaskStatus.COMPLETED)
+        )
+
+
+def pending_assignments():
+    """Assignment rows (``Task.assigned_members.through``) whose member has not
+    marked their part done: their current TaskLog is missing or not COMPLETED."""
+    through = Task.assigned_members.through
+    current_status = (
+        TaskLog.objects.filter(
+            task_id=OuterRef("task_id"), assigned_to_id=OuterRef("projectmember_id")
+        )
+        .order_by("-created_at", "-id")
+        .values("status")[:1]
+    )
+    return (
+        through.objects.annotate(current_status=Subquery(current_status))
+        .filter(Q(current_status__isnull=True) | ~Q(current_status=TaskStatus.COMPLETED))
+    )
+
+
 class Task(models.Model):
+    objects = TaskQuerySet.as_manager()
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -229,17 +312,90 @@ class Task(models.Model):
         return current
 
     @property
-    def is_overdue(self) -> bool:
-        """Still open past its deadline — a finished task is never late.
-
-        The same rule as the dashboard's overdue count and the overdue-task
-        digest; the browsing views flag it with ``_components/overdue_badge.html``.
-        """
+    def is_past_due(self) -> bool:
+        """Still open past the task-level deadline — overdue or extended."""
         return (
             self.deadline is not None
             and self.status != TaskStatus.COMPLETED
             and self.deadline < timezone.now()
         )
+
+    def _deadline_state(self) -> str | None:
+        """``"overdue"``, ``"extended"`` or None — see :class:`TaskQuerySet`.
+
+        Only a task already past its deadline costs any queries, and those
+        read the prefetched ``task_logs`` / ``assignee_deadlines`` when a
+        view has them. Not cached: a view may complete or reopen the task on
+        the same instance it then renders.
+        """
+        if not self.is_past_due:
+            return None
+        now = timezone.now()
+        current = self._current_logs_by_member()
+        personal = self.personal_deadlines()
+        pending = [
+            m.id
+            for m in self.assigned_members.all()
+            if (log := current.get(m.id)) is None or log.status != TaskStatus.COMPLETED
+        ]
+        extended = bool(pending) and all(
+            (d := personal.get(mid)) is not None and d >= now for mid in pending
+        )
+        return "extended" if extended else "overdue"
+
+    @property
+    def is_overdue(self) -> bool:
+        """Still open past its deadline, and not carried by extensions.
+
+        A finished task is never late. A task past its deadline whose every
+        assignee still working holds an individual deadline yet to come is
+        *extended* instead (:attr:`is_extended`). The same rule as
+        ``Task.objects.overdue()``, which the dashboard counts, the board's
+        Overdue filter and the project overview use; the browsing views flag
+        it with ``_components/overdue_badge.html``.
+        """
+        return self._deadline_state() == "overdue"
+
+    @property
+    def is_extended(self) -> bool:
+        """Past the task deadline, but every assignee not yet done has an
+        individual deadline still to come — see :attr:`is_overdue`."""
+        return self._deadline_state() == "extended"
+
+    def personal_deadlines(self) -> dict:
+        """Each member's individual deadline on this task, keyed by member id
+        (members with only an individual start date are left out)."""
+        return {
+            d.member_id: d.deadline
+            for d in self.assignee_deadlines.all()
+            if d.deadline is not None
+        }
+
+    def personal_start_dates(self) -> dict:
+        """Each member's individual start date on this task, keyed by member id."""
+        return {
+            d.member_id: d.start_date
+            for d in self.assignee_deadlines.all()
+            if d.start_date is not None
+        }
+
+    def start_date_for(self, member):
+        """``member``'s effective start date: their individual one, if a Lead
+        set it, else the task's. None when neither exists."""
+        if member is not None and member.pk is not None:
+            personal = self.personal_start_dates().get(member.pk)
+            if personal is not None:
+                return personal
+        return self.start_date
+
+    def deadline_for(self, member):
+        """``member``'s effective deadline: their individual one, if a Lead set
+        it, else the task's. None when neither exists."""
+        if member is not None and member.pk is not None:
+            personal = self.personal_deadlines().get(member.pk)
+            if personal is not None:
+                return personal
+        return self.deadline
 
     @property
     def assignee_count(self) -> int:
@@ -428,6 +584,53 @@ class TaskLog(models.Model):
     def is_reviewable(self) -> bool:
         """True when there is a submission here for a reviewer to act on."""
         return self.status == TaskStatus.COMPLETED
+
+
+class AssigneeDeadline(models.Model):
+    """Individual dates a Lead set for one assignee on a task: their own
+    start date, their own deadline, or both.
+
+    The task's own ``start_date`` and ``deadline`` still hold for the task and
+    for every other assignee; each date set here replaces the task's for
+    ``member`` alone, and may be earlier or later. A date left empty follows
+    the task's. The row exists only while at least one of the two is set
+    (``services.set_member_dates`` deletes it otherwise). It belongs to the
+    assignment: taking the member off the task deletes it
+    (``apps.tasks.signals``).
+    """
+
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name="assignee_deadlines"
+    )
+    member = models.ForeignKey(
+        "projects.ProjectMember",
+        on_delete=models.CASCADE,
+        related_name="individual_deadlines",
+    )
+    start_date = models.DateTimeField(null=True, blank=True)
+    deadline = models.DateTimeField(null=True, blank=True)
+    reason = models.CharField(max_length=500, blank=True, default="")
+    set_by = models.ForeignKey(
+        "projects.ProjectMember",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The Lead who last set these dates.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["task", "member"], name="unique_assignee_deadline"
+            )
+        ]
+        indexes = [models.Index(fields=["member", "deadline"])]
+
+    def __str__(self) -> str:
+        return f"Individual dates for member {self.member_id} on task {self.task_id}"
 
 
 class ActivityEvent(models.TextChoices):

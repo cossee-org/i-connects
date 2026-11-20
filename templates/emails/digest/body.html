@@ -12,7 +12,7 @@
       <li>
         <strong>{{ task.name }}</strong>
         {% if task.project %} &mdash; {{ task.project.name }}{% endif %}
-        {% if task.deadline %} (due {{ task.deadline|date:"M j, Y" }}){% endif %}
+        {% if task.my_deadline %} (due {{ task.my_deadline|date:"M j, Y" }}{% if task.my_deadline != task.deadline %}, your individual deadline{% endif %}){% endif %}
       </li>
     {% endfor %}
   </ul>

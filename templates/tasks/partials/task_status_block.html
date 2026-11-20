@@ -4,7 +4,10 @@
   assignee_states (each with member, log, done, done_at, done_by,
   done_by_self, reviewed, reviewed_by, reviewed_at, awaiting_review,
   verified, verified_by, verified_at, awaiting_verification,
-  can_mark_done, can_review, can_unreview, can_verify, can_unverify),
+  can_mark_done, can_review, can_unreview, can_verify, can_unverify,
+  individual, own_start, own_deadline, start_date, deadline, overdue,
+  can_set_dates, own_start_input, own_deadline_input),
+  pending_dates_count, can_set_dates,
   done_count, reviewed_count, verified_count, verify_done_count,
   verify_reviewed_count, assignee_count, is_assignee, my_done,
   marks_locked, needs_review, show_review, reviewers.
@@ -148,6 +151,18 @@
       {% endcomment %}
       {% if is_project_manager %}
         <div class="mt-3 flex flex-wrap items-center gap-2" data-verify-batch>
+          {% comment %}
+            Every assignee not yet done gets the same own start date and/or
+            deadline — earlier or later than the task's. Opens the dates
+            dialog at the end of this block (task_dates_modal.html).
+          {% endcomment %}
+          {% if can_set_dates %}
+            <button type="button" class="btn btn-xs btn-outline"
+                    @click="$dispatch('open-dates', { scope: 'pending', member: '', name: '', start: '', value: '', reason: '', hasPersonal: false })"
+                    aria-haspopup="dialog"
+                    {% if not pending_dates_count %}disabled{% endif %}
+                    data-dates-all>Set dates for all not done ({{ pending_dates_count }})</button>
+          {% endif %}
           <button type="button" class="btn btn-xs btn-outline"
                   onclick="document.getElementById('verify-done-modal-{{ task.pk }}').showModal()"
                   aria-haspopup="dialog"
@@ -327,6 +342,38 @@
                   <span class="text-sm font-medium text-brand-navy break-words min-w-0" data-assignee-name>{{ s.member.display_name }}</span>
                   {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
                 </div>
+                {% comment %}
+                  The member's dates, under their name: "Starts Nov 20 ·" when
+                  they have their own start date, then their deadline —
+                  either their own or the task's — with "own deadline" /
+                  "own start" / "own dates" saying which are theirs (the
+                  tooltip names who set them, the task's dates and the
+                  reason). Red with an Overdue pill once the deadline has
+                  passed and their part is still not done. A Lead gets Set
+                  dates / Change beside it, which opens the dates dialog
+                  for this row.
+                {% endcomment %}
+                {% if s.individual or s.deadline and not s.done or s.can_set_dates %}
+                  <div class="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs"
+                       data-member-deadline="{% if s.own_deadline %}own{% elif s.deadline %}task{% else %}none{% endif %}"
+                       data-member-start="{% if s.own_start %}own{% elif s.start_date %}task{% else %}none{% endif %}">
+                    {% if s.own_start or s.deadline %}
+                      <span class="{% if s.overdue %}text-error font-medium{% else %}text-brand-text/70{% endif %}"
+                            {% if s.individual %}title="Individual dates{% if s.individual.set_by %} set by {{ s.individual.set_by.display_name }}{% endif %}{% if task.start_date or task.deadline %} (task: {% if task.start_date %}starts {{ task.start_date|date:"M j, Y g:i A" }}{% if task.deadline %}, {% endif %}{% endif %}{% if task.deadline %}due {{ task.deadline|date:"M j, Y g:i A" }}{% endif %}){% endif %}{% if s.individual.reason %}: {{ s.individual.reason }}{% endif %}"{% endif %}>{% if s.own_start %}Starts {{ s.own_start|date:"M j" }}{% if s.deadline %} &middot; {% endif %}{% endif %}{% if s.deadline %}Due {{ s.deadline|date:"M j" }}{% endif %}{% if s.individual %} &middot; own {% if s.own_start and s.own_deadline %}dates{% elif s.own_start %}start{% else %}deadline{% endif %}{% endif %}</span>
+                      {% if s.overdue %}
+                        <span class="inline-flex items-center rounded px-1 py-0.5 bg-error/10 text-error text-[10px] font-semibold leading-none" data-member-overdue>Overdue</span>
+                      {% endif %}
+                    {% elif s.can_set_dates %}
+                      <span class="text-brand-text/50">No dates</span>
+                    {% endif %}
+                    {% if s.can_set_dates %}
+                      <button type="button" class="text-brand-navy font-medium hover:underline"
+                              @click="$dispatch('open-dates', { scope: 'member', member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', start: '{{ s.own_start_input }}', value: '{{ s.own_deadline_input }}', reason: '{{ s.individual.reason|default:''|escapejs }}', hasPersonal: {% if s.individual %}true{% else %}false{% endif %} })"
+                              aria-haspopup="dialog"
+                              data-set-dates="{{ s.member.pk }}">{% if s.individual %}Change<span class="sr-only"> {{ s.member.display_name }}'s dates</span>{% else %}Set dates<span class="sr-only"> for {{ s.member.display_name }}</span>{% endif %}</button>
+                    {% endif %}
+                  </div>
+                {% endif %}
               </td>
               <td data-done-cell data-mark="{% if s.done %}yes{% else %}no{% endif %}">
                 <div class="completion-mark">
@@ -371,6 +418,9 @@
         </tbody>
       </table>
       </div>
+      {% if can_set_dates %}
+        {% include "tasks/partials/task_dates_modal.html" with task=task assignee_states=assignee_states %}
+      {% endif %}
       {% if assignee_count > 3 %}
         <button type="button"
                 class="mt-1 text-xs font-medium text-brand-navy hover:underline"
@@ -432,6 +482,9 @@
             {% else %}
               <span class="inline-block w-4 h-4 rounded-full border border-brand-light" aria-hidden="true"></span>
               <span class="text-brand-text/70">{{ s.member.display_name }}</span>
+            {% endif %}
+            {% if s.individual %}
+              <span class="text-xs {% if s.overdue %}text-error{% else %}text-brand-text/60{% endif %}">&middot; {% if s.own_start %}starts {{ s.start_date|date:"M j" }}, {% endif %}{% if s.deadline %}due {{ s.deadline|date:"M j" }}{% endif %} (own {% if s.own_start and s.own_deadline %}dates{% elif s.own_start %}start{% else %}deadline{% endif %})</span>
             {% endif %}
           </li>
         {% endfor %}
