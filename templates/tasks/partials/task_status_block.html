@@ -381,7 +381,7 @@
                     {% endif %}
                     {% if s.tracks_credit and s.type_differs %}
                       <div class="text-brand-text/70" data-member-type-line
-                           title="Individual contribution type{% if s.own_type.set_by %} set by {{ s.own_type.set_by.display_name }}{% endif %} (task: {{ task.get_contribution_type_display }})">Type: {{ s.contribution_type_label }}</div>
+                           title="Individual contribution type{% if s.own_type.set_by %} set by {{ s.own_type.set_by.display_name }}{% endif %} (task: {{ task.get_contribution_type_display }})">Task type: {{ s.contribution_type_label }}</div>
                     {% endif %}
                     {% if s.can_set_dates or s.can_set_type %}
                       <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5">
