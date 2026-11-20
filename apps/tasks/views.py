@@ -69,8 +69,9 @@ from apps.tasks.ics import build_ics
 from apps.tasks.timezones import (
     DEFAULT_DUE_TIME,
     DEFAULT_START_TIME,
+    canonical,
     picker_value,
-    timezone_option,
+    short_zone_label,
 )
 from apps.tasks.import_csv import import_rows, parse_csv
 from apps.tasks.import_form import TaskImportForm
@@ -1406,10 +1407,6 @@ def _task_status_context(task, *, project_member, is_project_manager):
     # task has no dates left to keep.
     can_set_dates = is_project_manager and task.status != TaskStatus.COMPLETED
 
-    def _zone_label(name):
-        option = timezone_option(name)
-        return option["display"] if option else name
-
     def picker(value, zone):
         """A date as the Lead's date picker (datetime-local) takes it, in
         ``zone``."""
@@ -1527,24 +1524,34 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # task's), or None when they have no own dates — the dialog
                 # then starts on the Lead's system timezone.
                 "own_timezone": individual.timezone if individual else None,
-                # The zones of the dates on their line, as the picker
-                # labels them: the deadline's (else the start's), and the
-                # start's when it is in another zone than the deadline.
-                "timezone_label": _zone_label(
-                    own_zone if own_deadline or (own_start and not effective_deadline)
-                    else task.timezone
+                # What under their name differs from the task — only that
+                # is shown there: an own start or deadline at another
+                # moment than the task's, an own zone other than the
+                # task's (as "Tokyo (UTC+9)"), an own type other than the
+                # task's.
+                "start_differs": own_start is not None and own_start != task.start_date,
+                "deadline_differs": (
+                    own_deadline is not None and own_deadline != task.deadline
                 ),
-                # Whether that deadline's (or start's) zone is their own.
-                "timezone_is_own": bool(
+                "zone_differs": bool(
                     individual
                     and individual.timezone
-                    and (own_deadline or (own_start and not effective_deadline))
+                    and canonical(individual.timezone) != canonical(task.timezone)
                 ),
-                "start_timezone_label": (
-                    _zone_label(own_zone)
-                    if own_start and effective_deadline and not own_deadline
-                    and own_zone != task.timezone
-                    else ""
+                "zone_short": short_zone_label(
+                    own_zone, own_deadline or own_start or task.deadline
+                ),
+                "dates_differ": bool(
+                    (own_start is not None and own_start != task.start_date)
+                    or (own_deadline is not None and own_deadline != task.deadline)
+                    or (
+                        individual
+                        and individual.timezone
+                        and canonical(individual.timezone) != canonical(task.timezone)
+                    )
+                ),
+                "type_differs": bool(
+                    own_type and own_type.contribution_type != task.contribution_type
                 ),
                 # Late on their own deadline: open task, part not done.
                 "overdue": bool(
@@ -1553,6 +1560,7 @@ def _task_status_context(task, *, project_member, is_project_manager):
                     and not done
                     and task.status != TaskStatus.COMPLETED
                 ),
+                # Can a Lead act on their dates?
                 "can_set_dates": can_set_dates,
                 # Pre-fill the Lead's dialog with the member's own dates
                 # only: a date left empty there follows the task's.

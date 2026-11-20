@@ -402,6 +402,21 @@ def timezone_choices(extra: str | None = None) -> list[dict]:
     return options
 
 
+def short_zone_label(name, at: datetime | None = None) -> str:
+    """A zone in a few words, for tight spaces: its city and its offset
+    ``at`` (now by default), "Tokyo (UTC+9)", "Kolkata (UTC+5:30)",
+    "UTC"."""
+    zone = get_zone(name)
+    key = getattr(zone, "key", "UTC")
+    if key == "UTC":
+        return "UTC"
+    offset = (at or dj_timezone.now()).astimezone(zone).utcoffset() or timedelta(0)
+    minutes = int(offset.total_seconds() // 60)
+    hours, mins = divmod(abs(minutes), 60)
+    sign = "+" if minutes >= 0 else "\u2212"
+    return f"{_city(key)} (UTC{sign}{hours}" + (f":{mins:02d}" if mins else "") + ")"
+
+
 def timezone_option(value) -> dict | None:
     """The picker's entry for ``value`` (as in :func:`timezone_choices`), for
     the form to show the saved zone before the full list has loaded. None

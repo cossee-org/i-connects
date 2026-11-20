@@ -102,7 +102,8 @@ def test_lead_sets_an_individual_deadline_later_than_the_task(client, pm_user, o
     # The swapped-in block shows the member's own deadline and the Change control.
     content = response.content.decode()
     assert 'data-member-deadline="own"' in content
-    assert "own deadline" in content
+    # Their deadline differs from the task's, so it is shown under their name.
+    assert f"Due {timezone.localtime(later):%b %-d}</span>" in content
 
 
 @pytest.mark.django_db
@@ -694,7 +695,8 @@ def test_lead_sets_only_an_individual_start_date(client, pm_user, other_user):
     content = response.content.decode()
     assert 'data-member-start="own"' in content
     assert 'data-member-deadline="task"' in content
-    assert "own start" in content
+    # Only their start differs from the task's, so only it is shown.
+    assert f">Starts {timezone.localtime(entry.start_date):%b %-d}</span>" in content
 
 
 @pytest.mark.django_db

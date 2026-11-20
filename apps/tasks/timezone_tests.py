@@ -494,7 +494,7 @@ def test_dialog_starts_on_the_system_zone_unless_one_is_saved(client, pm_user, z
     # Ari's own dates are shown and prefilled in Tokyo time…
     assert "start: '', value: '2027-01-20T09:00'" in content
     assert "timezone: 'Asia/Tokyo'" in content
-    assert "own dates in Asia/Tokyo" in content
+    assert "<span data-member-timezone>Tokyo (UTC+9)</span>" in content
     # …Bo has none, so the dialog starts on the Lead's system timezone.
     assert "timezone: null" in content
     assert "Same as task (America/Denver)" in content
@@ -514,19 +514,44 @@ def test_completion_table_names_each_members_timezone(client, pm_user, zoned):
         reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
     ).content.decode()
 
-    # One line each: the date, the zone it is in, and which are their own.
-    assert (
-        'Due Jan 20 &middot; <span data-member-timezone="own">(UTC+09:00) Tokyo, '
-        "Japan</span> &middot; own deadline, own timezone</span>"
-    ) in content
-    assert (
-        'Due Jan 15 &middot; <span data-member-timezone="task">(UTC\u221207:00) '
-        "Denver, United States of America</span></span>"
-    ) in content
+    # Only what differs from the task: Ari's own deadline and zone, on one
+    # line, the zone shortened; Bo follows the task, so nothing is shown.
+    assert "Due Jan 20 &middot; <span data-member-timezone>Tokyo (UTC+9)</span></span>" in content
+    assert content.count("data-member-dates") == 1
 
 
 @pytest.mark.django_db
-def test_an_own_start_in_another_zone_names_its_zone(client, pm_user, zoned):
+def test_nothing_shown_when_own_values_match_the_task(client, pm_user, zoned):
+    """An own deadline at the task's moment, an own zone equal to the
+    task's, an own type equal to the task's: none of it differs, so
+    nothing is shown under the name."""
+    from apps.tasks.services import set_member_contribution_type
+
+    project, task, lead, ari, _bo = zoned
+    project.contribution_tracking = "CREDIT"
+    project.save()
+    set_member_dates(
+        task=task, member=ari, lead=lead, timezone="America/Denver",
+        deadline=task.deadline,
+    )
+    set_member_contribution_type(
+        task=task, member=ari, lead=lead, contribution_type=task.contribution_type,
+    )
+    client.force_login(pm_user)
+
+    content = client.get(
+        reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
+    ).content.decode()
+
+    assert "data-member-dates" not in content
+    assert "data-member-type-line" not in content
+    # A Lead still gets the controls.
+    assert f'data-set-dates="{ari.pk}"' in content
+    assert ">Change dates<" in content
+
+
+@pytest.mark.django_db
+def test_an_own_start_shows_with_its_zone(client, pm_user, zoned):
     _project, task, lead, ari, _bo = zoned
     set_member_dates(
         task=task, member=ari, lead=lead, timezone="Asia/Tokyo",
@@ -538,11 +563,18 @@ def test_an_own_start_in_another_zone_names_its_zone(client, pm_user, zoned):
         reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
     ).content.decode()
 
-    assert (
-        "Starts Jan 10 &middot; <span data-member-start-timezone>(UTC+09:00) Tokyo, "
-        "Japan</span> &middot; Due Jan 15 &middot; "
-        '<span data-member-timezone="task">(UTC\u221207:00) Denver'
-    ) in content
+    assert "Starts Jan 10 &middot; <span data-member-timezone>Tokyo (UTC+9)</span>" in content
+
+
+def test_short_zone_label():
+    from apps.tasks.timezones import short_zone_label
+
+    when = datetime(2027, 1, 15, tzinfo=UTC)
+    assert short_zone_label("Asia/Tokyo", when) == "Tokyo (UTC+9)"
+    assert short_zone_label("Asia/Kolkata", when) == "Kolkata (UTC+5:30)"
+    assert short_zone_label("America/Denver", when) == "Denver (UTC\u22127)"
+    assert short_zone_label("America/Argentina/Buenos_Aires", when) == "Buenos Aires (UTC\u22123)"
+    assert short_zone_label("UTC", when) == "UTC"
 
 
 # ---------------------------------------------------------------------------
