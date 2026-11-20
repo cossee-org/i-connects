@@ -1,4 +1,5 @@
 {% extends "emails/base_email.html" %}
+{% load task_tags %}
 {% block title %}New task assignment{% endblock %}
 {% block content %}
 <p>Hi {{ user.name|default:user.email }},</p>
@@ -13,7 +14,7 @@
     <li style="margin-bottom:8px;">
       <a href="{{ entry.url }}" style="color:#1d4ed8;font-weight:600;">{{ entry.task.name }}</a>
       &mdash; {{ entry.task.project.name }}
-      {% if entry.task.deadline %}<br><span style="color:#6b7280;">Due {{ entry.task.deadline|date:"M j, Y" }}</span>{% endif %}
+      {% if entry.task.deadline %}<br><span style="color:#6b7280;">Due {{ entry.task.deadline|in_zone:entry.task.timezone|date:"M j, Y g:i A T" }}</span>{% endif %}
     </li>
   {% endfor %}
 </ul>

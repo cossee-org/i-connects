@@ -717,10 +717,15 @@ def set_member_dates(
     lead: ProjectMember | None,
     start_date=UNSET,
     deadline=UNSET,
+    timezone=UNSET,
     reason: str | None = None,
     batch: str | None = None,
 ) -> AssigneeDeadline | None:
     """A Lead sets one assignee's own dates on ``task``.
+
+    ``timezone`` is the IANA zone governing the member's own dates; "" (or
+    None) makes them follow the task's zone, and ``UNSET`` keeps the one
+    they have.
 
     Each of ``start_date`` and ``deadline`` replaces the task's date for that
     member alone, and may be earlier or later than it; None removes the
@@ -737,21 +742,24 @@ def set_member_dates(
     existing = AssigneeDeadline.objects.filter(task=task, member=member).first()
     old_start = existing.start_date if existing else None
     old_deadline = existing.deadline if existing else None
+    old_zone = existing.timezone if existing else ""
     new_start = old_start if start_date is UNSET else start_date
     new_deadline = old_deadline if deadline is UNSET else deadline
+    new_zone = old_zone if timezone is UNSET else (timezone or "")
     new_reason = (
         (existing.reason if existing else "") if reason is None else reason.strip()
     )
     if new_start is None and new_deadline is None:
         clear_member_dates(task=task, member=member, actor=lead, batch=batch)
         return None
-    if existing and (new_start, new_deadline, new_reason) == (
-        old_start, old_deadline, existing.reason
+    if existing and (new_start, new_deadline, new_zone, new_reason) == (
+        old_start, old_deadline, old_zone, existing.reason
     ):
         return existing
     entry = existing or AssigneeDeadline(task=task, member=member)
     entry.start_date = new_start
     entry.deadline = new_deadline
+    entry.timezone = new_zone
     entry.reason = new_reason
     entry.set_by = lead
     entry.save()
@@ -764,6 +772,8 @@ def set_member_dates(
         previous_start_date=old_start,
         deadline=new_deadline,
         previous=old_deadline,
+        timezone=new_zone,
+        previous_timezone=old_zone if existing else None,
         reason=new_reason,
         batch=batch,
     )
@@ -778,11 +788,13 @@ def set_pending_dates(
     lead: ProjectMember | None,
     start_date=UNSET,
     deadline=UNSET,
+    timezone=UNSET,
     reason: str | None = None,
 ) -> list[ProjectMember]:
     """Give every assignee not yet done the same own start date and/or
-    deadline. A date passed as ``UNSET`` is left as each member has it, and
-    a None ``reason`` keeps each member's note.
+    deadline, and the same zone for their own dates. A date passed as
+    ``UNSET`` is left as each member has it (the same moment, shown in the
+    new zone), and a None ``reason`` keeps each member's note.
 
     Members who have marked their part done are left as they are. Returns
     the members it covered.
@@ -791,7 +803,7 @@ def set_pending_dates(
     for member in members:
         set_member_dates(
             task=task, member=member, lead=lead, start_date=start_date,
-            deadline=deadline, reason=reason, batch="pending",
+            deadline=deadline, timezone=timezone, reason=reason, batch="pending",
         )
     return members
 
@@ -819,6 +831,8 @@ def clear_member_dates(
         previous_start_date=existing.start_date,
         deadline=None,
         previous=existing.deadline,
+        timezone=None,
+        previous_timezone=existing.timezone,
         batch=batch,
     )
     _notify_member_dates(task=task, member=member, entry=None, lead=actor)
@@ -942,6 +956,38 @@ class TaskDateChange:
 
 
 @transaction.atomic
+def rezone_following_members(
+    *,
+    task: Task,
+    old_zone: str,
+    new_zone: str,
+    actor: ProjectMember | None,
+) -> list[AssigneeDeadline]:
+    """The task moved from ``old_zone`` to ``new_zone``: members whose own
+    dates follow the task's zone keep their clock times in the new zone,
+    as the task's own dates do. Members with a zone of their own are left
+    as they are. Each change is audited (``batch="task_timezone"``) and
+    told to the member. Returns the entries it changed.
+    """
+    from apps.tasks.timezones import canonical, rezone
+
+    if canonical(old_zone) == canonical(new_zone):
+        return []
+    changed = []
+    for entry in task.assignee_deadlines.select_related("member").filter(timezone=""):
+        start = rezone(entry.start_date, old_zone, new_zone)
+        deadline = rezone(entry.deadline, old_zone, new_zone)
+        if (start, deadline) == (entry.start_date, entry.deadline):
+            continue
+        set_member_dates(
+            task=task, member=entry.member, lead=actor,
+            start_date=start, deadline=deadline, batch="task_timezone",
+        )
+        changed.append(entry)
+    return changed
+
+
+@transaction.atomic
 def apply_task_date_change(
     *,
     task: Task,
@@ -950,18 +996,27 @@ def apply_task_date_change(
     new_value,
     choice: str,
     actor: ProjectMember | None,
+    old_zone: str | None = None,
 ) -> list[AssigneeDeadline]:
     """Carry a change of ``task``'s ``field`` ("start_date" or "deadline")
     onto the members' own dates of the same kind.
 
-    ``shift`` moves each by the same amount as the task's, so a member given
-    a week past the task keeps that week; ``clear`` removes them, so those
-    members follow the task's new date (their other own date, if any, stays);
-    ``keep`` leaves them as they were. Each change is audited (``batch``
-    names the task edit, e.g. ``task_deadline_shift``) and told to the
-    member. Called after the task is saved, so members taken off it in the
-    same edit have already lost theirs. Returns the entries it touched.
+    ``shift`` moves each by the same amount on the clock as the task's
+    (``old_value`` in ``old_zone``, the task's zone before the edit, to
+    ``new_value`` in its zone now), in the zone governing the member's
+    date — so a member given a week past the task keeps that week, and
+    5:00 PM stays 5:00 PM across a daylight-saving change. ``clear``
+    removes them, so those members follow the task's new date (their other
+    own date, if any, stays); ``keep`` leaves them as they were. Each
+    change is audited (``batch`` names the task edit, e.g.
+    ``task_deadline_shift``) and told to the member. Called after the task
+    is saved — and after :func:`rezone_following_members`, when the zone
+    changed too — so members taken off it in the same edit have already
+    lost theirs. Returns the entries it touched. See
+    ``timezones.carried_own_date``, which the task form checks against.
     """
+    from apps.tasks.timezones import carried_own_date
+
     assert field in ("start_date", "deadline")
     entries = [
         e
@@ -971,11 +1026,21 @@ def apply_task_date_change(
     if choice == TaskDateChange.SHIFT:
         if old_value is None or new_value is None:
             return []
-        delta = new_value - old_value
         for entry in entries:
+            shifted = carried_own_date(
+                getattr(entry, field),
+                own_zone=entry.timezone,
+                # Already moved into the new zone, when the zone changed.
+                old_task_zone=task.timezone,
+                new_task_zone=task.timezone,
+                moved=True,
+                choice=TaskDateChange.SHIFT,
+                old_value=_rezoned(old_value, old_zone or task.timezone, task.timezone),
+                new_value=new_value,
+            )
             set_member_dates(
                 task=task, member=entry.member, lead=actor,
-                **{field: getattr(entry, field) + delta},
+                **{field: shifted},
                 batch=f"task_{field}_shift",
             )
         return entries
@@ -987,6 +1052,17 @@ def apply_task_date_change(
             )
         return entries
     return []
+
+
+def _rezoned(value, old_zone: str, new_zone: str):
+    """``value``'s clock time in ``old_zone``, read in ``new_zone``: the
+    task's old date as it reads in its new zone, so the shift is the
+    distance on the clock alone."""
+    from apps.tasks.timezones import canonical, rezone
+
+    if canonical(old_zone) == canonical(new_zone):
+        return value
+    return rezone(value, old_zone, new_zone)
 
 
 def _iso(value):
@@ -1003,10 +1079,16 @@ def _log_dates_action(
     previous_start_date,
     deadline,
     previous,
+    timezone: str | None = None,
+    previous_timezone: str | None = None,
     reason: str = "",
     batch: str | None = None,
 ) -> None:
-    """Append an audit row for a member's own dates set or removed."""
+    """Append an audit row for a member's own dates set or removed.
+
+    ``timezone`` / ``previous_timezone`` are the member's own zone after and
+    before ("" when their dates follow the task's zone, None when they had
+    no own dates at all)."""
     metadata = {
         "task_name": task.name,
         "assignee_member_id": member.pk,
@@ -1014,8 +1096,11 @@ def _log_dates_action(
         "previous_start_date": _iso(previous_start_date),
         "deadline": _iso(deadline),
         "previous_deadline": _iso(previous),
+        "timezone": timezone,
+        "previous_timezone": previous_timezone,
         "task_start_date": _iso(task.start_date),
         "task_deadline": _iso(task.deadline),
+        "task_timezone": task.timezone,
     }
     if reason:
         metadata["reason"] = reason
@@ -1030,8 +1115,12 @@ def _log_dates_action(
     )
 
 
-def _when(value) -> str:
-    return timezone.localtime(value).strftime("%b %-d, %Y %-I:%M %p")
+def _when(value, zone=None) -> str:
+    """``value`` in ``zone`` (the server's when None), with the zone's
+    abbreviation: "Nov 30, 2026 5:00 PM MST"."""
+    from apps.tasks.timezones import format_when
+
+    return format_when(value, zone)
 
 
 def _notify_member_dates(
@@ -1052,15 +1141,18 @@ def _notify_member_dates(
         user_ids.difference_update(lead.users.values_list("id", flat=True))
     if not user_ids:
         return
-    start = entry.start_date if entry else None
-    deadline = entry.deadline if entry else None
-    start = start or task.start_date
-    deadline = deadline or task.deadline
+    own_start = entry.start_date if entry else None
+    own_deadline = entry.deadline if entry else None
+    own_zone = (entry.timezone if entry else "") or task.timezone
+    start = own_start or task.start_date
+    deadline = own_deadline or task.deadline
     parts = []
     if start:
-        parts.append(f"starts {_when(start)}")
+        parts.append(f"starts {_when(start, own_zone if own_start else task.timezone)}")
     if deadline:
-        parts.append(f"is due {_when(deadline)}")
+        parts.append(
+            f"is due {_when(deadline, own_zone if own_deadline else task.timezone)}"
+        )
     dates = " and ".join(parts)
     if entry is not None:
         title = f"Your dates changed: {task.name}"

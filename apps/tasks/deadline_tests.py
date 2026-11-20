@@ -102,7 +102,8 @@ def test_lead_sets_an_individual_deadline_later_than_the_task(client, pm_user, o
     # The swapped-in block shows the member's own deadline and the Change control.
     content = response.content.decode()
     assert 'data-member-deadline="own"' in content
-    assert "own deadline" in content
+    # Their deadline differs from the task's, so it is shown under their name.
+    assert f"Due {timezone.localtime(later):%b %-d}</span>" in content
 
 
 @pytest.mark.django_db
@@ -118,7 +119,9 @@ def test_individual_deadline_may_be_earlier_than_the_task(client, pm_user, other
 
 
 @pytest.mark.django_db
-def test_individual_deadline_must_be_in_the_future(client, pm_user, other_user):
+def test_individual_deadline_may_be_in_the_past(client, pm_user, other_user):
+    """The only rule for a member's dates is that an own start comes no
+    later than their deadline; a deadline already passed is the Lead's call."""
     _project, task, _lead, [bob] = _setup(pm_user, other_user)
     client.force_login(pm_user)
 
@@ -127,9 +130,8 @@ def test_individual_deadline_must_be_in_the_future(client, pm_user, other_user):
         deadline=_local_input(timezone.now() - timedelta(days=1)),
     )
 
-    assert response.status_code == 400
-    assert "future" in response.content.decode()
-    assert not AssigneeDeadline.objects.exists()
+    assert response.status_code == 200
+    assert AssigneeDeadline.objects.get(member=bob).deadline < timezone.now()
 
 
 @pytest.mark.django_db
@@ -694,7 +696,8 @@ def test_lead_sets_only_an_individual_start_date(client, pm_user, other_user):
     content = response.content.decode()
     assert 'data-member-start="own"' in content
     assert 'data-member-deadline="task"' in content
-    assert "own start" in content
+    # Only their start differs from the task's, so only it is shown.
+    assert f">Starts {timezone.localtime(entry.start_date):%b %-d}</span>" in content
 
 
 @pytest.mark.django_db
@@ -800,7 +803,7 @@ def test_set_dates_for_all_needs_at_least_one_date(client, pm_user, other_user):
     response = _post(client, task, scope="pending", start_date="", deadline="")
 
     assert response.status_code == 400
-    assert "start date or a deadline" in response.content.decode()
+    assert "Change the start date or the deadline" in response.content.decode()
 
 
 @pytest.mark.django_db
@@ -1016,9 +1019,10 @@ def test_shifting_own_deadlines_before_kept_own_starts_is_refused(client, pm_use
 
 
 @pytest.mark.django_db
-def test_task_start_moved_past_an_own_deadline_is_refused(client, pm_user, user, other_user):
-    """No panel applies — Bo has only his own (earlier) deadline — so the
-    error goes on the task's start date."""
+def test_task_start_moved_past_an_own_deadline_is_allowed(client, pm_user, user, other_user):
+    """Bo has only his own (earlier) deadline and follows the task's start:
+    with no start of his own there is nothing to check, so the task's start
+    may move past his deadline (collaborators in other timezones)."""
     project, task, lead, [ari, bo] = _setup(pm_user, user, other_user, deadline_days=20)
     task.deadline = _minute(task.deadline)
     task.save()
@@ -1031,9 +1035,7 @@ def test_task_start_moved_past_an_own_deadline_is_refused(client, pm_user, user,
         deadline=_local_input(task.deadline),
     )
 
-    assert response.status_code == 200
-    assert "after their deadline" in response.content.decode()
-    assert response.context["form"].errors["start_date"]
+    assert response.status_code == 302
 
 
 @pytest.mark.django_db
