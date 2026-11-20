@@ -416,6 +416,72 @@
   </script>
 
   {% comment %}
+    The member-dates dialog (tasks/partials/task_dates_modal.html). Each date
+    is a day and a time. For one member, a date they have no own value for
+    starts on the task's — the same moment, shown in the timezone picked in
+    the dialog, and kept in step with it until the Lead edits that date —
+    so the Lead sees what the member follows and changes only what should
+    differ; the server treats a date sent back at the task's moment as "follow
+    the task" (forms.AssigneeDatesForm). A date the task does not have
+    either starts with an empty day and the task form's default time (9:00
+    AM to start, 5:00 PM to be due). For everyone not done, the days start
+    empty: an empty day keeps each member's own.
+
+    ``cfg``: taskZone (IANA name), taskStart / taskDue (epoch milliseconds,
+    or null).
+  {% endcomment %}
+  <script>
+    window.memberDatesDialog = function (cfg) {
+      var wall = function (ms, zone) {
+        try {
+          var parts = {};
+          new Intl.DateTimeFormat("en-CA", {
+            timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+          }).formatToParts(new Date(ms)).forEach(function (p) { parts[p.type] = p.value; });
+          return [parts.year + "-" + parts.month + "-" + parts.day, parts.hour + ":" + parts.minute];
+        } catch (e) {
+          return ["", ""];
+        }
+      };
+      var split = function (value, fallback) {
+        return value ? [value.slice(0, 10), value.slice(11, 16) || fallback] : ["", fallback];
+      };
+      return {
+        scope: "member", member: "", name: "", reason: "", hasPersonal: false, error: "",
+        startDay: "", startTime: "09:00", dueDay: "", dueTime: "17:00",
+        startFollows: false, dueFollows: false,
+        open: function (detail) {
+          this.scope = detail.scope || "member";
+          this.member = detail.member || "";
+          this.name = detail.name || "";
+          this.reason = detail.reason || "";
+          this.hasPersonal = !!detail.hasPersonal;
+          this.error = "";
+          var start = split(detail.start, "09:00"), due = split(detail.value, "17:00");
+          this.startDay = start[0]; this.startTime = start[1];
+          this.dueDay = due[0]; this.dueTime = due[1];
+          this.startFollows = this.scope === "member" && !detail.start && cfg.taskStart != null;
+          this.dueFollows = this.scope === "member" && !detail.value && cfg.taskDue != null;
+          this.refill();
+          // The timezone picker applies its zone on the same event.
+          var self = this;
+          this.$nextTick(function () { self.refill(); });
+        },
+        zone: function () {
+          var select = this.$root.querySelector("select[name=timezone]");
+          return (select && select.value) || cfg.taskZone || "UTC";
+        },
+        refill: function () {
+          var zone = this.zone(), p;
+          if (this.startFollows) { p = wall(cfg.taskStart, zone); this.startDay = p[0]; this.startTime = p[1]; }
+          if (this.dueFollows) { p = wall(cfg.taskDue, zone); this.dueDay = p[0]; this.dueTime = p[1]; }
+        },
+      };
+    };
+  </script>
+
+  {% comment %}
     Header sort for a plain table, in the browser: x-data="sortableRows()" on
     the <table>, x-ref="rows" on its <tbody>, a _components/sortable_header.html
     per sortable column, and on each row data-order (the server's order) and

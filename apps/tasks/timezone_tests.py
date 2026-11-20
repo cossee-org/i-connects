@@ -412,6 +412,62 @@ def test_emptying_both_own_dates_still_removes_them_whatever_the_zone(client, pm
 
 
 @pytest.mark.django_db
+def test_a_date_sent_back_at_the_tasks_moment_follows_the_task(client, pm_user, zoned):
+    """The dialog starts a date the member has no own value for on the
+    task's (in the zone picked); sent back unchanged, it is not theirs."""
+    _project, task, _lead, ari, _bo = zoned
+    task.start_date = _at(DENVER, 2027, 1, 11, 9, 0)
+    task.save()
+    client.force_login(pm_user)
+
+    # The task's start, as it reads in Tokyo, beside an own deadline.
+    response = _post(
+        client, task, member=ari.pk, timezone="Asia/Tokyo",
+        start_date_0="2027-01-12", start_date_1="01:00",
+        deadline_0="2027-01-20", deadline_1="09:00",
+    )
+
+    assert response.status_code == 200
+    own = AssigneeDeadline.objects.get(member=ari)
+    assert own.start_date is None
+    assert own.deadline == _at(TOKYO, 2027, 1, 20, 9, 0)
+
+
+@pytest.mark.django_db
+def test_task_dates_sent_back_unchanged_save_nothing(client, pm_user, zoned):
+    _project, task, _lead, ari, _bo = zoned
+    client.force_login(pm_user)
+
+    response = _post(
+        client, task, member=ari.pk, timezone="America/Denver",
+        deadline_0="2027-01-15", deadline_1="17:00",
+    )
+
+    # Nothing of their own, so the zone has nothing to govern either.
+    assert response.status_code == 400
+    assert "first" in response.content.decode()
+    assert not AssigneeDeadline.objects.exists()
+
+
+@pytest.mark.django_db
+def test_dates_dialog_knows_the_tasks_dates(client, pm_user, zoned):
+    _project, task, *_ = zoned
+    client.force_login(pm_user)
+
+    content = client.get(
+        reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
+    ).content.decode()
+
+    due_ms = int(task.deadline.timestamp()) * 1000
+    assert (
+        "memberDatesDialog({ taskZone: 'America/Denver', taskStart: null, "
+        f"taskDue: {due_ms} }})"
+    ) in content
+    for name in ("start_date_0", "start_date_1", "deadline_0", "deadline_1"):
+        assert f'name="{name}"' in content
+
+
+@pytest.mark.django_db
 def test_changing_only_the_members_zone_is_saved(pm_user, zoned):
     _project, task, lead, ari, _bo = zoned
     when = _at(TOKYO, 2027, 1, 20, 9, 0)

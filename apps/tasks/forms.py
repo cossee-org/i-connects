@@ -721,8 +721,15 @@ class AssigneeDatesForm(forms.Form):
     keeps its moment in time and is shown in that zone from then on.
     """
 
-    start_date = ZonedDateTimeField(required=False, input_formats=_DATE_INPUT_FORMATS)
-    deadline = ZonedDateTimeField(required=False, input_formats=_DATE_INPUT_FORMATS)
+    # A day and a time each (``DateTimeSplitWidget``), as on the task form.
+    start_date = ZonedDateTimeField(
+        required=False, input_formats=_DATE_INPUT_FORMATS,
+        widget=DateTimeSplitWidget(DEFAULT_START_TIME),
+    )
+    deadline = ZonedDateTimeField(
+        required=False, input_formats=_DATE_INPUT_FORMATS,
+        widget=DateTimeSplitWidget(DEFAULT_DUE_TIME),
+    )
     # The zone governing the member's own dates. Empty ("Same as task")
     # follows the task's zone. The dialog starts on the Lead's system
     # timezone unless the member already has their own dates.
@@ -758,6 +765,19 @@ class AssigneeDatesForm(forms.Form):
         cleaned = super().clean()
         if self.errors:
             return cleaned
+        # The dialog starts a date the member has no own value for on the
+        # task's; one sent back at the task's moment is not theirs, so it
+        # follows the task's (and an old deadline of the task's is not
+        # refused as past).
+        if self.scope == "member":
+            for name in ("start_date", "deadline"):
+                value, task_value = cleaned.get(name), getattr(self.task, name)
+                if (
+                    value is not None
+                    and task_value is not None
+                    and self._minute(value) == self._minute(task_value)
+                ):
+                    cleaned[name] = None
         start = cleaned.get("start_date")
         deadline = cleaned.get("deadline")
         if self.scope == "pending" and start is None and deadline is None:
