@@ -474,10 +474,12 @@ class DateTimeSplitWidget(forms.MultiWidget):
     ``<input type=time>``), which the form reads as one clock time,
     "YYYY-MM-DDTHH:MM".
 
-    The time picker starts on ``default_time`` while no date is set, so a
-    Lead who picks only a day gets that time (9:00 AM for a start date,
-    5:00 PM for a due date). An empty day means no date, whatever the time
-    says; a day with no time takes ``default_time`` too. A single
+    While no day is set the time is empty too. Picking a day fills in
+    ``default_time`` if the time is still empty (9:00 AM for a start date,
+    5:00 PM for a due date; ``data-default-time`` on the time picker, read
+    by ``window.dateTimeDefaults`` in base.html), and clearing the day
+    clears the time. An empty day means no date, whatever the time says; a
+    day sent with no time takes ``default_time``. A single
     ``<name>`` value ("YYYY-MM-DDTHH:MM", or a bare "YYYY-MM-DD", which also
     takes ``default_time``) is read when the two parts are not sent.
     """
@@ -488,7 +490,12 @@ class DateTimeSplitWidget(forms.MultiWidget):
         widgets = (
             forms.DateInput(attrs={**base, "type": "date"}, format="%Y-%m-%d"),
             forms.TimeInput(
-                attrs={**base, "type": "time", "aria-label": time_label},
+                attrs={
+                    **base,
+                    "type": "time",
+                    "aria-label": time_label,
+                    "data-default-time": default_time.strftime("%H:%M"),
+                },
                 format="%H:%M",
             ),
         )
@@ -503,7 +510,7 @@ class DateTimeSplitWidget(forms.MultiWidget):
         if isinstance(value, str) and value:
             day, _, clock = value.replace(" ", "T").partition("T")
             return [day, clock[:5] or default]
-        return ["", default]
+        return ["", ""]
 
     def _join(self, day: str, clock: str) -> str:
         day, clock = (day or "").strip(), (clock or "").strip()

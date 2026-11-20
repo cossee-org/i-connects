@@ -39,7 +39,7 @@
                   const day = form.querySelector('[name={{ date_field.html_name }}_0]');
                   const clock = form.querySelector('[name={{ date_field.html_name }}_1]');
                   const zoneInput = form.querySelector('[name=timezone]');
-                  const sync = () => { current = day.value ? day.value + 'T' + (clock.value || clock.defaultValue) : ''; zone = zoneInput ? zoneInput.value : ''; if (!canShift && choice === 'shift') choice = 'keep' };
+                  const sync = () => { current = day.value ? day.value + 'T' + (clock.value || clock.dataset.defaultTime) : ''; zone = zoneInput ? zoneInput.value : ''; if (!canShift && choice === 'shift') choice = 'keep' };
                   sync();
                   [day, clock].forEach((el) => { el.addEventListener('input', sync); el.addEventListener('change', sync) });
                   if (zoneInput) zoneInput.addEventListener('change', sync)"

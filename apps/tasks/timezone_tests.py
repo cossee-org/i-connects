@@ -131,7 +131,7 @@ def test_create_form_starts_on_the_system_timezone(client, pm_user, other_user):
 
 
 @pytest.mark.django_db
-def test_new_task_times_start_on_9am_and_5pm(client, pm_user, other_user):
+def test_new_task_times_start_empty_and_know_their_defaults(client, pm_user, other_user):
     project, _task, _lead, _ = _setup(pm_user, other_user)
     client.force_login(pm_user)
 
@@ -140,10 +140,13 @@ def test_new_task_times_start_on_9am_and_5pm(client, pm_user, other_user):
         HTTP_HX_REQUEST="true",
     ).content.decode()
 
+    # No day yet, so no time either; picking a day fills in the default.
     assert 'type="date" name="start_date_0" value="" class=' in content
-    assert 'type="time" name="start_date_1" value="09:00"' in content
+    assert 'type="time" name="start_date_1" value="" ' in content
+    assert 'data-default-time="09:00"' in content
     assert 'type="date" name="deadline_0" value="" class=' in content
-    assert 'type="time" name="deadline_1" value="17:00"' in content
+    assert 'type="time" name="deadline_1" value="" ' in content
+    assert 'data-default-time="17:00"' in content
 
 
 @pytest.mark.django_db

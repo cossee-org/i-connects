@@ -91,7 +91,7 @@
           <div class="grid grid-cols-[minmax(0,1fr)_8.5rem] gap-2">
             <input type="date" name="start_date_0" id="dates-start-day-{{ task.pk }}"
                    class="input input-bordered w-full px-3"
-                   x-model="startDay" @input="startFollows = false" data-start-input>
+                   x-model="startDay" @input="dayChanged('start')" @change="dayChanged('start')" data-start-input>
             <input type="time" name="start_date_1" aria-label="Start time"
                    class="input input-bordered w-full px-3"
                    x-model="startTime" @input="startFollows = false" data-start-time-input>
@@ -102,7 +102,7 @@
           <div class="grid grid-cols-[minmax(0,1fr)_8.5rem] gap-2">
             <input type="date" name="deadline_0" id="dates-due-day-{{ task.pk }}"
                    class="input input-bordered w-full px-3"
-                   x-model="dueDay" @input="dueFollows = false" data-deadline-input>
+                   x-model="dueDay" @input="dayChanged('due')" @change="dayChanged('due')" data-deadline-input>
             <input type="time" name="deadline_1" aria-label="Deadline time"
                    class="input input-bordered w-full px-3"
                    x-model="dueTime" @input="dueFollows = false" data-deadline-time-input>

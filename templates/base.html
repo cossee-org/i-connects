@@ -423,14 +423,28 @@
     so the Lead sees what the member follows and changes only what should
     differ; the server treats a date sent back at the task's moment as "follow
     the task" (forms.AssigneeDatesForm). A date the task does not have
-    either starts with an empty day and the task form's default time (9:00
-    AM to start, 5:00 PM to be due). For everyone not done, the days start
-    empty: an empty day keeps each member's own.
+    either starts empty, day and time; picking a day fills in the task
+    form's default time (9:00 AM to start, 5:00 PM to be due), and clearing
+    it clears the time. For everyone not done, the dates start empty: an
+    empty day keeps each member's own.
 
     ``cfg``: taskZone (IANA name), taskStart / taskDue (epoch milliseconds,
     or null).
   {% endcomment %}
   <script>
+    // A day and time pair (tasks/partials/date_time_field.html): picking a
+    // day fills in the time picker's data-default-time when it is empty;
+    // clearing the day clears the time.
+    window.dateTimeDefaults = function (event) {
+      var day = event.target;
+      if (!day || day.type !== "date") return;
+      var time = day.parentElement && day.parentElement.querySelector("input[type=time]");
+      if (!time) return;
+      var before = time.value;
+      if (!day.value) time.value = "";
+      else if (!time.value) time.value = time.dataset.defaultTime || "";
+      if (time.value !== before) time.dispatchEvent(new Event("input", { bubbles: true }));
+    };
     window.memberDatesDialog = function (cfg) {
       var wall = function (ms, zone) {
         try {
@@ -449,7 +463,7 @@
       };
       return {
         scope: "member", member: "", name: "", reason: "", hasPersonal: false, error: "",
-        startDay: "", startTime: "09:00", dueDay: "", dueTime: "17:00",
+        startDay: "", startTime: "", dueDay: "", dueTime: "",
         startFollows: false, dueFollows: false,
         open: function (detail) {
           this.scope = detail.scope || "member";
@@ -458,7 +472,7 @@
           this.reason = detail.reason || "";
           this.hasPersonal = !!detail.hasPersonal;
           this.error = "";
-          var start = split(detail.start, "09:00"), due = split(detail.value, "17:00");
+          var start = split(detail.start, ""), due = split(detail.value, "");
           this.startDay = start[0]; this.startTime = start[1];
           this.dueDay = due[0]; this.dueTime = due[1];
           this.startFollows = this.scope === "member" && !detail.start && cfg.taskStart != null;
@@ -471,6 +485,18 @@
         zone: function () {
           var select = this.$root.querySelector("select[name=timezone]");
           return (select && select.value) || cfg.taskZone || "UTC";
+        },
+        // A day picked fills in the default time; a day cleared clears it.
+        dayChanged: function (which) {
+          if (which === "start") {
+            this.startFollows = false;
+            if (!this.startDay) this.startTime = "";
+            else if (!this.startTime) this.startTime = "09:00";
+          } else {
+            this.dueFollows = false;
+            if (!this.dueDay) this.dueTime = "";
+            else if (!this.dueTime) this.dueTime = "17:00";
+          }
         },
         refill: function () {
           var zone = this.zone(), p;
