@@ -370,8 +370,8 @@ def test_create_form_defaults_is_priority_false(client, user):
 def test_create_form_prefills_dates_from_calendar_range_params(client, user):
     # A date range picked on the calendar view opens the create form with
     # ?start_date=&deadline= (YYYY-MM-DD) — the form should pre-fill both
-    # fields, all-day style (start at 00:00, deadline at 23:59), without
-    # creating anything until the user saves.
+    # fields at the form's default times (start at 9:00 AM, due at 5:00 PM),
+    # without creating anything until the user saves.
     project, _col1, _col2 = _make_project_with_board(user)
     client.force_login(user)
     response = client.get(
@@ -380,9 +380,10 @@ def test_create_form_prefills_dates_from_calendar_range_params(client, user):
     )
     assert response.status_code == 200
     content = response.content.decode()
-    assert 'name="start_date"' in content
-    assert 'value="2026-03-10T00:00"' in content
-    assert 'value="2026-03-12T23:59"' in content
+    assert 'name="start_date_0" value="2026-03-10"' in content
+    assert 'name="start_date_1" value="09:00"' in content
+    assert 'name="deadline_0" value="2026-03-12"' in content
+    assert 'name="deadline_1" value="17:00"' in content
     assert not Task.objects.filter(project=project).exists()
 
 
@@ -399,11 +400,14 @@ def test_create_form_ignores_invalid_calendar_range_params(client, user):
 
 
 def test_task_form_datetime_fields_render_html5_local_format():
-    d = timezone.make_aware(datetime(2026, 3, 10, 0, 0))
+    # Each date is a day picker and a time picker, in the formats the
+    # browser's date and time inputs take.
+    d = timezone.make_aware(datetime(2026, 3, 10, 14, 30))
     form = TaskForm(project=None, initial={"deadline": d, "start_date": d})
     rendered = str(form["deadline"])
-    assert 'value="2026-03-10T00:00"' in rendered
-    assert "2026-03-10 00:00:00" not in rendered
+    assert 'type="date" name="deadline_0" value="2026-03-10"' in rendered
+    assert 'type="time" name="deadline_1" value="14:30"' in rendered
+    assert "2026-03-10 14:30:00" not in rendered
 
 
 @pytest.mark.django_db

@@ -17,6 +17,9 @@ from apps.core.enums import (
 from apps.projects.models import ProjectMember
 from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
 from apps.tasks.timezones import (
+    DEFAULT_DUE_TIME,
+    DEFAULT_START_TIME,
+    DateTimeSplitWidget,
     TimezoneField,
     ZonedDateTimeField,
     canonical,
@@ -160,27 +163,24 @@ class TaskForm(forms.ModelForm):
     from a column can pre-fill it without surfacing the field in the UI.
     """
 
-    # datetime-local inputs require the HTML5 "YYYY-MM-DDTHH:MM" format for
-    # both the value they submit and the value they're pre-filled with;
-    # Django's default DATETIME_INPUT_FORMATS is space-separated, which the
-    # browser silently rejects (the field just renders blank).
-    #
     # Both are read and shown in the task's timezone (``timezone`` below),
     # not the server's: see ``_init_timezone``.
+    #
+    # Each is a day picker and a time picker (``DateTimeSplitWidget``); the
+    # time starts on 9:00 AM for the start date and 5:00 PM for the due
+    # date, so picking only a day gives those times.
     deadline = ZonedDateTimeField(
         required=False,
         input_formats=_DATE_INPUT_FORMATS,
-        widget=forms.DateTimeInput(
-            attrs={"type": "datetime-local", "class": _daisy_input},
-            format="%Y-%m-%dT%H:%M",
+        widget=DateTimeSplitWidget(
+            DEFAULT_DUE_TIME, attrs={"class": f"{_daisy_input} px-3"}, time_label="Due time"
         ),
     )
     start_date = ZonedDateTimeField(
         required=False,
         input_formats=_DATE_INPUT_FORMATS,
-        widget=forms.DateTimeInput(
-            attrs={"type": "datetime-local", "class": _daisy_input},
-            format="%Y-%m-%dT%H:%M",
+        widget=DateTimeSplitWidget(
+            DEFAULT_START_TIME, attrs={"class": f"{_daisy_input} px-3"}, time_label="Start time"
         ),
     )
     # The IANA zone governing the start and due dates. The picker starts on

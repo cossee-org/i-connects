@@ -107,8 +107,8 @@
       </div>
     {% endif %}
 
-    {% include "_components/form_field.html" with field=form.start_date %}
-    {% include "_components/form_field.html" with field=form.deadline %}
+    {% include "tasks/partials/date_time_field.html" with field=form.start_date %}
+    {% include "tasks/partials/date_time_field.html" with field=form.deadline %}
 
     {# The zone the start and due dates are in: the Lead's system timezone for a new task, the saved one when editing. #}
     <div class="md:col-span-2">

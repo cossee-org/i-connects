@@ -66,7 +66,7 @@ from apps.tasks.forms import (
     TaskMilestoneForm,
 )
 from apps.tasks.ics import build_ics
-from apps.tasks.timezones import picker_value
+from apps.tasks.timezones import DEFAULT_DUE_TIME, DEFAULT_START_TIME, picker_value
 from apps.tasks.import_csv import import_rows, parse_csv
 from apps.tasks.import_form import TaskImportForm
 from apps.tasks.mixins import (
@@ -793,13 +793,14 @@ class TaskCreateView(
         # both YYYY-MM-DD) pre-fills the new task's span; the user still
         # fills in the rest and saves — nothing is created automatically.
         # Clock times with no zone attached: they are read in whichever zone
-        # the Lead saves the task in (their system timezone by default).
+        # the Lead saves the task in (their system timezone by default). The
+        # times are the form's defaults: 9:00 AM to start, 5:00 PM to be due.
         start_date_param = parse_date(self.request.GET.get("start_date") or "")
         if start_date_param:
-            initial["start_date"] = datetime.combine(start_date_param, time.min)
+            initial["start_date"] = datetime.combine(start_date_param, DEFAULT_START_TIME)
         deadline_param = parse_date(self.request.GET.get("deadline") or "")
         if deadline_param:
-            initial["deadline"] = datetime.combine(deadline_param, time(23, 59))
+            initial["deadline"] = datetime.combine(deadline_param, DEFAULT_DUE_TIME)
         return initial
 
     def form_valid(self, form):

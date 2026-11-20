@@ -131,13 +131,76 @@ def test_create_form_starts_on_the_system_timezone(client, pm_user, other_user):
 
 
 @pytest.mark.django_db
+def test_new_task_times_start_on_9am_and_5pm(client, pm_user, other_user):
+    project, _task, _lead, _ = _setup(pm_user, other_user)
+    client.force_login(pm_user)
+
+    content = client.get(
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        HTTP_HX_REQUEST="true",
+    ).content.decode()
+
+    assert 'type="date" name="start_date_0" value="" class=' in content
+    assert 'type="time" name="start_date_1" value="09:00"' in content
+    assert 'type="date" name="deadline_0" value="" class=' in content
+    assert 'type="time" name="deadline_1" value="17:00"' in content
+
+
+@pytest.mark.django_db
+def test_picking_only_a_day_gives_the_default_times(client, pm_user, other_user):
+    project, _task, _lead, _ = _setup(pm_user, other_user)
+    client.force_login(pm_user)
+
+    _create(
+        client, project, name="Days only", timezone="America/Denver",
+        start_date_0="2027-01-11", start_date_1="",
+        deadline_0="2027-01-15", deadline_1="",
+    )
+    _create(
+        client, project, name="Own times", timezone="America/Denver",
+        start_date_0="2027-01-11", start_date_1="08:15",
+        deadline_0="2027-01-15", deadline_1="12:00",
+    )
+    _create(
+        client, project, name="No day", timezone="America/Denver",
+        start_date_0="", start_date_1="09:00", deadline_0="", deadline_1="17:00",
+    )
+
+    days_only = Task.objects.get(name="Days only")
+    assert days_only.start_date == _at(DENVER, 2027, 1, 11, 9, 0)
+    assert days_only.deadline == _at(DENVER, 2027, 1, 15, 17, 0)
+    own = Task.objects.get(name="Own times")
+    assert own.start_date == _at(DENVER, 2027, 1, 11, 8, 15)
+    assert own.deadline == _at(DENVER, 2027, 1, 15, 12, 0)
+    # A time with no day sets no date.
+    no_day = Task.objects.get(name="No day")
+    assert (no_day.start_date, no_day.deadline) == (None, None)
+
+
+@pytest.mark.django_db
+def test_a_bare_day_sent_as_one_value_gets_the_default_time(client, pm_user, other_user):
+    project, _task, _lead, _ = _setup(pm_user, other_user)
+    client.force_login(pm_user)
+
+    _create(
+        client, project, name="Bare", timezone="America/Denver",
+        start_date="2027-01-11", deadline="2027-01-15",
+    )
+
+    task = Task.objects.get(name="Bare")
+    assert task.start_date == _at(DENVER, 2027, 1, 11, 9, 0)
+    assert task.deadline == _at(DENVER, 2027, 1, 15, 17, 0)
+
+
+@pytest.mark.django_db
 def test_edit_form_shows_the_dates_in_the_tasks_zone(client, pm_user, zoned):
     project, task, *_ = zoned
     client.force_login(pm_user)
 
     content = client.get(_update_url(project, task), HTTP_HX_REQUEST="true").content.decode()
 
-    assert 'value="2027-01-15T17:00"' in content
+    assert 'name="deadline_0" value="2027-01-15"' in content
+    assert 'name="deadline_1" value="17:00"' in content
     assert "timezoneSelect('America/Denver')" in content
     assert (
         '<option value="America/Denver" selected '
@@ -471,8 +534,9 @@ def test_import_reads_deadlines_in_the_rows_or_the_chosen_zone(pm_user, other_us
     row_zone = Task.objects.get(name="Row zone")
     assert (row_zone.timezone, row_zone.deadline) == ("Asia/Tokyo", _at(TOKYO, 2027, 1, 15, 17, 0))
     form_zone = Task.objects.get(name="Form zone")
+    # A bare date is due at 5:00 PM, as on the task form.
     assert (form_zone.timezone, form_zone.deadline) == (
-        "America/Denver", _at(DENVER, 2027, 1, 15, 0, 0)
+        "America/Denver", _at(DENVER, 2027, 1, 15, 17, 0)
     )
 
 

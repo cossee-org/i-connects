@@ -96,7 +96,7 @@
         </label>
       </div>
       {% with task_zone_label="Same as task ("|add:task.timezone|add:")" pk_s=task.pk|stringformat:"s" %}
-        {% include "_components/timezone_select.html" with name="timezone" id="dates-timezone-"|add:pk_s managed=True inherit_label=task_zone_label help="The dates above are in this timezone." %}
+        {% include "_components/timezone_select.html" with name="timezone" id="dates-timezone-"|add:pk_s managed=True inherit_label=task_zone_label inherit_zone=task.timezone help="The dates above are in this timezone." %}
       {% endwith %}
       <label class="flex flex-col gap-1 text-sm">
         <span class="font-medium text-brand-navy">Reason <span class="font-normal text-brand-text/60">(optional)</span></span>

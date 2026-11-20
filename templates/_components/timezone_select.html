@@ -17,6 +17,7 @@
     errors         the field's errors, if any
     inherit_label  set to offer a first "Same as task (…)" entry whose value
                    is "" (the member-dates dialog)
+    inherit_zone   the task's zone, which that entry stands for
     managed        set when the enclosing dialog decides the zone each time
                    it opens: the picker then listens for the ``open-dates``
                    window event and reads ``timezone`` off its detail —
@@ -31,8 +32,10 @@
   into every form, and a zone picked from it is added to the select. With
   script the select is hidden behind the search box; without script it
   is the picker, offering the saved zone or the server's. The note under
-  it says which zone is the system's, so the Lead can see where the
-  default came from and change it.
+  it names the timezone in use and where it came from: "Timezone used:
+  (UTC−06:00) Edmonton, Canada — your system timezone.", or the server's
+  when the browser cannot tell (or without script), or the task's for
+  "Same as task".
 {% endcomment %}
 {% load task_tags %}
 {% timezone_option saved as current %}
@@ -47,13 +50,13 @@
     <span class="label-text text-sm text-brand-navy font-medium">{{ label|default:"Timezone" }}</span>
   </label>
   <select id="{{ id }}-select" name="{{ name }}" class="select select-bordered w-full"
-          :class="ready && 'hidden'" :tabindex="ready ? -1 : null" :aria-hidden="ready ? 'true' : null"
-          x-ref="select" @change="refresh()"
+          x-show="!ready" x-ref="select" @change="refresh()"
+          data-server-zone="{{ server_zone }}"
           data-tz-aliases="{% timezone_aliases_json %}"
           data-tz-url="{% url 'tasks:timezones' %}"
           data-timezone-select>
     {% if inherit_label %}
-      <option value=""{% if not saved %} selected{% endif %} data-label="{{ inherit_label }}" data-display="{{ inherit_label }}" data-search="same as task {{ inherit_label }}">{{ inherit_label }}</option>
+      <option value=""{% if not saved %} selected{% endif %} data-label="{{ inherit_label }}" data-display="{{ inherit_label }}" data-inherit-zone="{{ inherit_zone }}" data-search="same as task {{ inherit_label }}">{{ inherit_label }}</option>
     {% elif not saved %}
       <option value="" selected data-label="Server default ({{ server_zone }})" data-display="Server default ({{ server_zone }})" data-search="server default {{ server_zone }}">Server default ({{ server_zone }})</option>
     {% endif %}
@@ -109,7 +112,8 @@
 
   <label class="label pt-1">
     <span class="label-text-alt text-brand-text/60">
-      <span x-show="note" x-text="note" x-cloak data-timezone-note></span>{% if help %}<span x-show="note" x-cloak> &middot; </span>{{ help }}{% endif %}
+      {# Which timezone is in use, and why: the system's, the server's, the task's, or one picked. #}
+      <span x-text="note" data-timezone-note>Timezone used: {% if current %}{{ current.display }}{% elif inherit_label %}the task's, {{ inherit_zone }}{% else %}the server's, {{ server_zone }}{% endif %}.</span>{% if help %} {{ help }}{% endif %}
     </span>
   </label>
   {% if errors %}

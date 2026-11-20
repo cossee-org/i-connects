@@ -17,7 +17,7 @@ server's ``settings.TIME_ZONE`` is used, as before zones existed.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from functools import lru_cache
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
@@ -88,6 +88,10 @@ ALIASES = {
 }
 
 PICKER_FORMAT = "%Y-%m-%dT%H:%M"
+
+# The time a new task's start and due dates take when only a day is picked.
+DEFAULT_START_TIME = time(9, 0)
+DEFAULT_DUE_TIME = time(17, 0)
 WHEN_FORMAT = "%b %-d, %Y %-I:%M %p"
 
 
@@ -448,3 +452,57 @@ class ZonedDateTimeField(forms.DateTimeField):
     def to_python(self, value):
         with dj_timezone.override(self.zone or dj_timezone.get_current_timezone()):
             return super().to_python(value)
+
+
+class DateTimeSplitWidget(forms.MultiWidget):
+    """A day picker and a time picker side by side (``<input type=date>`` and
+    ``<input type=time>``), which the form reads as one clock time,
+    "YYYY-MM-DDTHH:MM".
+
+    The time picker starts on ``default_time`` while no date is set, so a
+    Lead who picks only a day gets that time (9:00 AM for a start date,
+    5:00 PM for a due date). An empty day means no date, whatever the time
+    says; a day with no time takes ``default_time`` too. A single
+    ``<name>`` value ("YYYY-MM-DDTHH:MM", or a bare "YYYY-MM-DD", which also
+    takes ``default_time``) is read when the two parts are not sent.
+    """
+
+    def __init__(self, default_time: time, attrs=None, time_label: str = "Time"):
+        self.default_time = default_time
+        base = dict(attrs or {})
+        widgets = (
+            forms.DateInput(attrs={**base, "type": "date"}, format="%Y-%m-%d"),
+            forms.TimeInput(
+                attrs={**base, "type": "time", "aria-label": time_label},
+                format="%H:%M",
+            ),
+        )
+        super().__init__(widgets)
+
+    def decompress(self, value):
+        default = self.default_time.strftime("%H:%M")
+        if isinstance(value, datetime):
+            return [value.strftime("%Y-%m-%d"), value.strftime("%H:%M")]
+        if isinstance(value, date):
+            return [value.strftime("%Y-%m-%d"), default]
+        if isinstance(value, str) and value:
+            day, _, clock = value.replace(" ", "T").partition("T")
+            return [day, clock[:5] or default]
+        return ["", default]
+
+    def _join(self, day: str, clock: str) -> str:
+        day, clock = (day or "").strip(), (clock or "").strip()
+        if not day:
+            return ""
+        return f"{day}T{clock or self.default_time.strftime('%H:%M')}"
+
+    def value_from_datadict(self, data, files, name):
+        if f"{name}_0" in data:
+            return self._join(data.get(f"{name}_0"), data.get(f"{name}_1"))
+        value = data.get(name)
+        if isinstance(value, str) and len(value.strip()) == 10:  # a bare day
+            return self._join(value, "")
+        return value
+
+    def value_omitted_from_data(self, data, files, name):
+        return name not in data and super().value_omitted_from_data(data, files, name)

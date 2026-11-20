@@ -115,7 +115,7 @@ def import_rows(
     Each task's zone is the row's ``timezone`` column where it names one,
     else ``timezone`` (the zone picked on the import form, which starts on
     the Lead's system timezone), else the server's. A row's deadline is
-    read in its task's zone; a bare date is midnight there.
+    read in its task's zone; a bare date is due at 5:00 PM there.
 
     All database work runs inside a single ``transaction.atomic`` block; if
     any row raises an unexpected exception the whole import is rolled back
@@ -315,21 +315,25 @@ def _parse_deadline(raw: Any, zone: str | None = None) -> tuple[Any, str | None]
     """Return ``(value, error)``. Empty string → ``(None, None)``.
 
     Clock times are read in ``zone`` (the server's when None); a bare date
-    is midnight there. A value carrying its own offset keeps it.
+    is due at 5:00 PM there, as on the task form. A value carrying its own
+    offset keeps it.
     """
-    from datetime import datetime, time
+    from datetime import datetime
+
+    from apps.tasks.timezones import DEFAULT_DUE_TIME
 
     text = (raw or "").strip() if isinstance(raw, str) else raw
     if not text:
         return None, None
     zone = zone or default_zone_name()
-    # Accept ``YYYY-MM-DD HH:MM`` / ``YYYY-MM-DDTHH:MM`` first.
+    # A bare ``YYYY-MM-DD`` first: parse_datetime would take it as midnight.
+    d = parse_date(text)
+    if d is not None:
+        return from_wall(datetime.combine(d, DEFAULT_DUE_TIME), zone), None
+    # Then ``YYYY-MM-DD HH:MM`` / ``YYYY-MM-DDTHH:MM``.
     dt = parse_datetime(text)
     if dt is not None:
         return from_wall(dt, zone), None
-    d = parse_date(text)
-    if d is not None:
-        return from_wall(datetime.combine(d, time.min), zone), None
     return None, f"invalid deadline {text!r}"
 
 

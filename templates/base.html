@@ -336,10 +336,23 @@
           var select = this.$refs.select, current = select.options[select.selectedIndex];
           this.value = select.value;
           this.display = current ? (current.dataset.display || current.textContent) : "";
-          var match = this.systemMatch;
-          if (!this.systemZone) this.note = "";
-          else if (match && select.value === match) this.note = "Your system timezone";
-          else this.note = "Your system timezone is " + (match || this.systemZone).replace(/_/g, " ");
+          this.note = this.describe(select, current);
+        },
+        // "Timezone used: …", naming where it came from.
+        describe: function (select, current) {
+          var name = function (o, value) { return o ? o.display : value.replace(/_/g, " "); };
+          var system = this.systemMatch;
+          if (!select.value) {
+            if (current && current.dataset.inheritZone) {
+              return "Timezone used: the task's, " + current.dataset.inheritZone.replace(/_/g, " ") + ".";
+            }
+            return "Timezone used: the server's, " + (select.dataset.serverZone || "UTC").replace(/_/g, " ") +
+              (system ? "." : " \u2014 your system timezone could not be read.");
+          }
+          var used = "Timezone used: " + name(this.find(select.value), select.value);
+          if (system && select.value === system) return used + " \u2014 your system timezone.";
+          if (system) return used + ". Your system timezone is " + name(this.find(system), system) + ".";
+          return used + ".";
         },
         get results() {
           var terms = words(this.query);
