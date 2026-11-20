@@ -49,7 +49,15 @@
   <label for="{{ id }}" class="label py-0.5 pb-1">
     <span class="label-text text-sm text-brand-navy font-medium">{{ label|default:"Timezone" }}</span>
   </label>
-  <select id="{{ id }}-select" name="{{ name }}" class="select select-bordered w-full"
+  {% comment %}
+    No id on purpose: when htmx swaps new HTML in (the completion table
+    after every action, the pop-up editor after a refused save) it restores
+    the old element's class and style on any id the old and new content
+    share, then settles to the new ones — which would undo the inline
+    style that hides this select, and show it beside the search box.
+  {% endcomment %}
+  <select name="{{ name }}" class="select select-bordered w-full"
+          aria-label="{{ label|default:"Timezone" }}"
           x-show="!ready" x-ref="select" @change="refresh()"
           data-server-zone="{{ server_zone }}"
           data-tz-aliases="{% timezone_aliases_json %}"

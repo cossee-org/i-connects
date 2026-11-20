@@ -193,6 +193,22 @@ def test_a_bare_day_sent_as_one_value_gets_the_default_time(client, pm_user, oth
 
 
 @pytest.mark.django_db
+def test_hidden_select_has_no_id_for_htmx_to_settle(client, pm_user, zoned):
+    """htmx restores class and style on elements whose id is in both the old
+    and the new content when it swaps; with an id, the select the search box
+    hides would reappear after the completion table re-renders."""
+    project, task, *_ = zoned
+    client.force_login(pm_user)
+
+    for url in (
+        reverse("tasks:create", kwargs={"project_pk": project.pk}),
+        reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1",
+    ):
+        content = client.get(url, HTTP_HX_REQUEST="true").content.decode()
+        assert '<select name="timezone" class="select' in content
+
+
+@pytest.mark.django_db
 def test_edit_form_shows_the_dates_in_the_tasks_zone(client, pm_user, zoned):
     project, task, *_ = zoned
     client.force_login(pm_user)
