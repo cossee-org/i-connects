@@ -707,7 +707,9 @@ class TaskMilestoneForm(forms.Form):
 
 class AssigneeDatesForm(forms.Form):
     """A Lead's own start date and/or deadline for one assignee, or for every
-    assignee not yet done (``views.TaskMemberDatesView``).
+    assignee not yet done (``views.TaskMemberDatesView``). The dialog starts
+    both on the task's dates; a date sent back at the task's moment counts
+    as not set.
 
     Each date may be earlier or later than the task's. For one member
     (``scope="member"``) the dialog shows their current own dates, so an
@@ -770,23 +772,26 @@ class AssigneeDatesForm(forms.Form):
         cleaned = super().clean()
         if self.errors:
             return cleaned
-        # The dialog starts a date the member has no own value for on the
-        # task's; one sent back at the task's moment is not theirs, so it
-        # follows the task's (and an old deadline of the task's is not
-        # refused as past).
-        if self.scope == "member":
-            for name in ("start_date", "deadline"):
-                value, task_value = cleaned.get(name), getattr(self.task, name)
-                if (
-                    value is not None
-                    and task_value is not None
-                    and self._minute(value) == self._minute(task_value)
-                ):
-                    cleaned[name] = None
+        # The dialog starts a date the member has no own value for (and, for
+        # everyone not done, both dates) on the task's; one sent back at the
+        # task's moment is not a date of their own. For one member it
+        # follows the task's; for everyone not done it keeps each member's
+        # own, as an empty one does.
+        for name in ("start_date", "deadline"):
+            value, task_value = cleaned.get(name), getattr(self.task, name)
+            if (
+                value is not None
+                and task_value is not None
+                and self._minute(value) == self._minute(task_value)
+            ):
+                cleaned[name] = None
         start = cleaned.get("start_date")
         deadline = cleaned.get("deadline")
         if self.scope == "pending" and start is None and deadline is None:
-            raise forms.ValidationError("Choose a start date or a deadline.")
+            raise forms.ValidationError(
+                "Change the start date or the deadline: a date left at the "
+                "task's keeps each member's own."
+            )
         # A member's zone is kept with their own dates and governs only
         # those, so one with no own dates, given none here, has nothing for
         # it to apply to: say so rather than save nothing. (A member who

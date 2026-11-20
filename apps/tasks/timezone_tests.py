@@ -552,6 +552,41 @@ def test_own_deadline_may_come_before_the_tasks_start(client, pm_user, zoned):
 
 
 @pytest.mark.django_db
+def test_set_dates_for_all_keeps_own_dates_left_at_the_tasks(client, pm_user, zoned):
+    """The dialog starts on the task's dates for everyone not done; a date
+    sent back at the task's moment keeps each member's own, and only a date
+    the Lead changed is given to all."""
+    _project, task, lead, ari, bo = zoned
+    task.start_date = _at(DENVER, 2027, 1, 11, 9, 0)
+    task.save()
+    set_member_dates(task=task, member=bo, lead=lead, deadline=_at(DENVER, 2027, 1, 20, 17, 0))
+    client.force_login(pm_user)
+
+    # Start changed; deadline left at the task's (Jan 15 5:00 PM Denver).
+    response = _post(
+        client, task, scope="pending", timezone="America/Denver",
+        start_date_0="2027-01-12", start_date_1="09:00",
+        deadline_0="2027-01-15", deadline_1="17:00",
+    )
+
+    assert response.status_code == 200
+    own = {d.member_id: d for d in AssigneeDeadline.objects.all()}
+    assert own[ari.pk].start_date == _at(DENVER, 2027, 1, 12, 9, 0)
+    assert own[ari.pk].deadline is None
+    assert own[bo.pk].start_date == _at(DENVER, 2027, 1, 12, 9, 0)
+    assert own[bo.pk].deadline == _at(DENVER, 2027, 1, 20, 17, 0)
+
+    # Both left at the task's: nothing to give anyone.
+    response = _post(
+        client, task, scope="pending", timezone="America/Denver",
+        start_date_0="2027-01-11", start_date_1="09:00",
+        deadline_0="2027-01-15", deadline_1="17:00",
+    )
+    assert response.status_code == 400
+    assert "Change the start date or the deadline" in response.content.decode()
+
+
+@pytest.mark.django_db
 def test_set_dates_for_all_gives_everyone_the_zone(client, pm_user, zoned):
     _project, task, _lead, ari, bo = zoned
     client.force_login(pm_user)

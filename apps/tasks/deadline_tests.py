@@ -803,7 +803,7 @@ def test_set_dates_for_all_needs_at_least_one_date(client, pm_user, other_user):
     response = _post(client, task, scope="pending", start_date="", deadline="")
 
     assert response.status_code == 400
-    assert "start date or a deadline" in response.content.decode()
+    assert "Change the start date or the deadline" in response.content.decode()
 
 
 @pytest.mark.django_db

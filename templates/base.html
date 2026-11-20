@@ -426,8 +426,9 @@
     they are saved as that clock time in the new zone. A date the task does not have
     either starts empty, day and time; picking a day fills in the task
     form's default time (9:00 AM to start, 5:00 PM to be due), and clearing
-    it clears the time. For everyone not done, the dates start empty: an
-    empty day keeps each member's own.
+    it clears the time. For everyone not done, the dates start on the
+    task's the same way; there a date left at the task's (or emptied) keeps
+    each member's own, and only a date the Lead changes is given to all.
 
     ``cfg``: taskZone (IANA name), taskStart / taskDue (epoch milliseconds,
     or null).
@@ -476,8 +477,8 @@
           var start = split(detail.start, ""), due = split(detail.value, "");
           this.startDay = start[0]; this.startTime = start[1];
           this.dueDay = due[0]; this.dueTime = due[1];
-          this.startFollows = this.scope === "member" && !detail.start && cfg.taskStart != null;
-          this.dueFollows = this.scope === "member" && !detail.value && cfg.taskDue != null;
+          this.startFollows = !detail.start && cfg.taskStart != null;
+          this.dueFollows = !detail.value && cfg.taskDue != null;
           // The timezone picker applies its zone on the same event, so the
           // task's dates are read in it once it has; after that a change of
           // zone keeps the clock times as they are.
