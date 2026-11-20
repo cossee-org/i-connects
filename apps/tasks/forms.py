@@ -715,6 +715,8 @@ class AssigneeDatesForm(forms.Form):
 
     ``timezone`` governs the member's own dates: the dates are read in it,
     and shown in it afterwards. Empty means "Same as task": the task's zone.
+    A zone for a member with no own dates, sent with no dates, is refused:
+    it would have nothing to govern.
     For everyone not done, it becomes each member's zone; a date left empty
     keeps its moment in time and is shown in that zone from then on.
     """
@@ -728,11 +730,13 @@ class AssigneeDatesForm(forms.Form):
     reason = forms.CharField(required=False, max_length=500)
 
     def __init__(
-        self, *args, task, scope="member", current=None, pending=(), **kwargs
+        self, *args, task, scope="member", current=None, pending=(), member=None,
+        **kwargs
     ):
         super().__init__(*args, **kwargs)
         self.task = task
         self.scope = scope
+        self.member = member  # scope "member": the assignee, for messages
         self.current = current  # the member's AssigneeDeadline, if any
         # scope "pending": (member, their AssigneeDeadline or None) for each
         # assignee not yet done — whose dates a date left empty keeps.
@@ -758,6 +762,22 @@ class AssigneeDatesForm(forms.Form):
         deadline = cleaned.get("deadline")
         if self.scope == "pending" and start is None and deadline is None:
             raise forms.ValidationError("Choose a start date or a deadline.")
+        # A member's zone is kept with their own dates and governs only
+        # those, so one with no own dates, given none here, has nothing for
+        # it to apply to: say so rather than save nothing. (A member who
+        # has own dates and is sent none has them removed, as ever.)
+        if (
+            self.scope == "member"
+            and self.current is None
+            and start is None
+            and deadline is None
+            and cleaned.get("timezone")
+        ):
+            name = self.member.display_name if self.member is not None else "this member"
+            raise forms.ValidationError(
+                f"Set a start date or deadline for {name} first \u2014 a "
+                "contributor's timezone applies to their own dates."
+            )
         stored = self.current.deadline if self.current else None
         if (
             deadline is not None

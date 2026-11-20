@@ -2066,7 +2066,7 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             pending = [(m, own.get(m.id)) for m in pending_members(self.task)]
         form = AssigneeDatesForm(
             request.POST, task=self.task, scope=scope, current=current,
-            pending=pending,
+            pending=pending, member=member,
         )
         if not form.is_valid():
             return HttpResponseBadRequest(

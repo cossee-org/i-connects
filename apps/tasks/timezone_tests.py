@@ -380,6 +380,38 @@ def test_same_as_task_saves_no_zone_of_their_own(client, pm_user, zoned):
 
 
 @pytest.mark.django_db
+def test_a_zone_alone_for_a_member_without_own_dates_is_refused(client, pm_user, zoned):
+    """The zone governs only the member's own dates, so with none to govern
+    the save is refused with a reason rather than quietly doing nothing."""
+    _project, task, _lead, ari, _bo = zoned
+    client.force_login(pm_user)
+
+    response = _post(client, task, member=ari.pk, timezone="Asia/Tokyo", start_date="", deadline="")
+
+    assert response.status_code == 400
+    assert (
+        f"Set a start date or deadline for {ari.display_name} first"
+        in response.content.decode()
+    )
+    assert not AssigneeDeadline.objects.exists()
+
+
+@pytest.mark.django_db
+def test_emptying_both_own_dates_still_removes_them_whatever_the_zone(client, pm_user, zoned):
+    _project, task, lead, ari, _bo = zoned
+    set_member_dates(
+        task=task, member=ari, lead=lead, timezone="Asia/Tokyo",
+        deadline=_at(TOKYO, 2027, 1, 20, 9, 0),
+    )
+    client.force_login(pm_user)
+
+    response = _post(client, task, member=ari.pk, timezone="Asia/Tokyo", start_date="", deadline="")
+
+    assert response.status_code == 200
+    assert not AssigneeDeadline.objects.exists()
+
+
+@pytest.mark.django_db
 def test_changing_only_the_members_zone_is_saved(pm_user, zoned):
     _project, task, lead, ari, _bo = zoned
     when = _at(TOKYO, 2027, 1, 20, 9, 0)
