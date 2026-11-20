@@ -713,7 +713,7 @@ def set_member_deadline(
     deadline,
     lead: ProjectMember | None,
     reason: str = "",
-    batch: bool = False,
+    batch: str | None = None,
 ) -> AssigneeDeadline:
     """A Lead gives one assignee their own deadline on ``task``.
 
@@ -724,6 +724,7 @@ def set_member_deadline(
 
     Writes an audit row naming the old and new dates, and tells the member.
     A no-op, with nothing written, when the deadline and reason are unchanged.
+    ``batch`` names the bulk action this came from, for the audit row.
     """
     reason = (reason or "").strip()
     existing = AssigneeDeadline.objects.filter(task=task, member=member).first()
@@ -762,14 +763,18 @@ def set_pending_deadlines(
     for member in members:
         set_member_deadline(
             task=task, member=member, deadline=deadline, lead=lead,
-            reason=reason, batch=True,
+            reason=reason, batch="pending",
         )
     return members
 
 
 @transaction.atomic
 def clear_member_deadline(
-    *, task: Task, member: ProjectMember, actor: ProjectMember | None
+    *,
+    task: Task,
+    member: ProjectMember,
+    actor: ProjectMember | None,
+    batch: str | None = None,
 ) -> bool:
     """Remove ``member``'s individual deadline, putting them back on the
     task's. Returns False, writing nothing, when they had none."""
@@ -785,9 +790,54 @@ def clear_member_deadline(
         actor_member=actor,
         deadline=None,
         previous=previous,
+        batch=batch,
     )
     _notify_member_deadline(task=task, member=member, deadline=None, lead=actor)
     return True
+
+
+class TaskDeadlineChange:
+    """What happens to individual deadlines when a Lead moves the task's
+    due date — the choice the task form asks for every time."""
+
+    SHIFT = "shift"
+    KEEP = "keep"
+    CLEAR = "clear"
+
+
+@transaction.atomic
+def apply_task_deadline_change(
+    *, task: Task, old_deadline, new_deadline, choice: str, actor: ProjectMember | None
+) -> list[AssigneeDeadline]:
+    """Carry a change of ``task``'s due date onto its individual deadlines.
+
+    ``shift`` moves each one by the same amount as the task's, so a member
+    given a week past the task keeps that week; ``clear`` removes them, so
+    those members follow the new due date; ``keep`` leaves their dates as
+    they were. Each change is audited (``batch`` names the task edit) and
+    told to the member. Called after the task is saved, so members taken off
+    it in the same edit have already lost theirs. Returns the entries it
+    touched.
+    """
+    entries = list(task.assignee_deadlines.select_related("member"))
+    if choice == TaskDeadlineChange.SHIFT:
+        if old_deadline is None or new_deadline is None:
+            return []
+        delta = new_deadline - old_deadline
+        for entry in entries:
+            set_member_deadline(
+                task=task, member=entry.member, deadline=entry.deadline + delta,
+                lead=actor, reason=entry.reason, batch="task_deadline_shift",
+            )
+        return entries
+    if choice == TaskDeadlineChange.CLEAR:
+        for entry in entries:
+            clear_member_deadline(
+                task=task, member=entry.member, actor=actor,
+                batch="task_deadline_clear",
+            )
+        return entries
+    return []
 
 
 def _log_deadline_action(
@@ -799,7 +849,7 @@ def _log_deadline_action(
     deadline,
     previous,
     reason: str = "",
-    batch: bool = False,
+    batch: str | None = None,
 ) -> None:
     """Append an audit row for an individual deadline set or removed."""
     metadata = {
@@ -812,7 +862,7 @@ def _log_deadline_action(
     if reason:
         metadata["reason"] = reason
     if batch:
-        metadata["batch"] = "pending"
+        metadata["batch"] = batch
     log_action(
         action,
         actor=actor_member.users.first() if actor_member is not None else None,

@@ -69,6 +69,7 @@ from apps.tasks.mixins import (
 )
 from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
 from apps.tasks.services import (
+    apply_task_deadline_change,
     approve_completion,
     clear_member_deadline,
     clear_review,
@@ -1023,6 +1024,17 @@ class TaskUpdateView(
         # Read before saving: only members this edit adds hear about it.
         previous_ids = _assignee_ids(self.object)
         task = form.save()
+        # A moved due date asks what happens to members' own deadlines
+        # (TaskForm.individual_deadlines): shift, keep or remove them.
+        if "individual_deadlines" in form.fields and form.deadline_changed:
+            apply_task_deadline_change(
+                task=task,
+                old_deadline=form.original_deadline,
+                new_deadline=task.deadline,
+                choice=form.cleaned_data.get("individual_deadlines") or "keep",
+                actor=self.project_member
+                or _fallback_member(self.request.user, self.project),
+            )
         if "contribution_type" in form.changed_data and old_type:
             from apps.contributions.services import sync_contribution_type
 

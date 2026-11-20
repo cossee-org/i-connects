@@ -500,3 +500,172 @@ def test_lead_sees_deadline_controls_and_member_does_not(client, pm_user, other_
     content = client.get(url).content.decode()
     assert "data-set-deadline" not in content
     assert "data-deadline-modal" not in content
+
+
+# ---------------------------------------------------------------------------
+# Moving the task's due date asks what happens to individual deadlines
+# ---------------------------------------------------------------------------
+
+
+def _edit(client, project, task, members, **extra):
+    data = {
+        "name": task.name,
+        "container": task.container_id,
+        "contribution_type": "OTHER",
+        "assigned_members": [m.pk for m in members],
+        **extra,
+    }
+    return client.post(
+        reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk}), data
+    )
+
+
+def _minute(dt):
+    return dt.replace(second=0, microsecond=0)
+
+
+@pytest.fixture
+def moved(pm_user, user, other_user):
+    """A task due in 2 days; Bo has his own deadline 7 days after it, Ari
+    has none. The tests move the task's due date 13 days later."""
+    project, task, lead, [ari, bo] = _setup(pm_user, user, other_user, deadline_days=2)
+    task.deadline = _minute(task.deadline)
+    task.save()
+    own = set_member_deadline(
+        task=task, member=bo, deadline=task.deadline + timedelta(days=7), lead=lead,
+        reason="Conference",
+    )
+    new_deadline = task.deadline + timedelta(days=13)
+    return project, task, ari, bo, own, new_deadline
+
+
+@pytest.mark.django_db
+def test_edit_form_offers_the_choice_only_when_members_have_their_own(
+    client, pm_user, other_user
+):
+    project, task, lead, [bo] = _setup(pm_user, other_user, deadline_days=2)
+    url = reverse("tasks:update", kwargs={"project_pk": project.pk, "pk": task.pk})
+    client.force_login(pm_user)
+    assert "data-individual-deadlines" not in client.get(url).content.decode()
+
+    set_member_deadline(
+        task=task, member=bo, deadline=task.deadline + timedelta(days=7), lead=lead
+    )
+    content = client.get(url).content.decode()
+    assert "data-individual-deadlines" in content
+    assert "Shift them by the same amount" in content
+    assert 'value="shift"' in content
+
+
+@pytest.mark.django_db
+def test_shifting_moves_individual_deadlines_by_the_same_amount(client, pm_user, moved):
+    project, task, ari, bo, own, new_deadline = moved
+    old_own = own.deadline
+    client.force_login(pm_user)
+
+    response = _edit(
+        client, project, task, [ari, bo],
+        deadline=_local_input(new_deadline), individual_deadlines="shift",
+    )
+
+    assert response.status_code == 302
+    task.refresh_from_db()
+    own.refresh_from_db()
+    assert task.deadline == new_deadline
+    assert own.deadline == old_own + timedelta(days=13)
+    assert own.reason == "Conference"
+    row = AuditLog.objects.filter(action=AuditAction.TASK_DEADLINE_SET).latest("id")
+    assert row.metadata["batch"] == "task_deadline_shift"
+    assert row.metadata["previous_deadline"] == old_own.isoformat()
+
+
+@pytest.mark.django_db
+def test_keeping_leaves_individual_deadlines_alone(client, pm_user, moved):
+    project, task, ari, bo, own, new_deadline = moved
+    old_own = own.deadline
+    client.force_login(pm_user)
+
+    _edit(
+        client, project, task, [ari, bo],
+        deadline=_local_input(new_deadline), individual_deadlines="keep",
+    )
+
+    own.refresh_from_db()
+    assert own.deadline == old_own
+    assert AuditLog.objects.filter(action=AuditAction.TASK_DEADLINE_SET).count() == 1
+
+
+@pytest.mark.django_db
+def test_removing_puts_members_on_the_new_due_date(client, pm_user, moved):
+    project, task, ari, bo, _own, new_deadline = moved
+    client.force_login(pm_user)
+
+    _edit(
+        client, project, task, [ari, bo],
+        deadline=_local_input(new_deadline), individual_deadlines="clear",
+    )
+
+    task.refresh_from_db()
+    assert not AssigneeDeadline.objects.exists()
+    assert task.deadline_for(bo) == new_deadline
+    row = AuditLog.objects.get(action=AuditAction.TASK_DEADLINE_CLEARED)
+    assert row.metadata["batch"] == "task_deadline_clear"
+
+
+@pytest.mark.django_db
+def test_moving_the_due_date_without_a_choice_is_refused(client, pm_user, moved):
+    project, task, ari, bo, own, new_deadline = moved
+    old_deadline = task.deadline
+    client.force_login(pm_user)
+
+    response = _edit(client, project, task, [ari, bo], deadline=_local_input(new_deadline))
+
+    assert response.status_code == 200
+    assert "Choose whether to shift, keep or remove them" in response.content.decode()
+    task.refresh_from_db()
+    assert task.deadline == old_deadline
+
+
+@pytest.mark.django_db
+def test_an_edit_that_keeps_the_due_date_asks_nothing(client, pm_user, moved):
+    project, task, ari, bo, own, _new = moved
+    old_own = own.deadline
+    client.force_login(pm_user)
+
+    response = _edit(
+        client, project, task, [ari, bo], deadline=_local_input(task.deadline),
+        individual_deadlines="clear", description="Edited",
+    )
+
+    assert response.status_code == 302
+    own.refresh_from_db()
+    assert own.deadline == old_own
+
+
+@pytest.mark.django_db
+def test_shift_is_refused_when_the_due_date_is_removed(client, pm_user, moved):
+    project, task, ari, bo, own, _new = moved
+    client.force_login(pm_user)
+
+    response = _edit(client, project, task, [ari, bo], deadline="", individual_deadlines="shift")
+    assert response.status_code == 200
+    assert "no longer has a due date" in response.content.decode()
+
+    response = _edit(client, project, task, [ari, bo], deadline="", individual_deadlines="keep")
+    assert response.status_code == 302
+    task.refresh_from_db()
+    assert task.deadline is None
+    assert AssigneeDeadline.objects.filter(member=bo).exists()
+
+
+@pytest.mark.django_db
+def test_member_taken_off_in_the_same_edit_is_not_shifted_back(client, pm_user, moved):
+    project, task, ari, bo, _own, new_deadline = moved
+    client.force_login(pm_user)
+
+    _edit(
+        client, project, task, [ari],
+        deadline=_local_input(new_deadline), individual_deadlines="shift",
+    )
+
+    assert not AssigneeDeadline.objects.exists()

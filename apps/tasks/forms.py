@@ -137,6 +137,18 @@ class TaskForm(forms.ModelForm):
             format="%Y-%m-%dT%H:%M",
         ),
     )
+    # Asked only when editing a task some assignees have their own deadline
+    # on, and only acted on when the due date changes: what happens to
+    # those individual deadlines. See ``individual_deadline_entries``.
+    individual_deadlines = forms.ChoiceField(
+        required=False,
+        choices=[
+            ("shift", "Shift them by the same amount"),
+            ("keep", "Keep their dates as they are"),
+            ("clear", "Remove them, so they follow the task's due date"),
+        ],
+        widget=forms.RadioSelect,
+    )
 
     class Meta:
         model = Task
@@ -197,6 +209,7 @@ class TaskForm(forms.ModelForm):
         # not the model's default "{name} (project {id})" representation.
         self.fields["container"].label_from_instance = lambda obj: obj.name
         self._init_task_type(project)
+        self._init_individual_deadlines()
         if project is not None:
             self.fields["container"].queryset = KanbanBoard.objects.filter(project=project)
             members = (
@@ -241,6 +254,48 @@ class TaskForm(forms.ModelForm):
         if not self.instance.pk and "contribution_type" not in self.initial:
             field.initial = ""
 
+    def _init_individual_deadlines(self):
+        """Offer the individual-deadlines choice when editing a task that
+        has any; drop the field otherwise.
+
+        Shifting is preselected where it can apply (the task has a due date
+        now, so there is an amount to shift by); otherwise keeping them is.
+        """
+        self.original_deadline = self.instance.deadline if self.instance.pk else None
+        self.individual_deadline_entries = (
+            list(
+                self.instance.assignee_deadlines.select_related("member")
+                .prefetch_related("member__users")
+                .order_by("deadline", "id")
+            )
+            if self.instance.pk
+            else []
+        )
+        if not self.individual_deadline_entries:
+            self.fields.pop("individual_deadlines", None)
+            return
+        field = self.fields["individual_deadlines"]
+        field.label = "Individual deadlines"
+        if "individual_deadlines" not in self.initial:
+            field.initial = "shift" if self.original_deadline else "keep"
+
+    @staticmethod
+    def _to_minute(value):
+        return value.replace(second=0, microsecond=0) if value else None
+
+    @property
+    def deadline_changed(self) -> bool:
+        """Whether this edit moves, sets or clears the task's due date.
+
+        Compared to the minute, the picker's precision, so a deadline
+        stored with seconds is not "changed" by a re-save.
+        """
+        if not hasattr(self, "cleaned_data") or "deadline" not in self.cleaned_data:
+            return False
+        return self._to_minute(self.cleaned_data["deadline"]) != self._to_minute(
+            self.original_deadline
+        )
+
     def clean_contribution_type(self):
         """An unpicked task type falls back to the model's own default."""
         return self.cleaned_data.get("contribution_type") or ContributionType.OTHER
@@ -263,6 +318,24 @@ class TaskForm(forms.ModelForm):
             self.add_error(
                 "start_date", "Start date must be before or equal to the due date."
             )
+
+        # Moving the due date of a task some members have their own deadline
+        # on asks the Lead what happens to those, every time.
+        if "individual_deadlines" in self.fields and self.deadline_changed:
+            choice = cleaned.get("individual_deadlines")
+            if not choice:
+                self.add_error(
+                    "individual_deadlines",
+                    "Some assignees have their own deadline. Choose whether to "
+                    "shift, keep or remove them.",
+                )
+            elif choice == "shift" and not (deadline and self.original_deadline):
+                self.add_error(
+                    "individual_deadlines",
+                    "There is no change of date to shift by: the task "
+                    + ("had no due date." if deadline else "no longer has a due date.")
+                    + " Keep or remove the individual deadlines instead.",
+                )
 
         if cleaned.get("requires_review"):
             if not cleaned.get("reviewers"):
