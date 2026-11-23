@@ -87,10 +87,10 @@ def _tagger(comment):
 def comment_body(comment):
     """The comment's text, escaped, with its web addresses and tags linked.
 
-    Web addresses (``URL``) open in a new tab, after the "Leaving
-    i-connects" dialog (base.html) has asked — ``data-external-link``. They are found first, in the
-    text as typed, so an ``@`` inside one (``https://x.com/@reefs``) is never
-    read as a tag.
+    Web addresses (``URL``) open in a new tab, after the "Leaving i-CONNECTS"
+    dialog (base.html) has asked — ``data-external-link``. They are found
+    first, in the text as typed, so an ``@`` inside one
+    (``https://x.com/@reefs``) is never read as a tag.
 
     A tag is ``@Name`` or ``@email`` of someone actually tagged
     (``comment.mentions``): "@everyone" typed by hand, or a name whose tag

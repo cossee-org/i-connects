@@ -567,7 +567,9 @@ def test_every_page_carries_the_leaving_dialog(client, cast):
     assert "data-external-link>https://example.org</a>" in html
     dialog = html[html.index('<dialog id="external-link-modal"') :]
     dialog = dialog[: dialog.index("</dialog>")]
-    assert "Leaving i-connects" in dialog
+    assert "Leaving i-CONNECTS" in dialog
+    assert "You are now leaving i-CONNECTS." in dialog
+    assert "i-connects" not in dialog
     assert "We are not responsible for the content of external websites." in dialog
     assert dialog.index(">Continue</button>") < dialog.index(">Return</button>")
     assert 'id="external-link-return" class="btn btn-primary" autofocus' in dialog
