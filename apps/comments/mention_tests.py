@@ -502,7 +502,8 @@ def _body(cast, content, tagged=()):
 def _a(href, text=None):
     return (
         f'<a href="{href}" class="comment-link text-brand-navy underline underline-offset-2 '
-        f'hover:text-brand-coral" target="_blank" rel="noopener noreferrer nofollow">'
+        f'hover:text-brand-coral" target="_blank" rel="noopener noreferrer nofollow" '
+        f"data-external-link>"
         f"{text or href}</a>"
     )
 
@@ -554,3 +555,19 @@ def test_links_and_tags_side_by_side(cast):
         + _a("https://x.com/@Bea")
         + " Lund"
     )
+
+
+@pytest.mark.django_db
+def test_every_page_carries_the_leaving_dialog(client, cast):
+    """Comment links are marked to ask first, and the task page has the
+    dialog that asks: Return focused and on the right, Continue beside it."""
+    Comment.objects.create(task=cast.task, author=cast.assignee_member, content="https://example.org")
+    client.force_login(cast.bystander)
+    html = client.get(cast.detail_url()).content.decode()
+    assert "data-external-link>https://example.org</a>" in html
+    dialog = html[html.index('<dialog id="external-link-modal"') :]
+    dialog = dialog[: dialog.index("</dialog>")]
+    assert "Leaving i-connects" in dialog
+    assert "We are not responsible for the content of external websites." in dialog
+    assert dialog.index(">Continue</button>") < dialog.index(">Return</button>")
+    assert 'id="external-link-return" class="btn btn-primary" autofocus' in dialog

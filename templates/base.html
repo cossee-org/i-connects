@@ -1228,6 +1228,82 @@
     {% endif %}
   </div><!-- end main content -->
 
+  {% comment %}
+    Leaving the site. A link marked data-external-link (the web addresses in
+    comments, see comment_tags.comment_body) asks before it takes anyone off
+    i-connects: what someone typed into a comment can point anywhere. A link
+    back into i-connects itself — same host — is not leaving, and opens as
+    it would anyway.
+
+    Return is the primary button and has the focus, so Enter or Escape
+    keeps the reader here; Continue opens the address in a new tab. The
+    address is shown in full, so they can see where it really goes before
+    they choose. One dialog serves the whole page, comments swapped in by
+    HTMX included, since the click is caught on the document.
+  {% endcomment %}
+  <dialog id="external-link-modal" class="modal"
+          aria-labelledby="external-link-title" aria-describedby="external-link-body">
+    <div class="modal-box max-w-lg bg-base-100 border border-brand-light/60 p-0">
+      <div class="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-brand-light/60">
+        <h2 id="external-link-title" class="text-xl font-semibold text-brand-navy">Leaving i-connects</h2>
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle btn-ghost -mr-2 -mt-1" aria-label="Close">&times;</button>
+        </form>
+      </div>
+      <div id="external-link-body" class="px-6 py-5 text-brand-text">
+        <p>You are now leaving i-connects. We are not responsible for the content of external websites.</p>
+        <p class="mt-3 text-sm text-brand-text/70">This link goes to:</p>
+        <p id="external-link-url"
+           class="mt-1 rounded-lg bg-brand-lighter px-3 py-2 text-sm text-brand-navy break-all"></p>
+      </div>
+      <div class="flex gap-2 justify-end px-6 py-4 border-t border-brand-light/60">
+        <button type="button" id="external-link-continue"
+                class="btn bg-base-100 border-brand-light text-brand-text hover:bg-brand-lighter hover:border-brand-light">Continue</button>
+        <button type="button" id="external-link-return" class="btn btn-primary" autofocus>Return</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+  <script>
+    (function () {
+      var modal = document.getElementById("external-link-modal");
+      var shown = document.getElementById("external-link-url");
+      var target = null;
+
+      function leaving(link) {
+        try { return new URL(link.href, location.href).host !== location.host; }
+        catch (e) { return true; }
+      }
+      function ask(event) {
+        var link = event.target.closest && event.target.closest("a[data-external-link]");
+        if (!link || !leaving(link)) return;
+        // A middle click opens a tab too; catch it as well as a plain click.
+        if (event.type === "auxclick" && event.button !== 1) return;
+        event.preventDefault();
+        target = link.href;
+        shown.textContent = target;
+        modal.showModal();
+        document.getElementById("external-link-return").focus();
+      }
+      document.addEventListener("click", ask);
+      document.addEventListener("auxclick", ask);
+
+      document.getElementById("external-link-continue").addEventListener("click", function () {
+        if (target) window.open(target, "_blank", "noopener,noreferrer");
+        modal.close();
+      });
+      document.getElementById("external-link-return").addEventListener("click", function () {
+        modal.close();
+      });
+      modal.addEventListener("close", function () { target = null; });
+      // Escape closes this dialog, and only this dialog: the task pane
+      // behind it listens for Escape on the window to close itself.
+      modal.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") event.stopPropagation();
+      });
+    })();
+  </script>
+
   {% block extra_body %}{% endblock %}
 </body>
 </html>

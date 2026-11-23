@@ -50,7 +50,8 @@ def _link(url: str) -> str:
     href = url if url.lower().startswith(("http://", "https://")) else f"https://{url}"
     return (
         f'<a href="{escape(href)}" class="{LINK_CLASS}" '
-        f'target="_blank" rel="noopener noreferrer nofollow">{escape(url)}</a>'
+        f'target="_blank" rel="noopener noreferrer nofollow" data-external-link>'
+        f"{escape(url)}</a>"
     )
 
 
@@ -86,7 +87,8 @@ def _tagger(comment):
 def comment_body(comment):
     """The comment's text, escaped, with its web addresses and tags linked.
 
-    Web addresses (``URL``) open in a new tab. They are found first, in the
+    Web addresses (``URL``) open in a new tab, after the "Leaving
+    i-connects" dialog (base.html) has asked — ``data-external-link``. They are found first, in the
     text as typed, so an ``@`` inside one (``https://x.com/@reefs``) is never
     read as a tag.
 
