@@ -547,6 +547,116 @@
     };
   </script>
 
+  {% comment %}
+    Comment box @ list (comments/mention_list.html). The form carries
+    x-data="mentionBox()" and holds a JSON script of {candidates, selected}.
+    Typing @ at the start of a word opens the people whose name has a word
+    starting with what follows it (ignoring case and accents); picking one
+    replaces the @query with "@Name " and adds them to the tags the form
+    posts. The textarea is the combobox: it keeps focus throughout, and
+    arrows, Enter/Tab and Escape drive the list only while it is open.
+  {% endcomment %}
+  <script>
+    window.mentionBox = function () {
+      var fold = function (text) {
+        return String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      };
+      return {
+        uid: "mention-" + Math.random().toString(36).slice(2, 9),
+        candidates: [],
+        mentions: [],
+        results: [],
+        open: false,
+        active: 0,
+        start: -1,
+        box: null,
+        init: function () {
+          var data = this.$el.querySelector('script[type="application/json"]');
+          try {
+            var parsed = JSON.parse(data ? data.textContent : "{}") || {};
+            this.candidates = parsed.candidates || [];
+            this.mentions = (parsed.selected || []).slice();
+          } catch (e) { /* a plain box, then */ }
+          this.box = this.$el.querySelector("textarea");
+          if (!this.box || !this.candidates.length) return;
+          var self = this;
+          this.box.setAttribute("role", "combobox");
+          this.box.setAttribute("aria-autocomplete", "list");
+          this.box.setAttribute("aria-controls", this.uid + "-list");
+          this.box.setAttribute("aria-expanded", "false");
+          this.box.addEventListener("input", function () { self.search(); });
+          this.box.addEventListener("click", function () { self.search(); });
+          this.box.addEventListener("blur", function () { self.close(); });
+          this.box.addEventListener("keydown", function (e) { self.key(e); });
+          this.$watch("open", function (v) {
+            self.box.setAttribute("aria-expanded", v ? "true" : "false");
+            self.syncActive();
+          });
+          this.$watch("active", function () { self.syncActive(); });
+        },
+        syncActive: function () {
+          if (this.open && this.results.length) {
+            this.box.setAttribute("aria-activedescendant", this.uid + "-opt-" + this.active);
+            var el = document.getElementById(this.uid + "-opt-" + this.active);
+            if (el) el.scrollIntoView({ block: "nearest" });
+          } else {
+            this.box.removeAttribute("aria-activedescendant");
+          }
+        },
+        search: function () {
+          var text = this.box.value, caret = this.box.selectionStart;
+          var at = text.lastIndexOf("@", caret - 1);
+          // An @ that starts a word, with no line break between it and the caret.
+          if (at < 0 || (at > 0 && !/\s/.test(text[at - 1]))) return this.close();
+          var query = text.slice(at + 1, caret);
+          if (/[\n@]/.test(query) || query.length > 40) return this.close();
+          var words = fold(query).split(/\s+/).filter(Boolean);
+          this.results = this.candidates.filter(function (c) {
+            var parts = fold(c.name).split(/\s+/);
+            return words.every(function (w) {
+              return parts.some(function (p) { return p.indexOf(w) === 0; });
+            });
+          }).slice(0, 8);
+          this.start = at;
+          this.active = 0;
+          this.open = this.results.length > 0;
+        },
+        close: function () { this.open = false; this.start = -1; },
+        key: function (e) {
+          if (!this.open) return;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            this.active = (this.active + 1) % this.results.length;
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            this.active = (this.active - 1 + this.results.length) % this.results.length;
+          } else if (e.key === "Enter" || e.key === "Tab") {
+            e.preventDefault();
+            this.pick(this.results[this.active]);
+          } else if (e.key === "Escape") {
+            // Close the list, not the dialog or pane the box sits in.
+            e.preventDefault();
+            e.stopPropagation();
+            this.close();
+          }
+        },
+        pick: function (c) {
+          if (!c || this.start < 0) return;
+          var text = this.box.value, caret = this.box.selectionStart;
+          var insert = "@" + c.name + " ";
+          this.box.value = text.slice(0, this.start) + insert + text.slice(caret);
+          var pos = this.start + insert.length;
+          this.box.setSelectionRange(pos, pos);
+          this.box.focus();
+          if (!this.mentions.some(function (m) { return m.id === c.id; })) {
+            this.mentions.push({ id: c.id, name: c.name });
+          }
+          this.close();
+        },
+      };
+    };
+  </script>
+
   {% comment %}Vendored locally so the UI works in environments whose network policy blocks external hosts.{% endcomment %}
   <script src="{% static 'js/vendor/htmx.min.js' %}"></script>
   <script defer src="{% static 'js/vendor/alpine.min.js' %}"></script>

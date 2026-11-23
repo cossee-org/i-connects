@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from django.conf import settings
 from django.db import models
 
 
@@ -88,3 +89,36 @@ class CommentReadStatus(models.Model):
 
     def __str__(self) -> str:
         return f"read={self.read} for comment {self.comment_id} by {self.project_member_id}"
+
+
+class CommentMention(models.Model):
+    """A person tagged in a comment with ``@Name``.
+
+    The comment's text keeps the name as it was typed, so it reads the same in
+    an email, an export or the admin; this row is what says *who* that name
+    was, since two people can share one. Tagging is what sends the email (see
+    :func:`apps.comments.services.notify_mentioned_users`).
+    """
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    comment = models.ForeignKey(
+        Comment,
+        on_delete=models.CASCADE,
+        related_name="mentions",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="comment_mentions",
+    )
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["comment", "user"], name="unique_comment_mention"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"user {self.user_id} in comment {self.comment_id}"

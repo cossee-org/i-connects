@@ -3631,8 +3631,11 @@ def test_dropping_an_assignee_drops_their_row_and_blocks_review(client, user, ot
 
     client.force_login(user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert contrib.display_name not in pane
-    assert lead.display_name in pane  # the remaining assignee is untouched
+    # Scoped to the Completion rows: they are still in the project, so the
+    # comment box's @ list names them, as it does anyone who can be tagged.
+    rows = _rows(pane)
+    assert contrib.display_name not in rows
+    assert lead.display_name in rows  # the remaining assignee is untouched
 
     response = client.post(_review_url(task, log), {"reviewed": "1"}, HTTP_HX_REQUEST="true")
     assert response.status_code == 400

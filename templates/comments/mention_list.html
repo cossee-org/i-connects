@@ -1,0 +1,36 @@
+{% comment %}
+  The @ list of a comment box, and the tags it has picked. Included inside a
+  form carrying x-data="mentionBox()" (base.html), right after the
+  textarea's wrapper; that wrapper must be ``relative`` for the list to drop
+  down beneath the box.
+
+  mention_data is {"candidates": [{id, name}], "selected": [...]}: who can be
+  tagged, and who already is (an edit). Each pick posts one
+  mentioned_user_ids; the server keeps only those whose @Name is still in the
+  text, so a name deleted from the box after it was picked tags no one.
+
+  The list follows the ARIA combobox pattern: the textarea owns it
+  (aria-controls, aria-expanded, aria-activedescendant are set from
+  mentionBox), arrows move, Enter or Tab picks, Escape closes.
+{% endcomment %}
+{{ mention_data|json_script }}
+<template x-for="m in mentions" :key="m.id">
+  <input type="hidden" name="mentioned_user_ids" :value="m.id">
+</template>
+<ul x-ref="listbox"
+    :id="uid + '-list'"
+    role="listbox"
+    aria-label="People you can mention"
+    x-show="open" x-cloak
+    class="absolute left-0 right-0 top-full z-30 mt-1 max-h-56 overflow-y-auto rounded-lg border border-brand-light bg-base-100 py-1 shadow-lg">
+  <template x-for="(c, i) in results" :key="c.id">
+    <li role="option"
+        :id="uid + '-opt-' + i"
+        :aria-selected="i === active"
+        class="cursor-pointer px-3 py-1.5 text-sm text-brand-text"
+        :class="{ 'bg-brand-lighter text-brand-navy': i === active }"
+        @mousedown.prevent="pick(c)"
+        @mouseenter="active = i"
+        x-text="c.name"></li>
+  </template>
+</ul>
