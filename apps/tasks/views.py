@@ -41,6 +41,7 @@ from django.views.generic import (
 
 from apps.audit.services import AuditAction, log_action
 from apps.comments.forms import CommentForm
+from apps.comments.views import comment_box_context
 from apps.core.enums import (
     CompletedAs,
     ContributionType,
@@ -907,12 +908,14 @@ class TaskDetailPaneView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
                 "assignee_contribution_types",
                 "task_logs__completed_by",
                 "comments__author",
+                "comments__mentions__user",
             ),
             project=self.project,
             pk=kwargs["pk"],
         )
         context["task"] = task
         context["comment_form"] = CommentForm()
+        context.update(comment_box_context(task, self.request.user))
         context["status_block"] = _task_status_context(
             task,
             project_member=self.project_member,
@@ -941,13 +944,14 @@ class TaskDetailView(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         task = get_object_or_404(
             Task.objects.select_related("container", "milestone", "created_by")
-            .prefetch_related("assigned_members", "reviewers", "task_logs__comments__author", "task_logs__reviewed_by", "assignee_deadlines", "assignee_contribution_types", "task_logs__completed_by", "comments__author", "activities__actor", "activities__member")
+            .prefetch_related("assigned_members", "reviewers", "task_logs__comments__author", "task_logs__reviewed_by", "assignee_deadlines", "assignee_contribution_types", "task_logs__completed_by", "comments__author", "comments__mentions__user", "activities__actor", "activities__member")
             .filter(project=self.project),
             pk=kwargs["pk"],
         )
         context["task"] = task
         context["task_activities"] = task.activities.select_related("actor", "member")
         context["comment_form"] = CommentForm()
+        context.update(comment_box_context(task, self.request.user))
         context["assign_form"] = TaskAssignForm(
             project=self.project,
             initial={"assigned_members": task.assigned_members.all()},

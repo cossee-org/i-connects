@@ -4,10 +4,21 @@ from __future__ import annotations
 
 from django import template
 
+from apps.core.linkify import linkify
 from apps.tasks.calendar import task_date_label
 from apps.tasks.timezones import get_zone
 
 register = template.Library()
+
+
+@register.filter
+def link_urls(text):
+    """``text`` escaped, with its web addresses as links (``apps.core.linkify``).
+
+    Safe output, so it goes before ``linebreaks`` — which leaves safe text
+    unescaped and only adds the paragraphs: ``{{ x|link_urls|linebreaks }}``.
+    """
+    return linkify(text)
 
 
 @register.simple_tag

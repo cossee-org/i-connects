@@ -79,11 +79,18 @@
           Comments{% if total %} <span class="normal-case tracking-normal font-normal text-brand-text/60">{{ total }}</span>{% endif %}
         </h3>
 
-        {% with pk=task.pk|stringformat:"s" %}
-          {% include "comments/comment_form.html" with task=task form=comment_form target="#task-pane-comments-"|add:pk %}
-        {% endwith %}
+        {% comment %}
+          The box is for the task's participants: its creator, assignees and
+          reviewers. Everyone else in the project reads the thread, with no
+          box and no send button above it.
+        {% endcomment %}
+        {% if can_comment %}
+          {% with pk=task.pk|stringformat:"s" %}
+            {% include "comments/comment_form.html" with task=task form=comment_form target="#task-pane-comments-"|add:pk %}
+          {% endwith %}
+        {% endif %}
 
-        <div x-data="{ expanded: false }" class="mt-4">
+        <div x-data="{ expanded: false }" {% if can_comment %}class="mt-4"{% endif %}>
           <div id="task-pane-comments-{{ task.pk }}" class="flex flex-col gap-3">
             {% for comment in task.comments.all|slice:":3" %}
               {% include "comments/comment_item.html" with comment=comment task=task project_member=project_member is_project_manager=is_project_manager %}
