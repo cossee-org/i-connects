@@ -92,7 +92,7 @@
       <div x-ref="body"
            id="comment-body-{{ comment.pk }}"
            class="text-sm text-brand-text whitespace-pre-line break-words line-clamp-3"
-           :class="{ 'line-clamp-3': !expanded }">{{ comment|with_mentions }}</div>
+           :class="{ 'line-clamp-3': !expanded }">{{ comment|comment_body }}</div>
       <button type="button" x-show="overflowing" x-cloak
               class="mt-0.5 text-xs font-medium text-brand-navy hover:underline"
               aria-controls="comment-body-{{ comment.pk }}"

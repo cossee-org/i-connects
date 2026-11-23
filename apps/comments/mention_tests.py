@@ -484,3 +484,73 @@ def test_a_name_two_tagged_people_share_is_highlighted_but_not_linked(cast):
     assert html.count('<span class="comment-mention">@Ben Okafor</span>') == 2
     ben2_url = reverse("public_profile", kwargs={"pk": ben2.pk})
     assert f'<a href="{ben2_url}" class="comment-mention">@ben2@test.com</a>' in html
+
+
+# ---------------------------------------------------------------------------
+# Web addresses
+# ---------------------------------------------------------------------------
+def _body(cast, content, tagged=()):
+    comment = Comment.objects.create(task=cast.task, author=cast.assignee_member, content=content)
+    for user in tagged:
+        CommentMention.objects.create(comment=comment, user=user)
+    html = render_to_string("comments/comment_item.html", {"comment": comment, "task": cast.task})
+    start = html.index(f'id="comment-body-{comment.pk}"')
+    open_end = html.index(">", start) + 1
+    return html[open_end : html.index("</div>", open_end)]
+
+
+def _a(href, text=None):
+    return (
+        f'<a href="{href}" class="comment-link text-brand-navy underline underline-offset-2 '
+        f'hover:text-brand-coral" target="_blank" rel="noopener noreferrer nofollow">'
+        f"{text or href}</a>"
+    )
+
+
+@pytest.mark.django_db
+def test_a_web_address_opens_in_a_new_tab(cast):
+    body = _body(cast, "Data: https://example.org/reef?site=4&year=2026")
+    assert body == "Data: " + _a(
+        "https://example.org/reef?site=4&amp;year=2026",
+    )
+
+
+@pytest.mark.django_db
+def test_www_addresses_are_linked_over_https(cast):
+    body = _body(cast, "See www.example.org/notes")
+    assert body == "See " + _a("https://www.example.org/notes", "www.example.org/notes")
+
+
+@pytest.mark.django_db
+def test_the_sentences_punctuation_stays_out_of_the_link(cast):
+    body = _body(cast, "Read https://example.org/a. Then (see https://example.org/b), and https://en.wikipedia.org/wiki/Reef_(ecology)!")
+    assert _a("https://example.org/a") + ". Then (see " in body
+    assert _a("https://example.org/b") + "), and " in body
+    assert _a("https://en.wikipedia.org/wiki/Reef_(ecology)") + "!" in body
+
+
+@pytest.mark.django_db
+def test_only_web_addresses_are_linked(cast):
+    """No javascript:, no bare file names or domains, no plain addresses."""
+    body = _body(cast, "javascript:alert(1) notes.md example.org bea@test.com www. https://")
+    assert "<a" not in body
+
+
+@pytest.mark.django_db
+def test_what_the_author_typed_cannot_break_out_of_a_link(cast):
+    body = _body(cast, 'https://example.org/"onmouseover="alert(1) <b>x</b>')
+    assert body.startswith(_a("https://example.org/") + "&quot;onmouseover=&quot;alert(1)")
+    assert "&lt;b&gt;x&lt;/b&gt;" in body
+    assert "<b>" not in body
+
+
+@pytest.mark.django_db
+def test_links_and_tags_side_by_side(cast):
+    """An @ inside an address is part of it; a tag beside one is still a tag."""
+    body = _body(cast, "@Bea Lund look at https://x.com/@Bea Lund", tagged=[cast.bystander])
+    bea = reverse("public_profile", kwargs={"pk": cast.bystander.pk})
+    assert body == (
+        f'<a href="{bea}" class="comment-mention">@Bea Lund</a> look at '
+        + _a("https://x.com/@Bea")
+        + " Lund"
+    )
