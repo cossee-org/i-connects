@@ -573,3 +573,23 @@ def test_every_page_carries_the_leaving_dialog(client, cast):
     assert "We are not responsible for the content of external websites." in dialog
     assert dialog.index(">Continue</button>") < dialog.index(">Return</button>")
     assert 'id="external-link-return" class="btn btn-primary" autofocus' in dialog
+
+
+@pytest.mark.django_db
+def test_the_box_survives_the_pane_being_loaded_again(client, cast):
+    """What keeps the comment box drawn when a pane loads over an older one.
+
+    The textarea has an id, and HTMX resets the class and style of an element
+    whose id was in the markup it swapped out. So the highlight layer's
+    styles hang off the box's server-rendered wrapper, never a class added to
+    the textarea, and the pane is emptied before each load.
+    """
+    client.force_login(cast.assignee)
+    pane = client.get(cast.pane_url()).content.decode()
+    assert '<div class="mention-field relative flex-1 min-w-0">' in pane
+
+    page = client.get(cast.detail_url()).content.decode()
+    assert ".mention-field textarea {" in page
+    assert "mention-input" not in page
+    assert 'target.id === "task-pane-body" && event.detail.shouldSwap' in page
+    assert "target.replaceChildren();" in page

@@ -1,8 +1,9 @@
 {% comment %}
   The @ list of a comment box, and the tags it has picked. Included inside a
-  form carrying x-data="mentionBox()" (base.html), right after the
-  textarea's wrapper; that wrapper must be ``relative`` for the list to drop
-  down beneath the box.
+  form carrying x-data="mentionBox()" (base.html), right after the textarea,
+  in a wrapper with the classes ``mention-field relative``: relative so the
+  list drops down beneath the box, mention-field for the highlight layer's
+  styles (see .mention-field in base.html).
 
   mention_data is {"candidates": [{id, name, email}], "selected": [...]}: the
   project's contributors, who are the only people who can be tagged, and who

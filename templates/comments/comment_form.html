@@ -24,7 +24,7 @@
       hx-on::after-request="if(event.detail.successful){ this.reset(); this.dispatchEvent(new CustomEvent('mentions-reset')) }">
   {% csrf_token %}
   <label for="{{ form.content.id_for_label }}" class="sr-only">Comment</label>
-  <div class="relative flex-1 min-w-0">
+  <div class="mention-field relative flex-1 min-w-0">
     {{ form.content }}
     {% include "comments/mention_list.html" %}
   </div>

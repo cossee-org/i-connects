@@ -205,6 +205,10 @@
       white-space: pre-wrap;
       overflow-wrap: break-word;
       color: transparent;
+      /* The box's own background (DaisyUI's base-100), which it gives up to
+         let the marks show through. Set here rather than read off the box,
+         which can be mid-swap when the layer is built (see below). */
+      background-color: var(--fallback-b1, oklch(var(--b1) / 1));
     }
     .mention-backdrop mark {
       color: transparent;
@@ -212,7 +216,14 @@
       border-radius: 4px;
       box-shadow: 2px 0 0 #d6e0f3, -2px 0 0 #d6e0f3;
     }
-    textarea.mention-input {
+    /* Keyed off the box's wrapper, a class the server renders, and never off
+       a class added to the textarea. The textarea has an id (id_content), and
+       when HTMX swaps a pane over an older one holding the same id, it gives
+       the new textarea the old one's attributes and resets them to the
+       server's ~20ms later — wiping anything script added in between. A lost
+       class left the layer painted over the box: a blank white panel where
+       the comment box should be. */
+    .mention-field textarea {
       position: relative;
       z-index: 1;
       background-color: transparent !important;
@@ -587,6 +598,30 @@
   </script>
 
   {% comment %}
+    The task side pane (#task-pane-body on the board and the project page) is
+    filled by swapping a task's markup over whatever it last held: the task
+    opened before, or the same task when an edit reloads it. HTMX treats an
+    element whose id is also in the old markup as the same element carried
+    over: it hands the new one the old one's class and style, and only puts
+    the new markup's back ~20ms later — wiping what Alpine set in between.
+    That re-showed the older comments hidden behind See more (x-show's
+    display:none, lost), and with them anything else script had styled.
+
+    Nothing should carry over from one load of the pane to the next, so the
+    pane is emptied the moment before its new content goes in. It is the same
+    tick as the swap, so nothing flashes; and only on a swap that happens, so
+    a failed request still gets the pane's error message.
+  {% endcomment %}
+  <script>
+    document.addEventListener("htmx:beforeSwap", function (event) {
+      var target = event.detail && event.detail.target;
+      if (target && target.id === "task-pane-body" && event.detail.shouldSwap) {
+        target.replaceChildren();
+      }
+    });
+  </script>
+
+  {% comment %}
     Comment box @ list (comments/mention_list.html). The form carries
     x-data="mentionBox()" and holds a JSON script of {candidates, selected}.
     Typing @ at the start of a word opens the project's contributors whose
@@ -609,7 +644,8 @@
     padding, border and size, holding the same text with each tag in a
     <mark>, its text transparent; the textarea's own background goes
     transparent so the marks show through. It follows the box's scrolling
-    and resizing.
+    and resizing. Nothing it relies on is written onto the textarea: see
+    .mention-field in the styles for why.
 
     The textarea is the combobox: it keeps focus throughout, and arrows,
     Enter/Tab and Escape drive the list only while it is open.
@@ -676,11 +712,15 @@
           this.box = this.$el.querySelector("textarea");
           if (!this.box || !this.candidates.length) return;
           var self = this;
-          this.box.setAttribute("role", "combobox");
-          this.box.setAttribute("aria-autocomplete", "list");
-          this.box.setAttribute("aria-controls", this.uid + "-list");
-          this.box.setAttribute("aria-expanded", "false");
           this.buildBackdrop();
+          this.applyAria();
+          // The textarea has an id, so an HTMX swap over older content with
+          // the same id resets its attributes once it settles (see
+          // .mention-field in the styles above). Put the ARIA back after it.
+          document.addEventListener("htmx:afterSettle", function () {
+            if (self.box.isConnected) self.applyAria();
+          }, { once: true });
+          this.box.addEventListener("focus", function () { self.applyAria(); });
           this.box.addEventListener("input", function () { self.refresh(); self.search(); });
           this.box.addEventListener("click", function () { self.search(); });
           this.box.addEventListener("scroll", function () { self.syncScroll(); });
@@ -718,9 +758,7 @@
           this.back = document.createElement("div");
           this.back.className = "mention-backdrop";
           this.back.setAttribute("aria-hidden", "true");
-          this.backColor = getComputedStyle(box).backgroundColor;
           box.parentNode.insertBefore(this.back, box);
-          box.classList.add("mention-input");
           this.fit();
           if (window.ResizeObserver) {
             new ResizeObserver(function () { self.fit(); }).observe(box);
@@ -740,7 +778,6 @@
           back.style.boxSizing = "border-box";
           back.style.borderStyle = "solid";
           back.style.borderColor = "transparent";
-          back.style.backgroundColor = this.backColor;
           // A scrollbar in the box narrows its text; narrow the copy to match.
           var scrollbar = box.offsetWidth - box.clientWidth -
             parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
@@ -770,6 +807,12 @@
           // A trailing newline only takes up a line once something follows it.
           this.back.innerHTML = html + (text.slice(-1) === "\n" ? " " : "");
           this.fit();
+        },
+        applyAria: function () {
+          this.box.setAttribute("role", "combobox");
+          this.box.setAttribute("aria-autocomplete", "list");
+          this.box.setAttribute("aria-controls", this.uid + "-list");
+          this.box.setAttribute("aria-expanded", this.open ? "true" : "false");
         },
         syncActive: function () {
           if (this.open && this.results.length) {

@@ -10,7 +10,7 @@
         hx-swap="outerHTML">
     {% csrf_token %}
     {# The tags already on the comment come in as selected; see mention_list.html. #}
-    <div class="relative">
+    <div class="mention-field relative">
       {{ form.content }}
       {% include "comments/mention_list.html" %}
     </div>
