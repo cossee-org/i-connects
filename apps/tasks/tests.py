@@ -5846,3 +5846,43 @@ def test_verify_notes_say_what_verifying_means_for_credit(client, user, other_us
     assert "On this CRediT project, that is what credits them" in help_
     assert "(Software)" in help_
 
+
+
+# ---------------------------------------------------------------------------
+# Links in the description
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+def test_web_addresses_in_the_description_are_links(client, user):
+    """Linked the way comments link them — new tab, through the leaving
+    dialog — on the page and in the pane, with paragraphs kept and
+    everything else escaped."""
+    project, col1, _col2 = _make_project_with_board(user)
+    task = Task.objects.create(
+        project=project,
+        created_by=_primary_member(project, user),
+        container=col1,
+        container_task_order=0,
+        name="Linked",
+        description=(
+            "Protocol: https://example.org/protocol?v=2&lang=en.\n"
+            "Notes at www.example.org/notes\n\n"
+            "<script>alert(1)</script> javascript:alert(1)"
+        ),
+    )
+    client.force_login(user)
+    for url in (
+        reverse("tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}),
+        reverse("tasks:detail_pane", kwargs={"project_pk": project.pk, "pk": task.pk}),
+    ):
+        html = client.get(url).content.decode()
+        body = html[html.index(f'id="task-description-{task.pk}"') :]
+        body = body[body.index(">") + 1 : body.index("</div>")]
+        assert (
+            '<p>Protocol: <a href="https://example.org/protocol?v=2&amp;lang=en" '
+            'class="comment-link text-brand-navy underline underline-offset-2 '
+            'hover:text-brand-coral" target="_blank" rel="noopener noreferrer nofollow" '
+            'data-external-link>https://example.org/protocol?v=2&amp;lang=en</a>.<br>'
+        ) in body
+        assert 'href="https://www.example.org/notes"' in body
+        assert "<p>&lt;script&gt;alert(1)&lt;/script&gt; javascript:alert(1)</p>" in body
+        assert body.count("<a ") == 2

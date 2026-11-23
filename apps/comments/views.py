@@ -23,7 +23,7 @@ from apps.comments.services import (
     sync_mentions,
 )
 from apps.tasks.mixins import ProjectContextMixin, TaskMemberAccessMixin
-from apps.tasks.models import Task, TaskLog
+from apps.tasks.models import Task
 
 NOT_A_PARTICIPANT = "Only the task's creator, assignees and reviewers can comment."
 

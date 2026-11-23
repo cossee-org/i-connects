@@ -2,57 +2,14 @@
 
 from __future__ import annotations
 
-import re
-
 from django import template
 from django.urls import reverse
 from django.utils.html import escape
-from django.utils.safestring import mark_safe
 
 from apps.comments.services import mention_pattern
+from apps.core.linkify import linkify
 
 register = template.Library()
-
-# A web address written into a comment: http(s):// or www., up to the next
-# space or a character that cannot be in one. Other schemes (javascript:,
-# data:, mailto:) are never linked. Not urlize: it would also turn the address
-# in an @email tag into a mailto link, and a bare "notes.md" into a website.
-URL = re.compile(r"\b(?:https?://|www\.)[^\s<>\"']+", re.IGNORECASE)
-
-# What is left must still be an address: the prefix, then something more.
-_ADDRESS = re.compile(r"(?:https?://|www\.)[^\s.]", re.IGNORECASE)
-
-# Punctuation that ends a sentence rather than the address it follows.
-_TRAILING = ".,;:!?*_~"
-_CLOSERS = {")": "(", "]": "["}
-
-LINK_CLASS = "comment-link text-brand-navy underline underline-offset-2 hover:text-brand-coral"
-
-
-def _trim(url: str) -> str:
-    """``url`` without the punctuation that follows it in the sentence.
-
-    A closing bracket stays when the address opened it — the Wikipedia
-    "Foo_(bar)" kind — and goes when it closes a bracket around the address.
-    """
-    while url:
-        last = url[-1]
-        if last in _TRAILING:
-            url = url[:-1]
-        elif last in _CLOSERS and url.count(last) > url.count(_CLOSERS[last]):
-            url = url[:-1]
-        else:
-            break
-    return url
-
-
-def _link(url: str) -> str:
-    href = url if url.lower().startswith(("http://", "https://")) else f"https://{url}"
-    return (
-        f'<a href="{escape(href)}" class="{LINK_CLASS}" '
-        f'target="_blank" rel="noopener noreferrer nofollow" data-external-link>'
-        f"{escape(url)}</a>"
-    )
 
 
 def _tagger(comment):
@@ -87,7 +44,7 @@ def _tagger(comment):
 def comment_body(comment):
     """The comment's text, escaped, with its web addresses and tags linked.
 
-    Web addresses (``URL``) open in a new tab, after the "Leaving i-CONNECTS"
+    Web addresses (``apps.core.linkify``) open in a new tab, after the "Leaving i-CONNECTS"
     dialog (base.html) has asked — ``data-external-link``. They are found
     first, in the text as typed, so an ``@`` inside one
     (``https://x.com/@reefs``) is never read as a tag.
@@ -104,15 +61,4 @@ def comment_body(comment):
     inside an ``href``. Newlines are left as they are for
     ``whitespace-pre-line`` to render.
     """
-    text = comment.content or ""
-    tag = _tagger(comment)
-    out, last = [], 0
-    for match in URL.finditer(text):
-        url = _trim(match.group(0))
-        if not _ADDRESS.match(url):  # "www." or "https://" alone, once trimmed
-            continue
-        out.append(tag(text[last : match.start()]))
-        out.append(_link(url))
-        last = match.start() + len(url)
-    out.append(tag(text[last:]))
-    return mark_safe("".join(out))
+    return linkify(comment.content, between=_tagger(comment))
