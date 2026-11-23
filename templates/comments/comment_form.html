@@ -17,7 +17,7 @@
 {% endcomment %}
 <form class="flex items-start gap-2"
       x-data="mentionBox()"
-      @mentions-reset="mentions = []"
+      @mentions-reset="clear()"
       hx-post="{% url 'comments:create' task_pk=task.pk %}"
       hx-target="{{ target|default:'#task-comments' }}"
       hx-swap="afterbegin"

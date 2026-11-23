@@ -237,7 +237,7 @@ def test_a_tag_is_saved_and_highlighted(client, cast, django_capture_on_commit_c
     comment = cast.task.comments.get()
     assert list(comment.mentions.values_list("user_id", flat=True)) == [cast.bystander.pk]
     html = response.content.decode()
-    assert '<span class="comment-mention font-medium text-brand-navy">@Bea Lund</span> can you check?' in html
+    assert '<span class="comment-mention">@Bea Lund</span> can you check?' in html
 
 
 @pytest.mark.django_db
@@ -290,8 +290,8 @@ def test_an_email_typed_out_tags_its_owner_without_a_pick(client, cast):
         cast.lead.pk,
     }
     html = response.content.decode()
-    assert '<span class="comment-mention font-medium text-brand-navy">@BEA@test.com</span>,' in html
-    assert '<span class="comment-mention font-medium text-brand-navy">@lena@test.com</span>.' in html
+    assert '<span class="comment-mention">@BEA@test.com</span>,' in html
+    assert '<span class="comment-mention">@lena@test.com</span>.' in html
 
 
 @pytest.mark.django_db
@@ -427,3 +427,16 @@ def test_the_preference_is_on_the_profile_page(client, user):
     client.force_login(user)
     html = client.get(reverse("accounts:profile")).content.decode()
     assert "Email me when I&#x27;m mentioned in a comment" in html
+
+
+@pytest.mark.django_db
+def test_the_box_posts_the_people_it_highlights(client, cast):
+    """The ids the comment box posts are its highlighted tags (mentionBox's
+    ``tagged``), announced to screen readers, and the chip style the box
+    paints is the one a posted comment wears."""
+    client.force_login(cast.assignee)
+    html = client.get(cast.detail_url()).content.decode()
+    assert '<template x-for="m in tagged" :key="m.id">' in html
+    assert 'aria-live="polite" x-text="taggedSummary"' in html
+    assert ".mention-backdrop mark {" in html
+    assert ".comment-mention {" in html

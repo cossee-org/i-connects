@@ -19,7 +19,8 @@ def with_mentions(comment):
     (``comment.mentions``): "@everyone" typed by hand, or a name whose tag
     was dropped, stays plain text. Matching runs on the escaped text against escaped names, so
     nothing the author typed is ever emitted unescaped. Newlines are left as
-    they are for ``whitespace-pre-line`` to render.
+    they are for ``whitespace-pre-line`` to render. ``.comment-mention``
+    (base.html) is the same chip the comment box paints while typing.
     """
     text = escape(comment.content or "")
     users = [m.user for m in comment.mentions.all()]
@@ -30,7 +31,7 @@ def with_mentions(comment):
         return mark_safe(text)
     return mark_safe(
         pattern.sub(
-            lambda m: f'<span class="comment-mention font-medium text-brand-navy">{m.group(0)}</span>',
+            lambda m: f'<span class="comment-mention">{m.group(0)}</span>',
             text,
         )
     )

@@ -178,6 +178,42 @@
       border-bottom-color: transparent;
       border-left-color: #1e293b;
     }
+
+    /* Tagged people in comments (window.mentionBox, comment_tags.with_mentions).
+       One look in the box while typing and in the posted comment: a pale
+       brand-blue chip. Its sides are widened with box-shadows, not padding,
+       so the chip takes no room and the text around it wraps exactly as
+       typed; not its top and bottom, which would bleed past a comment
+       clamped behind See more. */
+    .comment-mention {
+      color: #323895;
+      font-weight: 500;
+      background-color: #e1e8f6;
+      border-radius: 4px;
+      box-shadow: 2px 0 0 #e1e8f6, -2px 0 0 #e1e8f6;
+    }
+    /* The layer behind a comment box. It holds the same text, laid out the
+       same way, but invisible: only its chips show, through the textarea,
+       whose own background is made transparent. */
+    .mention-backdrop {
+      position: absolute;
+      overflow: hidden;
+      pointer-events: none;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      color: transparent;
+    }
+    .mention-backdrop mark {
+      color: transparent;
+      background-color: #d6e0f3;
+      border-radius: 4px;
+      box-shadow: 2px 0 0 #d6e0f3, -2px 0 0 #d6e0f3;
+    }
+    textarea.mention-input {
+      position: relative;
+      z-index: 1;
+      background-color: transparent !important;
+    }
   </style>
 
   {% comment %}
@@ -553,21 +589,75 @@
     Typing @ at the start of a word opens the project's contributors whose
     name has a word starting with each word typed after it, or whose email
     starts with what was typed (ignoring case and accents); each is listed
-    with their email. Picking one replaces the @query with "@Name " and adds
-    them to the tags the form posts. An address typed out in full
-    (@someone@example.org) tags its owner without a pick; the server reads
-    it from the text. The textarea is the combobox: it keeps focus throughout, and
-    arrows, Enter/Tab and Escape drive the list only while it is open.
+    with their email. Picking one replaces the @query with "@Name ".
+
+    Who is tagged is read from the text on every keystroke, and each tag is
+    highlighted in the box as it stands: a contributor picked from the list
+    whose @Name is still there; one whose @Name is typed out in full, when no
+    other contributor shares it (two Alex Smiths need a pick to say which);
+    and one whose @email is typed out. Break a tag — delete a letter of it —
+    and its highlight goes, and so does the tag: the hidden inputs the form
+    posts are exactly the highlighted people, so what is highlighted is what
+    the server tags. A screen reader hears who is tagged through a polite
+    live region, since the highlight itself is only paint.
+
+    Textareas cannot style their own text, so the highlight is a layer
+    behind the box (.mention-backdrop): a div copying the textarea's font,
+    padding, border and size, holding the same text with each tag in a
+    <mark>, its text transparent; the textarea's own background goes
+    transparent so the marks show through. It follows the box's scrolling
+    and resizing.
+
+    The textarea is the combobox: it keeps focus throughout, and arrows,
+    Enter/Tab and Escape drive the list only while it is open.
   {% endcomment %}
   <script>
     window.mentionBox = function () {
       var fold = function (text) {
         return String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       };
+      var escapeRe = function (t) { return String(t).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); };
+      var escapeHtml = function (t) {
+        return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      };
+      // The same rules as apps.comments.services, so the box highlights
+      // exactly what the server will tag. @Name: as written, a whole word.
+      var NAME_END = "(?![\\p{L}\\p{N}_])";
+      // @email: any case, and not the start of a longer address.
+      var EMAIL_END = "(?![\\p{L}\\p{N}_-]|\\.[\\p{L}\\p{N}_-])";
+      var namePattern = function (name) {
+        return new RegExp("@" + escapeRe(name) + NAME_END, "u");
+      };
+      // An address in either case, spelled as a pattern rather than with a
+      // case-insensitive flag, so it can sit beside case-sensitive names in
+      // one regex (inline (?i:) groups are too new to rely on).
+      var caseless = function (text) {
+        return Array.from(String(text)).map(function (ch) {
+          var lo = ch.toLowerCase(), up = ch.toUpperCase();
+          return lo === up ? escapeRe(ch) : "[" + escapeRe(lo) + escapeRe(up) + "]";
+        }).join("");
+      };
+      // Typed out with no pick, an address must start a word, as the
+      // server's EMAIL_TAG requires.
+      var typedEmailPattern = function (email) {
+        return new RegExp("(?:^|\\s)@" + caseless(email) + EMAIL_END, "u");
+      };
+      // Every tag of these people, longest first, for painting the marks.
+      var tagPattern = function (people) {
+        var parts = [];
+        people.forEach(function (c) {
+          parts.push({ len: c.name.length, src: escapeRe(c.name) + NAME_END });
+          parts.push({ len: c.email.length, src: caseless(c.email) + EMAIL_END });
+        });
+        if (!parts.length) return null;
+        parts.sort(function (a, b) { return b.len - a.len; });
+        return new RegExp("@(?:" + parts.map(function (p) { return p.src; }).join("|") + ")", "gu");
+      };
       return {
         uid: "mention-" + Math.random().toString(36).slice(2, 9),
         candidates: [],
         mentions: [],
+        tagged: [],
         results: [],
         open: false,
         active: 0,
@@ -587,8 +677,10 @@
           this.box.setAttribute("aria-autocomplete", "list");
           this.box.setAttribute("aria-controls", this.uid + "-list");
           this.box.setAttribute("aria-expanded", "false");
-          this.box.addEventListener("input", function () { self.search(); });
+          this.buildBackdrop();
+          this.box.addEventListener("input", function () { self.refresh(); self.search(); });
           this.box.addEventListener("click", function () { self.search(); });
+          this.box.addEventListener("scroll", function () { self.syncScroll(); });
           this.box.addEventListener("blur", function () { self.close(); });
           this.box.addEventListener("keydown", function (e) { self.key(e); });
           this.$watch("open", function (v) {
@@ -596,6 +688,85 @@
             self.syncActive();
           });
           this.$watch("active", function () { self.syncActive(); });
+          this.refresh();
+        },
+        // Read who the text tags, then repaint the highlight to match.
+        refresh: function () {
+          var text = this.box.value, picked = this.mentions, counts = {};
+          this.candidates.forEach(function (c) { counts[c.name] = (counts[c.name] || 0) + 1; });
+          this.tagged = this.candidates.filter(function (c) {
+            var chosen = picked.some(function (m) { return m.id === c.id; });
+            if ((chosen || counts[c.name] === 1) && namePattern(c.name).test(text)) return true;
+            return typedEmailPattern(c.email).test(text);
+          });
+          this.paint();
+        },
+        clear: function () {
+          this.mentions = [];
+          if (this.box) this.refresh();
+        },
+        get taggedSummary() {
+          return this.tagged.length
+            ? "Tagging " + this.tagged.map(function (c) { return c.name; }).join(", ")
+            : "";
+        },
+        buildBackdrop: function () {
+          var self = this, box = this.box;
+          this.back = document.createElement("div");
+          this.back.className = "mention-backdrop";
+          this.back.setAttribute("aria-hidden", "true");
+          this.backColor = getComputedStyle(box).backgroundColor;
+          box.parentNode.insertBefore(this.back, box);
+          box.classList.add("mention-input");
+          this.fit();
+          if (window.ResizeObserver) {
+            new ResizeObserver(function () { self.fit(); }).observe(box);
+          }
+        },
+        // Lay the backdrop exactly under the textarea's text.
+        fit: function () {
+          var box = this.box, back = this.back, cs = getComputedStyle(box);
+          ["fontFamily", "fontSize", "fontWeight", "fontStyle", "letterSpacing",
+           "lineHeight", "textTransform", "wordSpacing", "textIndent", "tabSize",
+           "paddingTop", "paddingBottom", "paddingLeft",
+           "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
+           "borderTopLeftRadius", "borderTopRightRadius",
+           "borderBottomLeftRadius", "borderBottomRightRadius"].forEach(function (p) {
+            back.style[p] = cs[p];
+          });
+          back.style.boxSizing = "border-box";
+          back.style.borderStyle = "solid";
+          back.style.borderColor = "transparent";
+          back.style.backgroundColor = this.backColor;
+          // A scrollbar in the box narrows its text; narrow the copy to match.
+          var scrollbar = box.offsetWidth - box.clientWidth -
+            parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+          back.style.paddingRight = (parseFloat(cs.paddingRight) + Math.max(0, scrollbar)) + "px";
+          back.style.top = box.offsetTop + "px";
+          back.style.left = box.offsetLeft + "px";
+          back.style.width = box.offsetWidth + "px";
+          back.style.height = box.offsetHeight + "px";
+          this.syncScroll();
+        },
+        syncScroll: function () {
+          if (!this.back) return;
+          this.back.scrollTop = this.box.scrollTop;
+          this.back.scrollLeft = this.box.scrollLeft;
+        },
+        paint: function () {
+          if (!this.back) return;
+          var text = this.box.value, html = "", last = 0;
+          var pattern = tagPattern(this.tagged), m;
+          if (pattern) {
+            while ((m = pattern.exec(text))) {
+              html += escapeHtml(text.slice(last, m.index)) + "<mark>" + escapeHtml(m[0]) + "</mark>";
+              last = m.index + m[0].length;
+            }
+          }
+          html += escapeHtml(text.slice(last));
+          // A trailing newline only takes up a line once something follows it.
+          this.back.innerHTML = html + (text.slice(-1) === "\n" ? " " : "");
+          this.fit();
         },
         syncActive: function () {
           if (this.open && this.results.length) {
@@ -656,6 +827,7 @@
           if (!this.mentions.some(function (m) { return m.id === c.id; })) {
             this.mentions.push({ id: c.id, name: c.name });
           }
+          this.refresh();
           this.close();
         },
       };

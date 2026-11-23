@@ -10,16 +10,21 @@
   can be found by either. Each pick posts one mentioned_user_ids; the server
   keeps only those whose @Name (or @email) is still in the text, so a name
   deleted from the box after it was picked tags no one. An @email typed out
-  in full tags its owner with no pick at all.
+  in full tags its owner with no pick at all, and so does an @Name typed out
+  in full that no other contributor shares. Each tag is highlighted in the
+  box as it is typed (mentionBox in base.html), and the posted ids are the
+  highlighted people.
 
   The list follows the ARIA combobox pattern: the textarea owns it
   (aria-controls, aria-expanded, aria-activedescendant are set from
   mentionBox), arrows move, Enter or Tab picks, Escape closes.
 {% endcomment %}
 {{ mention_data|json_script }}
-<template x-for="m in mentions" :key="m.id">
+{# Exactly the people highlighted in the box: see mentionBox.refresh. #}
+<template x-for="m in tagged" :key="m.id">
   <input type="hidden" name="mentioned_user_ids" :value="m.id">
 </template>
+<span class="sr-only" aria-live="polite" x-text="taggedSummary"></span>
 <ul x-ref="listbox"
     :id="uid + '-list'"
     role="listbox"
