@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import models
+from django.utils.functional import cached_property
 
 
 class Comment(models.Model):
@@ -54,6 +55,18 @@ class Comment(models.Model):
     # edit arrives in a later request, so anything under a second apart is the
     # insert, not a person.
     EDIT_TOLERANCE = timedelta(seconds=1)
+
+    @cached_property
+    def author_user(self):
+        """The person who wrote this, for linking their name to their profile.
+
+        ``author`` is a membership; a comment's is always an individual one
+        (``CommentCreateView`` posts as the writer's own), whose user this
+        is — chosen the way ``ProjectMember.display_name`` chooses, so the
+        link and the name shown agree. ``None`` for a membership with no
+        users left on it.
+        """
+        return self.author.users.order_by("given_name", "family_name").first()
 
     @property
     def is_edited(self) -> bool:

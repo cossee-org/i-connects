@@ -81,15 +81,14 @@
 
         {% comment %}
           The box is for the task's participants: its creator, assignees and
-          reviewers. Everyone else in the project reads the thread.
+          reviewers. Everyone else in the project reads the thread, with no
+          box and no send button above it.
         {% endcomment %}
         {% if can_comment %}
           {% include "comments/comment_form.html" with task=task form=comment_form %}
-        {% else %}
-          <p class="text-xs text-brand-text/60">Only the task's creator, assignees and reviewers can comment.</p>
         {% endif %}
 
-        <div x-data="{ expanded: false }" class="mt-4">
+        <div x-data="{ expanded: false }" {% if can_comment %}class="mt-4"{% endif %}>
           <div id="task-comments" class="flex flex-col gap-3">
             {% for comment in task.comments.all|slice:":3" %}
               {% include "comments/comment_item.html" with comment=comment task=task project_member=project_member is_project_manager=is_project_manager %}

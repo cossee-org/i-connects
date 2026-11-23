@@ -148,17 +148,23 @@ def test_a_membership_that_left_no_longer_counts(cast):
 
 @pytest.mark.django_db
 def test_the_box_is_drawn_only_for_participants(client, cast):
+    """Others read the thread with no box, no send button, and nothing in
+    their place."""
+    Comment.objects.create(task=cast.task, author=cast.assignee_member, content="Status: done")
     box = f'hx-post="{cast.create_url()}"'
-    note = "Only the task&#x27;s creator, assignees and reviewers can comment."
     for url in (cast.pane_url(), cast.detail_url()):
         client.force_login(cast.assignee)
         html = client.get(url).content.decode()
-        assert box in html and note not in html
+        assert box in html
+        assert 'title="Comment"' in html  # the send button
 
         client.force_login(cast.bystander)
         html = client.get(url).content.decode()
+        assert "Status: done" in html
         assert box not in html
-        assert "creator, assignees and reviewers can comment" in html
+        assert 'title="Comment"' not in html
+        assert 'name="content"' not in html
+        assert "can comment" not in html
 
 
 @pytest.mark.django_db
@@ -237,7 +243,8 @@ def test_a_tag_is_saved_and_highlighted(client, cast, django_capture_on_commit_c
     comment = cast.task.comments.get()
     assert list(comment.mentions.values_list("user_id", flat=True)) == [cast.bystander.pk]
     html = response.content.decode()
-    assert '<span class="comment-mention">@Bea Lund</span> can you check?' in html
+    bea = reverse("public_profile", kwargs={"pk": cast.bystander.pk})
+    assert f'<a href="{bea}" class="comment-mention">@Bea Lund</a> can you check?' in html
 
 
 @pytest.mark.django_db
@@ -290,8 +297,10 @@ def test_an_email_typed_out_tags_its_owner_without_a_pick(client, cast):
         cast.lead.pk,
     }
     html = response.content.decode()
-    assert '<span class="comment-mention">@BEA@test.com</span>,' in html
-    assert '<span class="comment-mention">@lena@test.com</span>.' in html
+    bea = reverse("public_profile", kwargs={"pk": cast.bystander.pk})
+    lena = reverse("public_profile", kwargs={"pk": cast.lead.pk})
+    assert f'<a href="{bea}" class="comment-mention">@BEA@test.com</a>,' in html
+    assert f'<a href="{lena}" class="comment-mention">@lena@test.com</a>.' in html
 
 
 @pytest.mark.django_db
@@ -440,3 +449,38 @@ def test_the_box_posts_the_people_it_highlights(client, cast):
     assert 'aria-live="polite" x-text="taggedSummary"' in html
     assert ".mention-backdrop mark {" in html
     assert ".comment-mention {" in html
+
+
+# ---------------------------------------------------------------------------
+# Names link to profiles
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+def test_the_commenters_name_opens_their_profile(client, cast):
+    Comment.objects.create(task=cast.task, author=cast.assignee_member, content="hi")
+    asha = reverse("public_profile", kwargs={"pk": cast.assignee.pk})
+    client.force_login(cast.bystander)
+    for url in (cast.pane_url(), cast.detail_url()):
+        html = client.get(url).content.decode()
+        assert f'<a href="{asha}"\n               class="comment-author' in html
+        assert ">Asha Rao</a>" in html
+
+
+@pytest.mark.django_db
+def test_a_name_two_tagged_people_share_is_highlighted_but_not_linked(cast):
+    """Which of them "@Ben Okafor" means cannot be told, so it links to
+    neither; each one's address still links to them."""
+    ben1 = _user("ben1@test.com", "Ben", "Okafor")
+    ben2 = _user("ben2@test.com", "Ben", "Okafor")
+    _join(cast.project, ben1)
+    _join(cast.project, ben2)
+    comment = Comment.objects.create(
+        task=cast.task,
+        author=cast.assignee_member,
+        content="@Ben Okafor and @Ben Okafor, i.e. @ben2@test.com",
+    )
+    CommentMention.objects.create(comment=comment, user=ben1)
+    CommentMention.objects.create(comment=comment, user=ben2)
+    html = render_to_string("comments/comment_item.html", {"comment": comment, "task": cast.task})
+    assert html.count('<span class="comment-mention">@Ben Okafor</span>') == 2
+    ben2_url = reverse("public_profile", kwargs={"pk": ben2.pk})
+    assert f'<a href="{ben2_url}" class="comment-mention">@ben2@test.com</a>' in html
