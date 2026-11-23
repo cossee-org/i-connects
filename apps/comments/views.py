@@ -29,11 +29,12 @@ NOT_A_PARTICIPANT = "Only the task's creator, assignees and reviewers can commen
 
 
 def mention_candidates(project, user) -> list[dict]:
-    """The people the @ list in a comment box offers ``user``: everyone who
-    can open the task bar themselves. Names and ids only — the list is
-    printed into the page, and email addresses have no business there."""
+    """The people the @ list in a comment box offers ``user``: the project's
+    contributors bar themselves, by name and email — the same two things the
+    Contributors page already shows every member — so two people with one
+    name can be told apart, and someone can be found by their address."""
     return [
-        {"id": u.pk, "name": u.display_name}
+        {"id": u.pk, "name": u.display_name, "email": u.email}
         for u in mentionable_users(project).exclude(pk=user.pk)
     ]
 
@@ -136,7 +137,8 @@ class CommentEditView(LoginRequiredMixin, View):
                 "mention_data": {
                     "candidates": mention_candidates(task.project, request.user),
                     "selected": [
-                        {"id": m.user_id, "name": m.user.display_name} for m in mentioned
+                        {"id": m.user_id, "name": m.user.display_name, "email": m.user.email}
+                        for m in mentioned
                     ],
                 },
             },

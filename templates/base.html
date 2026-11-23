@@ -550,10 +550,13 @@
   {% comment %}
     Comment box @ list (comments/mention_list.html). The form carries
     x-data="mentionBox()" and holds a JSON script of {candidates, selected}.
-    Typing @ at the start of a word opens the people whose name has a word
-    starting with what follows it (ignoring case and accents); picking one
-    replaces the @query with "@Name " and adds them to the tags the form
-    posts. The textarea is the combobox: it keeps focus throughout, and
+    Typing @ at the start of a word opens the project's contributors whose
+    name has a word starting with each word typed after it, or whose email
+    starts with what was typed (ignoring case and accents); each is listed
+    with their email. Picking one replaces the @query with "@Name " and adds
+    them to the tags the form posts. An address typed out in full
+    (@someone@example.org) tags its owner without a pick; the server reads
+    it from the text. The textarea is the combobox: it keeps focus throughout, and
     arrows, Enter/Tab and Escape drive the list only while it is open.
   {% endcomment %}
   <script>
@@ -604,20 +607,22 @@
           }
         },
         search: function () {
-          var text = this.box.value, caret = this.box.selectionStart;
-          var at = text.lastIndexOf("@", caret - 1);
-          // An @ that starts a word, with no line break between it and the caret.
-          if (at < 0 || (at > 0 && !/\s/.test(text[at - 1]))) return this.close();
-          var query = text.slice(at + 1, caret);
-          if (/[\n@]/.test(query) || query.length > 40) return this.close();
-          var words = fold(query).split(/\s+/).filter(Boolean);
+          var caret = this.box.selectionStart;
+          // The last @ that starts a word before the caret, on this line. The
+          // query may hold an @ of its own (an address being typed), but not
+          // one that starts another word.
+          var m = /(?:^|\s)@((?:(?!\s@)[^\n]){0,60})$/.exec(this.box.value.slice(0, caret));
+          if (!m) return this.close();
+          var query = fold(m[1]);
+          var words = query.split(/\s+/).filter(Boolean);
           this.results = this.candidates.filter(function (c) {
+            if (query && fold(c.email).indexOf(query.trim()) === 0) return true;
             var parts = fold(c.name).split(/\s+/);
             return words.every(function (w) {
               return parts.some(function (p) { return p.indexOf(w) === 0; });
             });
           }).slice(0, 8);
-          this.start = at;
+          this.start = caret - m[1].length - 1;
           this.active = 0;
           this.open = this.results.length > 0;
         },

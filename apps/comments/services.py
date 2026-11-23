@@ -4,10 +4,12 @@ Commenting on a task is for the people working on it: the member who created
 it, its assignees and its reviewers. Everyone else in the project can read
 the thread but not add to it — which also means they cannot tag anyone.
 
-A tag is ``@Name`` in the comment's text plus the person's id, sent alongside
-by the comment box (see ``CommentForm``). Anyone who can open the task may be
-tagged, so a participant can pull in a Lead or a colleague, who then gets an
-in-app notification and, unless they turned it off, an email.
+Only the project's contributors can be tagged — the people on its
+Contributors list, Leads and Members alike. A tag is written either as
+``@Name``, picked from the comment box's @ list (which sends the person's id
+alongside, see ``CommentForm``), or as ``@email``, which needs no picking:
+emails are unique, so the address alone says who. A tagged contributor gets
+an in-app notification and, unless they turned it off, an email.
 """
 
 from __future__ import annotations
@@ -17,9 +19,7 @@ from typing import Iterable
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Q
 
-from apps.core.enums import MemberPrivileges
 from apps.projects.models import ProjectMember
 
 from .models import Comment, CommentMention
@@ -58,50 +58,69 @@ def can_comment(user, task) -> bool:
 # Who may be tagged
 # ---------------------------------------------------------------------------
 def mentionable_users(project):
-    """The active users who can open ``project``'s tasks, and so can be tagged.
+    """The project's contributors: the only people a comment can tag.
 
-    The same people ``ProjectContextMixin`` lets in: an individual membership
-    that has not left, or a Lead's privilege. A tag sends a link to the task,
-    and a link to a page that answers 403 is no use to anyone.
+    The active users on its Contributors list — each individual membership
+    that has not left the project, Leads and Members alike. The same people
+    can open the task the tag links to. Someone holding a Lead privilege with
+    no membership row is not on that list and cannot be tagged, nor can the
+    users of a team-shaped membership, who cannot open the project by it.
     """
     User = get_user_model()
     return (
-        User.objects.filter(is_active=True)
-        .filter(
-            Q(
-                project_memberships__project=project,
-                project_memberships__deleted=False,
-                project_memberships__name__isnull=True,
-            )
-            | Q(
-                project_privileges__project=project,
-                project_privileges__privilege=MemberPrivileges.PROJECT_MANAGER,
-            )
+        User.objects.filter(
+            is_active=True,
+            project_memberships__project=project,
+            project_memberships__deleted=False,
+            project_memberships__name__isnull=True,
         )
         .distinct()
         .order_by("given_name", "family_name", "name", "email")
     )
 
 
-def mention_pattern(names: Iterable[str]) -> re.Pattern | None:
-    """A regex matching ``@<name>`` for any of ``names``, as a whole word.
+# ``@`` starting a word, then an address. The domain needs a dot followed by
+# more of it, so the full stop that ends a sentence is not taken in.
+EMAIL_TAG = re.compile(r"(?<!\S)@([\w.+'-]+@[\w-]+(?:\.[\w-]+)+)")
 
-    Longest names first, so "@Ana Lima" is matched whole rather than as
-    "@Ana" followed by " Lima". The negative lookahead keeps "@Al" from
-    matching the start of "@Alice".
+# After an address: not more of one. "@bea@x.org" is not a tag in
+# "@bea@x.org.uk", nor in "@bea@x.org-west".
+_EMAIL_END = r"(?![\w-]|\.[\w-])"
+
+
+def mention_pattern(names: Iterable[str], emails: Iterable[str] = ()) -> re.Pattern | None:
+    """A regex matching ``@<name>`` or ``@<email>`` for any of those given.
+
+    Names are matched as written and as a whole word: longest first, so
+    "@Ana Lima" is matched whole rather than as "@Ana" followed by " Lima",
+    and the lookahead keeps "@Al" from matching the start of "@Alice".
+    Emails are matched ignoring case, and not as the start of a longer one.
     """
     names = sorted({n for n in names if n}, key=len, reverse=True)
-    if not names:
+    emails = sorted({e for e in emails if e}, key=len, reverse=True)
+    parts = []
+    if names:
+        parts.append("(?:" + "|".join(re.escape(n) for n in names) + r")(?!\w)")
+    if emails:
+        parts.append(
+            "(?i:" + "|".join(re.escape(e) for e in emails) + ")" + _EMAIL_END
+        )
+    if not parts:
         return None
-    return re.compile(
-        "@(?:" + "|".join(re.escape(n) for n in names) + r")(?!\w)"
-    )
+    return re.compile("@(?:" + "|".join(parts) + ")")
 
 
 def tagged_in(content: str, user) -> bool:
-    """Whether ``content`` still names ``user`` as ``@<their display name>``."""
-    pattern = mention_pattern([user.display_name])
+    """Whether ``content`` still names ``user`` as ``@<display name>`` or
+    ``@<email>``."""
+    pattern = mention_pattern([user.display_name], [user.email])
     return bool(pattern and pattern.search(content or ""))
+
+
+def emails_tagged_in(content: str) -> set[str]:
+    """Every address written as a tag (``@someone@example.org``) in
+    ``content``, lowercased."""
+    return {m.lower() for m in EMAIL_TAG.findall(content or "")}
 
 
 def sync_mentions(comment: Comment, users: Iterable) -> set[int]:

@@ -182,10 +182,24 @@ def test_an_author_taken_off_the_task_cannot_edit_but_can_delete(client, cast):
 # Who may be tagged
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-def test_anyone_who_can_open_the_task_can_be_tagged(cast):
+def test_only_contributors_can_be_tagged(cast):
+    """The Contributors list — Leads and Members alike — and no one else."""
     tagged = set(mentionable_users(cast.project))
     assert {cast.creator, cast.assignee, cast.reviewer, cast.bystander, cast.lead} <= tagged
     assert cast.outsider not in tagged
+
+    # A Lead privilege with no membership row is not on the Contributors list.
+    privileged = _user("pia@test.com", "Pia", "Holm")
+    ProjectPrivilege.objects.create(
+        project=cast.project, user=privileged, privilege=MemberPrivileges.PROJECT_MANAGER
+    )
+    # Nor is someone who is only on a team-shaped membership.
+    teamed = _user("tom@test.com", "Tom", "Ek")
+    ProjectMember.objects.create(project=cast.project, name="Divers").users.add(teamed)
+
+    tagged = set(mentionable_users(cast.project))
+    assert privileged not in tagged
+    assert teamed not in tagged
 
 
 @pytest.mark.django_db
@@ -200,14 +214,16 @@ def test_people_who_left_or_are_inactive_cannot_be_tagged(cast):
 
 
 @pytest.mark.django_db
-def test_the_at_list_names_but_does_not_email(client, cast):
-    """The page carries names and ids for the @ list, never addresses, and
-    leaves out the person writing."""
+def test_the_at_list_shows_each_contributors_name_and_email(client, cast):
+    """Names and emails, so two people with one name can be told apart — and
+    never the person writing, nor anyone who is not a contributor."""
     client.force_login(cast.assignee)
     html = client.get(cast.pane_url()).content.decode()
-    assert '"name": "Bea Lund"' in html
-    assert "bea@test.com" not in html
-    assert '"name": "Asha Rao"' not in html
+    assert '"name": "Bea Lund", "email": "bea@test.com"' in html
+    assert '"name": "Lena Park", "email": "lena@test.com"' in html
+    assert "asha@test.com" not in html
+    assert "otto@test.com" not in html
+    assert 'x-text="c.email"' in html
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +259,7 @@ def test_outsiders_bad_ids_and_yourself_are_dropped_not_refused(client, cast):
     response = client.post(
         cast.create_url(),
         {
-            "content": "@Otto Berg @Asha Rao @Ravi Shah",
+            "content": "@Otto Berg @otto@test.com @Asha Rao @asha@test.com @Ravi Shah",
             "mentioned_user_ids": [
                 cast.outsider.pk,
                 "nonsense",
@@ -261,6 +277,40 @@ def test_outsiders_bad_ids_and_yourself_are_dropped_not_refused(client, cast):
         {"content": "@Asha Rao", "mentioned_user_ids": [cast.assignee.pk]},
     )
     assert not comment.mentions.exists()
+
+
+@pytest.mark.django_db
+def test_an_email_typed_out_tags_its_owner_without_a_pick(client, cast):
+    """An address names one person, so the text alone is enough."""
+    response = _post(client, cast, cast.assignee, "cc @BEA@test.com, and @lena@test.com.")
+    assert response.status_code == 200
+    comment = cast.task.comments.get()
+    assert set(comment.mentions.values_list("user_id", flat=True)) == {
+        cast.bystander.pk,
+        cast.lead.pk,
+    }
+    html = response.content.decode()
+    assert '<span class="comment-mention font-medium text-brand-navy">@BEA@test.com</span>,' in html
+    assert '<span class="comment-mention font-medium text-brand-navy">@lena@test.com</span>.' in html
+
+
+@pytest.mark.django_db
+def test_a_picked_person_can_be_written_as_their_email(client, cast):
+    _post(client, cast, cast.assignee, "@bea@test.com see above", [cast.bystander])
+    assert list(CommentMention.objects.values_list("user_id", flat=True)) == [cast.bystander.pk]
+
+
+@pytest.mark.django_db
+def test_an_address_that_only_starts_like_a_contributors_is_not_a_tag(client, cast):
+    """Not typed out, and not left after picking Bea and lengthening it."""
+    _post(
+        client,
+        cast,
+        cast.assignee,
+        "@bea@test.com.au @bea@test.community @bea@test.com-west bea@test.com",
+        [cast.bystander],
+    )
+    assert not CommentMention.objects.exists()
 
 
 @pytest.mark.django_db
@@ -295,6 +345,14 @@ def test_a_tagged_person_is_notified_and_emailed(client, cast, django_capture_on
     html = email.alternatives[0][0]
     assert "&lt;b&gt;approve&lt;/b&gt;" in html
     assert "<b>approve</b>" not in html
+
+
+@pytest.mark.django_db
+def test_an_email_tag_sends_the_email(client, cast, django_capture_on_commit_callbacks):
+    with django_capture_on_commit_callbacks(execute=True):
+        _post(client, cast, cast.assignee, "@ravi@test.com over to you")
+    assert [m.to for m in mail.outbox] == [["ravi@test.com"]]
+    assert Notification.objects.for_user(cast.reviewer).exists()
 
 
 @pytest.mark.django_db

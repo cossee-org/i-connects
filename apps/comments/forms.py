@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from django import forms
+from django.db.models.functions import Lower
 
 from apps.comments.models import Comment
-from apps.comments.services import tagged_in
+from apps.comments.services import emails_tagged_in, tagged_in
 
 # The comment box posts one of these per person picked from its @ list.
 MENTION_FIELD = "mentioned_user_ids"
@@ -55,21 +56,38 @@ class CommentForm(forms.ModelForm):
         return ids
 
     def clean(self):
-        """Keep the tags that still stand; drop the rest without complaint.
+        """Work out who the comment tags, quietly leaving out the rest.
 
-        A tag stands when the person may be tagged and their ``@Name`` is
-        still in the text. Anything else — a name deleted from the box after
-        it was picked, someone who left the project while the page was open,
-        an id that was never valid — is not worth refusing the comment over,
-        so it is quietly left out rather than raised as an error.
+        Two ways in, both limited to ``mentionable`` (the project's
+        contributors):
+
+        * a pick from the @ list, which sent the person's id, stands while
+          their ``@Name`` (or ``@email``) is still in the text;
+        * ``@email`` typed out stands on its own — an address names exactly
+          one person, so it needs no pick.
+
+        Anything else — a name deleted from the box after it was picked,
+        someone who is not a contributor, an id that was never valid, the
+        author tagging themselves — is not worth refusing the comment over,
+        so it is left out rather than raised as an error.
         """
         cleaned = super().clean()
+        if self.mentionable is None:
+            return cleaned
         content = cleaned.get("content") or ""
         ids = self._submitted_mention_ids()
+        emails = emails_tagged_in(content)
+        tagged = {}
+        if ids:
+            for u in self.mentionable.filter(pk__in=ids):
+                if tagged_in(content, u):
+                    tagged[u.pk] = u
+        if emails:
+            for u in self.mentionable.annotate(email_lower=Lower("email")).filter(
+                email_lower__in=emails
+            ):
+                tagged[u.pk] = u
         if self.author_user is not None:
-            ids.discard(self.author_user.pk)
-        if ids and self.mentionable is not None:
-            self.mentioned_users = [
-                u for u in self.mentionable.filter(pk__in=ids) if tagged_in(content, u)
-            ]
+            tagged.pop(self.author_user.pk, None)
+        self.mentioned_users = list(tagged.values())
         return cleaned
