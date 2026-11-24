@@ -834,6 +834,8 @@ def test_a_lead_opens_the_email_in_a_modal_with_its_metadata(
     content = response.content.decode()
     assert 'class="modal-box' in content
     assert "<html" not in content.lower()  # a fragment, not a page
+    # The app's corner close button, as on its other modals.
+    assert 'class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">&times;</button>' in content
     for text in ("Coral survey", user.email, "noreply@test.com", "lead@test.com",
                  "Mailing list message", "See you at the reef."):
         assert text in content
