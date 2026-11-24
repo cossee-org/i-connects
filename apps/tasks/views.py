@@ -773,7 +773,7 @@ def _completion_locked(task) -> bool:
     contributors have already been credited for under the task's type. Letting
     that be rewritten in place would rewrite the record behind the credit.
 
-    A lock rather than a wall: completion is reversible, and Mark Not Complete
+    A lock rather than a wall: completion is reversible, and Re-open Task
     is the action a completed task still offers its Lead.
 
     Board position is deliberately left out. Which column a task sits in is
@@ -1911,7 +1911,7 @@ class TaskMemberDoneView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     records the Lead as ``completed_by``, so it never reads as the assignee's
     own click.
 
-    Deliberately *not* what Mark Completed does: closing a task still writes
+    Deliberately *not* what Close Task does: closing a task still writes
     no marks on anybody's behalf. This is a separate, explicit, per-person
     action, and like every other mark it closes once the task is completed.
 
