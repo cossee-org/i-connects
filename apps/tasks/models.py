@@ -201,16 +201,31 @@ class TaskQuerySet(models.QuerySet):
         "verify": Q(has_to_verify=True),
     }
 
+    #: A task waiting on an action from the user: a part of theirs still to
+    #: mark done, or a submission to review or verify. Whatever the task's
+    #: status — a Lead's closing it leaves an assignee's mark open
+    #: (``services.mark_own_done``), and closed tasks take reviews and
+    #: verifications too.
+    MY_LIST_NEEDS_ACTION = (
+        MY_LIST_TABS["assigned"] | MY_LIST_TABS["review"] | MY_LIST_TABS["verify"]
+    )
+
+    #: On :meth:`on_my_list` only for a part the user has marked done —
+    #: nothing left for them to do. The Tasks page leaves these out unless
+    #: its "Include marked done" box is ticked.
+    MY_LIST_MARKED_DONE_ONLY = ~MY_LIST_NEEDS_ACTION
+
     def my_list_counts(self, user):
-        """How many open tasks (no Lead has closed them) ``user`` has on the
-        Tasks page, in one query: ``total`` (the All tab) and one count per
-        tab in :attr:`MY_LIST_TABS`. Whatever the page's search and filters,
-        so the sidebar, the page's header and its tabs give the same
-        totals."""
+        """How many tasks on the Tasks page wait on an action from ``user``,
+        in one query: ``total`` (the All tab) and one count per tab in
+        :attr:`MY_LIST_TABS`, plus ``done``, the tasks "Include marked done"
+        adds. Whatever the page's search and filters, so the sidebar, the
+        page's header and its tabs give the same totals."""
         from django.db.models import Count
 
-        return self.on_my_list(user).filter(status=TaskStatus.NOT_COMPLETED).aggregate(
-            total=Count("pk"),
+        return self.on_my_list(user).aggregate(
+            total=Count("pk", filter=self.MY_LIST_NEEDS_ACTION),
+            done=Count("pk", filter=self.MY_LIST_MARKED_DONE_ONLY),
             **{
                 tab: Count("pk", filter=condition)
                 for tab, condition in self.MY_LIST_TABS.items()

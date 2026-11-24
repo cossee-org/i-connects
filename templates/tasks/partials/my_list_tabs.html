@@ -2,7 +2,8 @@
   The All tasks page's tabs — All, Assigned, To Review, To Verify — in the
   Requests page's brand-tab style. A tab sets the filter form's ``type``
   and submits it, so the search and the other filters carry over and the
-  list starts again from page one. Each tab carries its total of open tasks
+  list starts again from page one. Each tab carries its total of tasks
+  waiting on the user
   (views.MyTaskListView.task_tabs, from TaskQuerySet.my_list_counts) —
   All's is the header's and the sidebar's — whatever the search and
   filters, which the results summary counts instead.

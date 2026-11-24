@@ -115,22 +115,27 @@ from apps.tasks.services import (
 
 
 class MyTaskListView(LoginRequiredMixin, ListView):
-    """Tasks touching the current user, across all of their projects: those
-    assigned to the user, and those with a submission waiting on the user's
-    review or verification, merged into a single list. The page's tabs
-    (``?type=``) narrow that down: All, Assigned (assigned to the user,
-    their part not yet marked done — All keeps the parts they have marked), To
-    Review (the user reviews the task and an assignee's part is marked done
-    and not yet reviewed) and To Verify (a task in a project the user leads
-    with a part marked done and not yet verified — and reviewed, where the
-    task requires review).
+    """Tasks waiting on an action from the current user, across all of
+    their projects: a part of theirs still to mark done, or a submission
+    waiting on their review or verification, merged into a single list. The
+    page's tabs (``?type=``) narrow that down: All, Assigned (their part not
+    yet marked done), To Review (the user reviews the task and an assignee's
+    part is marked done and not yet reviewed) and To Verify (a task in a
+    project the user leads with a part marked done and not yet verified —
+    and reviewed, where the task requires review).
 
-    The "Status" filter reads whether a Lead has closed the task: by
-    default only tasks no Lead has closed ("Open") are shown; it can switch
-    to closed tasks only ("Closed") or "All". Excludes tasks the user merely
-    created, and tasks they review or lead with nothing waiting on them. The
-    one place tasks can be filtered and browsed across projects; paginated
-    so a heavy task load never gets fetched at once.
+    Parts the user has marked done, with nothing else on the task waiting
+    on them, are left out unless the "Include marked done" box
+    (``?done=1``) is ticked; on the All and Assigned tabs it brings them
+    back.
+
+    The "Status" filter reads whether a Lead has closed the task. Its
+    default, "All", leaves that aside, since a closed task can still wait on
+    the user (``TaskQuerySet.MY_LIST_NEEDS_ACTION``); "Open" and "Closed"
+    narrow to either. Excludes tasks the user merely created, and tasks they
+    review or lead with nothing waiting on them. The one place tasks can be
+    filtered and browsed across projects; paginated so a heavy task load
+    never gets fetched at once.
     """
 
     model = Task
@@ -166,7 +171,10 @@ class MyTaskListView(LoginRequiredMixin, ListView):
 
     def _current_status(self):
         status = self.request.GET.get("status", "")
-        return status if status in self._STATUSES else "not_completed"
+        return status if status in self._STATUSES else "all"
+
+    def _include_done(self):
+        return self.request.GET.get("done", "") == "1"
 
     def _current_type(self):
         task_type = self.request.GET.get("type", "")
@@ -182,23 +190,30 @@ class MyTaskListView(LoginRequiredMixin, ListView):
     def _apply_status_filter(self, qs, status_filter):
         """Restrict by whether a Lead has marked the task complete (closed
         it: ``services.close_task``), which is what ``Task.status`` records.
-        "not_completed" (the default, "Open") shows only tasks no Lead has
-        closed; "completed" ("Closed") only the ones a Lead has;
-        "all" applies no filter. A part's own done mark plays no part here:
-        the Assigned tab handles that (``_apply_type_filter``), so a closed
-        task waiting on a review or verification shows under Complete."""
+        "all" (the default) applies no filter; "not_completed" ("Open")
+        shows only tasks no Lead has closed; "completed" ("Closed") only the
+        ones a Lead has. A part's own done mark plays no part here: the
+        "Include marked done" box handles that (``_apply_type_filter``)."""
         if status_filter == "all":
             return qs
         if status_filter == "completed":
             return qs.filter(status=TaskStatus.COMPLETED)
         return qs.filter(status=TaskStatus.NOT_COMPLETED)
 
-    def _apply_type_filter(self, qs, task_type):
+    def _apply_type_filter(self, qs, task_type, include_done=False):
         """Narrow to a tab (TaskQuerySet.MY_LIST_TABS); All, "", is every
-        task. Assigned holds only parts the user has still to mark done,
-        whatever the status."""
-        condition = TaskQuerySet.MY_LIST_TABS.get(task_type)
-        return qs.filter(condition) if condition is not None else qs
+        task waiting on the user (TaskQuerySet.MY_LIST_NEEDS_ACTION).
+        ``include_done`` adds back the parts the user has marked done, on
+        All and on Assigned; To Review and To Verify hold only what waits on
+        the user either way."""
+        if include_done and task_type == "":
+            return qs
+        if include_done and task_type == "assigned":
+            return qs.filter(is_assigned=True)
+        condition = TaskQuerySet.MY_LIST_TABS.get(
+            task_type, TaskQuerySet.MY_LIST_NEEDS_ACTION
+        )
+        return qs.filter(condition)
 
     def _apply_common_filters(self, qs):
         """Search/project/priority filters (not sort, not the type
@@ -231,7 +246,9 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             .prefetch_related("assigned_members")
         )
         qs = self._apply_common_filters(qs)
-        qs = self._apply_type_filter(qs, self._current_type())
+        qs = self._apply_type_filter(
+            qs, self._current_type(), include_done=self._include_done()
+        )
         qs = self._apply_status_filter(qs, self._current_status())
 
         sort = self.request.GET.get("sort", "newest")
@@ -250,6 +267,7 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         current_priority = self.request.GET.get("priority", "")
         current_status = self._current_status()
         current_type = self._current_type()
+        include_done = self._include_done()
 
         context["current_q"] = current_q
         context["current_sort"] = current_sort
@@ -257,6 +275,7 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         context["current_priority"] = current_priority
         context["current_status"] = current_status
         context["current_type"] = current_type
+        context["include_done"] = include_done
 
         context["my_projects"] = (
             Project.objects.filter(privileges__user=user)
@@ -268,11 +287,13 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
 
-        # The header's and the tabs' numbers are the user's open-task
-        # totals, whatever the search and filters (the results summary gives
-        # the filtered count) -- the same numbers as the sidebar's badge.
+        # The header's and the tabs' numbers are the user's totals of tasks
+        # waiting on them, whatever the search and filters (the results
+        # summary gives the filtered count) -- the same numbers as the
+        # sidebar's badge. done_task_count: what "Include marked done" adds.
         counts = Task.objects.my_list_counts(user)
         context["total_task_count"] = counts["total"]
+        context["done_task_count"] = counts["done"]
         context["task_tabs"] = [
             {
                 "value": value,
@@ -288,8 +309,8 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         # The tab is where the user is, not a filter they set: it alone
         # brings up no results summary.
         has_filters = bool(
-            current_q or current_project or current_priority
-            or current_status != "not_completed"
+            current_q or current_project or current_priority or include_done
+            or current_status != "all"
         )
         if has_filters:
             parts = []
@@ -302,8 +323,10 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             elif current_type == "verify":
                 parts.append("to-verify")
             desc = (" ".join(parts) + " tasks") if parts else "tasks"
-            if current_status == "all":
-                desc += " (including closed)"
+            if include_done:
+                desc += " including marked done"
+            if current_status == "not_completed":
+                desc += " (open only)"
             elif current_status == "completed":
                 desc += " (closed only)"
             if current_project:

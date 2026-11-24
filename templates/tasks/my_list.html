@@ -21,7 +21,7 @@
            x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
            x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
            class="absolute left-0 mt-2 w-max max-w-80 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-30">
-        <p class="text-sm text-brand-text/70">Tasks across all of your projects: assigned to you, submissions waiting on your review, and, in projects you lead, contributions waiting on your verification.</p>
+        <p class="text-sm text-brand-text/70">Tasks waiting on you, across all of your projects: your parts still to mark done, submissions waiting on your review, and, in projects you lead, contributions waiting on your verification. Tick Include marked done to see the parts you have already marked.</p>
       </div>
     </div>
   </div>
@@ -52,13 +52,14 @@
 
   <div class="flex gap-3 w-full sm:w-auto flex-wrap items-center">
 
-    {# Status dropdown — Open (default) / Closed / All: the task's own status, which a Lead sets #}
+    {# Status dropdown — All (default) / Open / Closed: the task's own status, which a Lead sets. #}
+    {# All by default, since a closed task can still wait on the user. #}
     <div x-data="{
       open: false,
       options: [
+        {value: 'all', label: 'All'},
         {value: 'not_completed', label: 'Open'},
-        {value: 'completed', label: 'Closed'},
-        {value: 'all', label: 'All'}
+        {value: 'completed', label: 'Closed'}
       ],
       current: '{{ current_status }}',
       get label() { return 'Status' },
@@ -157,6 +158,21 @@
         </template>
       </div>
     </div>
+
+    {% comment %}
+      Include marked done: the page lists only tasks waiting on an action
+      from the user; ticked, it adds back the parts they have marked done
+      with nothing else on the task waiting on them (on All and Assigned).
+      The number is how many it adds. Submits the form like the dropdowns.
+    {% endcomment %}
+    <label class="inline-flex items-center gap-2 text-sm text-gray-600 cursor-pointer whitespace-nowrap">
+      <input type="checkbox" name="done" value="1"
+             class="checkbox checkbox-sm checkbox-primary"
+             {% if include_done %}checked{% endif %}
+             onchange="this.form.submit()">
+      Include marked done
+      {% if done_task_count %}<span class="text-xs text-brand-text/50">({{ done_task_count }})</span>{% endif %}
+    </label>
 
     {# Sort dropdown — last #}
     <div x-data="{

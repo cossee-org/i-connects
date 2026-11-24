@@ -32,8 +32,8 @@ def sidebar_counts(request):
     # excludes join requests the user sent out themselves.
     requests_total = pending_invitations_count + incoming_join_requests_count
 
-    # The Tasks page's total (its header and All tab): open tasks assigned
-    # to the user or waiting on their review or verification.
+    # The Tasks page's total (its header and All tab): tasks waiting on an
+    # action from the user -- a part to mark done, a review or a verification.
     active_tasks_total = Task.objects.my_list_counts(request.user)["total"]
 
     return {
