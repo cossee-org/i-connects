@@ -40,12 +40,13 @@ def send_templated_email(
     *,
     kind: str | None = None,
     project=None,
+    triggered_by=None,
 ) -> None:
     """Render three templates (subject, HTML body, text body) and send.
 
     Pass ``kind`` (an ``EmailKind``) for an email a project's Leads should be
     able to see in the email log, with the ``project`` it is about if there
-    is one. Without ``kind`` the email is sent unlogged, which is right for
+    is one and the member whose action sent it (``triggered_by``) if any. Without ``kind`` the email is sent unlogged, which is right for
     account emails only.
 
     ``to`` may be a list of strings or any iterable of email addresses.
@@ -67,4 +68,4 @@ def send_templated_email(
     # Imported here: communications depends on core, not the other way round.
     from apps.communications.services import send_logged
 
-    send_logged(msg, kind=kind, project=project)
+    send_logged(msg, kind=kind, project=project, triggered_by=triggered_by)

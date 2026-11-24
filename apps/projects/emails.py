@@ -39,7 +39,9 @@ def _absolute_url(path: str) -> str:
     return f"{site}{path}"
 
 
-def _send(*, subject, body_text, body_html, recipients, kind, project) -> None:
+def _send(
+    *, subject, body_text, body_html, recipients, kind, project, triggered_by=None
+) -> None:
     """Send one project email and record it in the project's email log.
 
     One message per recipient, so nobody sees the others' addresses and each
@@ -56,7 +58,13 @@ def _send(*, subject, body_text, body_html, recipients, kind, project) -> None:
             to=[recipient],
         )
         message.attach_alternative(body_html, "text/html")
-        send_logged(message, kind=kind, project=project, fail_silently=True)
+        send_logged(
+            message,
+            kind=kind,
+            project=project,
+            triggered_by=triggered_by,
+            fail_silently=True,
+        )
 
 
 def _invitation_url(invitation) -> str:
@@ -72,8 +80,11 @@ def _invitation_url(invitation) -> str:
     return _absolute_url(path)
 
 
-def send_invitation_email(invitation) -> None:
-    """Email ``invitation.email`` the accept/decline link."""
+def send_invitation_email(invitation, *, triggered_by=None) -> None:
+    """Email ``invitation.email`` the accept/decline link.
+
+    ``triggered_by`` is the Lead who sent (or resent) the invitation.
+    """
     context = {
         "invitation": invitation,
         "project": invitation.project,
@@ -89,6 +100,7 @@ def send_invitation_email(invitation) -> None:
         recipients=[invitation.email],
         kind=EmailKind.INVITATION,
         project=invitation.project,
+        triggered_by=triggered_by,
     )
 
 
@@ -138,6 +150,7 @@ def send_join_request_email_to_pms(*, join_request, pm_user_ids) -> None:
         recipients=recipients,
         kind=EmailKind.JOIN_REQUEST,
         project=project,
+        triggered_by=join_request.user,
     )
 
 
@@ -180,4 +193,6 @@ def send_join_request_decision_email(*, join_request, approved: bool) -> None:
         recipients=[recipient],
         kind=EmailKind.JOIN_REQUEST_DECISION,
         project=project,
+        # The Lead who approved or declined.
+        triggered_by=join_request.decided_by,
     )

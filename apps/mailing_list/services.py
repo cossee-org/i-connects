@@ -62,7 +62,9 @@ def _send_one(
         reply_to=reply_to,
     )
     msg.attach_alternative(html_body, "text/html")
-    send_logged(msg, kind=EmailKind.MAILING_LIST, project=project)
+    send_logged(
+        msg, kind=EmailKind.MAILING_LIST, project=project, triggered_by=sender
+    )
 
 
 @transaction.atomic

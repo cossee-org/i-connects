@@ -71,4 +71,5 @@ def send_comment_mention_email_task(comment_id: int, user_ids: list[int]) -> Non
             to=[user.email],
             kind=EmailKind.COMMENT_MENTION,
             project=task.project,
+            triggered_by=comment.author_user,
         )

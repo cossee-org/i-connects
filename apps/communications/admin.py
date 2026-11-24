@@ -9,9 +9,13 @@ from .models import EmailLog
 
 @admin.register(EmailLog)
 class EmailLogAdmin(admin.ModelAdmin):
-    list_display = ("sent_at", "kind", "to_email", "project", "subject", "status")
+    list_display = (
+        "sent_at", "kind", "to_email", "triggered_by", "project", "subject", "status"
+    )
     list_filter = ("kind", "status")
-    search_fields = ("to_email", "recipient__name", "subject", "project__name")
+    search_fields = (
+        "to_email", "recipient__name", "triggered_by__name", "subject", "project__name"
+    )
     date_hierarchy = "sent_at"
     # The email itself is for the project's Leads, on the email log, alone.
     exclude = ("text_body", "html_body")

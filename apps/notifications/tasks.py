@@ -99,8 +99,12 @@ def send_digest_email_task(user_id: int, frequency: str = "daily") -> None:
 
 
 @shared_task(name="notifications.broadcast_announcement")
-def broadcast_announcement_task(announcement_id: int) -> None:
-    """Email every recipient of an announcement notification."""
+def broadcast_announcement_task(announcement_id: int, sent_by_id: int | None = None) -> None:
+    """Email every recipient of an announcement notification.
+
+    ``sent_by_id`` is the admin who made the announcement, recorded in the
+    email log.
+    """
     from .models import Notification
 
     try:
@@ -121,6 +125,9 @@ def broadcast_announcement_task(announcement_id: int) -> None:
         "announcement": announcement,
         "project": announcement.project,
     }
+    sent_by = (
+        get_user_model().objects.filter(pk=sent_by_id).first() if sent_by_id else None
+    )
     for email in recipients:
         send_templated_email(
             subject_template="emails/announcement/subject.txt",
@@ -130,6 +137,7 @@ def broadcast_announcement_task(announcement_id: int) -> None:
             to=[email],
             kind=EmailKind.ANNOUNCEMENT,
             project=announcement.project,
+            triggered_by=sent_by,
         )
 
 

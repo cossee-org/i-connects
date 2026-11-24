@@ -80,4 +80,5 @@ def send_task_assigned_email_task(
         to=[user.email],
         kind=EmailKind.TASK_ASSIGNED,
         project=project,
+        triggered_by=assigned_by,
     )

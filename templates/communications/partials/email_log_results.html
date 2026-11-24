@@ -26,6 +26,7 @@
           <tr>
             <th scope="col">Sent</th>
             <th scope="col">To</th>
+            <th scope="col">Triggered by</th>
             <th scope="col">Email</th>
             <th scope="col">Subject</th>
             <th scope="col">Status</th>
@@ -47,6 +48,9 @@
                   {# An address with no account, such as an invitation not yet accepted. #}
                   <div class="font-medium text-brand-navy">{{ email.to_email }}</div>
                 {% endif %}
+              </td>
+              <td class="text-sm">
+                {% include "communications/partials/email_triggered_by.html" with link_class="block font-medium text-brand-navy hover:text-brand-coral" email_class="block text-xs text-brand-text/60" %}
               </td>
               <td class="text-xs text-brand-text/80 whitespace-nowrap">{{ email.get_kind_display }}</td>
               <td class="text-xs text-brand-text/80">{{ email.subject }}</td>

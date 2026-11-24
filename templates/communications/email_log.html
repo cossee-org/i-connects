@@ -18,7 +18,7 @@
 <div class="flex items-center gap-3 mb-6">
   <h2 class="text-lg font-semibold text-brand-navy">Email log</h2>
   <span id="email-log-total-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ paginator.count }}</span>
-  {% include "_components/info_popover.html" with label="Email log" body="The emails i-CONNECTS sent about this project, newest first: invitations, join requests, task assignments, comment tags, mailing list messages and announcements. Search looks in the recipient's name and address, the subject and the text of each email. View email shows an email exactly as it was sent. Sent means the email left i-CONNECTS; it cannot tell whether it reached the inbox or a spam folder. Only Leads can see this page." %}
+  {% include "_components/info_popover.html" with label="Email log" body="The emails i-CONNECTS sent about this project, newest first: invitations, join requests, task assignments, comment tags, mailing list messages and announcements. Triggered by is the member whose action sent the email; Automatic means i-CONNECTS sent it on its own. Search looks in the names and addresses of the recipient and of whoever triggered it, the subject and the text of each email. View email shows an email exactly as it was sent. Sent means the email left i-CONNECTS; it cannot tell whether it reached the inbox or a spam folder. Only Leads can see this page." %}
 </div>
 
 {# ── Search / filter bar — the same bar as People discovery's ─────────────── #}

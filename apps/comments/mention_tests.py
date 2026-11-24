@@ -444,6 +444,8 @@ def test_the_email_is_in_the_projects_email_log(cast):
     assert row.recipient == cast.bystander
     assert row.to_email == "bea@test.com"
     assert row.project == cast.project
+    # Set off by the comment's author.
+    assert row.triggered_by == cast.assignee
 
 
 @pytest.mark.django_db

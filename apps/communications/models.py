@@ -32,6 +32,10 @@ class EmailKind(models.TextChoices):
     DIGEST = "digest", "Activity digest"
 
 
+# Kinds i-CONNECTS sends on its own, with no member behind them.
+AUTOMATIC_KINDS = frozenset({EmailKind.DIGEST})
+
+
 class EmailStatus(models.TextChoices):
     SENT = "sent", "Sent"
     FAILED = "failed", "Failed"
@@ -60,6 +64,17 @@ class EmailLog(models.Model):
         on_delete=models.CASCADE,
         related_name="email_logs",
     )
+    # The member whose action sent the email: the Lead who invited, assigned
+    # or decided, the requester, the comment's author, the mailing list
+    # message's sender. Null for an email i-CONNECTS sends on its own (a
+    # digest), and for rows written before this was recorded.
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="triggered_email_logs",
+    )
     subject = models.CharField(max_length=255, blank=True, default="")
     status = models.CharField(
         max_length=16, choices=EmailStatus.choices, default=EmailStatus.SENT
@@ -79,6 +94,10 @@ class EmailLog(models.Model):
             models.Index(fields=["recipient", "-sent_at"]),
             models.Index(fields=["to_email"]),
         ]
+
+    @property
+    def is_automatic(self) -> bool:
+        return self.kind in AUTOMATIC_KINDS
 
     @property
     def has_body(self) -> bool:

@@ -22,6 +22,7 @@ from apps.projects.services import (
     approve_join_request,
     create_invitation,
     create_join_request,
+    resend_invitation,
     create_project_with_owner,
 )
 from apps.tasks.models import KanbanBoard, Task
@@ -194,6 +195,30 @@ def test_an_invitation_is_logged_to_an_address_without_an_account(project, pm_us
     assert row.recipient is None
     assert row.project == project
     assert row.subject == mail.outbox[-1].subject
+    assert row.triggered_by == pm_user
+
+
+@pytest.mark.django_db
+def test_a_resent_invitation_is_triggered_by_whoever_resent_it(
+    project, pm_user, other_user
+):
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.PROJECT_MANAGER
+    )
+    invitation = create_invitation(
+        project=project,
+        email="newcomer@test.com",
+        privilege=MemberPrivileges.CONTRIBUTOR,
+        added_by=pm_user.name,
+        inviter=pm_user,
+    )
+
+    resend_invitation(invitation=invitation, resender=other_user)
+
+    assert [row.triggered_by for row in EmailLog.objects.order_by("id")] == [
+        pm_user,
+        other_user,
+    ]
 
 
 @pytest.mark.django_db
@@ -211,6 +236,8 @@ def test_a_join_request_is_logged_for_each_lead_and_its_decision_for_the_request
 
     requests = EmailLog.objects.filter(kind=EmailKind.JOIN_REQUEST)
     assert {row.recipient for row in requests} == {pm_user, other_user}
+    # Set off by the person asking to join.
+    assert {row.triggered_by for row in requests} == {user}
     # Each Lead gets a message of their own, not one with every Lead on it.
     assert sorted(m.to for m in mail.outbox) == sorted(
         [[pm_user.email], [other_user.email]]
@@ -221,6 +248,8 @@ def test_a_join_request_is_logged_for_each_lead_and_its_decision_for_the_request
     decision = EmailLog.objects.get(kind=EmailKind.JOIN_REQUEST_DECISION)
     assert decision.recipient == user
     assert decision.project == project
+    # Set off by the Lead who decided.
+    assert decision.triggered_by == pm_user
 
 
 @pytest.mark.django_db
@@ -242,6 +271,7 @@ def test_a_task_assignment_email_is_logged_with_its_project(project, pm_user, us
     assert row.kind == EmailKind.TASK_ASSIGNED
     assert row.recipient == user
     assert row.project == project
+    assert row.triggered_by == pm_user
 
 
 @pytest.mark.django_db
@@ -272,6 +302,7 @@ def test_a_mailing_list_message_is_logged_for_each_recipient(
     # Everyone but the sender, who does not get a copy.
     assert {row.recipient for row in rows} == {user, other_user}
     assert {row.subject for row in rows} == {"[Coral reefs] Meeting"}
+    assert {row.triggered_by for row in rows} == {pm_user}
 
 
 @pytest.mark.django_db
@@ -284,6 +315,34 @@ def test_an_announcement_is_logged_for_each_recipient(project, user, other_user)
 
     rows = EmailLog.objects.filter(kind=EmailKind.ANNOUNCEMENT, project=project)
     assert {row.recipient for row in rows} == {user, other_user}
+    assert {row.triggered_by for row in rows} == {None}
+
+
+@pytest.mark.django_db
+def test_an_announcement_records_the_admin_who_sent_it(project, pm_user, user):
+    announcement = create_notification(
+        [user], title="News", project=project, announcement=True
+    )
+
+    broadcast_announcement_task(announcement.pk, sent_by_id=pm_user.pk)
+
+    assert EmailLog.objects.get().triggered_by == pm_user
+
+
+@pytest.mark.django_db
+def test_a_digest_is_triggered_by_no_one(user):
+    send_templated_email(
+        subject_template="emails/comment_mention/subject.txt",
+        html_template="emails/comment_mention/body.html",
+        text_template="emails/comment_mention/body.txt",
+        context={"user": user, "task": type("T", (), {"name": "x"})(), "project": None},
+        to=[user.email],
+        kind=EmailKind.DIGEST,
+    )
+
+    row = EmailLog.objects.get()
+    assert row.triggered_by is None
+    assert row.is_automatic
 
 
 # ---------------------------------------------------------------------------
@@ -920,3 +979,56 @@ def test_page_links_leave_out_the_bars_empty_fields(client, project, pm_user, us
     response = client.get(_log_url(project, q="", member="", kind="", per_page=25))
 
     assert response.context["filter_query"] == "per_page=25"
+
+
+# ---------------------------------------------------------------------------
+# Who triggered an email
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+def test_the_log_shows_who_triggered_each_email(client, project, pm_user, user):
+    _add_member(project, user)
+    _log(project, user, subject="By a Lead", triggered_by=pm_user)
+    _log(project, user, subject="Not recorded")
+    client.force_login(pm_user)
+
+    content = client.get(_log_url(project)).content.decode()
+
+    assert "Triggered by" in content
+    assert reverse("public_profile", kwargs={"pk": pm_user.pk}) in content
+    assert 'title="Not recorded"' in content
+
+
+@pytest.mark.django_db
+def test_the_modal_shows_who_triggered_the_email(client, project, pm_user, user):
+    _add_member(project, user)
+    email = _log(project, user, triggered_by=pm_user, text_body="Hi")
+    client.force_login(pm_user)
+
+    content = client.get(_detail_url(project, email), HTTP_HX_REQUEST="true").content.decode()
+
+    assert "Triggered by" in content
+    assert pm_user.email in content
+
+
+@pytest.mark.django_db
+def test_an_automatic_email_says_so(client, project, pm_user, user):
+    email = _log(project, user, kind=EmailKind.DIGEST, text_body="Your week")
+    client.force_login(pm_user)
+
+    content = client.get(_detail_url(project, email), HTTP_HX_REQUEST="true").content.decode()
+
+    assert "Automatic" in content
+
+
+@pytest.mark.django_db
+def test_search_finds_an_email_by_who_triggered_it(
+    client, project, pm_user, user, other_user
+):
+    _add_member(project, user)
+    _log(project, user, subject="From the Lead", triggered_by=pm_user)
+    _log(project, user, subject="From someone else", triggered_by=other_user)
+    client.force_login(pm_user)
+
+    response = client.get(_log_url(project, q=pm_user.email))
+
+    assert [e.subject for e in response.context["emails"]] == ["From the Lead"]

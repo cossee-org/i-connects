@@ -22,8 +22,18 @@ from .models import EmailLog, EmailStatus
 logger = logging.getLogger(__name__)
 
 
-def send_logged(message, *, kind: str, project=None, fail_silently: bool = False) -> int:
+def send_logged(
+    message,
+    *,
+    kind: str,
+    project=None,
+    triggered_by=None,
+    fail_silently: bool = False,
+) -> int:
     """Send ``message`` and log one row per address in ``message.to``.
+
+    ``triggered_by`` is the member whose action sent it, if any — None for
+    an email i-CONNECTS sends on its own.
 
     Returns the number of messages the backend accepted, as
     ``EmailMessage.send`` does. A send that raises is logged as failed with
@@ -39,13 +49,17 @@ def send_logged(message, *, kind: str, project=None, fail_silently: bool = False
         error = f"{type(exc).__name__}: {exc}"[:1000]
         if fail_silently:
             logger.warning("send_logged: %s email failed: %s", kind, error)
-        _record(message, kind=kind, project=project, error=error)
+        _record(
+            message, kind=kind, project=project, triggered_by=triggered_by, error=error
+        )
         if not fail_silently:
             raise
         return 0
     if not sent:
         error = "The mail backend did not accept the message."
-    _record(message, kind=kind, project=project, error=error)
+    _record(
+        message, kind=kind, project=project, triggered_by=triggered_by, error=error
+    )
     return sent
 
 
@@ -56,7 +70,7 @@ def _html_alternative(message) -> str:
     return ""
 
 
-def _record(message, *, kind, project, error) -> None:
+def _record(message, *, kind, project, triggered_by, error) -> None:
     addresses = [a for a in (message.to or []) if a]
     if not addresses:
         return
@@ -85,6 +99,7 @@ def _record(message, *, kind, project, error) -> None:
                     to_email=address,
                     recipient=users.get(address.lower()),
                     project=project,
+                    triggered_by=triggered_by,
                     subject=(message.subject or "")[:255],
                     status=EmailStatus.FAILED if error else EmailStatus.SENT,
                     error=error,

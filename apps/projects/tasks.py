@@ -33,8 +33,13 @@ def _invitation_url(invitation) -> str:
 
 
 @shared_task(name="projects.send_invitation_email")
-def send_invitation_email_task(invitation_id: int) -> None:
-    """Email the invitee with the accept/decline link."""
+def send_invitation_email_task(invitation_id: int, inviter_id: int | None = None) -> None:
+    """Email the invitee with the accept/decline link.
+
+    ``inviter_id`` is the Lead who sent it, recorded in the email log.
+    """
+    from django.contrib.auth import get_user_model
+
     from .models import Invitation
 
     try:
@@ -56,4 +61,7 @@ def send_invitation_email_task(invitation_id: int) -> None:
         to=[invitation.email],
         kind=EmailKind.INVITATION,
         project=invitation.project,
+        triggered_by=(
+            get_user_model().objects.filter(pk=inviter_id).first() if inviter_id else None
+        ),
     )

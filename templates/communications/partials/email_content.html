@@ -23,6 +23,9 @@
     {% endif %}
   </dd>
 
+  <dt class="text-brand-text/60">Triggered by</dt>
+  <dd class="break-words">{% include "communications/partials/email_triggered_by.html" with brackets=True %}</dd>
+
   {% if email.from_email %}
     <dt class="text-brand-text/60">From</dt>
     <dd class="break-words">{{ email.from_email }}</dd>

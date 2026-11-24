@@ -49,8 +49,8 @@ class ProjectEmailLogView(
 
     Newest first, one row per email per recipient. ``?member=<user id>``
     narrows it to one current member, ``?kind=`` to one kind of email, and
-    ``?q=`` searches the recipient's name and address, the subject and the
-    text of the email. ``?per_page=`` picks 25, 50 or 100 rows a page. A
+    ``?q=`` searches the recipient's name and address, the name and address
+    of the member who triggered it, the subject and the text of the email. ``?per_page=`` picks 25, 50 or 100 rows a page. A
     value that matches nothing is ignored rather than an error, and a page
     past the end shows the last one, so a stale link still opens the log.
     Each row's View button opens the email itself
@@ -109,7 +109,7 @@ class ProjectEmailLogView(
 
     def get_queryset(self):
         queryset = EmailLog.objects.filter(project=self.project).select_related(
-            "recipient"
+            "recipient", "triggered_by"
         )
         self.selected_member = next(
             (u for u in self._members() if str(u.pk) == self.request.GET.get("member")),
@@ -131,6 +131,8 @@ class ProjectEmailLogView(
                 | Q(recipient__name__icontains=q)
                 | Q(recipient__given_name__icontains=q)
                 | Q(recipient__family_name__icontains=q)
+                | Q(triggered_by__name__icontains=q)
+                | Q(triggered_by__email__icontains=q)
                 | Q(subject__icontains=q)
                 | Q(text_body__icontains=q)
             )
@@ -212,7 +214,7 @@ class ProjectEmailDetailView(
 
     def get_queryset(self):
         return EmailLog.objects.filter(project=self.project).select_related(
-            "recipient"
+            "recipient", "triggered_by"
         )
 
     def get_context_data(self, **kwargs):
