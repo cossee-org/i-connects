@@ -73,7 +73,7 @@ class AuditAction(models.TextChoices):
     TASK_CREATED = "task.created", "Task created"
     TASK_UPDATED = "task.updated", "Task updated"
     TASK_DELETED = "task.deleted", "Task deleted"
-    TASK_COMPLETED = "task.completed", "Task marked complete"
+    TASK_COMPLETED = "task.completed", "Task closed"
     TASK_APPROVED = "task.approved", "Task completion approved"
     TASK_REJECTED = "task.rejected", "Task completion rejected"
     TASK_REVIEWED = "task.reviewed", "Task submission reviewed"

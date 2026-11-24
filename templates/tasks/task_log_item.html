@@ -18,9 +18,9 @@
       </div>
       <div class="flex gap-1 items-center flex-wrap">
         {% if log.status == "COMPLETED" %}
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success">Completed</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success">Done</span>
         {% else %}
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-light/50 text-brand-text">Not completed</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-light/50 text-brand-text">Not done</span>
         {% endif %}
         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-lighter text-brand-navy border border-brand-light">{{ log.completed_as }}</span>
         {% if log.approved is True %}

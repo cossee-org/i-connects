@@ -1108,8 +1108,9 @@ def test_dashboard_active_task_list_orders_by_deadline_and_caps(client, user):
 
 @pytest.mark.django_db
 def test_dashboard_active_task_list_flags_review_work_and_skips_finished_tasks(client, user):
-    """A task the user only reviews is listed and marked "To review"; tasks
-    the user has already marked complete, and closed tasks, are not listed."""
+    """A task the user only reviews is listed and marked "To review" once a
+    submission waits on their review; tasks the user has already marked
+    complete, and closed tasks, are not listed."""
     from apps.tasks.models import TaskLog
 
     project = create_project_with_owner(
@@ -1120,6 +1121,11 @@ def test_dashboard_active_task_list_flags_review_work_and_skips_finished_tasks(c
 
     reviewing = _task(project, member, "Task to review")
     reviewing.reviewers.add(member)
+    submitter = ProjectMember.objects.create(project=project)
+    reviewing.assigned_members.add(submitter)
+    TaskLog.objects.create(
+        task=reviewing, assigned_to=submitter, status=TaskStatus.COMPLETED
+    )
 
     self_marked = _task(project, member, "Task I finished")
     self_marked.assigned_members.add(member)
@@ -1753,7 +1759,7 @@ def test_summary_reports_activity(client, user, other_user):
 
     # Recent activity covers completions and done marks, newest first.
     verbs = [e["verb"] for e in summary["activity"]]
-    assert "completed" in verbs and "marked their part done on" in verbs
+    assert "closed" in verbs and "marked their part done on" in verbs
     whens = [e["when"] for e in summary["activity"]]
     assert whens == sorted(whens, reverse=True)
     assert all(e["ago"] == "just now" for e in summary["activity"])
@@ -1814,7 +1820,7 @@ def test_summary_activity_lists_reviews_verifications_and_who_completed(client, 
     assert lines[0] == ("Alice", "verified Bob's part on", "Reviewed one")
     assert ("Alice", "reviewed Carol's part on", "Reviewed one") in lines
     assert ("Alice", "completed", "Reviewed one") not in lines
-    assert ("Alice", "completed", "Closed by hand") in lines
+    assert ("Alice", "closed", "Closed by hand") in lines
 
     body = response.content.decode()
     assert "verified Bob&#x27;s part on" in body

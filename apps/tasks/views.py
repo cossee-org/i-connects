@@ -116,16 +116,21 @@ from apps.tasks.services import (
 
 class MyTaskListView(LoginRequiredMixin, ListView):
     """Tasks touching the current user, across all of their projects: those
-    assigned to the user and those where the user is a reviewer, merged into
-    a single list. The "Type" filter narrows that down to just tasks
-    assigned to the user, or just tasks where the user is a reviewer.
+    assigned to the user, and those with a submission waiting on the user's
+    review or verification, merged into a single list. The page's tabs
+    (``?type=``) narrow that down: All, Assigned (assigned to the user,
+    their part not yet marked done — All keeps the parts they have marked), To
+    Review (the user reviews the task and an assignee's part is marked done
+    and not yet reviewed) and To Verify (a task in a project the user leads
+    with a part marked done and not yet verified — and reviewed, where the
+    task requires review).
 
-    By default only active ("Not completed") tasks are shown, matching the
-    dashboard's task counts; the "Status" filter can switch to "Completed"
-    only or "All" regardless of status. Excludes tasks the user merely
-    created or that are assigned to others. The one place tasks can be
-    filtered and browsed across projects; paginated so a heavy task load
-    never gets fetched at once.
+    The "Status" filter reads whether a Lead has closed the task: by
+    default only tasks no Lead has closed ("Open") are shown; it can switch
+    to closed tasks only ("Closed") or "All". Excludes tasks the user merely
+    created, and tasks they review or lead with nothing waiting on them. The
+    one place tasks can be filtered and browsed across projects; paginated
+    so a heavy task load never gets fetched at once.
     """
 
     model = Task
@@ -149,7 +154,14 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         "name_desc": "-name",
     }
 
-    _TYPES = ("assigned", "review")
+    #: The page's tabs, in order: ``?type=`` value -> label. "" is All.
+    TABS = (
+        ("", "All"),
+        ("assigned", "Assigned"),
+        ("review", "To Review"),
+        ("verify", "To Verify"),
+    )
+    _TYPES = ("assigned", "review", "verify")
     _STATUSES = ("not_completed", "completed", "all")
 
     def _current_status(self):
@@ -168,39 +180,49 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             .order_by("-created_at")
             .values("status")[:1]
         )
-        return Task.objects.filter(
-            Q(assigned_members__users=user) | Q(reviewers__users=user)
-        ).with_my_deadline(user).annotate(
-            user_log_status=latest_log_status,
-            is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
-            is_reviewing=Exists(user_member_qs.filter(reviewed_tasks=OuterRef("pk"))),
+        return (
+            # has_to_review / has_to_verify: the To Review and To Verify
+            # tabs' rules (TaskQuerySet.with_waiting_on).
+            Task.objects.with_my_deadline(user)
+            .with_waiting_on(user)
+            .annotate(
+                user_log_status=latest_log_status,
+                is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
+            )
+            .filter(
+                Q(is_assigned=True) | Q(has_to_review=True) | Q(has_to_verify=True)
+            )
         )
 
     def _apply_status_filter(self, qs, status_filter):
-        """Restrict by completion status. "all" applies no filter; "completed"
-        shows only fully-completed tasks; the default "not_completed" matches
-        the dashboard's task counts."""
+        """Restrict by whether a Lead has marked the task complete (closed
+        it: ``services.close_task``), which is what ``Task.status`` records.
+        "not_completed" (the default, "Open") shows only tasks no Lead has
+        closed; "completed" ("Closed") only the ones a Lead has;
+        "all" applies no filter. A part's own done mark plays no part here:
+        the Assigned tab handles that (``_apply_type_filter``), so a closed
+        task waiting on a review or verification shows under Complete."""
         if status_filter == "all":
             return qs
         if status_filter == "completed":
             return qs.filter(status=TaskStatus.COMPLETED)
-        # NULL-safe: a task with no TaskLog yet has user_log_status=NULL, and
-        # `.exclude(user_log_status=COMPLETED)` would silently drop it too
-        # (NOT (NULL = COMPLETED) is NULL/false in SQL), so it must be kept
-        # explicitly — matching the dashboard's active_task_count logic. Only
-        # applies to tasks the user is assigned to; a review-only task is
-        # judged by the task's own status alone.
-        return qs.filter(status=TaskStatus.NOT_COMPLETED).filter(
-            Q(is_assigned=False)
-            | Q(user_log_status__isnull=True)
-            | ~Q(user_log_status=TaskStatus.COMPLETED)
-        )
+        return qs.filter(status=TaskStatus.NOT_COMPLETED)
 
     def _apply_type_filter(self, qs, task_type):
         if task_type == "assigned":
-            return qs.filter(is_assigned=True)
+            # Only parts the user has still to mark done. NULL-safe: a task
+            # with no TaskLog yet for the user has user_log_status=NULL, and
+            # `~Q(user_log_status=COMPLETED)` alone would silently drop it
+            # (NOT (NULL = COMPLETED) is NULL/false in SQL), so it is kept
+            # explicitly — matching the dashboard's active_task_count logic.
+            return qs.filter(is_assigned=True).filter(
+                Q(user_log_status__isnull=True)
+                | ~Q(user_log_status=TaskStatus.COMPLETED)
+            )
         if task_type == "review":
-            return qs.filter(is_reviewing=True)
+            return qs.filter(has_to_review=True)
+        if task_type == "verify":
+            return qs.filter(has_to_verify=True)
         return qs
 
     def _apply_common_filters(self, qs):
@@ -272,13 +294,30 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
 
-        context["total_task_count"] = self._apply_status_filter(
+        # The tabs' counts follow every filter but the tab itself; All's is
+        # the header total.
+        untyped = self._apply_status_filter(
             self._apply_common_filters(self._base_queryset()), current_status
-        ).count()
+        )
+        context["total_task_count"] = untyped.count()
+        context["task_tabs"] = [
+            {
+                "value": value,
+                "label": label,
+                "count": (
+                    self._apply_type_filter(untyped, value).count() if value else None
+                ),
+            }
+            for value, label in self.TABS
+        ]
+        # Clearing the filters keeps the user on their tab.
+        context["clear_filters_query"] = f"?type={current_type}" if current_type else ""
         context["now"] = timezone.now()
 
+        # The tab is where the user is, not a filter they set: it alone
+        # brings up no results summary.
         has_filters = bool(
-            current_q or current_project or current_priority or current_type
+            current_q or current_project or current_priority
             or current_status != "not_completed"
         )
         if has_filters:
@@ -288,12 +327,14 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             if current_type == "assigned":
                 parts.append("assigned")
             elif current_type == "review":
-                parts.append("review")
+                parts.append("to-review")
+            elif current_type == "verify":
+                parts.append("to-verify")
             desc = (" ".join(parts) + " tasks") if parts else "tasks"
             if current_status == "all":
-                desc += " (including completed)"
+                desc += " (including closed)"
             elif current_status == "completed":
-                desc += " (completed only)"
+                desc += " (closed only)"
             if current_project:
                 project_obj = next(
                     (p for p in context["my_projects"] if str(p.pk) == current_project),
@@ -328,8 +369,9 @@ BOARD_FILTERS = (
     ("overdue", "Overdue"),
     ("extended", "Extended"),
     ("high_priority", "High Priority"),
-    ("completed", "Completed"),
-    ("not_completed", "Not Completed"),
+    # The task's own status, which a Lead sets: Open, or Closed.
+    ("not_completed", "Open"),
+    ("completed", "Closed"),
 )
 
 
@@ -436,9 +478,9 @@ LIST_SORT_CHOICES = (
 )
 
 LIST_DONE_CHOICES = (
-    ("", "Any completion"),
-    ("complete", "Complete"),
-    ("not_complete", "Not complete"),
+    ("", "Any status"),
+    ("not_complete", "Open"),
+    ("complete", "Closed"),
 )
 
 LIST_PRIORITY_CHOICES = (
@@ -718,8 +760,7 @@ class BoardTablePartialView(LoginRequiredMixin, ProjectContextMixin, TemplateVie
 
 
 _COMPLETED_MESSAGE = (
-    "This task is marked completed. A Lead has to mark it not complete before "
-    "it can be changed."
+    "This task is closed. A Lead has to re-open it before it can be changed."
 )
 
 
@@ -732,7 +773,7 @@ def _completion_locked(task) -> bool:
     contributors have already been credited for under the task's type. Letting
     that be rewritten in place would rewrite the record behind the credit.
 
-    A lock rather than a wall: completion is reversible, and Mark Not Complete
+    A lock rather than a wall: completion is reversible, and Re-open Task
     is the action a completed task still offers its Lead.
 
     Board position is deliberately left out. Which column a task sits in is
@@ -1328,20 +1369,18 @@ class TaskChangeColumnView(
 
 
 _LOCKED_MESSAGE = (
-    "This task is marked completed. A Lead has to mark it not complete before "
-    "setting or clearing another member's done mark."
+    "This task is closed. A Lead has to re-open it before setting or "
+    "clearing another member's done mark."
 )
 
 _REVIEW_CLOSED_MESSAGE = (
-    "This part was marked done before the task was marked completed, so it "
-    "can no longer be reviewed. A Lead has to mark the task not complete "
-    "first."
+    "This part was marked done before the task was closed, so it can no "
+    "longer be reviewed. A Lead has to re-open the task first."
 )
 
 _REVIEW_LOCKED_MESSAGE = (
-    "This part was reviewed before the task was marked completed, so its "
-    "review is locked. A Lead has to mark the task not complete before it "
-    "can be withdrawn."
+    "This part was reviewed before the task was closed, so its review is "
+    "locked. A Lead has to re-open the task before it can be withdrawn."
 )
 
 def _marks_locked(task) -> bool:
@@ -1356,8 +1395,8 @@ def _marks_locked(task) -> bool:
     withdraw (``services.review_locked``) — though the assignee undoing their
     own mark still clears it — and a part marked before the task was
     completed and left unreviewed, which can no longer be reviewed
-    (``services.review_closed``); only parts marked after completion are. A Lead who needs to change either marks the
-    task Not Complete first.
+    (``services.review_closed``); only parts marked after completion are. A
+    Lead who needs to change either re-opens the task first (Re-open Task).
     """
     return task.status == TaskStatus.COMPLETED
 
@@ -1870,7 +1909,7 @@ class TaskMemberDoneView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     records the Lead as ``completed_by``, so it never reads as the assignee's
     own click.
 
-    Deliberately *not* what Mark Completed does: closing a task still writes
+    Deliberately *not* what Close Task does: closing a task still writes
     no marks on anybody's behalf. This is a separate, explicit, per-person
     action, and like every other mark it closes once the task is completed.
 
@@ -2078,8 +2117,8 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             )
         if self.task.status == TaskStatus.COMPLETED:
             return HttpResponseForbidden(
-                "This task is marked completed. Mark it not complete before "
-                "changing anyone's dates."
+                "This task is closed. Re-open it before changing anyone's "
+                "dates."
             )
         lead = self.project_member or _fallback_member(request.user, self.project)
         scope = "pending" if request.POST.get("scope") == "pending" else "member"

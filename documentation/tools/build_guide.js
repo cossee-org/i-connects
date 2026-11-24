@@ -202,14 +202,14 @@ const about = [
   h2("The example project"),
   p("Dr Maya Chen leads the **Coastal Seagrass Microbiome Survey**, which tracks contributions with the CRediT taxonomy. She works with three collaborators:"),
   ...table(["Person", "Role in the project", "What they do in this guide"], [
-    ["Maya Chen", "Lead", "Creates the project, invites the team, creates tasks, completes tasks, corrects the contribution record."],
+    ["Maya Chen", "Lead", "Creates the project, invites the team, creates tasks, closes tasks, corrects the contribution record."],
     ["Liam Okafor", "Member", "Accepts the invitation, marks his part of a task done, reviews a colleague's task, edits the wiki."],
     ["Sofia Ramirez", "Member", "Reviews the field-sampling task and writes the project's first wiki pages."],
     ["Kenji Watanabe", "Member", "Works on the field sampling and the sequencing-data clean-up."],
   ], [1900, 1900, 5560]),
   h2("Words used in this guide"),
   ...table(["Term", "Meaning"], [
-    ["Lead", "A project member with the Lead privilege. Leads invite people, create tasks, complete tasks and correct contributions. The person who creates a project is its first Lead."],
+    ["Lead", "A project member with the Lead privilege. Leads invite people, create tasks, close tasks and correct contributions. The person who creates a project is its first Lead."],
     ["Member", "Anyone else who belongs to the project. Members work on tasks, review them when asked, comment and write the wiki."],
     ["Assignee", "A member a task is assigned to. Each assignee marks their own part of the task done."],
     ["Reviewer", "A member asked to sign off the assignees' work on a task that requires review."],
@@ -275,7 +275,7 @@ const ch3 = [
     "Choose how contributions are tracked. Pick `Contributor Role Taxonomy (CRediT)` to record each member's contributions in CRediT's 14 roles; pick `None` if you do not need contribution tracking.",
   ]),
   ...figure("03_project_credit_menu", "Choosing CRediT contribution tracking."),
-  ...important("Choose CRediT when you create the project if you want i-CONNECTS to keep a record of who contributed what. On a project without it, tasks have no task type and completing them records no contributions."),
+  ...important("Choose CRediT when you create the project if you want i-CONNECTS to keep a record of who contributed what. On a project without it, tasks have no task type and closing them records no contributions."),
   ...steps(["Click `Create project`."]),
   ...figure("03_project_filled", "The completed new-project form."),
   p("The new project opens on its overview page. The `Lead` badge under the title shows your privilege in this project. The tabs give you access to everything in the project:"),
@@ -332,7 +332,7 @@ const ch5 = [
 
 const ch6 = [
   h1("6. Create a new task"),
-  p("Tasks are the units of work in a project. Each task has assignees who do the work, optionally reviewers who check it, and — on a CRediT project — a task type: the CRediT role its contributors are credited with when the task is completed. Leads create tasks."),
+  p("Tasks are the units of work in a project. Each task has assignees who do the work, optionally reviewers who check it, and — on a CRediT project — a task type: the CRediT role its contributors are credited with when the task is closed. Leads create tasks."),
   ...steps([
     "Open the project's `Tasks` tab and click `New task`. (The `+` at the top of a column creates a task in that column.)",
   ]),
@@ -362,7 +362,7 @@ const ch6 = [
 
 const ch7 = [
   h1("7. Mark a task done (as an assigned member)"),
-  p("When you have finished your part of a task, mark it done. On a task with several assignees, each assignee marks their own part; the task itself is completed later, by a reviewer's sign-off or by a Lead."),
+  p("When you have finished your part of a task, mark it done. On a task with several assignees, each assignee marks their own part; the task itself is closed later, by a reviewer's sign-off or by a Lead."),
   ...steps([
     "Find the task under `Active tasks and requests` on your Dashboard (or under `Tasks` in the sidebar) and click it.",
   ]),
@@ -377,7 +377,7 @@ const ch7 = [
   ...figure("07_task_before", "The task page before marking done. The Completion table has one row per assignee."),
   p("The box turns green, with the date and your name beside it. On a task that requires review, your row's `Reviewed` column reads `Awaiting review` until a reviewer signs your work off."),
   ...figure("07_task_after", "Marked done and awaiting review."),
-  ...tip("Marked done by mistake? Untick the box. You can undo until the task is completed."),
+  ...tip("Marked done by mistake? Untick the box. You can undo until the task is closed."),
 ];
 
 const ch8 = [
@@ -394,30 +394,30 @@ const ch8 = [
   ...figure("08_review_before", "Both assignees have marked their part done; each submission can now be reviewed."),
   p("The box turns purple, and the review is recorded with the date and your name. To take it back, untick the box."),
   ...figure("08_review_partial", "One submission reviewed, one still to review."),
-  p("When the last submission is reviewed, the task completes itself: its status changes to `Complete`, the page names you under `Closed by`, and each assignee is credited with the task's CRediT role."),
-  ...figure("08_review_complete", "All submissions reviewed: the task is complete."),
+  p("When the last submission is reviewed, the task closes itself: its status changes to `Closed`, the page names you under `Closed by`, and each assignee is credited with the task's CRediT role."),
+  ...figure("08_review_complete", "All submissions reviewed: the task is closed."),
   ...tip("Leads can review submissions on any task that requires review, in the same way as the named reviewers."),
 ];
 
 const ch9 = [
-  h1("9. Complete a task (as a project lead)"),
-  p("A Lead decides when a task is finished. This is how tasks without a review step are completed, and a Lead can also complete any other task whenever they judge it done."),
+  h1("9. Close a task (as a project lead)"),
+  p("A Lead decides when a task is finished. This is how tasks without a review step are closed, and a Lead can also close any other task whenever they judge it done."),
   ...steps([
     "Open the task. Check the `Completion` table: who has marked their part done (and, where review is required, whose work has been reviewed).",
-    "Click `Mark Completed`.",
+    "Click `Close Task`.",
   ]),
-  ...figure("09_complete_before", "A finished task without review, ready to be completed by the Lead."),
-  p("The task is now `Complete`, with your name under `Closed by`. On a CRediT project, completing a task is what records contributions: each assignee who marked their own part done — and, on a task that requires review, had it reviewed — is credited with the task's type."),
-  ...figure("09_complete_after", "The completed task. Its marks are now locked."),
-  ...important("Assignees who did not mark their part done receive no credit when the task is completed. Before completing, a Lead can mark someone's part done on their behalf by ticking the `Done` box in their row of the Completion table."),
-  ...tip("Completed a task too early? `Mark Not Complete` reopens it and withdraws the credit it recorded; completing it again records the credit anew. While a task is complete it is locked: it cannot be edited or deleted, and its Done and Reviewed boxes cannot change."),
-  p("A task's Kanban column is separate from whether it is complete. To keep the board tidy, drag finished cards to the `Done` column, and work in progress to `In Progress`. A blue check on a card shows that the task is complete."),
+  ...figure("09_complete_before", "A finished task without review, ready for the Lead to close."),
+  p("The task is now `Closed`, with your name under `Closed by`. On a CRediT project, closing a task is what records contributions: each assignee who marked their own part done — and, on a task that requires review, had it reviewed — is credited with the task's type."),
+  ...figure("09_complete_after", "The closed task. Its marks are now locked."),
+  ...important("Assignees who did not mark their part done receive no credit when the task is closed. Before closing it, a Lead can mark someone's part done on their behalf by ticking the `Done` box in their row of the Completion table."),
+  ...tip("Closed a task too early? `Re-open Task` re-opens it and withdraws the credit it recorded; closing it again records the credit anew. While a task is closed it is locked: it cannot be edited or deleted, and its Done and Reviewed boxes cannot change."),
+  p("A task's Kanban column is separate from whether it is closed. To keep the board tidy, drag finished cards to the `Done` column, and work in progress to `In Progress`. A blue check on a card shows that the task is closed."),
   ...figure("09_board_after", "The board after the Lead has dragged the cards to their columns."),
 ];
 
 const ch10 = [
   h1("10. Track the contribution of members"),
-  p("On a project that tracks contributions with CRediT, i-CONNECTS keeps a ledger of who contributed what. Each completed task adds one contribution per credited assignee, under the task's type. Every member of the project can see the record in the `Contribution Tracking` tab."),
+  p("On a project that tracks contributions with CRediT, i-CONNECTS keeps a ledger of who contributed what. Each closed task adds one contribution per credited assignee, under the task's type. Every member of the project can see the record in the `Contribution Tracking` tab."),
   h2("Contributions by member"),
   p("The first view is a grid of every member against all 14 CRediT roles, with totals for each person and each role, sorted by total."),
   ...figure("10_by_member", "Contributions by member: all members against all 14 CRediT roles (the table scrolls sideways)."),
@@ -433,7 +433,7 @@ const ch10 = [
     "In `Add a contribution`, choose the `Task`, the `Member` and the `CRediT role`, then click `Add contribution`.",
   ]),
   ...figure("10_add_contribution", "Crediting the reviewer with Validation on the sampling task."),
-  p("Contributions entered by hand are labelled `Added by hand`, and are kept even if the task is later reopened."),
+  p("Contributions entered by hand are labelled `Added by hand`, and are kept even if the task is later re-opened."),
   ...figure("10_every_contribution_after", "The hand-entered contribution in the list."),
   h2("Downloading the record"),
   p("`Matrix (CSV)` downloads the grid and `List (CSV)` the individual records, ready to open in a spreadsheet — for example to write an authorship or CRediT statement. Every member can download the matrix; the list, which includes members' email addresses and ORCID iDs, is available to Leads only."),
@@ -476,7 +476,7 @@ const reference = [
     ["Create, edit and delete tasks", "Yes", "No"],
     ["Mark own part of a task done", "Yes, if assigned", "Yes, if assigned"],
     ["Review submissions on a task that requires review", "Yes", "If named as a reviewer"],
-    ["Mark a task Completed / Not Complete", "Yes", "No"],
+    ["Close or re-open a task", "Yes", "No"],
     ["See contribution tracking and download the matrix", "Yes", "Yes"],
     ["Download the contribution list (emails, ORCID iDs)", "Yes", "No"],
     ["Add, edit or remove contributions", "Yes", "No"],
@@ -487,9 +487,9 @@ const reference = [
   ...steps([
     "A **Lead** creates the task, with its type, assignees and (optionally) reviewers.",
     "Each **assignee** does their part and ticks their `Done` box in the task's Completion table.",
-    "If the task requires review, a **reviewer** ticks the `Reviewed` box for each submission; the last review completes the task.",
-    "Otherwise a **Lead** clicks `Mark Completed`.",
-    "Completion credits each assignee who marked their part done (and was reviewed, where required) with the task's CRediT role, visible under `Contribution Tracking`.",
+    "If the task requires review, a **reviewer** ticks the `Reviewed` box for each submission; the last review closes the task.",
+    "Otherwise a **Lead** clicks `Close Task`.",
+    "Closing credits each assignee who marked their part done (and was reviewed, where required) with the task's CRediT role, visible under `Contribution Tracking`.",
   ]),
 ];
 

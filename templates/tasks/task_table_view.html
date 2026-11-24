@@ -59,10 +59,10 @@
               {% if task.status == "COMPLETED" %}
                 <span class="inline-flex items-center gap-1 text-blue-600 font-medium">
                   {% include "_components/completion_check.html" with task=task %}
-                  Complete
+                  Closed
                 </span>
               {% else %}
-                <span class="text-brand-text/60">Not complete</span>
+                <span class="text-brand-text/60">Open</span>
               {% endif %}
             </td>
           </tr>

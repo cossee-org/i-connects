@@ -259,6 +259,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             # one, else the task's -- what "overdue" and the date on each
             # row mean for this user.
             .with_my_deadline(user)
+            # has_to_review / has_to_verify: the rows' To review and To
+            # verify marks, by the All tasks page's rules — a row waiting on
+            # both carries both.
+            .with_waiting_on(user)
             .annotate(
                 user_log_status=latest_log_status,
                 is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
@@ -686,11 +690,11 @@ def _project_summary(project, now, *, is_lead: bool) -> dict:
         .select_related("closed_by")
         .order_by("-closed_at")[:8]
     ):
-        # Only a Lead completes a task, so the line names whoever did.
+        # Only a Lead closes a task, so the line names whoever did.
         events.append({
             "when": t.closed_at,
             "who": t.closed_by.display_name if t.closed_by else "A lead",
-            "verb": "completed", "kind": "task", "task": t,
+            "verb": "closed", "kind": "task", "task": t,
         })
     for r in (
         WikiRevision.objects.filter(page__in=readable_pages)

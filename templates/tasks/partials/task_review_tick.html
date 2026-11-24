@@ -24,14 +24,14 @@
          aria-disabled="true" data-locked
          aria-describedby="task-locked-notice"
          aria-label="{{ s.member.display_name }}: reviewed (locked)"
-         title="Locked: reviewed before the task was marked completed"
+         title="Locked: reviewed before the task was closed"
          @click.prevent="showLocked()">
 {% elif s.review_closed %}
   <input type="checkbox" class="completion-tick completion-tick-review"
          aria-disabled="true" data-locked
          aria-describedby="task-locked-notice"
          aria-label="{{ s.member.display_name }}: not reviewed (locked)"
-         title="Locked: marked done before the task was marked completed"
+         title="Locked: marked done before the task was closed"
          @click.prevent="showLocked()">
 {% elif s.reviewed %}
   {% if s.can_unreview %}

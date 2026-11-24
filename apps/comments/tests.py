@@ -216,7 +216,7 @@ def test_the_comment_buttons_are_the_size_the_task_surfaces_use(commentable):
     """Comment is a send button beside the box; Save and Cancel stay btn-xs.
 
     The posting box and its send button share one row on both task surfaces.
-    Save and Cancel sit under a thread whose card sits under Mark Completed,
+    Save and Cancel sit under a thread whose card sits under Close Task,
     the self-mark and the row buttons — all btn-xs.
     """
     from django.template.loader import render_to_string
