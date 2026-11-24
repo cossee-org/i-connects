@@ -52,12 +52,12 @@
 
   <div class="flex gap-3 w-full sm:w-auto flex-wrap items-center">
 
-    {# Status dropdown — Not Completed (default) / Completed / All #}
+    {# Status dropdown — Not Complete (default) / Complete / All #}
     <div x-data="{
       open: false,
       options: [
-        {value: 'not_completed', label: 'Not Completed'},
-        {value: 'completed', label: 'Completed'},
+        {value: 'not_completed', label: 'Not Complete'},
+        {value: 'completed', label: 'Complete'},
         {value: 'all', label: 'All'}
       ],
       current: '{{ current_status }}',
