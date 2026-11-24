@@ -14,9 +14,14 @@
   back in this card's shape.
 {% endcomment %}
 <section id="task-summary" class="brand-card p-4">
-  {# The name, with the task's status (Open / Closed) in the card's top right corner. #}
-  <div class="flex items-start gap-3">
-    <h2 class="flex-1 min-w-0 {{ title_class|default:"text-lg" }} font-semibold text-brand-navy leading-snug break-words">{{ task.name }}</h2>
+  {% comment %}
+    The name, with the task's status (Open / Closed) in the card's top
+    right corner at the same size. The size sits on the row and both inherit
+    it, so the status keeps it when the completion toggle swaps it out of
+    band (that swap cannot tell the pane from the full page).
+  {% endcomment %}
+  <div class="flex items-start gap-3 {{ title_class|default:"text-lg" }} leading-snug">
+    <h2 class="flex-1 min-w-0 font-semibold text-brand-navy break-words">{{ task.name }}</h2>
     {% include "tasks/partials/task_completion_chip.html" with task=task %}
   </div>
 
