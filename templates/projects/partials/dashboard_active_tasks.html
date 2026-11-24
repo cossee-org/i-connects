@@ -54,7 +54,7 @@ heading of its own.
             </div>
           </div>
 
-          {% if task.is_priority or task.is_reviewing %}
+          {% if task.is_priority or task.has_to_review or task.has_to_verify %}
             <div class="flex items-center gap-2 shrink-0 mt-0.5">
               {% if task.is_priority %}
                 {% comment %}
@@ -72,8 +72,11 @@ heading of its own.
                 {% endcomment %}
                 {% include "_components/priority_flag.html" with icon_only=True tooltip=True tooltip_left=True %}
               {% endif %}
-              {% if task.is_reviewing %}
+              {% if task.has_to_review %}
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-coral/10 text-brand-coral">To review</span>
+              {% endif %}
+              {% if task.has_to_verify %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-navy/10 text-brand-navy">To verify</span>
               {% endif %}
             </div>
           {% endif %}

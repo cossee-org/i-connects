@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 from django.db import models
-from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models import Exists, F, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from apps.core.enums import AutoAssignNew, CompletedAs, ContributionType, TaskStatus
+from apps.core.enums import (
+    AutoAssignNew,
+    CompletedAs,
+    ContributionType,
+    MemberPrivileges,
+    TaskStatus,
+)
 from apps.tasks.timezones import default_zone_name, get_zone, validate_timezone
 
 
@@ -103,6 +109,60 @@ class TaskQuerySet(models.QuerySet):
         now = now or timezone.now()
         has_pending, has_uncovered = self._deadline_states(now)
         return self.past_due(now).filter(has_pending & ~has_uncovered)
+
+    def with_waiting_on(self, user):
+        """Annotate ``has_to_review`` and ``has_to_verify``: whether a
+        submission on each task is waiting on ``user``.
+
+        Both read the task's current assignees' current parts (each one's
+        newest TaskLog — ``services.current_logs``) marked done:
+
+        - ``has_to_review``: ``user`` reviews the task (which is what makes
+          a task require review: ``Task.needs_review``) and a done part is
+          not yet reviewed. On a completed task only a part marked after it
+          was completed still takes a review (``services.review_closed``).
+        - ``has_to_verify``: ``user`` is a Lead of the task's project and a
+          done part is not yet verified, and reviewed too where the task
+          requires review.
+
+        The All tasks page and the dashboard read their To review / To
+        verify marks off these, so the two agree.
+        """
+        from apps.projects.models import ProjectMember
+
+        newer_log = TaskLog.objects.filter(
+            task=OuterRef("task"), assigned_to=OuterRef("assigned_to")
+        ).filter(
+            Q(created_at__gt=OuterRef("created_at"))
+            | Q(created_at=OuterRef("created_at"), pk__gt=OuterRef("pk"))
+        )
+        done_parts = TaskLog.objects.filter(
+            task=OuterRef("pk"),
+            assigned_to__assigned_tasks=OuterRef("pk"),
+            status=TaskStatus.COMPLETED,
+        ).filter(~Exists(newer_log))
+        to_review = done_parts.filter(
+            reviewed_at__isnull=True,
+            task__reviewers__users=user,
+        ).filter(
+            ~Q(task__status=TaskStatus.COMPLETED)
+            | Q(
+                task__closed_at__isnull=False,
+                completed_at__isnull=False,
+                completed_at__gt=F("task__closed_at"),
+            )
+        )
+        task_has_reviewers = ProjectMember.objects.filter(
+            reviewed_tasks=OuterRef("task")
+        )
+        to_verify = done_parts.filter(
+            verified_at__isnull=True,
+            task__project__privileges__user=user,
+            task__project__privileges__privilege=MemberPrivileges.PROJECT_MANAGER,
+        ).filter(Q(reviewed_at__isnull=False) | ~Exists(task_has_reviewers))
+        return self.annotate(
+            has_to_review=Exists(to_review), has_to_verify=Exists(to_verify)
+        )
 
     def with_my_deadline(self, user):
         """Annotate ``my_deadline``: ``user``'s individual deadline on each

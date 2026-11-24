@@ -1108,8 +1108,9 @@ def test_dashboard_active_task_list_orders_by_deadline_and_caps(client, user):
 
 @pytest.mark.django_db
 def test_dashboard_active_task_list_flags_review_work_and_skips_finished_tasks(client, user):
-    """A task the user only reviews is listed and marked "To review"; tasks
-    the user has already marked complete, and closed tasks, are not listed."""
+    """A task the user only reviews is listed and marked "To review" once a
+    submission waits on their review; tasks the user has already marked
+    complete, and closed tasks, are not listed."""
     from apps.tasks.models import TaskLog
 
     project = create_project_with_owner(
@@ -1120,6 +1121,11 @@ def test_dashboard_active_task_list_flags_review_work_and_skips_finished_tasks(c
 
     reviewing = _task(project, member, "Task to review")
     reviewing.reviewers.add(member)
+    submitter = ProjectMember.objects.create(project=project)
+    reviewing.assigned_members.add(submitter)
+    TaskLog.objects.create(
+        task=reviewing, assigned_to=submitter, status=TaskStatus.COMPLETED
+    )
 
     self_marked = _task(project, member, "Task I finished")
     self_marked.assigned_members.add(member)

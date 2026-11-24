@@ -6067,3 +6067,63 @@ def test_to_verify_waits_for_the_review_a_task_requires(
     mark_reviewed(task_log=log, reviewer=reviewer)
     page = client.get(url, {"type": "verify"}).content.decode()
     assert task.name in page and "To verify" in page
+
+
+@pytest.mark.django_db
+def test_a_task_waiting_on_both_shows_both_pills(client, user, other_user, third_user):
+    """A Lead who also reviews the task sees To review and To verify at once:
+    one part done and unreviewed, another reviewed and unverified."""
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _lead_only_task(user, other_user)
+    task.reviewers.add(lead)
+    second = ProjectMember.objects.create(project=project)
+    second.users.add(third_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=third_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    task.assigned_members.add(second)
+    TaskLog.objects.create(task=task, assigned_to=second)
+
+    reviewed = mark_own_done(task=task, member=contrib)
+    mark_reviewed(task_log=reviewed, reviewer=lead)
+    mark_own_done(task=task, member=second)
+    client.force_login(user)
+
+    url = reverse("tasks:my_list")
+    for tab in ("", "review", "verify"):
+        page = client.get(url, {"type": tab}).content.decode()
+        card = page[page.index(task.name) :]
+        card = card[: card.index("</a>")]
+        assert ">To review</span>" in card and ">To verify</span>" in card, tab
+
+
+@pytest.mark.django_db
+def test_dashboard_row_waiting_on_both_shows_both_pills(client, user, other_user, third_user):
+    """The dashboard's active-task rows follow the same rules as All tasks:
+    a row waiting on the user's review and verification carries both marks,
+    and a task the user merely reviews carries neither."""
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    project, task, lead, contrib = _lead_only_task(user, other_user)
+    # The Lead is assigned too, so the open task is on their dashboard.
+    task.assigned_members.add(lead)
+    TaskLog.objects.create(task=task, assigned_to=lead)
+    task.reviewers.add(lead)
+    second = ProjectMember.objects.create(project=project)
+    second.users.add(third_user)
+    task.assigned_members.add(second)
+    TaskLog.objects.create(task=task, assigned_to=second)
+    client.force_login(user)
+
+    def row():
+        page = client.get(reverse("projects:dashboard")).content.decode()
+        card = page[page.index(task.name) :]
+        return card[: card.index("</a>")]
+
+    assert ">To review</span>" not in row() and ">To verify</span>" not in row()
+
+    reviewed = mark_own_done(task=task, member=contrib)
+    mark_reviewed(task_log=reviewed, reviewer=lead)
+    mark_own_done(task=task, member=second)
+    assert ">To review</span>" in row() and ">To verify</span>" in row()

@@ -259,6 +259,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             # one, else the task's -- what "overdue" and the date on each
             # row mean for this user.
             .with_my_deadline(user)
+            # has_to_review / has_to_verify: the rows' To review and To
+            # verify marks, by the All tasks page's rules — a row waiting on
+            # both carries both.
+            .with_waiting_on(user)
             .annotate(
                 user_log_status=latest_log_status,
                 is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),

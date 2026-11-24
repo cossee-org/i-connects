@@ -45,7 +45,6 @@ from apps.comments.views import comment_box_context
 from apps.core.enums import (
     CompletedAs,
     ContributionType,
-    MemberPrivileges,
     TaskStatus,
     credit_role_choices,
 )
@@ -182,53 +181,14 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             .order_by("-created_at")
             .values("status")[:1]
         )
-        # A current assignee's current part (their newest TaskLog — see
-        # services.current_logs) marked done. Both tabs below are read off it.
-        newer_log = TaskLog.objects.filter(
-            task=OuterRef("task"), assigned_to=OuterRef("assigned_to")
-        ).filter(
-            Q(created_at__gt=OuterRef("created_at"))
-            | Q(created_at=OuterRef("created_at"), pk__gt=OuterRef("pk"))
-        )
-        done_parts = TaskLog.objects.filter(
-            task=OuterRef("pk"),
-            assigned_to__assigned_tasks=OuterRef("pk"),
-            status=TaskStatus.COMPLETED,
-        ).filter(~Exists(newer_log))
-        # To Review: a submission waiting on this user's review — a done part
-        # not yet reviewed, on a task the user reviews (which is what makes a
-        # task require review: Task.needs_review). On a completed task only a
-        # part marked after it was completed still takes a review
-        # (services.review_closed).
-        to_review = done_parts.filter(
-            reviewed_at__isnull=True,
-            task__reviewers__users=user,
-        ).filter(
-            ~Q(task__status=TaskStatus.COMPLETED)
-            | Q(
-                task__closed_at__isnull=False,
-                completed_at__isnull=False,
-                completed_at__gt=F("task__closed_at"),
-            )
-        )
-        # To Verify: a contribution waiting on this user's verification as a
-        # Lead of the task's project — a done part not yet verified, and
-        # reviewed too where the task requires review.
-        task_has_reviewers = ProjectMember.objects.filter(
-            reviewed_tasks=OuterRef("task")
-        )
-        to_verify = done_parts.filter(
-            verified_at__isnull=True,
-            task__project__privileges__user=user,
-            task__project__privileges__privilege=MemberPrivileges.PROJECT_MANAGER,
-        ).filter(Q(reviewed_at__isnull=False) | ~Exists(task_has_reviewers))
         return (
+            # has_to_review / has_to_verify: the To Review and To Verify
+            # tabs' rules (TaskQuerySet.with_waiting_on).
             Task.objects.with_my_deadline(user)
+            .with_waiting_on(user)
             .annotate(
                 user_log_status=latest_log_status,
                 is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
-                has_to_review=Exists(to_review),
-                has_to_verify=Exists(to_verify),
             )
             .filter(
                 Q(is_assigned=True) | Q(has_to_review=True) | Q(has_to_verify=True)
