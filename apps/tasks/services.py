@@ -1259,14 +1259,14 @@ def _notify_task_completed(*, task: Task, completed_by: ProjectMember) -> None:
         user_ids.update(member.users.values_list("id", flat=True))
     # Notify the task creator too so they see progress on their task.
     user_ids.update(task.created_by.users.values_list("id", flat=True))
-    # Don't notify the person who just clicked "complete".
+    # Don't notify the Lead who just clicked Close Task.
     user_ids.difference_update(completed_by.users.values_list("id", flat=True))
     if not user_ids:
         return
 
     create_notification(
         users=list(user_ids),
-        title=f"Task completed: {task.name}",
+        title=f"Task closed: {task.name}",
         body=f"In project {task.project.name}.",
         project=task.project,
         route="tasks:detail",

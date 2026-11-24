@@ -1759,7 +1759,7 @@ def test_summary_reports_activity(client, user, other_user):
 
     # Recent activity covers completions and done marks, newest first.
     verbs = [e["verb"] for e in summary["activity"]]
-    assert "completed" in verbs and "marked their part done on" in verbs
+    assert "closed" in verbs and "marked their part done on" in verbs
     whens = [e["when"] for e in summary["activity"]]
     assert whens == sorted(whens, reverse=True)
     assert all(e["ago"] == "just now" for e in summary["activity"])
@@ -1820,7 +1820,7 @@ def test_summary_activity_lists_reviews_verifications_and_who_completed(client, 
     assert lines[0] == ("Alice", "verified Bob's part on", "Reviewed one")
     assert ("Alice", "reviewed Carol's part on", "Reviewed one") in lines
     assert ("Alice", "completed", "Reviewed one") not in lines
-    assert ("Alice", "completed", "Closed by hand") in lines
+    assert ("Alice", "closed", "Closed by hand") in lines
 
     body = response.content.decode()
     assert "verified Bob&#x27;s part on" in body

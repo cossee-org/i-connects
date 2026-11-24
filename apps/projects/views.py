@@ -690,11 +690,11 @@ def _project_summary(project, now, *, is_lead: bool) -> dict:
         .select_related("closed_by")
         .order_by("-closed_at")[:8]
     ):
-        # Only a Lead completes a task, so the line names whoever did.
+        # Only a Lead closes a task, so the line names whoever did.
         events.append({
             "when": t.closed_at,
             "who": t.closed_by.display_name if t.closed_by else "A lead",
-            "verb": "completed", "kind": "task", "task": t,
+            "verb": "closed", "kind": "task", "task": t,
         })
     for r in (
         WikiRevision.objects.filter(page__in=readable_pages)
