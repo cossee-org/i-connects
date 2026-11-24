@@ -1602,7 +1602,7 @@ def test_board_table_lists_every_task_with_its_counts(client, user):
     assert 'aria-label="0 assigned members"' in content
     assert content.count('aria-label="0 reviewers"') == 2
     assert "High priority" in content
-    assert "Complete" in content
+    assert "Closed" in content and "Open" in content
     assert 'scope="col"' in content
 
 
