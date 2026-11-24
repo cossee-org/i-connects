@@ -1,0 +1,74 @@
+{% comment %}
+  One logged email, as its recipient got it: the envelope first, then the
+  body. Shared by the email log's modal (email_detail_modal.html) and the
+  page a View email link opens without scripting (email_detail.html).
+
+  The HTML body is rendered in a sandboxed frame with no permissions but
+  opening links in a new tab: no script in it runs, and it cannot reach this
+  page, its cookies or the rest of i-CONNECTS. ``html_srcdoc`` is the body
+  with links set to open in a new tab (ProjectEmailDetailView).
+{% endcomment %}
+<dl class="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1.5 text-sm">
+  <dt class="text-brand-text/60">Subject</dt>
+  <dd class="font-medium text-brand-navy break-words">{{ email.subject|default:"(no subject)" }}</dd>
+
+  <dt class="text-brand-text/60">To</dt>
+  <dd class="break-words">
+    {% if email.recipient %}
+      <a href="{% url 'public_profile' pk=email.recipient.pk %}"
+         class="text-brand-navy hover:text-brand-coral">{{ email.recipient.name|default:email.to_email }}</a>
+      {% if email.recipient.name %}<span class="text-brand-text/60">&lt;{{ email.to_email }}&gt;</span>{% endif %}
+    {% else %}
+      {{ email.to_email }}
+    {% endif %}
+  </dd>
+
+  {% if email.from_email %}
+    <dt class="text-brand-text/60">From</dt>
+    <dd class="break-words">{{ email.from_email }}</dd>
+  {% endif %}
+
+  {% if email.reply_to %}
+    <dt class="text-brand-text/60">Reply to</dt>
+    <dd class="break-words">{{ email.reply_to }}</dd>
+  {% endif %}
+
+  <dt class="text-brand-text/60">Sent</dt>
+  <dd>{% include "_components/local_time.html" with at=email.sent_at css="" %}</dd>
+
+  <dt class="text-brand-text/60">Email</dt>
+  <dd>{{ email.get_kind_display }}</dd>
+
+  <dt class="text-brand-text/60">Status</dt>
+  <dd>
+    {% if email.status == "failed" %}
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-error/10 text-error">Failed</span>
+      {% if email.error %}<div class="mt-1 text-xs text-brand-text/70 break-words">{{ email.error }}</div>{% endif %}
+    {% else %}
+      Sent
+    {% endif %}
+  </dd>
+</dl>
+
+<div class="mt-5">
+  {% if email.html_body %}
+    <iframe title="The email to {{ email.to_email }}"
+            sandbox="allow-popups allow-popups-to-escape-sandbox"
+            referrerpolicy="no-referrer"
+            srcdoc="{{ html_srcdoc }}"
+            class="w-full rounded-lg border border-brand-light bg-white"
+            style="height: 60vh;"></iframe>
+    {% if email.text_body %}
+      <details class="mt-3">
+        <summary class="cursor-pointer text-sm text-brand-navy">Plain-text version</summary>
+        <pre class="mt-2 p-3 rounded-lg bg-brand-lighter text-xs text-brand-text whitespace-pre-wrap break-words">{{ email.text_body }}</pre>
+      </details>
+    {% endif %}
+  {% elif email.text_body %}
+    <pre class="p-3 rounded-lg bg-brand-lighter text-sm text-brand-text whitespace-pre-wrap break-words">{{ email.text_body }}</pre>
+  {% else %}
+    <p class="text-sm text-brand-text/70">
+      The content of this email was not kept: it was sent before i-CONNECTS began keeping a copy of each email.
+    </p>
+  {% endif %}
+</div>

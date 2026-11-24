@@ -17,7 +17,7 @@
 
 <div class="flex items-center gap-2 mb-5">
   <h2 class="text-lg font-semibold text-brand-navy">Email log</h2>
-  {% include "_components/info_popover.html" with label="Email log" body="The emails i-CONNECTS sent about this project, newest first: invitations, join requests, task assignments, mailing list messages and announcements. Sent means the email left i-CONNECTS; it cannot tell whether it reached the inbox or a spam folder. Only Leads can see this page." %}
+  {% include "_components/info_popover.html" with label="Email log" body="The emails i-CONNECTS sent about this project, newest first: invitations, join requests, task assignments, comment tags, mailing list messages and announcements. View email shows an email exactly as it was sent. Sent means the email left i-CONNECTS; it cannot tell whether it reached the inbox or a spam folder. Only Leads can see this page." %}
 </div>
 
 {# The filters apply as soon as one changes; the button is for when scripting is off. #}
@@ -60,6 +60,7 @@
             <th scope="col">Email</th>
             <th scope="col">Subject</th>
             <th scope="col">Status</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
@@ -88,12 +89,26 @@
                   <span class="text-brand-text/70">Sent</span>
                 {% endif %}
               </td>
+              <td class="text-right whitespace-nowrap">
+                {# Without scripting the link opens the email as a page of its own. #}
+                <a href="{% url 'communications:email_detail' project_pk=project.pk pk=email.pk %}"
+                   hx-get="{% url 'communications:email_detail' project_pk=project.pk pk=email.pk %}"
+                   hx-target="#email-modal-body"
+                   onclick="document.getElementById('email-modal').showModal()"
+                   class="btn btn-xs btn-ghost text-brand-navy"
+                   aria-label="View the email to {{ email.to_email }}: {{ email.subject }}">View email</a>
+              </td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
+
+  <dialog id="email-modal" class="modal" aria-label="Email">
+    {# contents: the box and its backdrop size against the dialog, not this wrapper. #}
+    <div id="email-modal-body" class="contents"><!-- filled by HTMX --></div>
+  </dialog>
 
   {% if is_paginated %}
     <div class="join mt-8 flex justify-center">

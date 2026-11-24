@@ -49,10 +49,27 @@ def send_logged(message, *, kind: str, project=None, fail_silently: bool = False
     return sent
 
 
+def _html_alternative(message) -> str:
+    for content, mimetype in getattr(message, "alternatives", None) or []:
+        if mimetype == "text/html":
+            return str(content)
+    return ""
+
+
 def _record(message, *, kind, project, error) -> None:
     addresses = [a for a in (message.to or []) if a]
     if not addresses:
         return
+    # The email itself is kept only where a Lead can read it: in a project's
+    # log. An email about no project is in no one's log.
+    content = {}
+    if project is not None:
+        content = {
+            "from_email": (message.from_email or "")[:255],
+            "reply_to": ", ".join(message.reply_to or [])[:255],
+            "text_body": str(message.body or ""),
+            "html_body": _html_alternative(message),
+        }
     try:
         # A savepoint, so a failed write cannot poison a caller's transaction.
         with transaction.atomic():
@@ -71,6 +88,7 @@ def _record(message, *, kind, project, error) -> None:
                     subject=(message.subject or "")[:255],
                     status=EmailStatus.FAILED if error else EmailStatus.SENT,
                     error=error,
+                    **content,
                 )
                 for address in addresses
             )

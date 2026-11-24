@@ -13,6 +13,8 @@ class EmailLogAdmin(admin.ModelAdmin):
     list_filter = ("kind", "status")
     search_fields = ("to_email", "recipient__name", "subject", "project__name")
     date_hierarchy = "sent_at"
+    # The email itself is for the project's Leads, on the email log, alone.
+    exclude = ("text_body", "html_body")
 
     def has_add_permission(self, request) -> bool:
         return False

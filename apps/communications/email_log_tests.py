@@ -497,3 +497,205 @@ def test_the_kind_filter_does_not_offer_digests(client, project, pm_user):
     kinds = [value for value, _ in response.context["kind_choices"]]
     assert EmailKind.DIGEST not in kinds
     assert EmailKind.INVITATION in kinds
+
+
+# ---------------------------------------------------------------------------
+# The email itself
+# ---------------------------------------------------------------------------
+def _detail_url(project, email):
+    return reverse(
+        "communications:email_detail",
+        kwargs={"project_pk": project.pk, "pk": email.pk},
+    )
+
+
+@pytest.mark.django_db
+def test_send_logged_keeps_the_email_for_a_project(project, user):
+    message = EmailMultiAlternatives(
+        subject="Hello",
+        body="Plain body",
+        from_email="noreply@test.com",
+        to=[user.email],
+        reply_to=["lead@test.com"],
+    )
+    message.attach_alternative("<p>HTML body</p>", "text/html")
+
+    send_logged(message, kind=EmailKind.MAILING_LIST, project=project)
+
+    row = EmailLog.objects.get()
+    assert row.text_body == "Plain body"
+    assert row.html_body == "<p>HTML body</p>"
+    assert row.from_email == "noreply@test.com"
+    assert row.reply_to == "lead@test.com"
+
+
+@pytest.mark.django_db
+def test_a_failed_send_keeps_the_email_too(project, user, monkeypatch):
+    def boom(self, fail_silently=False):
+        raise ConnectionError("SMTP down")
+
+    monkeypatch.setattr(EmailMultiAlternatives, "send", boom)
+    send_logged(_message(user.email), kind=EmailKind.TASK_ASSIGNED, project=project, fail_silently=True)
+
+    row = EmailLog.objects.get()
+    assert row.status == EmailStatus.FAILED
+    assert row.text_body == "Body"
+
+
+@pytest.mark.django_db
+def test_an_email_about_no_project_keeps_no_body(user):
+    """No Lead can see it, so nobody should be able to read it."""
+    send_logged(_message(user.email), kind=EmailKind.DIGEST)
+
+    row = EmailLog.objects.get()
+    assert row.text_body == ""
+    assert row.html_body == ""
+    assert not row.has_body
+
+
+@pytest.mark.django_db
+def test_a_templated_project_email_keeps_both_bodies(project, user):
+    send_templated_email(
+        subject_template="emails/comment_mention/subject.txt",
+        html_template="emails/comment_mention/body.html",
+        text_template="emails/comment_mention/body.txt",
+        context={
+            "user": user,
+            "author_name": "Asha",
+            "task": type("T", (), {"name": "Count corals"})(),
+            "project": project,
+            "excerpt": "Have a look",
+            "url": "https://iconnects.test/t/1/",
+        },
+        to=[user.email],
+        kind=EmailKind.COMMENT_MENTION,
+        project=project,
+    )
+
+    row = EmailLog.objects.get()
+    assert "Have a look" in row.text_body
+    assert "<html" in row.html_body.lower()
+
+
+@pytest.mark.django_db
+def test_each_row_has_a_view_email_button(client, project, pm_user, user):
+    _add_member(project, user)
+    email = _log(project, user, text_body="Hi")
+    client.force_login(pm_user)
+
+    content = client.get(_log_url(project)).content.decode()
+
+    assert _detail_url(project, email) in content
+    assert "View email" in content
+    assert 'id="email-modal"' in content
+
+
+@pytest.mark.django_db
+def test_a_lead_opens_the_email_in_a_modal_with_its_metadata(
+    client, project, pm_user, user
+):
+    _add_member(project, user)
+    email = _log(
+        project,
+        user,
+        subject="Coral survey",
+        kind=EmailKind.MAILING_LIST,
+        from_email="noreply@test.com",
+        reply_to="lead@test.com",
+        text_body="See you at the reef.",
+        html_body="<!DOCTYPE html><html><head><title>x</title></head>"
+        '<body><p>See you at the <a href="https://reef.test">reef</a>.</p>'
+        "<script>alert(1)</script></body></html>",
+    )
+    client.force_login(pm_user)
+
+    response = client.get(_detail_url(project, email), HTTP_HX_REQUEST="true")
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'class="modal-box' in content
+    assert "<html" not in content.lower()  # a fragment, not a page
+    for text in ("Coral survey", user.email, "noreply@test.com", "lead@test.com",
+                 "Mailing list message", "See you at the reef."):
+        assert text in content
+    # The HTML body is in a sandboxed frame without scripts, escaped into
+    # srcdoc, with links sent to a new tab.
+    assert 'sandbox="allow-popups allow-popups-to-escape-sandbox"' in content
+    assert "allow-scripts" not in content
+    assert "allow-same-origin" not in content
+    assert "<script>alert(1)</script>" not in content
+    assert "&lt;head&gt;&lt;base target=&quot;_blank&quot;&gt;&lt;title&gt;" in content
+
+
+@pytest.mark.django_db
+def test_without_scripting_the_email_opens_as_a_page(client, project, pm_user, user):
+    _add_member(project, user)
+    email = _log(project, user, subject="Coral survey", text_body="Plain only")
+    client.force_login(pm_user)
+
+    content = client.get(_detail_url(project, email)).content.decode()
+
+    assert "<html" in content.lower()
+    assert "Email log" in content
+    assert "Plain only" in content
+    assert "<iframe" not in content
+
+
+@pytest.mark.django_db
+def test_an_email_logged_before_bodies_were_kept_says_so(
+    client, project, pm_user, user
+):
+    _add_member(project, user)
+    email = _log(project, user)
+    client.force_login(pm_user)
+
+    content = client.get(_detail_url(project, email), HTTP_HX_REQUEST="true").content.decode()
+
+    assert "The content of this email was not kept" in content
+
+
+@pytest.mark.django_db
+def test_only_a_lead_can_read_an_email(client, project, pm_user, user, other_user):
+    _add_member(project, user)
+    email = _log(project, user, text_body="For Leads only")
+    url = _detail_url(project, email)
+
+    # Not even its own recipient, through the log.
+    client.force_login(user)
+    response = client.get(url, HTTP_HX_REQUEST="true")
+    assert response.status_code == 403
+    assert "For Leads only" not in response.content.decode()
+
+    client.force_login(other_user)
+    assert client.get(url).status_code == 403
+
+    client.logout()
+    assert client.get(url).status_code in (302, 403)
+
+
+@pytest.mark.django_db
+def test_a_lead_cannot_read_another_projects_email_through_their_own(
+    client, project, pm_user, other_user
+):
+    elsewhere = create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Kelp", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    email = _log(elsewhere, other_user, text_body="Kelp business")
+    client.force_login(pm_user)
+
+    response = client.get(_detail_url(project, email), HTTP_HX_REQUEST="true")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_the_admin_does_not_show_the_email(admin_client, project, user):
+    email = _log(project, user, text_body="Secret plans", html_body="<p>Secret plans</p>")
+
+    response = admin_client.get(
+        reverse("admin:communications_emaillog_change", args=[email.pk])
+    )
+
+    assert response.status_code == 200
+    assert "Secret plans" not in response.content.decode()

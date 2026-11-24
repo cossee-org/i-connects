@@ -4,8 +4,12 @@
 message per recipient, written at the moment of sending by
 :func:`apps.communications.services.send_logged`. It holds what a Lead needs
 to answer "did this person get an email, and when" — who, when, what kind,
-the subject line and whether the send went through — and deliberately not the
-body, which for some emails is personal to the recipient.
+the subject line and whether the send went through — and, for an email about
+a project, the email itself (sender, reply-to, plain-text and HTML bodies),
+so a Lead can open exactly what the member was sent. Only the project's Leads
+can read a body: it is shown on the email log and nowhere else, not even in
+the Django admin. An email about no project (a digest, a site-wide
+announcement) is in no project's log, so its body is not kept at all.
 
 "Sent" means the mail backend accepted the message. Whether it was then
 delivered, bounced or filed as spam is known only to the mail provider.
@@ -61,6 +65,12 @@ class EmailLog(models.Model):
         max_length=16, choices=EmailStatus.choices, default=EmailStatus.SENT
     )
     error = models.TextField(blank=True, default="")
+    from_email = models.CharField(max_length=255, blank=True, default="")
+    reply_to = models.CharField(max_length=255, blank=True, default="")
+    # The email as the recipient got it. Empty for an email about no project,
+    # and for rows written before bodies were kept.
+    text_body = models.TextField(blank=True, default="")
+    html_body = models.TextField(blank=True, default="")
 
     class Meta:
         ordering = ["-sent_at", "-id"]
@@ -69,6 +79,10 @@ class EmailLog(models.Model):
             models.Index(fields=["recipient", "-sent_at"]),
             models.Index(fields=["to_email"]),
         ]
+
+    @property
+    def has_body(self) -> bool:
+        return bool(self.text_body or self.html_body)
 
     def __str__(self) -> str:
         return f"{self.get_kind_display()} to {self.to_email} ({self.status})"
