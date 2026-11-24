@@ -17,11 +17,21 @@
 
 <div class="flex items-center gap-2 mb-5">
   <h2 class="text-lg font-semibold text-brand-navy">Email log</h2>
-  {% include "_components/info_popover.html" with label="Email log" body="The emails i-CONNECTS sent about this project, newest first: invitations, join requests, task assignments, comment tags, mailing list messages and announcements. View email shows an email exactly as it was sent. Sent means the email left i-CONNECTS; it cannot tell whether it reached the inbox or a spam folder. Only Leads can see this page." %}
+  {% include "_components/info_popover.html" with label="Email log" body="The emails i-CONNECTS sent about this project, newest first: invitations, join requests, task assignments, comment tags, mailing list messages and announcements. Search looks in the recipient's name and address, the subject and the text of each email. View email shows an email exactly as it was sent. Sent means the email left i-CONNECTS; it cannot tell whether it reached the inbox or a spam folder. Only Leads can see this page." %}
 </div>
 
-{# The filters apply as soon as one changes; the button is for when scripting is off. #}
-<form method="get" class="flex flex-wrap items-end gap-3 mb-5">
+{# A select applies as soon as it changes; the search applies on Enter or Search. #}
+<form method="get" role="search" class="flex flex-wrap items-end gap-3 mb-5">
+  <div class="flex-1 min-w-[16rem]">
+    <label for="email-log-q" class="block text-xs font-medium text-brand-text/70 mb-1">Search</label>
+    <div class="join w-full">
+      <input id="email-log-q" type="search" name="q" value="{{ search_query }}"
+             maxlength="200" autocomplete="off"
+             placeholder="Name, address, subject or text"
+             class="input input-bordered input-sm join-item w-full">
+      <button type="submit" class="btn btn-sm join-item bg-brand-navy hover:bg-brand-navy/90 text-white border-0">Search</button>
+    </div>
+  </div>
   <div>
     <label for="email-log-member" class="block text-xs font-medium text-brand-text/70 mb-1">Member</label>
     <select id="email-log-member" name="member" class="select select-bordered select-sm"
@@ -42,9 +52,17 @@
       {% endfor %}
     </select>
   </div>
-  <noscript><button type="submit" class="btn btn-sm btn-ghost text-brand-navy">Filter</button></noscript>
-  {% if selected_member or selected_kind %}
-    <a href="{% url 'communications:email_log' project_pk=project.pk %}"
+  <div>
+    <label for="email-log-per-page" class="block text-xs font-medium text-brand-text/70 mb-1">Per page</label>
+    <select id="email-log-per-page" name="per_page" class="select select-bordered select-sm"
+            onchange="this.form.submit()">
+      {% for n in per_page_choices %}
+        <option value="{{ n }}"{% if n == current_per_page %} selected{% endif %}>{{ n }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if is_filtered %}
+    <a href="{% url 'communications:email_log' project_pk=project.pk %}{% if current_per_page != 50 %}?per_page={{ current_per_page }}{% endif %}"
        class="btn btn-sm btn-ghost text-brand-navy">Clear filters</a>
   {% endif %}
 </form>
@@ -110,22 +128,31 @@
     <div id="email-modal-body" class="contents"><!-- filled by HTMX --></div>
   </dialog>
 
-  {% if is_paginated %}
-    <div class="join mt-8 flex justify-center">
-      {% if page_obj.has_previous %}
-        <a class="join-item btn btn-sm" href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Prev</a>
-      {% endif %}
-      <span class="join-item btn btn-sm btn-active">
-        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
-      </span>
-      {% if page_obj.has_next %}
-        <a class="join-item btn btn-sm" href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>
-      {% endif %}
-    </div>
-  {% endif %}
+  {% with page=page_obj base="?"|add:filter_query %}
+  <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+    <p class="text-sm text-brand-text/70" aria-live="polite">
+      {% if page.paginator.count == 1 %}1 email{% else %}Showing {{ page.start_index }}&ndash;{{ page.end_index }} of {{ page.paginator.count }} emails{% endif %}
+    </p>
+    {% if is_paginated %}
+      <nav class="join" aria-label="Email log pages">
+        {% if page.has_previous %}
+          <a class="join-item btn btn-sm" href="{{ base }}{% if filter_query %}&amp;{% endif %}page=1" aria-label="First page">&laquo;</a>
+          <a class="join-item btn btn-sm" href="{{ base }}{% if filter_query %}&amp;{% endif %}page={{ page.previous_page_number }}">Prev</a>
+        {% endif %}
+        <span class="join-item btn btn-sm btn-active" aria-current="page">
+          Page {{ page.number }} of {{ page.paginator.num_pages }}
+        </span>
+        {% if page.has_next %}
+          <a class="join-item btn btn-sm" href="{{ base }}{% if filter_query %}&amp;{% endif %}page={{ page.next_page_number }}">Next</a>
+          <a class="join-item btn btn-sm" href="{{ base }}{% if filter_query %}&amp;{% endif %}page={{ page.paginator.num_pages }}" aria-label="Last page">&raquo;</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  </div>
+  {% endwith %}
 {% else %}
-  {% if selected_member or selected_kind %}
-    {% include "_components/empty_state.html" with title="No emails match" body="No email in this project's log matches these filters." %}
+  {% if is_filtered %}
+    {% include "_components/empty_state.html" with title="No emails match" body="No email in this project's log matches this search and these filters." %}
   {% else %}
     {% include "_components/empty_state.html" with title="No emails yet" body="Emails sent about this project will be listed here. Emails sent before the log was introduced are not included." %}
   {% endif %}

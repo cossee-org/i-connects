@@ -437,6 +437,145 @@ def test_the_log_is_paginated_and_keeps_its_filters_across_pages(
     assert f"?member={user.pk}&amp;page=2" in response.content.decode()
 
 
+def _bulk_log(project, user, count, **kwargs):
+    EmailLog.objects.bulk_create(
+        EmailLog(
+            project=project,
+            recipient=user,
+            to_email=user.email,
+            kind=EmailKind.TASK_ASSIGNED,
+            subject=f"Email {n}",
+            **kwargs,
+        )
+        for n in range(count)
+    )
+
+
+@pytest.mark.django_db
+def test_the_log_counts_what_it_shows(client, project, pm_user, user):
+    _bulk_log(project, user, 60)
+    client.force_login(pm_user)
+
+    first = client.get(_log_url(project)).content.decode()
+    last = client.get(_log_url(project, page=2)).content.decode()
+
+    assert "Showing 1&ndash;50 of 60 emails" in first
+    assert "Showing 51&ndash;60 of 60 emails" in last
+    assert 'aria-label="Last page"' in first
+    assert 'aria-label="First page"' in last
+
+
+@pytest.mark.django_db
+def test_a_lead_picks_how_many_rows_a_page(client, project, pm_user, user):
+    _bulk_log(project, user, 60)
+    client.force_login(pm_user)
+
+    response = client.get(_log_url(project, per_page=25))
+
+    assert len(response.context["emails"]) == 25
+    assert response.context["paginator"].num_pages == 3
+    assert "per_page=25&amp;page=2" in response.content.decode()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("per_page", ["7", "1000", "abc"])
+def test_a_page_size_not_on_offer_falls_back_to_fifty(
+    client, project, pm_user, user, per_page
+):
+    _bulk_log(project, user, 60)
+    client.force_login(pm_user)
+
+    response = client.get(_log_url(project, per_page=per_page))
+
+    assert len(response.context["emails"]) == 50
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("page, expected", [("99", 2), ("abc", 1), ("0", 1)])
+def test_a_page_that_does_not_exist_opens_the_nearest_one(
+    client, project, pm_user, user, page, expected
+):
+    """A stale link, say page 3 of a search since narrowed, is not a 404."""
+    _bulk_log(project, user, 60)
+    client.force_login(pm_user)
+
+    response = client.get(_log_url(project, page=page))
+
+    assert response.status_code == 200
+    assert response.context["page_obj"].number == expected
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "q",
+    ["Coral survey", "coral SURVEY", "bea@", "Lund", "transect counts"],
+    ids=["subject", "case", "address", "name", "body"],
+)
+def test_search_finds_an_email_by_subject_address_name_or_text(
+    client, project, pm_user, q
+):
+    from django.contrib.auth import get_user_model
+
+    bea = get_user_model().objects.create_user(
+        email="bea@reef.test", password="password123", name="Bea Lund",
+        given_name="Bea", family_name="Lund",
+    )
+    _add_member(project, bea)
+    _log(project, bea, subject="Coral survey",
+         text_body="Please check the transect counts.")
+    _log(project, pm_user, subject="Something else", text_body="Unrelated")
+    client.force_login(pm_user)
+
+    response = client.get(_log_url(project, q=q.replace(" ", "+")))
+
+    subjects = [e.subject for e in response.context["emails"]]
+    assert subjects == ["Coral survey"]
+
+
+@pytest.mark.django_db
+def test_search_combines_with_the_filters_and_survives_paging(
+    client, project, pm_user, user
+):
+    _add_member(project, user)
+    _bulk_log(project, user, 30, text_body="needle")
+    _bulk_log(project, user, 30, text_body="haystack")
+    _bulk_log(project, pm_user, 30, text_body="needle")
+    client.force_login(pm_user)
+
+    response = client.get(_log_url(project, q="needle", member=user.pk, per_page=25))
+
+    assert response.context["paginator"].count == 30
+    content = response.content.decode()
+    assert f"q=needle&amp;member={user.pk}&amp;per_page=25&amp;page=2" in content
+    assert 'value="needle"' in content
+    assert "Clear filters" in content
+
+
+@pytest.mark.django_db
+def test_a_search_with_no_match_says_so(client, project, pm_user, user):
+    _log(project, user, subject="Coral survey")
+    client.force_login(pm_user)
+
+    content = client.get(_log_url(project, q="kelp")).content.decode()
+
+    assert "No emails match" in content
+    assert "Coral survey" not in content
+
+
+@pytest.mark.django_db
+def test_search_does_not_reach_other_projects(client, project, pm_user, other_user):
+    elsewhere = create_project_with_owner(
+        user=other_user,
+        form_data={"name": "Kelp", "status": ProjectStatus.ACTIVE, "is_public": True},
+    )
+    _log(elsewhere, other_user, subject="Kelp business")
+    client.force_login(pm_user)
+
+    response = client.get(_log_url(project, q="Kelp"))
+
+    assert list(response.context["emails"]) == []
+
+
 # ---------------------------------------------------------------------------
 # Contributors tab
 # ---------------------------------------------------------------------------

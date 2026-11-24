@@ -20,6 +20,7 @@ import re
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Q
 from django.views.generic import DetailView, ListView, TemplateView
 
 from apps.projects.models import ProjectMember
@@ -47,15 +48,40 @@ class ProjectEmailLogView(
     """The emails i-connects sent about a project — Leads only.
 
     Newest first, one row per email per recipient. ``?member=<user id>``
-    narrows it to one current member, ``?kind=`` to one kind of email; a
-    value that matches nothing is ignored rather than an error, so a stale
-    link still opens the log. Each row's View button opens the email itself
+    narrows it to one current member, ``?kind=`` to one kind of email, and
+    ``?q=`` searches the recipient's name and address, the subject and the
+    text of the email. ``?per_page=`` picks 25, 50 or 100 rows a page. A
+    value that matches nothing is ignored rather than an error, and a page
+    past the end shows the last one, so a stale link still opens the log.
+    Each row's View button opens the email itself
     (``ProjectEmailDetailView``) in a modal.
     """
 
     template_name = "communications/email_log.html"
     context_object_name = "emails"
     paginate_by = 50
+    PER_PAGE_CHOICES = (25, 50, 100)
+    # Long enough for any address or subject line; a longer one is cut.
+    MAX_QUERY_LENGTH = 200
+
+    def get_paginate_by(self, queryset):
+        try:
+            per_page = int(self.request.GET.get("per_page", self.paginate_by))
+        except (TypeError, ValueError):
+            return self.paginate_by
+        return per_page if per_page in self.PER_PAGE_CHOICES else self.paginate_by
+
+    def paginate_queryset(self, queryset, page_size):
+        """As ListView's, but a page that is not a number or is past the end
+        opens the nearest page instead of a 404: narrowing the filters often
+        leaves a page number in the address that no longer exists."""
+        paginator = self.get_paginator(queryset, page_size)
+        try:
+            number = int(self.request.GET.get(self.page_kwarg) or 1)
+        except (TypeError, ValueError):
+            number = 1
+        page = paginator.page(max(1, min(number, paginator.num_pages)))
+        return paginator, page, page.object_list, page.has_other_pages()
 
     def _members(self):
         """The project's current members' accounts, by name."""
@@ -85,6 +111,19 @@ class ProjectEmailLogView(
         self.selected_kind = kind if kind in EmailKind.values else ""
         if self.selected_kind:
             queryset = queryset.filter(kind=self.selected_kind)
+        self.search_query = (self.request.GET.get("q") or "").strip()[
+            : self.MAX_QUERY_LENGTH
+        ]
+        if self.search_query:
+            q = self.search_query
+            queryset = queryset.filter(
+                Q(to_email__icontains=q)
+                | Q(recipient__name__icontains=q)
+                | Q(recipient__given_name__icontains=q)
+                | Q(recipient__family_name__icontains=q)
+                | Q(subject__icontains=q)
+                | Q(text_body__icontains=q)
+            )
         return queryset
 
     def get_context_data(self, **kwargs):
@@ -92,6 +131,12 @@ class ProjectEmailLogView(
         context["members"] = self._members()
         context["selected_member"] = self.selected_member
         context["selected_kind"] = self.selected_kind
+        context["search_query"] = self.search_query
+        context["is_filtered"] = bool(
+            self.selected_member or self.selected_kind or self.search_query
+        )
+        context["per_page_choices"] = self.PER_PAGE_CHOICES
+        context["current_per_page"] = context["paginator"].per_page
         # A digest is about no one project, so it is never in a project's log.
         context["kind_choices"] = [
             choice for choice in EmailKind.choices if choice[0] != EmailKind.DIGEST
