@@ -2003,7 +2003,7 @@ def test_pane_pills_share_one_row_above_the_dates(client, user):
         < pane.index("Kanban column")
     ), "expected the name with its status, High priority, the dates, then the Kanban column row"
     # The status shares the name's row, on its right.
-    title_row = pane[pane.index('<div class="flex items-start gap-3 ') : pane.index("High priority")]
+    title_row = pane[pane.index('<div class="flex items-start gap-3">') : pane.index("High priority")]
     assert "Pilled</h2>" in title_row and 'id="task-completion-chip"' in title_row
     if project.tracks_credit:
         assert pane.index("Task type") < pane.index("Kanban column")
@@ -3275,13 +3275,9 @@ def test_pane_body_text_is_one_size(client, user, other_user):
     pane = client.get(_pane_url(project, task)).content.decode()
     # The property list (dates, task type, created by).
     assert "gap-x-3 gap-y-2 text-sm" in pane
-    # The flag at text-sm; the status in the corner takes the title's size
-    # from the row they share, so it carries no size of its own.
+    # The flag at text-sm; the status in the corner runs a size up.
     assert 'gap-1 text-sm font-medium shrink-0 text-error' in pane
-    assert 'class="flex items-start gap-3 text-lg leading-snug"' in pane
-    chip = pane[pane.index('id="task-completion-chip"') :]
-    chip = chip[: chip.index(">")]
-    assert not re.search(r"\btext-(xs|sm|base|lg|xl|2xl)\b", chip)
+    assert "inline-flex items-center gap-2 mt-0.5 text-base font-semibold" in pane
     # Nothing in the pill row is left at text-xs.
     pill_row = pane[pane.index("flex flex-wrap items-center gap-2") : pane.index("<dl")]
     assert "text-xs" not in pill_row
