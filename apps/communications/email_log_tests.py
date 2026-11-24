@@ -628,14 +628,28 @@ def test_a_member_sees_neither_the_last_email_column_nor_the_log_link(
 
 
 @pytest.mark.django_db
-def test_the_kind_filter_does_not_offer_digests(client, project, pm_user):
+def test_the_kind_filter_does_not_offer_digests_or_announcements(
+    client, project, pm_user
+):
     client.force_login(pm_user)
 
     response = client.get(_log_url(project))
 
     kinds = [value for value, _ in response.context["kind_options"]]
     assert EmailKind.DIGEST not in kinds
+    assert EmailKind.ANNOUNCEMENT not in kinds
     assert EmailKind.INVITATION in kinds
+    assert "label: 'Announcement'" not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_announcements_are_still_listed(client, project, pm_user, user):
+    _log(project, user, kind=EmailKind.ANNOUNCEMENT, subject="Site news")
+    client.force_login(pm_user)
+
+    content = client.get(_log_url(project)).content.decode()
+
+    assert "Site news" in content
 
 
 # ---------------------------------------------------------------------------

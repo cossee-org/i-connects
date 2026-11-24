@@ -61,6 +61,10 @@ class ProjectEmailLogView(
     context_object_name = "emails"
     paginate_by = 50
     PER_PAGE_CHOICES = (25, 50, 100)
+    # Kinds left out of the Email filter. A digest is about no one project,
+    # so it is never in a project's log. Announcements are left out for now;
+    # they are still listed, and ``?kind=announcement`` still narrows to them.
+    KINDS_NOT_OFFERED = frozenset({EmailKind.DIGEST, EmailKind.ANNOUNCEMENT})
     # Long enough for any address or subject line; a longer one is cut.
     MAX_QUERY_LENGTH = 200
 
@@ -149,9 +153,10 @@ class ProjectEmailLogView(
         context["selected_member_value"] = (
             str(self.selected_member.pk) if self.selected_member else ""
         )
-        # A digest is about no one project, so it is never in a project's log.
         context["kind_options"] = [("", "All emails")] + [
-            choice for choice in EmailKind.choices if choice[0] != EmailKind.DIGEST
+            choice
+            for choice in EmailKind.choices
+            if choice[0] not in self.KINDS_NOT_OFFERED
         ]
         context["per_page_options"] = [(str(n), str(n)) for n in self.PER_PAGE_CHOICES]
         context["current_per_page_value"] = str(context["current_per_page"])
