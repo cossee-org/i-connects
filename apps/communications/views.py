@@ -64,6 +64,12 @@ class ProjectEmailLogView(
     # Long enough for any address or subject line; a longer one is cut.
     MAX_QUERY_LENGTH = 200
 
+    def get_template_names(self):
+        # A live search swaps the results alone.
+        if self.request.headers.get("HX-Request"):
+            return ["communications/partials/email_log_results.html"]
+        return [self.template_name]
+
     def get_paginate_by(self, queryset):
         try:
             per_page = int(self.request.GET.get("per_page", self.paginate_by))
@@ -128,24 +134,57 @@ class ProjectEmailLogView(
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["members"] = self._members()
+        context["is_htmx_request"] = bool(self.request.headers.get("HX-Request"))
         context["selected_member"] = self.selected_member
         context["selected_kind"] = self.selected_kind
         context["search_query"] = self.search_query
         context["is_filtered"] = bool(
             self.selected_member or self.selected_kind or self.search_query
         )
-        context["per_page_choices"] = self.PER_PAGE_CHOICES
         context["current_per_page"] = context["paginator"].per_page
+        # The dropdowns' options, as (value, label) strings.
+        context["member_options"] = [("", "All members")] + [
+            (str(u.pk), u.name or u.email) for u in self._members()
+        ]
+        context["selected_member_value"] = (
+            str(self.selected_member.pk) if self.selected_member else ""
+        )
         # A digest is about no one project, so it is never in a project's log.
-        context["kind_choices"] = [
+        context["kind_options"] = [("", "All emails")] + [
             choice for choice in EmailKind.choices if choice[0] != EmailKind.DIGEST
         ]
-        # The filters, carried across pages.
+        context["per_page_options"] = [(str(n), str(n)) for n in self.PER_PAGE_CHOICES]
+        context["current_per_page_value"] = str(context["current_per_page"])
+        context["results_summary"] = _results_summary(
+            context["paginator"].count,
+            member=self.selected_member,
+            kind_label=EmailKind(self.selected_kind).label if self.selected_kind else "",
+            q=self.search_query,
+        )
+        # The filters, carried across pages — only those set, so a link
+        # does not carry the bar's empty hidden fields.
         params = self.request.GET.copy()
         params.pop("page", None)
+        for key in [k for k, v in params.lists() if not any(v)]:
+            del params[key]
         context["filter_query"] = params.urlencode()
         return context
+
+
+def _results_summary(count, *, member, kind_label, q):
+    """The filters in a sentence, as on People discovery — "3 emails to Bea
+    Lund of type Task assigned matching “reef”" — or None when there are
+    none."""
+    if not (member or kind_label or q):
+        return None
+    summary = f"{count} email{'s' if count != 1 else ''}"
+    if member is not None:
+        summary += f" to {member.name or member.email}"
+    if kind_label:
+        summary += f" of type {kind_label}"
+    if q:
+        summary += f" matching “{q}”"
+    return summary
 
 
 class ProjectEmailDetailView(

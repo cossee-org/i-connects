@@ -548,7 +548,7 @@ def test_search_combines_with_the_filters_and_survives_paging(
     content = response.content.decode()
     assert f"q=needle&amp;member={user.pk}&amp;per_page=25&amp;page=2" in content
     assert 'value="needle"' in content
-    assert "Clear filters" in content
+    assert "Clear filter" in content
 
 
 @pytest.mark.django_db
@@ -633,7 +633,7 @@ def test_the_kind_filter_does_not_offer_digests(client, project, pm_user):
 
     response = client.get(_log_url(project))
 
-    kinds = [value for value, _ in response.context["kind_choices"]]
+    kinds = [value for value, _ in response.context["kind_options"]]
     assert EmailKind.DIGEST not in kinds
     assert EmailKind.INVITATION in kinds
 
@@ -838,3 +838,71 @@ def test_the_admin_does_not_show_the_email(admin_client, project, user):
 
     assert response.status_code == 200
     assert "Secret plans" not in response.content.decode()
+
+
+# ---------------------------------------------------------------------------
+# The search and filter bar
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+def test_the_bar_is_the_apps_search_and_filter_bar(client, project, pm_user, user):
+    _add_member(project, user)
+    client.force_login(pm_user)
+
+    content = client.get(_log_url(project)).content.decode()
+
+    assert 'id="filter-form-emails"' in content
+    assert 'placeholder="Search by name, address, subject or text…"' in content
+    assert 'hx-trigger="input changed delay:300ms"' in content
+    assert 'hx-target="#email-results"' in content
+    for label in ("Member", "Email", "Per page"):
+        assert f"<span>{label}</span>" in content
+    assert 'id="email-log-total-badge"' in content
+    # Each member is an option of the Member dropdown.
+    assert f"value: '{user.pk}'" in content
+
+
+@pytest.mark.django_db
+def test_a_live_search_returns_the_results_alone_with_the_count(
+    client, project, pm_user, user
+):
+    _log(project, user, subject="Coral survey")
+    _log(project, user, subject="Kelp survey")
+    client.force_login(pm_user)
+
+    response = client.get(_log_url(project, q="coral"), HTTP_HX_REQUEST="true")
+
+    content = response.content.decode()
+    assert "<html" not in content.lower()
+    assert 'id="filter-form-emails"' not in content
+    assert "Coral survey" in content
+    assert "Kelp survey" not in content
+    assert 'id="email-log-total-badge" hx-swap-oob="true"' in content
+
+
+@pytest.mark.django_db
+def test_the_filters_are_summed_up_in_a_sentence(client, project, pm_user, user):
+    _add_member(project, user)
+    _log(project, user, subject="Coral survey", kind=EmailKind.MAILING_LIST)
+    client.force_login(pm_user)
+
+    plain = client.get(_log_url(project))
+    filtered = client.get(
+        _log_url(project, member=user.pk, kind=EmailKind.MAILING_LIST, q="coral")
+    )
+
+    assert plain.context["results_summary"] is None
+    name = user.name or user.email
+    assert filtered.context["results_summary"] == (
+        f"1 email to {name} of type Mailing list message matching “coral”"
+    )
+
+
+@pytest.mark.django_db
+def test_page_links_leave_out_the_bars_empty_fields(client, project, pm_user, user):
+    _bulk_log(project, user, 60)
+    client.force_login(pm_user)
+
+    # What the bar submits with nothing chosen.
+    response = client.get(_log_url(project, q="", member="", kind="", per_page=25))
+
+    assert response.context["filter_query"] == "per_page=25"
