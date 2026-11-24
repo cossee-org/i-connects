@@ -2081,7 +2081,8 @@ def test_pane_completion_button_toggles_not_complete_to_completed(client, user):
     assert "Re-open Task" in body
     assert reverse("tasks:reopen", kwargs={"pk": task.pk}) in body
     assert 'id="task-completion-chip"' in body
-    assert "Open</span>" not in body
+    assert "<span>Closed</span>" in body
+    assert "<span>Open</span>" not in body
 
     # Closed -> Open.
     undone = client.post(
@@ -2093,6 +2094,8 @@ def test_pane_completion_button_toggles_not_complete_to_completed(client, user):
     task.refresh_from_db()
     assert task.status == TaskStatus.NOT_COMPLETED
     assert "Close Task" in undone.content.decode()
+    assert "<span>Open</span>" in undone.content.decode()
+    assert "<span>Closed</span>" not in undone.content.decode()
 
 
 @pytest.mark.django_db

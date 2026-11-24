@@ -1395,8 +1395,8 @@ def _marks_locked(task) -> bool:
     withdraw (``services.review_locked``) — though the assignee undoing their
     own mark still clears it — and a part marked before the task was
     completed and left unreviewed, which can no longer be reviewed
-    (``services.review_closed``); only parts marked after completion are. A Lead who needs to change either marks the
-    task Not Complete first.
+    (``services.review_closed``); only parts marked after completion are. A
+    Lead who needs to change either re-opens the task first (Re-open Task).
     """
     return task.status == TaskStatus.COMPLETED
 
