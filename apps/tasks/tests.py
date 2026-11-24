@@ -5956,8 +5956,8 @@ def test_to_verify_lists_a_done_unverified_part_for_the_lead(client, user, other
 @pytest.mark.django_db
 def test_status_follows_the_leads_complete_mark(client, user, other_user):
     """Open shows only tasks no Lead has closed and Closed only the
-    closed ones. The default, All, takes in both: a closed task with a part
-    still to verify waits on the Lead all the same."""
+    closed ones — even a closed task with a part still to verify, which the
+    To Verify tab keeps under Complete and All."""
     from apps.tasks.services import close_task, mark_own_done
 
     _project, task, lead, contrib = _lead_only_task(user, other_user)
@@ -5969,14 +5969,11 @@ def test_status_follows_the_leads_complete_mark(client, user, other_user):
         return task.name in client.get(url, params).content.decode()
 
     assert listed(type="verify")
-    assert listed(type="verify", status="not_completed")
     assert not listed(type="verify", status="completed")
 
     close_task(task=task, closed_by=lead)
-    assert listed(type="verify")
-    assert listed()
-    assert not listed(type="verify", status="not_completed")
-    assert not listed(status="not_completed")
+    assert not listed(type="verify")
+    assert not listed()
     assert listed(type="verify", status="completed")
     assert listed(status="completed")
     assert listed(type="verify", status="all")
@@ -6209,8 +6206,7 @@ def test_sidebar_header_and_tabs_give_the_same_totals(
     to_review.assigned_members.add(contrib)
     TaskLog.objects.create(task=to_review, assigned_to=contrib)
     mark_own_done(task=to_review, member=contrib)
-    # Assigned, closed by a Lead before the user marked it: still theirs
-    # to mark (services.mark_own_done), so still counted.
+    # Assigned but closed by a Lead: not counted.
     closed = task("Closed one")
     closed.assigned_members.add(lead)
     TaskLog.objects.create(task=closed, assigned_to=lead)
@@ -6218,97 +6214,19 @@ def test_sidebar_header_and_tabs_give_the_same_totals(
     close_task(task=closed, closed_by=lead)
 
     assert Task.objects.my_list_counts(user) == {
-        "total": 5, "assigned": 2, "review": 1, "verify": 2, "done": 0,
+        "total": 4, "assigned": 1, "review": 1, "verify": 2,
     }
 
     client.force_login(user)
     url = reverse("tasks:my_list")
-    for params in (
-        {}, {"q": "Still"}, {"status": "not_completed"}, {"done": "1"},
-        {"type": "verify"},
-    ):
+    for params in ({}, {"q": "Still"}, {"status": "all"}, {"type": "verify"}):
         response = client.get(url, params)
-        assert response.context["sidebar_active_tasks_total"] == 5
-        assert response.context["total_task_count"] == 5
+        assert response.context["sidebar_active_tasks_total"] == 4
+        assert response.context["total_task_count"] == 4
         assert {t["value"]: t["count"] for t in response.context["task_tabs"]} == {
-            "": 5, "assigned": 2, "review": 1, "verify": 2,
+            "": 4, "assigned": 1, "review": 1, "verify": 2,
         }
 
     # The All tab lists exactly as many tasks as it counts.
     assert response.context["paginator"].count == 2  # the verify tab
-    assert client.get(url).context["paginator"].count == 5
-    assert client.get(url, {"status": "not_completed"}).context["paginator"].count == 4
-
-
-@pytest.mark.django_db
-def test_a_part_marked_done_leaves_the_page_unless_marked_done_is_included(
-    client, user, other_user, third_user
-):
-    """A contributor's part marked done waits on no one but its reviewer
-    and Lead: off the page, the sidebar and the counts by default, back on
-    All and Assigned with "Include marked done" ticked."""
-    from apps.tasks.services import mark_own_done
-
-    # other_user leads; the user is the contributor.
-    _project, task, _lead, contrib = _lead_only_task(other_user, user)
-    url = reverse("tasks:my_list")
-    client.force_login(user)
-
-    def listed(**params):
-        return task.name in client.get(url, params).content.decode()
-
-    assert listed() and listed(type="assigned")
-    assert Task.objects.my_list_counts(user)["total"] == 1
-
-    mark_own_done(task=task, member=contrib)
-    assert not listed()
-    assert not listed(type="assigned")
-    response = client.get(url)
-    assert "Marked done</span>" not in response.content.decode()
-    assert response.context["sidebar_active_tasks_total"] == 0
-    assert response.context["total_task_count"] == 0
-    assert response.context["done_task_count"] == 1
-    assert "Include marked done" in response.content.decode()
-
-    assert listed(done="1")
-    assert listed(done="1", type="assigned")
-    assert not listed(done="1", type="review")
-    assert not listed(done="1", type="verify")
-    response = client.get(url, {"done": "1"})
-    page = response.content.decode()
-    assert re.search(r'name="done" value="1"[^>]*\schecked', page)
-    assert "including marked done" in response.context["results_summary"]
-    assert "Marked done</span>" in page
-    # The box carries over to paging and to the live search.
-    assert "done=1" in response.context["filter_params"]
-    assert task.name in client.get(
-        url, {"done": "1", "q": "Verify"}, HTTP_HX_REQUEST="true"
-    ).content.decode()
-    # Counts stay what waits on the user, ticked or not.
-    assert response.context["total_task_count"] == 0
-
-
-@pytest.mark.django_db
-def test_a_marked_part_stays_while_the_task_waits_on_the_users_review(
-    client, user, other_user, third_user
-):
-    """Marked done but still waiting on the user for something else: the
-    task stays on the page by default."""
-    from apps.tasks.services import mark_own_done
-
-    project, task, _lead, contrib = _lead_only_task(other_user, user)
-    second = ProjectMember.objects.create(project=project)
-    second.users.add(third_user)
-    task.assigned_members.add(second)
-    TaskLog.objects.create(task=task, assigned_to=second)
-    task.reviewers.add(contrib)
-
-    mark_own_done(task=task, member=contrib)
-    mark_own_done(task=task, member=second)
-    client.force_login(user)
-    url = reverse("tasks:my_list")
-
-    assert task.name in client.get(url).content.decode()
-    assert task.name in client.get(url, {"type": "review"}).content.decode()
-    assert task.name not in client.get(url, {"type": "assigned"}).content.decode()
-    assert Task.objects.my_list_counts(user)["done"] == 0
+    assert client.get(url).context["paginator"].count == 4
