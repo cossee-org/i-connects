@@ -1275,7 +1275,7 @@ def _overdue_filter_tasks(project, member, column):
 
 @pytest.mark.django_db
 def test_board_filter_narrows_every_view(client, user):
-    """All, Overdue, High Priority, Completed and Not Completed, in every view."""
+    """All, Overdue, High Priority, Open and Closed, in every view."""
     project, col1, _col2 = _make_project_with_board(user)
     _overdue_filter_tasks(project, _primary_member(project, user), col1)
     client.force_login(user)
@@ -1323,12 +1323,12 @@ def test_board_filter_menu(client, user):
     content = client.get(board).content.decode()
     menu = content[content.index('aria-haspopup="true"'):]
     links = [menu.index(f'href="{board}{q}"') for q in (
-        "", "?filter=overdue", "?filter=high_priority", "?filter=completed",
-        "?filter=not_completed",
+        "", "?filter=overdue", "?filter=high_priority", "?filter=not_completed",
+        "?filter=completed",
     )]
     assert links == sorted(links)
-    for label in (">All</a>", ">Overdue</a>", ">High Priority</a>", ">Completed</a>",
-                  ">Not Completed</a>"):
+    for label in (">All</a>", ">Overdue</a>", ">High Priority</a>", ">Open</a>",
+                  ">Closed</a>"):
         assert label in menu
     assert 'aria-current="true">All</a>' in menu
     assert "htmx:configRequest" not in content
@@ -1338,7 +1338,7 @@ def test_board_filter_menu(client, user):
     # it, and Kanban does not reorder.
     content = client.get(board, {"filter": "completed"}).content.decode()
     assert "<span>Filter</span>" in content and "Filter: " not in content
-    assert 'aria-current="true">Completed</a>' in content
+    assert 'aria-current="true">Closed</a>' in content
     assert "evt.detail.parameters.filter = 'completed'" in content
     assert "a filtered board does not reorder" in content
     # The old Overdue chip is gone.
@@ -5951,7 +5951,7 @@ def test_to_verify_lists_a_done_unverified_part_for_the_lead(client, user, other
 
 @pytest.mark.django_db
 def test_status_follows_the_leads_complete_mark(client, user, other_user):
-    """Not Complete shows only tasks no Lead has closed and Complete only the
+    """Open shows only tasks no Lead has closed and Closed only the
     closed ones — even a closed task with a part still to verify, which the
     To Verify tab keeps under Complete and All."""
     from apps.tasks.services import close_task, mark_own_done

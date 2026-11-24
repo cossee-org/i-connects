@@ -52,12 +52,12 @@
 
   <div class="flex gap-3 w-full sm:w-auto flex-wrap items-center">
 
-    {# Status dropdown — Not Complete (default) / Complete / All #}
+    {# Status dropdown — Open (default) / Closed / All: the task's own status, which a Lead sets #}
     <div x-data="{
       open: false,
       options: [
-        {value: 'not_completed', label: 'Not Complete'},
-        {value: 'completed', label: 'Complete'},
+        {value: 'not_completed', label: 'Open'},
+        {value: 'completed', label: 'Closed'},
         {value: 'all', label: 'All'}
       ],
       current: '{{ current_status }}',

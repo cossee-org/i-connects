@@ -125,12 +125,12 @@ class MyTaskListView(LoginRequiredMixin, ListView):
     with a part marked done and not yet verified — and reviewed, where the
     task requires review).
 
-    The "Status" filter reads whether a Lead has marked the task complete:
-    by default only tasks no Lead has closed ("Not Complete") are shown; it
-    can switch to closed tasks only ("Complete") or "All". Excludes tasks the user merely created, and tasks they review
-    or lead with nothing waiting on them. The one place tasks can be
-    filtered and browsed across projects; paginated so a heavy task load
-    never gets fetched at once.
+    The "Status" filter reads whether a Lead has closed the task: by
+    default only tasks no Lead has closed ("Open") are shown; it can switch
+    to closed tasks only ("Closed") or "All". Excludes tasks the user merely
+    created, and tasks they review or lead with nothing waiting on them. The
+    one place tasks can be filtered and browsed across projects; paginated
+    so a heavy task load never gets fetched at once.
     """
 
     model = Task
@@ -197,8 +197,8 @@ class MyTaskListView(LoginRequiredMixin, ListView):
     def _apply_status_filter(self, qs, status_filter):
         """Restrict by whether a Lead has marked the task complete (closed
         it: ``services.close_task``), which is what ``Task.status`` records.
-        "not_completed" (the default, "Not Complete") shows only tasks no
-        Lead has closed; "completed" ("Complete") only the ones a Lead has;
+        "not_completed" (the default, "Open") shows only tasks no Lead has
+        closed; "completed" ("Closed") only the ones a Lead has;
         "all" applies no filter. A part's own done mark plays no part here:
         the Assigned tab handles that (``_apply_type_filter``), so a closed
         task waiting on a review or verification shows under Complete."""
@@ -332,9 +332,9 @@ class MyTaskListView(LoginRequiredMixin, ListView):
                 parts.append("to-verify")
             desc = (" ".join(parts) + " tasks") if parts else "tasks"
             if current_status == "all":
-                desc += " (including completed)"
+                desc += " (including closed)"
             elif current_status == "completed":
-                desc += " (completed only)"
+                desc += " (closed only)"
             if current_project:
                 project_obj = next(
                     (p for p in context["my_projects"] if str(p.pk) == current_project),
@@ -369,8 +369,9 @@ BOARD_FILTERS = (
     ("overdue", "Overdue"),
     ("extended", "Extended"),
     ("high_priority", "High Priority"),
-    ("completed", "Completed"),
-    ("not_completed", "Not Completed"),
+    # The task's own status, which a Lead sets: Open, or Closed.
+    ("not_completed", "Open"),
+    ("completed", "Closed"),
 )
 
 
@@ -477,9 +478,9 @@ LIST_SORT_CHOICES = (
 )
 
 LIST_DONE_CHOICES = (
-    ("", "Any completion"),
-    ("complete", "Complete"),
-    ("not_complete", "Not complete"),
+    ("", "Any status"),
+    ("not_complete", "Open"),
+    ("complete", "Closed"),
 )
 
 LIST_PRIORITY_CHOICES = (
