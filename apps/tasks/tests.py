@@ -5950,22 +5950,29 @@ def test_to_verify_lists_a_done_unverified_part_for_the_lead(client, user, other
 
 
 @pytest.mark.django_db
-def test_to_verify_keeps_a_completed_task_with_a_part_left(client, user, other_user):
-    """A Lead verifies parts on completed tasks too, so the default Not
-    Completed status still lists one with a part waiting."""
-    from apps.tasks.services import mark_own_done
+def test_status_follows_the_leads_complete_mark(client, user, other_user):
+    """Not Complete shows only tasks no Lead has closed and Complete only the
+    closed ones — even a closed task with a part still to verify, which the
+    To Verify tab keeps under Complete and All."""
+    from apps.tasks.services import close_task, mark_own_done
 
-    _project, task, _lead, contrib = _lead_only_task(user, other_user)
+    _project, task, lead, contrib = _lead_only_task(user, other_user)
     mark_own_done(task=task, member=contrib)
-    task.status = TaskStatus.COMPLETED
-    task.save()
     client.force_login(user)
-
     url = reverse("tasks:my_list")
-    assert task.name in client.get(url, {"type": "verify"}).content.decode()
-    assert task.name in client.get(
-        url, {"type": "verify", "status": "completed"}
-    ).content.decode()
+
+    def listed(**params):
+        return task.name in client.get(url, params).content.decode()
+
+    assert listed(type="verify")
+    assert not listed(type="verify", status="completed")
+
+    close_task(task=task, closed_by=lead)
+    assert not listed(type="verify")
+    assert not listed()
+    assert listed(type="verify", status="completed")
+    assert listed(status="completed")
+    assert listed(type="verify", status="all")
 
 
 @pytest.mark.django_db

@@ -125,11 +125,9 @@ class MyTaskListView(LoginRequiredMixin, ListView):
     with a part marked done and not yet verified — and reviewed, where the
     task requires review).
 
-    By default only active ("Not completed") tasks are shown; the "Status"
-    filter can switch to "Completed" only or "All" regardless of status. A
-    submission waiting on the user's review or verification counts as
-    active whatever the task's status, since both go on after a task is
-    completed. Excludes tasks the user merely created, and tasks they review
+    The "Status" filter reads whether a Lead has marked the task complete:
+    by default only tasks no Lead has closed ("Not Complete") are shown; it
+    can switch to closed tasks only ("Complete") or "All". Excludes tasks the user merely created, and tasks they review
     or lead with nothing waiting on them. The one place tasks can be
     filtered and browsed across projects; paginated so a heavy task load
     never gets fetched at once.
@@ -197,22 +195,18 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         )
 
     def _apply_status_filter(self, qs, status_filter):
-        """Restrict by the task's completion status. "all" applies no
-        filter; "completed" shows only completed tasks; the default
-        "not_completed" shows open ones. A submission waiting on the user's
-        review or verification keeps a task active whatever its status: both
-        go on after it is completed. Whether the user has marked their own
-        part done is the Assigned tab's business (``_apply_type_filter``),
-        not the status's, so All keeps parts the user has already marked."""
+        """Restrict by whether a Lead has marked the task complete (closed
+        it: ``services.close_task``), which is what ``Task.status`` records.
+        "not_completed" (the default, "Not Complete") shows only tasks no
+        Lead has closed; "completed" ("Complete") only the ones a Lead has;
+        "all" applies no filter. A part's own done mark plays no part here:
+        the Assigned tab handles that (``_apply_type_filter``), so a closed
+        task waiting on a review or verification shows under Complete."""
         if status_filter == "all":
             return qs
         if status_filter == "completed":
             return qs.filter(status=TaskStatus.COMPLETED)
-        return qs.filter(
-            Q(status=TaskStatus.NOT_COMPLETED)
-            | Q(has_to_review=True)
-            | Q(has_to_verify=True)
-        )
+        return qs.filter(status=TaskStatus.NOT_COMPLETED)
 
     def _apply_type_filter(self, qs, task_type):
         if task_type == "assigned":
