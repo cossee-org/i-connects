@@ -9,7 +9,7 @@
 
 The guide covers: sign-up, sign-in, creating a project, inviting members,
 accepting an invitation, creating a task, marking a task done (assignee),
-reviewing submissions (reviewer), completing a task (Lead), tracking
+reviewing submissions (reviewer), closing a task (Lead), tracking
 contributions, and writing the project wiki.
 
 The screenshots are real: `tools/capture_screenshots.py` drove a running copy
