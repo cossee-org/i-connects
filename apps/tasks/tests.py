@@ -6164,3 +6164,69 @@ def test_assigned_drops_a_part_the_user_marked_done_but_all_keeps_it(client, use
         url, {"type": "assigned", "status": "all"}
     ).content.decode()
     assert task.name in client.get(url).content.decode()
+
+
+@pytest.mark.django_db
+def test_sidebar_header_and_tabs_give_the_same_totals(
+    client, user, other_user, third_user
+):
+    """The sidebar's Tasks badge, the Tasks page's header and its All tab
+    give one total, and each tab its own, whatever the search and filters."""
+    from apps.tasks.services import close_task, mark_own_done
+
+    # Verify: a contributor's part done, in a project the user leads.
+    project, to_verify, lead, contrib = _lead_only_task(user, other_user)
+    col = to_verify.container
+
+    def task(name, **kwargs):
+        return Task.objects.create(
+            project=project, created_by=lead, container=col,
+            container_task_order=0, name=name, **kwargs,
+        )
+
+    # Assigned, not yet marked done.
+    to_do = task("Still to do")
+    to_do.assigned_members.add(lead)
+    TaskLog.objects.create(task=to_do, assigned_to=lead)
+    # Assigned and marked done: off Assigned, and on To Verify, since the
+    # user leads the project.
+    marked = task("Marked done")
+    marked.assigned_members.add(lead)
+    TaskLog.objects.create(task=marked, assigned_to=lead)
+    mark_own_done(task=marked, member=lead)
+    # Reviewed by the user with nothing submitted: on no tab at all.
+    idle = task("Nothing to review")
+    idle.reviewers.add(lead)
+    idle.assigned_members.add(contrib)
+    TaskLog.objects.create(task=idle, assigned_to=contrib)
+    # Reviewed by the user, with a part waiting on that review (and
+    # not yet the Lead's to verify, since the task requires review).
+    to_review = task("Waiting on review")
+    to_review.reviewers.add(lead)
+    to_review.assigned_members.add(contrib)
+    TaskLog.objects.create(task=to_review, assigned_to=contrib)
+    mark_own_done(task=to_review, member=contrib)
+    # Assigned but closed by a Lead: not counted.
+    closed = task("Closed one")
+    closed.assigned_members.add(lead)
+    TaskLog.objects.create(task=closed, assigned_to=lead)
+    mark_own_done(task=to_verify, member=contrib)
+    close_task(task=closed, closed_by=lead)
+
+    assert Task.objects.my_list_counts(user) == {
+        "total": 4, "assigned": 1, "review": 1, "verify": 2,
+    }
+
+    client.force_login(user)
+    url = reverse("tasks:my_list")
+    for params in ({}, {"q": "Still"}, {"status": "all"}, {"type": "verify"}):
+        response = client.get(url, params)
+        assert response.context["sidebar_active_tasks_total"] == 4
+        assert response.context["total_task_count"] == 4
+        assert {t["value"]: t["count"] for t in response.context["task_tabs"]} == {
+            "": 4, "assigned": 1, "review": 1, "verify": 2,
+        }
+
+    # The All tab lists exactly as many tasks as it counts.
+    assert response.context["paginator"].count == 2  # the verify tab
+    assert client.get(url).context["paginator"].count == 4

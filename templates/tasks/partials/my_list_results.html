@@ -1,17 +1,5 @@
 {% load task_tags %}
 
-{% comment %}
-Out-of-band swap: keep the header total count (and the tabs' counts) in sync with the live
-search/filter results, even though it sits outside #task-results. Only
-emitted for the standalone HTMX response — when this partial is
-{% include %}d into the full page, the real badge above already exists,
-so emitting it too would duplicate visible, unstyled-by-htmx content.
-{% endcomment %}
-{% if is_htmx_request %}
-<span id="task-total-badge" hx-swap-oob="true" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_task_count }}</span>
-{% include "tasks/partials/my_list_tabs.html" with oob=True %}
-{% endif %}
-
 {% if results_summary %}
   <div class="flex items-center gap-3 mb-4">
     <p class="text-sm text-brand-text">{{ results_summary }}</p>

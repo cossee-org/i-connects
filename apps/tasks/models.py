@@ -164,6 +164,59 @@ class TaskQuerySet(models.QuerySet):
             has_to_review=Exists(to_review), has_to_verify=Exists(to_verify)
         )
 
+    def on_my_list(self, user):
+        """The tasks the Tasks page's All tab holds for ``user``: those
+        assigned to them, and those with a submission waiting on their review
+        or verification (:meth:`with_waiting_on`). Annotates
+        ``user_log_status`` (the user's own part's newest status) and
+        ``is_assigned`` besides. Every status: narrow with ``status=``."""
+        from apps.projects.models import ProjectMember
+
+        user_member_qs = ProjectMember.objects.filter(users=user)
+        latest_log_status = Subquery(
+            TaskLog.objects.filter(task=OuterRef("pk"), assigned_to__in=user_member_qs)
+            .order_by("-created_at")
+            .values("status")[:1]
+        )
+        return (
+            self.with_waiting_on(user)
+            .annotate(
+                user_log_status=latest_log_status,
+                is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
+            )
+            .filter(
+                Q(is_assigned=True) | Q(has_to_review=True) | Q(has_to_verify=True)
+            )
+        )
+
+    #: Each tab of the Tasks page but All, as a condition on
+    #: :meth:`on_my_list`'s annotations. Assigned holds only parts the user
+    #: has still to mark done — NULL-safe: with no TaskLog yet for the user,
+    #: user_log_status is NULL, and ``~Q(user_log_status=COMPLETED)`` alone
+    #: would drop the task (NOT (NULL = x) is not true in SQL).
+    MY_LIST_TABS = {
+        "assigned": Q(is_assigned=True)
+        & (Q(user_log_status__isnull=True) | ~Q(user_log_status=TaskStatus.COMPLETED)),
+        "review": Q(has_to_review=True),
+        "verify": Q(has_to_verify=True),
+    }
+
+    def my_list_counts(self, user):
+        """How many open tasks (no Lead has closed them) ``user`` has on the
+        Tasks page, in one query: ``total`` (the All tab) and one count per
+        tab in :attr:`MY_LIST_TABS`. Whatever the page's search and filters,
+        so the sidebar, the page's header and its tabs give the same
+        totals."""
+        from django.db.models import Count
+
+        return self.on_my_list(user).filter(status=TaskStatus.NOT_COMPLETED).aggregate(
+            total=Count("pk"),
+            **{
+                tab: Count("pk", filter=condition)
+                for tab, condition in self.MY_LIST_TABS.items()
+            },
+        )
+
     def with_my_deadline(self, user):
         """Annotate ``my_deadline``: ``user``'s individual deadline on each
         task where a Lead set one, else the task's own deadline — and
