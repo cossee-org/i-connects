@@ -5886,3 +5886,95 @@ def test_web_addresses_in_the_description_are_links(client, user):
         assert 'href="https://www.example.org/notes"' in body
         assert "<p>&lt;script&gt;alert(1)&lt;/script&gt; javascript:alert(1)</p>" in body
         assert body.count("<a ") == 2
+
+
+# ---------------------------------------------------------------------------
+# All tasks: the All / Assigned / To Review / To Verify tabs
+# ---------------------------------------------------------------------------
+
+
+def _lead_only_task(user, other_user):
+    """A task assigned to a contributor alone, in a project ``user`` leads."""
+    project, col1, _col2 = _make_project_with_board(user)
+    lead = _primary_member(project, user)
+    contrib = ProjectMember.objects.create(project=project)
+    contrib.users.add(other_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=other_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    task = Task.objects.create(
+        project=project, created_by=lead, container=col1,
+        container_task_order=0, name="Verify me",
+    )
+    task.assigned_members.add(contrib)
+    TaskLog.objects.create(task=task, assigned_to=contrib)
+    return project, task, lead, contrib
+
+
+@pytest.mark.django_db
+def test_my_tasks_page_has_the_four_tabs(client, user):
+    client.force_login(user)
+    page = client.get(reverse("tasks:my_list"), {"type": "review"}).content.decode()
+    tabs = page[page.index('id="task-tabs"') : page.index('id="filter-form-tasks"')]
+    labels = re.findall(r"</svg>\s*([A-Za-z ]+?)\s*<", tabs)
+    assert labels == ["All", "Assigned", "To Review", "To Verify"]
+    # The current tab is the active one, in the Requests page's style.
+    active = tabs[tabs.index("brand-tab-active") - 600 : tabs.index("brand-tab-active")]
+    assert 'aria-selected="true"' in active
+    assert tabs.count("brand-tab-active") == 1
+
+
+@pytest.mark.django_db
+def test_to_verify_lists_a_done_unverified_part_for_the_lead(client, user, other_user):
+    from apps.tasks.services import mark_own_done, verify_part
+
+    _project, task, lead, contrib = _lead_only_task(user, other_user)
+    url = reverse("tasks:my_list")
+    client.force_login(user)
+
+    # Not marked done yet: nothing for the Lead to verify, nor to see at all.
+    assert task.name not in client.get(url, {"type": "verify"}).content.decode()
+    assert task.name not in client.get(url).content.decode()
+
+    log = mark_own_done(task=task, member=contrib)
+    verify_page = client.get(url, {"type": "verify"}).content.decode()
+    assert task.name in verify_page
+    assert "To verify" in verify_page
+    # All takes it in too; Assigned and To Review do not.
+    assert task.name in client.get(url).content.decode()
+    assert task.name not in client.get(url, {"type": "assigned"}).content.decode()
+    assert task.name not in client.get(url, {"type": "review"}).content.decode()
+
+    verify_part(task_log=log, lead=lead)
+    assert task.name not in client.get(url, {"type": "verify"}).content.decode()
+
+
+@pytest.mark.django_db
+def test_to_verify_keeps_a_completed_task_with_a_part_left(client, user, other_user):
+    """A Lead verifies parts on completed tasks too, so the default Not
+    Completed status still lists one with a part waiting."""
+    from apps.tasks.services import mark_own_done
+
+    _project, task, _lead, contrib = _lead_only_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    task.status = TaskStatus.COMPLETED
+    task.save()
+    client.force_login(user)
+
+    url = reverse("tasks:my_list")
+    assert task.name in client.get(url, {"type": "verify"}).content.decode()
+    assert task.name in client.get(
+        url, {"type": "verify", "status": "completed"}
+    ).content.decode()
+
+
+@pytest.mark.django_db
+def test_to_verify_is_the_leads_alone(client, user, other_user):
+    from apps.tasks.services import mark_own_done
+
+    _project, task, _lead, contrib = _lead_only_task(user, other_user)
+    mark_own_done(task=task, member=contrib)
+    client.force_login(other_user)
+
+    page = client.get(reverse("tasks:my_list"), {"type": "verify"}).content.decode()
+    assert task.name not in page

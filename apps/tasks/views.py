@@ -45,10 +45,11 @@ from apps.comments.views import comment_box_context
 from apps.core.enums import (
     CompletedAs,
     ContributionType,
+    MemberPrivileges,
     TaskStatus,
     credit_role_choices,
 )
-from apps.projects.models import Project, ProjectMember
+from apps.projects.models import Project, ProjectMember, ProjectPrivilege
 from apps.tasks.calendar import (
     VIEWS as CALENDAR_VIEWS,
     build_day_tasks,
@@ -116,16 +117,21 @@ from apps.tasks.services import (
 
 class MyTaskListView(LoginRequiredMixin, ListView):
     """Tasks touching the current user, across all of their projects: those
-    assigned to the user and those where the user is a reviewer, merged into
-    a single list. The "Type" filter narrows that down to just tasks
-    assigned to the user, or just tasks where the user is a reviewer.
+    assigned to the user, those where the user is a reviewer, and those
+    waiting on the user's verification as a Lead, merged into a single list.
+    The page's tabs (``?type=``) narrow that down: All, Assigned (assigned
+    to the user), To Review (the user is a reviewer) and To Verify (a task in
+    a project the user leads with an assignee's part marked done and not yet
+    verified).
 
     By default only active ("Not completed") tasks are shown, matching the
     dashboard's task counts; the "Status" filter can switch to "Completed"
-    only or "All" regardless of status. Excludes tasks the user merely
-    created or that are assigned to others. The one place tasks can be
-    filtered and browsed across projects; paginated so a heavy task load
-    never gets fetched at once.
+    only or "All" regardless of status. A part waiting on the user's
+    verification counts as active whatever the task's status, since a Lead
+    verifies parts on completed tasks too. Excludes tasks the user merely
+    created or that are assigned to others with nothing for the user to
+    verify. The one place tasks can be filtered and browsed across projects;
+    paginated so a heavy task load never gets fetched at once.
     """
 
     model = Task
@@ -149,7 +155,14 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         "name_desc": "-name",
     }
 
-    _TYPES = ("assigned", "review")
+    #: The page's tabs, in order: ``?type=`` value -> label. "" is All.
+    TABS = (
+        ("", "All"),
+        ("assigned", "Assigned"),
+        ("review", "To Review"),
+        ("verify", "To Verify"),
+    )
+    _TYPES = ("assigned", "review", "verify")
     _STATUSES = ("not_completed", "completed", "all")
 
     def _current_status(self):
@@ -168,12 +181,40 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             .order_by("-created_at")
             .values("status")[:1]
         )
-        return Task.objects.filter(
-            Q(assigned_members__users=user) | Q(reviewers__users=user)
-        ).with_my_deadline(user).annotate(
-            user_log_status=latest_log_status,
-            is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
-            is_reviewing=Exists(user_member_qs.filter(reviewed_tasks=OuterRef("pk"))),
+        # A part waiting on this user's verification: a current assignee's
+        # current TaskLog (their newest — services.current_logs) marked done
+        # and not verified, on a task in a project the user leads.
+        newer_log = TaskLog.objects.filter(
+            task=OuterRef("task"), assigned_to=OuterRef("assigned_to")
+        ).filter(
+            Q(created_at__gt=OuterRef("created_at"))
+            | Q(created_at=OuterRef("created_at"), pk__gt=OuterRef("pk"))
+        )
+        awaiting_verification = TaskLog.objects.filter(
+            task=OuterRef("pk"),
+            assigned_to__assigned_tasks=OuterRef("pk"),
+            status=TaskStatus.COMPLETED,
+            verified_at__isnull=True,
+        ).filter(~Exists(newer_log))
+        user_leads = ProjectPrivilege.objects.filter(
+            project=OuterRef("project"),
+            user=user,
+            privilege=MemberPrivileges.PROJECT_MANAGER,
+        )
+        return (
+            Task.objects.with_my_deadline(user)
+            .annotate(
+                user_log_status=latest_log_status,
+                is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
+                is_reviewing=Exists(user_member_qs.filter(reviewed_tasks=OuterRef("pk"))),
+                is_lead=Exists(user_leads),
+                has_unverified=Exists(awaiting_verification),
+            )
+            .filter(
+                Q(is_assigned=True)
+                | Q(is_reviewing=True)
+                | Q(is_lead=True, has_unverified=True)
+            )
         )
 
     def _apply_status_filter(self, qs, status_filter):
@@ -189,18 +230,23 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         # (NOT (NULL = COMPLETED) is NULL/false in SQL), so it must be kept
         # explicitly — matching the dashboard's active_task_count logic. Only
         # applies to tasks the user is assigned to; a review-only task is
-        # judged by the task's own status alone.
-        return qs.filter(status=TaskStatus.NOT_COMPLETED).filter(
+        # judged by the task's own status alone. A part waiting on the user's
+        # verification keeps the task active whatever its status: a Lead
+        # verifies parts on completed tasks too.
+        open_for_user = Q(status=TaskStatus.NOT_COMPLETED) & (
             Q(is_assigned=False)
             | Q(user_log_status__isnull=True)
             | ~Q(user_log_status=TaskStatus.COMPLETED)
         )
+        return qs.filter(open_for_user | Q(is_lead=True, has_unverified=True))
 
     def _apply_type_filter(self, qs, task_type):
         if task_type == "assigned":
             return qs.filter(is_assigned=True)
         if task_type == "review":
             return qs.filter(is_reviewing=True)
+        if task_type == "verify":
+            return qs.filter(is_lead=True, has_unverified=True)
         return qs
 
     def _apply_common_filters(self, qs):
@@ -272,13 +318,30 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
 
-        context["total_task_count"] = self._apply_status_filter(
+        # The tabs' counts follow every filter but the tab itself; All's is
+        # the header total.
+        untyped = self._apply_status_filter(
             self._apply_common_filters(self._base_queryset()), current_status
-        ).count()
+        )
+        context["total_task_count"] = untyped.count()
+        context["task_tabs"] = [
+            {
+                "value": value,
+                "label": label,
+                "count": (
+                    self._apply_type_filter(untyped, value).count() if value else None
+                ),
+            }
+            for value, label in self.TABS
+        ]
+        # Clearing the filters keeps the user on their tab.
+        context["clear_filters_query"] = f"?type={current_type}" if current_type else ""
         context["now"] = timezone.now()
 
+        # The tab is where the user is, not a filter they set: it alone
+        # brings up no results summary.
         has_filters = bool(
-            current_q or current_project or current_priority or current_type
+            current_q or current_project or current_priority
             or current_status != "not_completed"
         )
         if has_filters:
@@ -288,7 +351,9 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             if current_type == "assigned":
                 parts.append("assigned")
             elif current_type == "review":
-                parts.append("review")
+                parts.append("to-review")
+            elif current_type == "verify":
+                parts.append("to-verify")
             desc = (" ".join(parts) + " tasks") if parts else "tasks"
             if current_status == "all":
                 desc += " (including completed)"
