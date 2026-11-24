@@ -687,7 +687,7 @@ def test_a_member_sees_neither_the_last_email_column_nor_the_log_link(
 
 
 @pytest.mark.django_db
-def test_the_kind_filter_does_not_offer_digests_or_announcements(
+def test_the_kind_filter_does_not_offer_digests_announcements_or_mailing_lists(
     client, project, pm_user
 ):
     client.force_login(pm_user)
@@ -697,18 +697,25 @@ def test_the_kind_filter_does_not_offer_digests_or_announcements(
     kinds = [value for value, _ in response.context["kind_options"]]
     assert EmailKind.DIGEST not in kinds
     assert EmailKind.ANNOUNCEMENT not in kinds
+    assert EmailKind.MAILING_LIST not in kinds
     assert EmailKind.INVITATION in kinds
-    assert "label: 'Announcement'" not in response.content.decode()
+    content = response.content.decode()
+    assert "label: 'Announcement'" not in content
+    assert "label: 'Mailing list message'" not in content
 
 
 @pytest.mark.django_db
-def test_announcements_are_still_listed(client, project, pm_user, user):
+def test_announcements_and_mailing_list_messages_are_still_listed(
+    client, project, pm_user, user
+):
     _log(project, user, kind=EmailKind.ANNOUNCEMENT, subject="Site news")
+    _log(project, user, kind=EmailKind.MAILING_LIST, subject="Team meeting")
     client.force_login(pm_user)
 
     content = client.get(_log_url(project)).content.decode()
 
     assert "Site news" in content
+    assert "Team meeting" in content
 
 
 # ---------------------------------------------------------------------------

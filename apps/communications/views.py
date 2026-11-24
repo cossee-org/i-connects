@@ -62,9 +62,12 @@ class ProjectEmailLogView(
     paginate_by = 50
     PER_PAGE_CHOICES = (25, 50, 100)
     # Kinds left out of the Email filter. A digest is about no one project,
-    # so it is never in a project's log. Announcements are left out for now;
-    # they are still listed, and ``?kind=announcement`` still narrows to them.
-    KINDS_NOT_OFFERED = frozenset({EmailKind.DIGEST, EmailKind.ANNOUNCEMENT})
+    # so it is never in a project's log. Announcements and mailing list
+    # messages are left out for now, as nothing in the app's navigation sends
+    # them yet; they are still listed, and ``?kind=`` still narrows to them.
+    KINDS_NOT_OFFERED = frozenset(
+        {EmailKind.DIGEST, EmailKind.ANNOUNCEMENT, EmailKind.MAILING_LIST}
+    )
     # Long enough for any address or subject line; a longer one is cut.
     MAX_QUERY_LENGTH = 200
 
