@@ -1,0 +1,40 @@
+{% comment %}
+  One of the email log's filter dropdowns, the same button and menu as
+  People discovery's and the Tasks page's: picking an option writes it to
+  the bar's hidden input for ``field`` and submits the bar.
+
+    {% include "communications/partials/email_log_dropdown.html" with field="kind" label="Email" options=kind_options current=selected_kind menu_class="left-0 w-56" %}
+
+  ``options`` is a list of (value, label) pairs of strings; ``current`` is
+  the value chosen now, shown in bold in the menu.
+{% endcomment %}
+<div x-data="{
+  open: false,
+  options: [{% for value, option_label in options %}{value: '{{ value|escapejs }}', label: '{{ option_label|escapejs }}'}{% if not forloop.last %}, {% endif %}{% endfor %}],
+  current: '{{ current|escapejs }}',
+  pick(val) {
+    this.current = val;
+    document.getElementById('{{ field }}-input-emails').value = val;
+    this.open = false;
+    document.getElementById('filter-form-emails').submit();
+  }
+}" class="relative flex-1 sm:flex-none sm:w-fit" @keydown.escape="open = false" @click.outside="open = false">
+  <button type="button" @click="open = !open" :aria-expanded="open" aria-haspopup="true"
+          class="w-full inline-flex items-center justify-between gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-lg px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+    <span>{{ label }}</span>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5 text-brand-text/50 shrink-0" aria-hidden="true">
+      <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+    </svg>
+  </button>
+  <div x-cloak x-show="open"
+       x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+       class="absolute {{ menu_class }} mt-1 max-w-[90vw] max-h-72 overflow-y-auto bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30">
+    <template x-for="opt in options" :key="opt.value">
+      <button type="button" @click="pick(opt.value)"
+              class="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors break-words"
+              :class="opt.value === current ? 'font-semibold bg-gray-50' : 'font-normal'"
+              x-text="opt.label"></button>
+    </template>
+  </div>
+</div>

@@ -39,6 +39,10 @@
       </span>
     {% endif %}
   </a>
+  <a href="{% url 'communications:email_log' project_pk=project.pk %}"
+     class="btn btn-sm btn-ghost">
+    Email log
+  </a>
   <button class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
           hx-get="{% url 'projects:invite' pk=project.pk %}"
           hx-target="#invite-modal-body"
@@ -55,7 +59,7 @@
         Every header but Actions sorts the rows in the browser, ascending
         first; clicking the active header flips the direction. Name and Roles
         sort alphabetically, with no roles last either way; Privilege puts
-        Leads first; Joined sorts by date. A person's email sits under their
+        Leads first; Joined and Last email sort by date. A person's email sits under their
         name rather than in a column of its own. Ties keep the server's order
         (by member id, data-order), which is also the order before any
         header is clicked. A row a privilege change swaps in carries its new
@@ -72,6 +76,10 @@
               {% include "_components/sortable_header.html" with key="roles" label="Roles" %}
             {% endif %}
             {% include "_components/sortable_header.html" with key="joined" label="Joined" %}
+            {# Last email: Leads only, like the email log it links to. #}
+            {% if user_privilege == "PROJECT_MANAGER" %}
+              {% include "_components/sortable_header.html" with key="lastemail" label="Last email" %}
+            {% endif %}
             <th scope="col" class="text-right">Actions</th>
           </tr>
         </thead>

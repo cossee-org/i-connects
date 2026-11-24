@@ -1,0 +1,109 @@
+{% comment %}
+  The email log's results — the part a live search swaps (#email-results).
+
+  Out-of-band, the count badge beside the heading is kept in step with
+  the results, as on People discovery; only for the HTMX response, since
+  on the full page the badge is already rendered above.
+{% endcomment %}
+{% if is_htmx_request %}
+<span id="email-log-total-badge" hx-swap-oob="true" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ paginator.count }}</span>
+{% endif %}
+{% if results_summary %}
+  <div class="flex items-center gap-3 mb-4">
+    <p class="text-sm text-brand-text">{{ results_summary }}</p>
+    <a href="{% url 'communications:email_log' project_pk=project.pk %}{% if current_per_page != 50 %}?per_page={{ current_per_page }}{% endif %}"
+       class="ml-auto inline-flex items-center gap-1 text-sm text-gray-400 hover:!text-blue-500 hover:underline shrink-0">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5" aria-hidden="true"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"/></svg>
+      Clear filter
+    </a>
+  </div>
+{% endif %}
+{% if emails %}
+  <div class="brand-card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead class="bg-brand-lighter text-brand-navy">
+          <tr>
+            <th scope="col">Sent</th>
+            <th scope="col">To</th>
+            <th scope="col">Triggered by</th>
+            <th scope="col">Email</th>
+            <th scope="col">Subject</th>
+            <th scope="col">Status</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for email in emails %}
+            <tr class="hover:bg-brand-lighter/40 align-middle">
+              <td class="whitespace-nowrap">
+                {% include "_components/local_time.html" with at=email.sent_at css="text-xs text-brand-text/70" %}
+              </td>
+              <td>
+                {% if email.recipient %}
+                  <a href="{% url 'public_profile' pk=email.recipient.pk %}"
+                     class="block font-medium text-brand-navy hover:text-brand-coral">{{ email.recipient.name|default:email.to_email }}</a>
+                  {% if email.recipient.name %}<div class="text-xs text-brand-text/60">{{ email.to_email }}</div>{% endif %}
+                {% else %}
+                  {# An address with no account, such as an invitation not yet accepted. #}
+                  <div class="font-medium text-brand-navy">{{ email.to_email }}</div>
+                {% endif %}
+              </td>
+              <td class="text-sm">
+                {% include "communications/partials/email_triggered_by.html" with link_class="block font-medium text-brand-navy hover:text-brand-coral" email_class="block text-xs text-brand-text/60" %}
+              </td>
+              <td class="text-xs text-brand-text/80 whitespace-nowrap">{{ email.get_kind_display }}</td>
+              <td class="text-xs text-brand-text/80">{{ email.subject }}</td>
+              <td class="text-xs whitespace-nowrap">
+                {% if email.status == "failed" %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-error/10 text-error"
+                        {% if email.error %}title="{{ email.error }}"{% endif %}>Failed</span>
+                {% else %}
+                  <span class="text-brand-text/70">Sent</span>
+                {% endif %}
+              </td>
+              <td class="text-right whitespace-nowrap">
+                {# Without scripting the link opens the email as a page of its own. #}
+                <a href="{% url 'communications:email_detail' project_pk=project.pk pk=email.pk %}"
+                   hx-get="{% url 'communications:email_detail' project_pk=project.pk pk=email.pk %}"
+                   hx-target="#email-modal-body"
+                   onclick="document.getElementById('email-modal').showModal()"
+                   class="btn btn-xs btn-ghost text-brand-navy"
+                   aria-label="View the email to {{ email.to_email }}: {{ email.subject }}">View email</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% with page=page_obj base="?"|add:filter_query %}
+  <div class="mt-8 flex flex-col items-center gap-2">
+    {% if is_paginated %}
+      <nav class="join" aria-label="Email log pages">
+        {% if page.has_previous %}
+          <a class="join-item btn btn-sm" href="{{ base }}{% if filter_query %}&amp;{% endif %}page=1" aria-label="First page">&laquo;</a>
+          <a class="join-item btn btn-sm" href="{{ base }}{% if filter_query %}&amp;{% endif %}page={{ page.previous_page_number }}" aria-label="Previous page">&lsaquo;</a>
+        {% endif %}
+        <span class="join-item btn btn-sm btn-active" aria-current="page">
+          Page {{ page.number }} of {{ page.paginator.num_pages }}
+        </span>
+        {% if page.has_next %}
+          <a class="join-item btn btn-sm" href="{{ base }}{% if filter_query %}&amp;{% endif %}page={{ page.next_page_number }}" aria-label="Next page">&rsaquo;</a>
+          <a class="join-item btn btn-sm" href="{{ base }}{% if filter_query %}&amp;{% endif %}page={{ page.paginator.num_pages }}" aria-label="Last page">&raquo;</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+    <p class="text-sm text-brand-text/70">
+      {% if page.paginator.count == 1 %}1 email{% else %}Showing {{ page.start_index }}&ndash;{{ page.end_index }} of {{ page.paginator.count }} emails{% endif %}
+    </p>
+  </div>
+  {% endwith %}
+{% else %}
+  {% if is_filtered %}
+    {% include "_components/empty_state.html" with title="No emails match" body="No email in this project's log matches this search and these filters." %}
+  {% else %}
+    {% include "_components/empty_state.html" with title="No emails yet" body="Emails sent about this project will be listed here. Emails sent before the log was introduced are not included." %}
+  {% endif %}
+{% endif %}

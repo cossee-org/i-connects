@@ -20,7 +20,7 @@ Eight Django apps ported from the original Prisma / Blitz schema:
 | `notes`          | Project notes with three visibility tiers (private / PM-only / contributors), markdown rendering with raw HTML escaping. |
 | `wiki`           | Per-project wiki pages: markdown + `[[wiki links]]`, append-only `WikiRevision` history with diffs / restore, lead-only page locking, edit-conflict detection, search. |
 | `forms_builder`  | Dynamic JSON-Schema -> Django Form renderer, versioned `FormVersion`s, jsonschema validation. Surfaced as **Surveys**; the module page is a placeholder for now. |
-| `communications` | Placeholder module — a sidebar page and a project section, both empty. No models yet. |
+| `communications` | Placeholder module — a sidebar page and a project section, both empty. Also holds the email log: `EmailLog` records every project email per recipient, with its content, and Leads read it from the Contributors tab — searchable (name, address, subject, text), filterable by member and kind, 25/50/100 a page, and each email opens in a modal as it was sent. Each row records the member whose action triggered it (Automatic for digests). Only Leads can read an email's content (not even the Django admin shows it); emails about no project keep none. |
 
 Plus `cron/tasks.py` with four Celery-beat jobs (daily digest, weekly
 digest, overdue-task reminders, tmp-file cleanup), scheduled via

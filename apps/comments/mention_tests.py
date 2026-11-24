@@ -12,6 +12,7 @@ from django.utils import timezone
 from apps.comments.models import Comment, CommentMention
 from apps.comments.services import can_comment, mentionable_users
 from apps.comments.tasks import send_comment_mention_email_task
+from apps.communications.models import EmailKind, EmailLog
 from apps.core.enums import MemberPrivileges, ProjectStatus
 from apps.notifications.models import Notification
 from apps.projects.models import ProjectMember, ProjectPrivilege
@@ -429,6 +430,22 @@ def test_the_email_rechecks_everything_when_it_runs(cast):
     comment.delete()
     send_comment_mention_email_task(comment_pk, [cast.bystander.pk])
     assert mail.outbox == []
+
+
+@pytest.mark.django_db
+def test_the_email_is_in_the_projects_email_log(cast):
+    comment = Comment.objects.create(task=cast.task, author=cast.assignee_member, content="@Bea Lund")
+    CommentMention.objects.create(comment=comment, user=cast.bystander)
+
+    send_comment_mention_email_task(comment.pk, [cast.bystander.pk])
+
+    row = EmailLog.objects.get()
+    assert row.kind == EmailKind.COMMENT_MENTION
+    assert row.recipient == cast.bystander
+    assert row.to_email == "bea@test.com"
+    assert row.project == cast.project
+    # Set off by the comment's author.
+    assert row.triggered_by == cast.assignee
 
 
 @pytest.mark.django_db

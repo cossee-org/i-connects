@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Email log &mdash; {{ project.name }}{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6">
+    {% include "_components/project_header.html" %}
+  </header>
+{% endblock %}
+
+{% block content %}
+{# Laid out like Pending invitation requests: back to the tab, then the heading. #}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <a href="{% url 'projects:members' pk=project.pk %}"
+     class="btn btn-sm btn-ghost text-brand-navy">&larr; All contributors</a>
+</div>
+
+<div class="flex items-center gap-3 mb-6">
+  <h2 class="text-lg font-semibold text-brand-navy">Email log</h2>
+  <span id="email-log-total-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ paginator.count }}</span>
+  {% include "_components/info_popover.html" with label="Email log" body="The emails i-CONNECTS sent about this project, newest first: invitations, join requests, task assignments, comment tags, mailing list messages and announcements. Triggered by is the member whose action sent the email; Automatic means i-CONNECTS sent it on its own. Search looks in the names and addresses of the recipient and of whoever triggered it, the subject and the text of each email. View email shows an email exactly as it was sent. Sent means the email left i-CONNECTS; it cannot tell whether it reached the inbox or a spam folder. Only Leads can see this page." %}
+</div>
+
+{# ── Search / filter bar — the same bar as People discovery's ─────────────── #}
+<form method="get" id="filter-form-emails" class="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-stretch sm:items-center mb-6">
+  <input type="hidden" name="member" id="member-input-emails" value="{{ selected_member.pk|default:'' }}">
+  <input type="hidden" name="kind" id="kind-input-emails" value="{{ selected_kind }}">
+  <input type="hidden" name="per_page" id="per_page-input-emails" value="{{ current_per_page }}">
+
+  {# Search — filters live as the user types #}
+  <div class="w-full sm:flex-1 sm:min-w-[200px]">
+    <label for="email-log-search" class="sr-only">Search emails</label>
+    <input type="text" name="q" id="email-log-search" value="{{ search_query }}"
+           maxlength="200" autocomplete="off"
+           placeholder="Search by name, address, subject or text…"
+           class="input input-sm input-bordered w-full"
+           hx-get="{% url 'communications:email_log' project_pk=project.pk %}"
+           hx-trigger="input changed delay:300ms"
+           {# The whole bar, so a search narrows the filters already chosen. #}
+           hx-include="#filter-form-emails"
+           hx-target="#email-results"
+           hx-swap="innerHTML"
+           hx-push-url="true" />
+  </div>
+
+  <div class="flex gap-3 w-full sm:w-auto flex-wrap items-center">
+    {% include "communications/partials/email_log_dropdown.html" with field="member" label="Member" options=member_options current=selected_member_value menu_class="left-0 w-64" %}
+    {% include "communications/partials/email_log_dropdown.html" with field="kind" label="Email" options=kind_options current=selected_kind menu_class="right-0 w-56" %}
+    {% include "communications/partials/email_log_dropdown.html" with field="per_page" label="Per page" options=per_page_options current=current_per_page_value menu_class="right-0 w-40" %}
+  </div>
+
+  <noscript>
+    <select name="member">
+      {% for value, label in member_options %}
+        <option value="{{ value }}" {% if selected_member_value == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="kind">
+      {% for value, label in kind_options %}
+        <option value="{{ value }}" {% if selected_kind == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="per_page">
+      {% for value, label in per_page_options %}
+        <option value="{{ value }}" {% if current_per_page_value == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-sm">Apply</button>
+  </noscript>
+</form>
+
+<div id="email-results">
+  {% include "communications/partials/email_log_results.html" %}
+</div>
+
+<dialog id="email-modal" class="modal" aria-label="Email">
+  {# contents: the box and its backdrop size against the dialog, not this wrapper. #}
+  <div id="email-modal-body" class="contents"><!-- filled by HTMX --></div>
+</dialog>
+{% endblock %}
