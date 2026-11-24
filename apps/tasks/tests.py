@@ -1970,7 +1970,8 @@ def test_pane_completion_button_is_lead_only(client, user, other_user):
 
     client.force_login(other_user)
     member_pane = client.get(_pane_url(project, task)).content.decode()
-    assert "Close Task" not in member_pane
+    # The button, not the words: the completion help names Close Task too.
+    assert 'id="task-completion-button"' not in member_pane
     assert reverse("tasks:close", kwargs={"pk": task.pk}) not in member_pane
 
 
@@ -4320,17 +4321,17 @@ def test_completion_heading_carries_an_info_button_explaining_the_procedure(clie
         info = info[: info.index("</ol>")]
         assert 'aria-label="About Completion"' in info
         assert 'x-show="open"' in info
-        for step in ("1. Done.", "2. Reviewed.", "3. Verified.", "4. Completed."):
+        for step in ("1. Done.", "2. Reviewed.", "3. Verified.", "4. Closed."):
             assert step in info, step
-        verified = info[info.index("3. Verified.") : info.index("4. Completed.")]
+        verified = info[info.index("3. Verified.") : info.index("4. Closed.")]
         # This project doesn't track CRediT, so verifying credits nothing.
         assert "records the sign-off only" in verified
-        completed = info[info.index("4. Completed.") :]
+        completed = info[info.index("4. Closed.") :]
         assert "Assignees can still tick their own Done" in completed
-        assert "reviewers can review parts marked done after completion" in completed
+        assert "reviewers can review parts marked done after it was closed" in completed
         assert "a review given then is locked" in completed
         assert "a part left unreviewed can no longer be reviewed" in completed
-        assert "A review given after completion can still be unticked" in completed
+        assert "A review given after the task was closed can still be unticked" in completed
         assert "5." not in info
         assert "Tick to mark, untick to undo." not in html
         assert "0 of 2 done" not in html
@@ -4379,15 +4380,15 @@ def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, oth
         assert MARK_NOT_REVIEWED not in row and MARK_VERIFIED in row
         # The notice is there, hidden until a click, and tells a Lead what to do.
         assert 'id="task-locked-notice"' in html and 'x-show="lockedNotice"' in html
-        assert "already marked completed" in html
-        assert "Mark it not complete first" in html
+        assert "already closed" in html
+        assert "Re-open it first" in html
 
     # An assignee is told a Lead has to reopen it.
     client.force_login(other_user)
     pane = client.get(_pane_url(project, task)).content.decode()
-    assert "A Lead has to mark it not complete" in pane
-    assert "parts marked done after completion can still be reviewed" in pane
-    assert "Mark it not complete first" not in pane
+    assert "A Lead has to re-open it" in pane
+    assert "parts marked done after it was closed can still be reviewed" in pane
+    assert "Re-open it first" not in pane
 
     client.force_login(user)
     reopened = client.post(
@@ -5121,7 +5122,7 @@ def test_an_htmx_edit_of_a_completed_task_gets_a_conflict(client, user):
         HTTP_HX_REQUEST="true",
     )
     assert resp.status_code == 409
-    assert b"mark it not complete" in resp.content
+    assert b"re-open it" in resp.content
 
 
 @pytest.mark.django_db
@@ -5842,7 +5843,7 @@ def test_verify_notes_say_what_verifying_means_for_credit(client, user, other_us
     assert "Software" in credit  # the task's CRediT role, by name
     assert "Nothing is credited until a part is verified" in credit
     assert "https://credit.niso.org/" in credit
-    help_ = pane[pane.index("3. Verified.") : pane.index("4. Completed.")]
+    help_ = pane[pane.index("3. Verified.") : pane.index("4. Closed.")]
     assert "On this CRediT project, that is what credits them" in help_
     assert "(Software)" in help_
 

@@ -760,8 +760,7 @@ class BoardTablePartialView(LoginRequiredMixin, ProjectContextMixin, TemplateVie
 
 
 _COMPLETED_MESSAGE = (
-    "This task is marked completed. A Lead has to mark it not complete before "
-    "it can be changed."
+    "This task is closed. A Lead has to re-open it before it can be changed."
 )
 
 
@@ -1370,20 +1369,18 @@ class TaskChangeColumnView(
 
 
 _LOCKED_MESSAGE = (
-    "This task is marked completed. A Lead has to mark it not complete before "
-    "setting or clearing another member's done mark."
+    "This task is closed. A Lead has to re-open it before setting or "
+    "clearing another member's done mark."
 )
 
 _REVIEW_CLOSED_MESSAGE = (
-    "This part was marked done before the task was marked completed, so it "
-    "can no longer be reviewed. A Lead has to mark the task not complete "
-    "first."
+    "This part was marked done before the task was closed, so it can no "
+    "longer be reviewed. A Lead has to re-open the task first."
 )
 
 _REVIEW_LOCKED_MESSAGE = (
-    "This part was reviewed before the task was marked completed, so its "
-    "review is locked. A Lead has to mark the task not complete before it "
-    "can be withdrawn."
+    "This part was reviewed before the task was closed, so its review is "
+    "locked. A Lead has to re-open the task before it can be withdrawn."
 )
 
 def _marks_locked(task) -> bool:
@@ -2120,8 +2117,8 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             )
         if self.task.status == TaskStatus.COMPLETED:
             return HttpResponseForbidden(
-                "This task is marked completed. Mark it not complete before "
-                "changing anyone's dates."
+                "This task is closed. Re-open it before changing anyone's "
+                "dates."
             )
         lead = self.project_member or _fallback_member(request.user, self.project)
         scope = "pending" if request.POST.get("scope") == "pending" else "member"
