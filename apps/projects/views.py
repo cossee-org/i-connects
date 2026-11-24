@@ -256,6 +256,14 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 Q(assigned_members__users=user) | Q(reviewers__users=user),
                 status=TaskStatus.NOT_COMPLETED,
             )
+            # my_deadline: the user's individual deadline where a Lead set
+            # one, else the task's -- what "overdue" and the date on each
+            # row mean for this user.
+            .with_my_deadline(user)
+            # has_to_review / has_to_verify: the rows' To review and To
+            # verify marks, by the All tasks page's rules — a row waiting on
+            # both carries both.
+            .with_waiting_on(user)
             .annotate(
                 user_log_status=latest_log_status,
                 is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
@@ -277,7 +285,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # so the section's badge and the "All N ..." link below the rows
         # both describe the filtered set rather than the whole one.
         if current_type == "overdue":
-            matching_tasks_qs = active_tasks_qs.filter(deadline__lt=now)
+            matching_tasks_qs = active_tasks_qs.filter(my_deadline__lt=now)
         elif current_type == "review":
             matching_tasks_qs = active_tasks_qs.filter(is_reviewing=True)
         else:
@@ -286,9 +294,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # nulls_last keeps undated tasks at the end in both directions
         # (SQLite orders NULLs before everything by default, Postgres after).
         if current_sort == "newest":
-            task_order = (F("deadline").desc(nulls_last=True), "-created_at", "id")
+            task_order = (F("my_deadline").desc(nulls_last=True), "-created_at", "id")
         else:
-            task_order = (F("deadline").asc(nulls_last=True), "created_at", "id")
+            task_order = (F("my_deadline").asc(nulls_last=True), "created_at", "id")
 
         if not shows_tasks:
             context["active_tasks"] = []
@@ -683,11 +691,11 @@ def _project_summary(project, now, *, is_lead: bool) -> dict:
         .select_related("closed_by")
         .order_by("-closed_at")[:8]
     ):
-        # Only a Lead completes a task, so the line names whoever did.
+        # Only a Lead closes a task, so the line names whoever did.
         events.append({
             "when": t.closed_at,
             "who": t.closed_by.display_name if t.closed_by else "A lead",
-            "verb": "completed", "kind": "task", "task": t,
+            "verb": "closed", "kind": "task", "task": t,
         })
     for r in (
         WikiRevision.objects.filter(page__in=readable_pages)
@@ -824,12 +832,10 @@ class ProjectDetailView(DetailView):
         task_qs = Task.objects.filter(project=project)
         context["task_count"] = task_qs.count()
         # Overdue means still open past its deadline; a finished task whose
-        # deadline has passed is not late.
-        context["overdue_count"] = (
-            task_qs.exclude(status=TaskStatus.COMPLETED)
-            .filter(deadline__lt=context["today"])
-            .count()
-        )
+        # deadline has passed is not late, and nor is one Extended: every
+        # assignee still working on it has a later individual deadline
+        # (Task.is_overdue).
+        context["overdue_count"] = task_qs.overdue(context["today"]).count()
         context["contributor_count"] = ProjectPrivilege.objects.filter(
             project=project
         ).values("user").distinct().count()

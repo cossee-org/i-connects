@@ -1,7 +1,7 @@
 {% load task_tags %}
 
 {% comment %}
-Out-of-band swap: keep the header total count in sync with the live
+Out-of-band swap: keep the header total count (and the tabs' counts) in sync with the live
 search/filter results, even though it sits outside #task-results. Only
 emitted for the standalone HTMX response — when this partial is
 {% include %}d into the full page, the real badge above already exists,
@@ -9,12 +9,13 @@ so emitting it too would duplicate visible, unstyled-by-htmx content.
 {% endcomment %}
 {% if is_htmx_request %}
 <span id="task-total-badge" hx-swap-oob="true" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-semibold bg-brand-navy/10 text-brand-navy">{{ total_task_count }}</span>
+{% include "tasks/partials/my_list_tabs.html" with oob=True %}
 {% endif %}
 
 {% if results_summary %}
   <div class="flex items-center gap-3 mb-4">
     <p class="text-sm text-brand-text">{{ results_summary }}</p>
-    <a href="{% url 'tasks:my_list' %}" class="ml-auto inline-flex items-center gap-1 text-sm text-gray-400 hover:!text-blue-500 hover:underline shrink-0">
+    <a href="{% url 'tasks:my_list' %}{{ clear_filters_query }}" class="ml-auto inline-flex items-center gap-1 text-sm text-gray-400 hover:!text-blue-500 hover:underline shrink-0">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"/></svg>
       Clear filter
     </a>
@@ -38,14 +39,15 @@ so emitting it too would duplicate visible, unstyled-by-htmx content.
             {% if task.is_priority %}
               {% include "_components/priority_flag.html" %}
             {% endif %}
-            {% if task.deadline %}
+            {# my_deadline: the viewer's individual deadline where a Lead set one, else the task's. #}
+            {% if task.my_deadline %}
               <span class="inline-flex items-center gap-1 text-xs
-                {% if task.deadline < now and task.status != 'COMPLETED' %}text-error font-medium{% else %}text-brand-text/60{% endif %}">
+                {% if task.my_deadline < now and task.status != 'COMPLETED' %}text-error font-medium{% else %}text-brand-text/60{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                      stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5 shrink-0" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
-                {{ task.deadline|date:"M j, Y" }}
+                {{ task.my_deadline|in_zone:task.my_deadline_tz|date:"M j, Y" }}{% if task.my_deadline != task.deadline %} <span class="text-brand-text/60 font-normal" title="An individual deadline a Lead set for you{% if task.deadline %}; the task is due {{ task.deadline|in_zone:task.timezone|date:"M j, Y" }}{% endif %}">(your deadline)</span>{% endif %}
               </span>
             {% endif %}
             {% with assignees=task.assigned_members.all|member_name_summary %}
@@ -63,8 +65,15 @@ so emitting it too would duplicate visible, unstyled-by-htmx content.
         </div>
 
         <div class="shrink-0 flex flex-col items-end gap-1 pt-0.5">
-          {% if task.is_reviewing %}
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">To review</span>
+          {% if task.has_to_review or task.has_to_verify %}
+            <div class="flex items-center gap-1.5">
+              {% if task.has_to_review %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-brand-coral/10 text-brand-coral">To review</span>
+              {% endif %}
+              {% if task.has_to_verify %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-brand-navy/10 text-brand-navy">To verify</span>
+              {% endif %}
+            </div>
           {% endif %}
           {% if task.is_assigned and task.status == 'COMPLETED' and task.user_log_status != 'COMPLETED' %}
             <span class="text-[11px] text-brand-text/50 italic whitespace-nowrap">Closed without your mark</span>
@@ -90,5 +99,13 @@ so emitting it too would duplicate visible, unstyled-by-htmx content.
     </div>
   {% endif %}
 {% else %}
-  {% include "_components/empty_state.html" with title="No tasks found" body="Try adjusting the filters above, or check back once you're assigned a task." %}
+  {% if current_type == "assigned" %}
+    {% include "_components/empty_state.html" with title="No tasks found" body="Nothing assigned to you is waiting on your mark. Parts you've marked done are still under All." %}
+  {% elif current_type == "review" %}
+    {% include "_components/empty_state.html" with title="No tasks found" body="No submissions are waiting on your review. Parts marked done on tasks you review show up here." %}
+  {% elif current_type == "verify" %}
+    {% include "_components/empty_state.html" with title="No tasks found" body="No contributions are waiting on your verification. Parts marked done in projects you lead show up here, once reviewed where the task requires review." %}
+  {% else %}
+    {% include "_components/empty_state.html" with title="No tasks found" body="Try adjusting the filters above, or check back once you're assigned a task." %}
+  {% endif %}
 {% endif %}

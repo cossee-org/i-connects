@@ -17,6 +17,8 @@ jsonschema==4.23.0
 resend==2.29.0
 django-ses==4.7.2
 django-countries==9.0.0
+# Timezone data for task dates (zoneinfo); slim images may not ship it.
+tzdata>=2025.2
 
 # Testing
 pytest==8.3.4

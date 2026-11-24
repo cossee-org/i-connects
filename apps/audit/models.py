@@ -73,7 +73,7 @@ class AuditAction(models.TextChoices):
     TASK_CREATED = "task.created", "Task created"
     TASK_UPDATED = "task.updated", "Task updated"
     TASK_DELETED = "task.deleted", "Task deleted"
-    TASK_COMPLETED = "task.completed", "Task marked complete"
+    TASK_COMPLETED = "task.completed", "Task closed"
     TASK_APPROVED = "task.approved", "Task completion approved"
     TASK_REJECTED = "task.rejected", "Task completion rejected"
     TASK_REVIEWED = "task.reviewed", "Task submission reviewed"
@@ -82,6 +82,16 @@ class AuditAction(models.TextChoices):
     TASK_PART_UNDONE = "task.part_undone", "Task part done mark undone"
     TASK_PART_VERIFIED = "task.part_verified", "Task contribution verified"
     TASK_PART_UNVERIFIED = "task.part_unverified", "Task contribution verification withdrawn"
+    TASK_DEADLINE_SET = "task.deadline_set", "Individual task dates set"
+    TASK_DEADLINE_CLEARED = "task.deadline_cleared", "Individual task dates removed"
+    TASK_MEMBER_TYPE_SET = (
+        "task.member_type_set",
+        "Individual contribution type set",
+    )
+    TASK_MEMBER_TYPE_CLEARED = (
+        "task.member_type_cleared",
+        "Individual contribution type removed",
+    )
 
     # ---- Wiki ---------------------------------------------------------------
     WIKI_PAGE_CREATED = "wiki.page_created", "Wiki page created"

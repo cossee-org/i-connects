@@ -37,6 +37,7 @@ class UserAdmin(BaseUserAdmin):
                     "email_project_activity_frequency",
                     "email_overdue_task_frequency",
                     "email_task_assigned",
+                    "email_comment_mention",
                     "email_confirmed_at",
                 )
             },

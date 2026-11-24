@@ -41,7 +41,7 @@
          aria-disabled="true" data-locked
          aria-describedby="task-locked-notice"
          aria-label="{{ s.member.display_name }}: {% if s.done %}done{% else %}not done{% endif %} (locked)"
-         title="Locked: the task is marked completed"
+         title="Locked: the task is closed"
          @click.prevent="showLocked()">
 {% else %}
   <input type="checkbox" class="completion-tick completion-tick-done" disabled{% if s.done %} checked{% endif %}

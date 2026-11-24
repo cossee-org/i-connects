@@ -15,7 +15,15 @@ from django.utils import timezone
 from apps.audit.services import AuditAction, log_action
 from apps.core.enums import CompletedAs, TaskStatus
 from apps.projects.models import ProjectMember
-from apps.tasks.models import ActivityEvent, KanbanBoard, Task, TaskActivity, TaskLog
+from apps.tasks.models import (
+    ActivityEvent,
+    AssigneeContributionType,
+    AssigneeDeadline,
+    KanbanBoard,
+    Task,
+    TaskActivity,
+    TaskLog,
+)
 
 
 @transaction.atomic
@@ -685,6 +693,488 @@ def approve_completion(
 
 
 # ---------------------------------------------------------------------------
+# Individual dates (a member's own start date and/or deadline)
+# ---------------------------------------------------------------------------
+UNSET = object()  # "leave this date as it is" in set_member_dates
+
+
+def pending_members(task: Task) -> list[ProjectMember]:
+    """The task's assignees who have not marked their part done."""
+    current = current_logs(task)
+    return [
+        member
+        for member in task.assigned_members.all()
+        if (log := current.get(member.id)) is None
+        or log.status != TaskStatus.COMPLETED
+    ]
+
+
+@transaction.atomic
+def set_member_dates(
+    *,
+    task: Task,
+    member: ProjectMember,
+    lead: ProjectMember | None,
+    start_date=UNSET,
+    deadline=UNSET,
+    timezone=UNSET,
+    reason: str | None = None,
+    batch: str | None = None,
+) -> AssigneeDeadline | None:
+    """A Lead sets one assignee's own dates on ``task``.
+
+    ``timezone`` is the IANA zone governing the member's own dates; "" (or
+    None) makes them follow the task's zone, and ``UNSET`` keeps the one
+    they have.
+
+    Each of ``start_date`` and ``deadline`` replaces the task's date for that
+    member alone, and may be earlier or later than it; None removes the
+    member's own date, so they follow the task's again; ``UNSET`` (the
+    default) leaves it as it is. ``reason`` replaces the note, or with None
+    keeps it. When neither date is left the entry is deleted
+    (:func:`clear_member_dates`) and None returned. Callers check that
+    ``lead`` is a Lead and ``member`` is assigned (``views.TaskMemberDatesView``).
+
+    Writes an audit row naming the old and new dates, and tells the member.
+    A no-op, with nothing written, when nothing changes. ``batch`` names the
+    bulk action this came from, for the audit row.
+    """
+    existing = AssigneeDeadline.objects.filter(task=task, member=member).first()
+    old_start = existing.start_date if existing else None
+    old_deadline = existing.deadline if existing else None
+    old_zone = existing.timezone if existing else ""
+    new_start = old_start if start_date is UNSET else start_date
+    new_deadline = old_deadline if deadline is UNSET else deadline
+    new_zone = old_zone if timezone is UNSET else (timezone or "")
+    new_reason = (
+        (existing.reason if existing else "") if reason is None else reason.strip()
+    )
+    if new_start is None and new_deadline is None:
+        clear_member_dates(task=task, member=member, actor=lead, batch=batch)
+        return None
+    if existing and (new_start, new_deadline, new_zone, new_reason) == (
+        old_start, old_deadline, old_zone, existing.reason
+    ):
+        return existing
+    entry = existing or AssigneeDeadline(task=task, member=member)
+    entry.start_date = new_start
+    entry.deadline = new_deadline
+    entry.timezone = new_zone
+    entry.reason = new_reason
+    entry.set_by = lead
+    entry.save()
+    _log_dates_action(
+        AuditAction.TASK_DEADLINE_SET,
+        task=task,
+        member=member,
+        actor_member=lead,
+        start_date=new_start,
+        previous_start_date=old_start,
+        deadline=new_deadline,
+        previous=old_deadline,
+        timezone=new_zone,
+        previous_timezone=old_zone if existing else None,
+        reason=new_reason,
+        batch=batch,
+    )
+    _notify_member_dates(task=task, member=member, entry=entry, lead=lead)
+    return entry
+
+
+@transaction.atomic
+def set_pending_dates(
+    *,
+    task: Task,
+    lead: ProjectMember | None,
+    start_date=UNSET,
+    deadline=UNSET,
+    timezone=UNSET,
+    reason: str | None = None,
+) -> list[ProjectMember]:
+    """Give every assignee not yet done the same own start date and/or
+    deadline, and the same zone for their own dates. A date passed as
+    ``UNSET`` is left as each member has it (the same moment, shown in the
+    new zone), and a None ``reason`` keeps each member's note.
+
+    Members who have marked their part done are left as they are. Returns
+    the members it covered.
+    """
+    members = pending_members(task)
+    for member in members:
+        set_member_dates(
+            task=task, member=member, lead=lead, start_date=start_date,
+            deadline=deadline, timezone=timezone, reason=reason, batch="pending",
+        )
+    return members
+
+
+@transaction.atomic
+def clear_member_dates(
+    *,
+    task: Task,
+    member: ProjectMember,
+    actor: ProjectMember | None,
+    batch: str | None = None,
+) -> bool:
+    """Remove ``member``'s own dates, putting them back on the task's.
+    Returns False, writing nothing, when they had none."""
+    existing = AssigneeDeadline.objects.filter(task=task, member=member).first()
+    if existing is None:
+        return False
+    existing.delete()
+    _log_dates_action(
+        AuditAction.TASK_DEADLINE_CLEARED,
+        task=task,
+        member=member,
+        actor_member=actor,
+        start_date=None,
+        previous_start_date=existing.start_date,
+        deadline=None,
+        previous=existing.deadline,
+        timezone=None,
+        previous_timezone=existing.timezone,
+        batch=batch,
+    )
+    _notify_member_dates(task=task, member=member, entry=None, lead=actor)
+    return True
+
+
+@transaction.atomic
+def set_member_contribution_type(
+    *,
+    task: Task,
+    member: ProjectMember,
+    lead: ProjectMember | None,
+    contribution_type: str | None,
+) -> AssigneeContributionType | None:
+    """A Lead gives one assignee their own contribution type on ``task``, or
+    with None puts them back on the task's.
+
+    The type replaces the task's for ``member`` alone: their credit is
+    recorded under it when their part is verified, and credit already
+    written for them moves with it (see
+    :func:`apps.contributions.services.sync_member_contribution_type`). A
+    type equal to the task's is still kept as their own, so they stay on it
+    if the task's type changes later. Callers check that ``lead`` is a Lead,
+    ``member`` is assigned and the type is a valid one
+    (``views.TaskMemberContributionTypeView``).
+
+    Writes an audit row naming the old and new type, and tells the member.
+    A no-op, with nothing written, when nothing changes. Returns the entry,
+    or None once the member follows the task's type.
+    """
+    from apps.contributions.services import sync_member_contribution_type
+
+    existing = AssigneeContributionType.objects.filter(
+        task=task, member=member
+    ).first()
+    old_own = existing.contribution_type if existing else None
+    if (contribution_type or None) == old_own:
+        return existing
+    old_effective = old_own or task.contribution_type
+    if contribution_type:
+        entry = existing or AssigneeContributionType(task=task, member=member)
+        entry.contribution_type = contribution_type
+        entry.set_by = lead
+        entry.save()
+        new_effective = contribution_type
+        action = AuditAction.TASK_MEMBER_TYPE_SET
+    else:
+        existing.delete()
+        entry = None
+        new_effective = task.contribution_type
+        action = AuditAction.TASK_MEMBER_TYPE_CLEARED
+    moved = sync_member_contribution_type(
+        task, member, old_type=old_effective, new_type=new_effective
+    )
+    log_action(
+        action,
+        actor=lead.users.first() if lead is not None else None,
+        entity=task,
+        project=task.project,
+        metadata={
+            "task_name": task.name,
+            "assignee_member_id": member.pk,
+            "contribution_type": contribution_type,
+            "previous_contribution_type": old_own,
+            "task_contribution_type": task.contribution_type,
+            "records_moved": moved,
+        },
+    )
+    _notify_member_type(
+        task=task, member=member, contribution_type=new_effective,
+        own=entry is not None, lead=lead,
+    )
+    return entry
+
+
+def _notify_member_type(
+    *,
+    task: Task,
+    member: ProjectMember,
+    contribution_type: str,
+    own: bool,
+    lead: ProjectMember | None,
+) -> None:
+    """Tell the member the type their part is credited under changed."""
+    try:
+        from apps.notifications.services import create_notification
+    except Exception:  # pragma: no cover
+        return
+
+    user_ids = set(member.users.values_list("id", flat=True))
+    if lead is not None:
+        user_ids.difference_update(lead.users.values_list("id", flat=True))
+    if not user_ids:
+        return
+    from apps.core.enums import ContributionType
+
+    label = ContributionType(contribution_type).label
+    if own:
+        title = f"Your contribution type changed: {task.name}"
+        body = f"Your part is now credited as {label}."
+    else:
+        title = f"Your individual contribution type was removed: {task.name}"
+        body = f"The task's type applies to you again: {label}."
+    create_notification(
+        users=list(user_ids),
+        title=title,
+        body=body,
+        project=task.project,
+        route="tasks:detail",
+        route_kwargs={"project_pk": task.project_id, "pk": task.pk},
+    )
+
+
+class TaskDateChange:
+    """What happens to members' own dates when a Lead moves the task's start
+    or due date — the choice the task form asks for every time."""
+
+    SHIFT = "shift"
+    KEEP = "keep"
+    CLEAR = "clear"
+
+
+@transaction.atomic
+def rezone_following_members(
+    *,
+    task: Task,
+    old_zone: str,
+    new_zone: str,
+    actor: ProjectMember | None,
+) -> list[AssigneeDeadline]:
+    """The task moved from ``old_zone`` to ``new_zone``: members whose own
+    dates follow the task's zone keep their clock times in the new zone,
+    as the task's own dates do. Members with a zone of their own are left
+    as they are. Each change is audited (``batch="task_timezone"``) and
+    told to the member. Returns the entries it changed.
+    """
+    from apps.tasks.timezones import canonical, rezone
+
+    if canonical(old_zone) == canonical(new_zone):
+        return []
+    changed = []
+    for entry in task.assignee_deadlines.select_related("member").filter(timezone=""):
+        start = rezone(entry.start_date, old_zone, new_zone)
+        deadline = rezone(entry.deadline, old_zone, new_zone)
+        if (start, deadline) == (entry.start_date, entry.deadline):
+            continue
+        set_member_dates(
+            task=task, member=entry.member, lead=actor,
+            start_date=start, deadline=deadline, batch="task_timezone",
+        )
+        changed.append(entry)
+    return changed
+
+
+@transaction.atomic
+def apply_task_date_change(
+    *,
+    task: Task,
+    field: str,
+    old_value,
+    new_value,
+    choice: str,
+    actor: ProjectMember | None,
+    old_zone: str | None = None,
+) -> list[AssigneeDeadline]:
+    """Carry a change of ``task``'s ``field`` ("start_date" or "deadline")
+    onto the members' own dates of the same kind.
+
+    ``shift`` moves each by the same amount on the clock as the task's
+    (``old_value`` in ``old_zone``, the task's zone before the edit, to
+    ``new_value`` in its zone now), in the zone governing the member's
+    date — so a member given a week past the task keeps that week, and
+    5:00 PM stays 5:00 PM across a daylight-saving change. ``clear``
+    removes them, so those members follow the task's new date (their other
+    own date, if any, stays); ``keep`` leaves them as they were. Each
+    change is audited (``batch`` names the task edit, e.g.
+    ``task_deadline_shift``) and told to the member. Called after the task
+    is saved — and after :func:`rezone_following_members`, when the zone
+    changed too — so members taken off it in the same edit have already
+    lost theirs. Returns the entries it touched. See
+    ``timezones.carried_own_date``, which the task form checks against.
+    """
+    from apps.tasks.timezones import carried_own_date
+
+    assert field in ("start_date", "deadline")
+    entries = [
+        e
+        for e in task.assignee_deadlines.select_related("member")
+        if getattr(e, field) is not None
+    ]
+    if choice == TaskDateChange.SHIFT:
+        if old_value is None or new_value is None:
+            return []
+        for entry in entries:
+            shifted = carried_own_date(
+                getattr(entry, field),
+                own_zone=entry.timezone,
+                # Already moved into the new zone, when the zone changed.
+                old_task_zone=task.timezone,
+                new_task_zone=task.timezone,
+                moved=True,
+                choice=TaskDateChange.SHIFT,
+                old_value=_rezoned(old_value, old_zone or task.timezone, task.timezone),
+                new_value=new_value,
+            )
+            set_member_dates(
+                task=task, member=entry.member, lead=actor,
+                **{field: shifted},
+                batch=f"task_{field}_shift",
+            )
+        return entries
+    if choice == TaskDateChange.CLEAR:
+        for entry in entries:
+            set_member_dates(
+                task=task, member=entry.member, lead=actor, **{field: None},
+                batch=f"task_{field}_clear",
+            )
+        return entries
+    return []
+
+
+def _rezoned(value, old_zone: str, new_zone: str):
+    """``value``'s clock time in ``old_zone``, read in ``new_zone``: the
+    task's old date as it reads in its new zone, so the shift is the
+    distance on the clock alone."""
+    from apps.tasks.timezones import canonical, rezone
+
+    if canonical(old_zone) == canonical(new_zone):
+        return value
+    return rezone(value, old_zone, new_zone)
+
+
+def _iso(value):
+    return value.isoformat() if value else None
+
+
+def _log_dates_action(
+    action,
+    *,
+    task: Task,
+    member: ProjectMember,
+    actor_member: ProjectMember | None,
+    start_date,
+    previous_start_date,
+    deadline,
+    previous,
+    timezone: str | None = None,
+    previous_timezone: str | None = None,
+    reason: str = "",
+    batch: str | None = None,
+) -> None:
+    """Append an audit row for a member's own dates set or removed.
+
+    ``timezone`` / ``previous_timezone`` are the member's own zone after and
+    before ("" when their dates follow the task's zone, None when they had
+    no own dates at all)."""
+    metadata = {
+        "task_name": task.name,
+        "assignee_member_id": member.pk,
+        "start_date": _iso(start_date),
+        "previous_start_date": _iso(previous_start_date),
+        "deadline": _iso(deadline),
+        "previous_deadline": _iso(previous),
+        "timezone": timezone,
+        "previous_timezone": previous_timezone,
+        "task_start_date": _iso(task.start_date),
+        "task_deadline": _iso(task.deadline),
+        "task_timezone": task.timezone,
+    }
+    if reason:
+        metadata["reason"] = reason
+    if batch:
+        metadata["batch"] = batch
+    log_action(
+        action,
+        actor=actor_member.users.first() if actor_member is not None else None,
+        entity=task,
+        project=task.project,
+        metadata=metadata,
+    )
+
+
+def _when(value, zone=None) -> str:
+    """``value`` in ``zone`` (the server's when None), with the zone's
+    abbreviation: "Nov 30, 2026 5:00 PM MST"."""
+    from apps.tasks.timezones import format_when
+
+    return format_when(value, zone)
+
+
+def _notify_member_dates(
+    *,
+    task: Task,
+    member: ProjectMember,
+    entry: AssigneeDeadline | None,
+    lead: ProjectMember | None,
+) -> None:
+    """Tell the member their dates on ``task`` changed (in-app)."""
+    try:
+        from apps.notifications.services import create_notification
+    except Exception:  # pragma: no cover
+        return
+
+    user_ids = set(member.users.values_list("id", flat=True))
+    if lead is not None:
+        user_ids.difference_update(lead.users.values_list("id", flat=True))
+    if not user_ids:
+        return
+    own_start = entry.start_date if entry else None
+    own_deadline = entry.deadline if entry else None
+    own_zone = (entry.timezone if entry else "") or task.timezone
+    start = own_start or task.start_date
+    deadline = own_deadline or task.deadline
+    parts = []
+    if start:
+        parts.append(f"starts {_when(start, own_zone if own_start else task.timezone)}")
+    if deadline:
+        parts.append(
+            f"is due {_when(deadline, own_zone if own_deadline else task.timezone)}"
+        )
+    dates = " and ".join(parts)
+    if entry is not None:
+        title = f"Your dates changed: {task.name}"
+        body = f"Your part now {dates}." if dates else ""
+    else:
+        title = f"Your individual dates were removed: {task.name}"
+        body = (
+            f"The task's dates apply to you again: it {dates}."
+            if dates
+            else "The task has no dates."
+        )
+    create_notification(
+        users=list(user_ids),
+        title=title,
+        body=body,
+        project=task.project,
+        route="tasks:detail",
+        route_kwargs={"project_pk": task.project_id, "pk": task.pk},
+    )
+
+
+# ---------------------------------------------------------------------------
 # Notification helpers (late-imported to avoid circular imports).
 # ---------------------------------------------------------------------------
 def _queue_assignment_email(user_id: int, task_ids: list[int], assigned_by_id):
@@ -769,14 +1259,14 @@ def _notify_task_completed(*, task: Task, completed_by: ProjectMember) -> None:
         user_ids.update(member.users.values_list("id", flat=True))
     # Notify the task creator too so they see progress on their task.
     user_ids.update(task.created_by.users.values_list("id", flat=True))
-    # Don't notify the person who just clicked "complete".
+    # Don't notify the Lead who just clicked Close Task.
     user_ids.difference_update(completed_by.users.values_list("id", flat=True))
     if not user_ids:
         return
 
     create_notification(
         users=list(user_ids),
-        title=f"Task completed: {task.name}",
+        title=f"Task closed: {task.name}",
         body=f"In project {task.project.name}.",
         project=task.project,
         route="tasks:detail",
