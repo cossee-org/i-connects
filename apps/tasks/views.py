@@ -49,7 +49,7 @@ from apps.core.enums import (
     TaskStatus,
     credit_role_choices,
 )
-from apps.projects.models import Project, ProjectMember, ProjectPrivilege
+from apps.projects.models import Project, ProjectMember
 from apps.tasks.calendar import (
     VIEWS as CALENDAR_VIEWS,
     build_day_tasks,
@@ -117,20 +117,21 @@ from apps.tasks.services import (
 
 class MyTaskListView(LoginRequiredMixin, ListView):
     """Tasks touching the current user, across all of their projects: those
-    assigned to the user, those where the user is a reviewer, and those
-    waiting on the user's verification as a Lead, merged into a single list.
-    The page's tabs (``?type=``) narrow that down: All, Assigned (assigned
-    to the user), To Review (the user is a reviewer) and To Verify (a task in
-    a project the user leads with an assignee's part marked done and not yet
-    verified).
+    assigned to the user, and those with a submission waiting on the user's
+    review or verification, merged into a single list. The page's tabs
+    (``?type=``) narrow that down: All, Assigned (assigned to the user), To
+    Review (the user reviews the task and an assignee's part is marked done
+    and not yet reviewed) and To Verify (a task in a project the user leads
+    with a part marked done and not yet verified — and reviewed, where the
+    task requires review).
 
     By default only active ("Not completed") tasks are shown, matching the
     dashboard's task counts; the "Status" filter can switch to "Completed"
-    only or "All" regardless of status. A part waiting on the user's
-    verification counts as active whatever the task's status, since a Lead
-    verifies parts on completed tasks too. Excludes tasks the user merely
-    created or that are assigned to others with nothing for the user to
-    verify. The one place tasks can be filtered and browsed across projects;
+    only or "All" regardless of status. A submission waiting on the user's
+    review or verification counts as active whatever the task's status,
+    since both go on after a task is completed. Excludes tasks the user
+    merely created, and tasks they review or lead with nothing waiting on
+    them. The one place tasks can be filtered and browsed across projects;
     paginated so a heavy task load never gets fetched at once.
     """
 
@@ -181,39 +182,56 @@ class MyTaskListView(LoginRequiredMixin, ListView):
             .order_by("-created_at")
             .values("status")[:1]
         )
-        # A part waiting on this user's verification: a current assignee's
-        # current TaskLog (their newest — services.current_logs) marked done
-        # and not verified, on a task in a project the user leads.
+        # A current assignee's current part (their newest TaskLog — see
+        # services.current_logs) marked done. Both tabs below are read off it.
         newer_log = TaskLog.objects.filter(
             task=OuterRef("task"), assigned_to=OuterRef("assigned_to")
         ).filter(
             Q(created_at__gt=OuterRef("created_at"))
             | Q(created_at=OuterRef("created_at"), pk__gt=OuterRef("pk"))
         )
-        awaiting_verification = TaskLog.objects.filter(
+        done_parts = TaskLog.objects.filter(
             task=OuterRef("pk"),
             assigned_to__assigned_tasks=OuterRef("pk"),
             status=TaskStatus.COMPLETED,
-            verified_at__isnull=True,
         ).filter(~Exists(newer_log))
-        user_leads = ProjectPrivilege.objects.filter(
-            project=OuterRef("project"),
-            user=user,
-            privilege=MemberPrivileges.PROJECT_MANAGER,
+        # To Review: a submission waiting on this user's review — a done part
+        # not yet reviewed, on a task the user reviews (which is what makes a
+        # task require review: Task.needs_review). On a completed task only a
+        # part marked after it was completed still takes a review
+        # (services.review_closed).
+        to_review = done_parts.filter(
+            reviewed_at__isnull=True,
+            task__reviewers__users=user,
+        ).filter(
+            ~Q(task__status=TaskStatus.COMPLETED)
+            | Q(
+                task__closed_at__isnull=False,
+                completed_at__isnull=False,
+                completed_at__gt=F("task__closed_at"),
+            )
         )
+        # To Verify: a contribution waiting on this user's verification as a
+        # Lead of the task's project — a done part not yet verified, and
+        # reviewed too where the task requires review.
+        task_has_reviewers = ProjectMember.objects.filter(
+            reviewed_tasks=OuterRef("task")
+        )
+        to_verify = done_parts.filter(
+            verified_at__isnull=True,
+            task__project__privileges__user=user,
+            task__project__privileges__privilege=MemberPrivileges.PROJECT_MANAGER,
+        ).filter(Q(reviewed_at__isnull=False) | ~Exists(task_has_reviewers))
         return (
             Task.objects.with_my_deadline(user)
             .annotate(
                 user_log_status=latest_log_status,
                 is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
-                is_reviewing=Exists(user_member_qs.filter(reviewed_tasks=OuterRef("pk"))),
-                is_lead=Exists(user_leads),
-                has_unverified=Exists(awaiting_verification),
+                has_to_review=Exists(to_review),
+                has_to_verify=Exists(to_verify),
             )
             .filter(
-                Q(is_assigned=True)
-                | Q(is_reviewing=True)
-                | Q(is_lead=True, has_unverified=True)
+                Q(is_assigned=True) | Q(has_to_review=True) | Q(has_to_verify=True)
             )
         )
 
@@ -228,25 +246,24 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         # NULL-safe: a task with no TaskLog yet has user_log_status=NULL, and
         # `.exclude(user_log_status=COMPLETED)` would silently drop it too
         # (NOT (NULL = COMPLETED) is NULL/false in SQL), so it must be kept
-        # explicitly — matching the dashboard's active_task_count logic. Only
-        # applies to tasks the user is assigned to; a review-only task is
-        # judged by the task's own status alone. A part waiting on the user's
-        # verification keeps the task active whatever its status: a Lead
-        # verifies parts on completed tasks too.
-        open_for_user = Q(status=TaskStatus.NOT_COMPLETED) & (
-            Q(is_assigned=False)
-            | Q(user_log_status__isnull=True)
+        # explicitly — matching the dashboard's active_task_count logic. A
+        # submission waiting on the user's review or verification keeps the
+        # task active whatever its status: both go on after it is completed.
+        open_for_user = Q(status=TaskStatus.NOT_COMPLETED, is_assigned=True) & (
+            Q(user_log_status__isnull=True)
             | ~Q(user_log_status=TaskStatus.COMPLETED)
         )
-        return qs.filter(open_for_user | Q(is_lead=True, has_unverified=True))
+        return qs.filter(
+            open_for_user | Q(has_to_review=True) | Q(has_to_verify=True)
+        )
 
     def _apply_type_filter(self, qs, task_type):
         if task_type == "assigned":
             return qs.filter(is_assigned=True)
         if task_type == "review":
-            return qs.filter(is_reviewing=True)
+            return qs.filter(has_to_review=True)
         if task_type == "verify":
-            return qs.filter(is_lead=True, has_unverified=True)
+            return qs.filter(has_to_verify=True)
         return qs
 
     def _apply_common_filters(self, qs):

@@ -5978,3 +5978,92 @@ def test_to_verify_is_the_leads_alone(client, user, other_user):
 
     page = client.get(reverse("tasks:my_list"), {"type": "verify"}).content.decode()
     assert task.name not in page
+
+
+def _task_with_a_reviewer(user, other_user, third_user):
+    """A task assigned to a contributor, reviewed by a third member, in a
+    project ``user`` leads."""
+    project, task, lead, contrib = _lead_only_task(user, other_user)
+    reviewer = ProjectMember.objects.create(project=project)
+    reviewer.users.add(third_user)
+    ProjectPrivilege.objects.create(
+        project=project, user=third_user, privilege=MemberPrivileges.CONTRIBUTOR
+    )
+    task.reviewers.add(reviewer)
+    return project, task, lead, contrib, reviewer
+
+
+@pytest.fixture
+def third_user(django_user_model):
+    return django_user_model.objects.create_user(
+        email="third@example.com", password="pw-third-123!"
+    )
+
+
+@pytest.mark.django_db
+def test_to_review_lists_only_a_submission_waiting_on_review(
+    client, user, other_user, third_user
+):
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    _project, task, _lead, contrib, reviewer = _task_with_a_reviewer(
+        user, other_user, third_user
+    )
+    url = reverse("tasks:my_list")
+    client.force_login(third_user)
+
+    # A reviewer with nothing submitted yet has nothing to review, and the
+    # task is nowhere on their page.
+    assert task.name not in client.get(url, {"type": "review"}).content.decode()
+    assert task.name not in client.get(url).content.decode()
+
+    log = mark_own_done(task=task, member=contrib)
+    page = client.get(url, {"type": "review"}).content.decode()
+    assert task.name in page and "To review" in page
+    assert task.name in client.get(url).content.decode()
+
+    mark_reviewed(task_log=log, reviewer=reviewer)
+    assert task.name not in client.get(url, {"type": "review"}).content.decode()
+    assert task.name not in client.get(url).content.decode()
+
+
+@pytest.mark.django_db
+def test_to_review_skips_a_part_marked_before_the_task_was_closed(
+    client, user, other_user, third_user
+):
+    """A completed task takes no review on a part marked before it closed."""
+    from apps.tasks.services import close_task, mark_own_done
+
+    _project, task, lead, contrib, _reviewer = _task_with_a_reviewer(
+        user, other_user, third_user
+    )
+    mark_own_done(task=task, member=contrib)
+    close_task(task=task, closed_by=lead)
+    client.force_login(third_user)
+
+    page = client.get(
+        reverse("tasks:my_list"), {"type": "review", "status": "all"}
+    ).content.decode()
+    assert task.name not in page
+
+
+@pytest.mark.django_db
+def test_to_verify_waits_for_the_review_a_task_requires(
+    client, user, other_user, third_user
+):
+    from apps.tasks.services import mark_own_done, mark_reviewed
+
+    _project, task, _lead, contrib, reviewer = _task_with_a_reviewer(
+        user, other_user, third_user
+    )
+    url = reverse("tasks:my_list")
+    client.force_login(user)
+
+    log = mark_own_done(task=task, member=contrib)
+    # Done but not reviewed: not the Lead's to verify yet.
+    assert task.name not in client.get(url, {"type": "verify"}).content.decode()
+    assert task.name not in client.get(url).content.decode()
+
+    mark_reviewed(task_log=log, reviewer=reviewer)
+    page = client.get(url, {"type": "verify"}).content.decode()
+    assert task.name in page and "To verify" in page

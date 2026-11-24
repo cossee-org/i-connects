@@ -65,10 +65,10 @@ so emitting it too would duplicate visible, unstyled-by-htmx content.
         </div>
 
         <div class="shrink-0 flex flex-col items-end gap-1 pt-0.5">
-          {% if task.is_reviewing %}
+          {% if task.has_to_review %}
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-coral/10 text-brand-coral">To review</span>
           {% endif %}
-          {% if task.is_lead and task.has_unverified %}
+          {% if task.has_to_verify %}
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-navy/10 text-brand-navy">To verify</span>
           {% endif %}
           {% if task.is_assigned and task.status == 'COMPLETED' and task.user_log_status != 'COMPLETED' %}
@@ -96,9 +96,9 @@ so emitting it too would duplicate visible, unstyled-by-htmx content.
   {% endif %}
 {% else %}
   {% if current_type == "review" %}
-    {% include "_components/empty_state.html" with title="No tasks found" body="Try adjusting the filters above, or check back once you're a reviewer on a task." %}
+    {% include "_components/empty_state.html" with title="No tasks found" body="No submissions are waiting on your review. Parts marked done on tasks you review show up here." %}
   {% elif current_type == "verify" %}
-    {% include "_components/empty_state.html" with title="No tasks found" body="Nothing is waiting on your verification. Parts marked done in projects you lead show up here." %}
+    {% include "_components/empty_state.html" with title="No tasks found" body="No contributions are waiting on your verification. Parts marked done in projects you lead show up here, once reviewed where the task requires review." %}
   {% else %}
     {% include "_components/empty_state.html" with title="No tasks found" body="Try adjusting the filters above, or check back once you're assigned a task." %}
   {% endif %}
