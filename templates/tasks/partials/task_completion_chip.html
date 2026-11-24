@@ -2,22 +2,17 @@
 {# An open task past its deadline also carries the shared Overdue pill here, inside the chip, so the #}
 {# out-of-band swap that follows a Lead closing or re-opening the task adds or drops it in step. #}
 <span id="task-completion-chip"{% if oob %} hx-swap-oob="true"{% endif %}
-      class="shrink-0 inline-flex items-center gap-2 mt-0.5 text-base font-semibold whitespace-nowrap {% if task.status == 'COMPLETED' %}text-blue-600{% else %}text-brand-text/70{% endif %}">
+      class="inline-flex items-center gap-1.5 text-sm font-medium {% if task.status == 'COMPLETED' %}text-blue-600{% else %}text-brand-text/70{% endif %}">
   {% if task.status == "COMPLETED" %}
-    <span class="inline-flex items-center gap-1.5">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="w-4 h-4 shrink-0" fill="currentColor" aria-hidden="true">
-        <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm4.7-9.3a1 1 0 0 0-1.4-1.4L9 11.6 6.7 9.3a1 1 0 0 0-1.4 1.4l3 3a1 1 0 0 0 1.4 0l5-5Z" clip-rule="evenodd" />
-      </svg>
-      <span>Closed</span>
-    </span>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="w-3.5 h-3.5 shrink-0" fill="currentColor" aria-hidden="true">
+      <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm4.7-9.3a1 1 0 0 0-1.4-1.4L9 11.6 6.7 9.3a1 1 0 0 0-1.4 1.4l3 3a1 1 0 0 0 1.4 0l5-5Z" clip-rule="evenodd" />
+    </svg>
+    <span>Closed</span>
   {% else %}
-    {# Overdue first, so the status itself keeps the corner. #}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <circle cx="10" cy="10" r="7.5" />
+    </svg>
+    <span>Open</span>
     {% include "_components/overdue_badge.html" with task=task text_size="text-sm" %}
-    <span class="inline-flex items-center gap-1.5">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-        <circle cx="10" cy="10" r="7.5" />
-      </svg>
-      <span>Open</span>
-    </span>
   {% endif %}
 </span>

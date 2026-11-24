@@ -1,8 +1,7 @@
 {% load task_tags %}
 {% comment %}
   The task's top card, shared by the side pane and the full task page: its
-  name with its status (Open / Closed) in the top right corner, its High
-  priority tag, its details as a property
+  name, its two tags (High priority, Complete), its details as a property
   list (the Kanban column among them, as plain text; the dates with their
   times, and the timezone they are in), then the description under a
   hairline. Pass title_class to size the name (the page's heading
@@ -14,17 +13,12 @@
   back in this card's shape.
 {% endcomment %}
 <section id="task-summary" class="brand-card p-4">
-  {# The name, with the task's status (Open / Closed) in the card's top right corner. #}
-  <div class="flex items-start gap-3">
-    <h2 class="flex-1 min-w-0 {{ title_class|default:"text-lg" }} font-semibold text-brand-navy leading-snug break-words">{{ task.name }}</h2>
+  <h2 class="{{ title_class|default:"text-lg" }} font-semibold text-brand-navy leading-snug break-words">{{ task.name }}</h2>
+
+  <div class="flex flex-wrap items-center gap-2 mt-2">
+    {% if task.is_priority %}{% include "_components/priority_flag.html" with text_size="text-sm" %}{% endif %}
     {% include "tasks/partials/task_completion_chip.html" with task=task %}
   </div>
-
-  {% if task.is_priority %}
-    <div class="flex flex-wrap items-center gap-2 mt-2">
-      {% include "_components/priority_flag.html" with text_size="text-sm" %}
-    </div>
-  {% endif %}
 
   {% comment %}
     The task's details as one property list: a muted label (with its

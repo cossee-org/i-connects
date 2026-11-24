@@ -1977,9 +1977,8 @@ def test_pane_completion_button_is_lead_only(client, user, other_user):
 
 @pytest.mark.django_db
 def test_pane_pills_share_one_row_above_the_dates(client, user):
-    """The status sits beside the name, in the card's top right corner; the
-    High priority tag follows under the name, over the dates; the Kanban
-    column is a property row after them, not a pill."""
+    """Priority and completion read left to right, over the dates; the
+    Kanban column is a property row after them, not a pill."""
     project, col1, _col2 = _make_project_with_board(user)
     lead = _primary_member(project, user)
     task = Task.objects.create(
@@ -1996,23 +1995,18 @@ def test_pane_pills_share_one_row_above_the_dates(client, user):
     pane = client.get(_pane_url(project, task)).content.decode()
 
     assert (
-        pane.index("Pilled</h2>")
+        pane.index("High priority")
         < pane.index("<span>Open</span>")
-        < pane.index("High priority")
         < pane.index("Mar 10, 2026 12:00 AM – Mar 12, 2026 12:00 AM UTC")
         < pane.index("Kanban column")
-    ), "expected the name with its status, High priority, the dates, then the Kanban column row"
-    # The status shares the name's row, on its right.
-    title_row = pane[pane.index('<div class="flex items-start gap-3">') : pane.index("High priority")]
-    assert "Pilled</h2>" in title_row and 'id="task-completion-chip"' in title_row
+    ), "expected High priority, completion, the dates, then the Kanban column row"
     if project.tracks_credit:
         assert pane.index("Task type") < pane.index("Kanban column")
 
 
 @pytest.mark.django_db
 def test_pane_pill_row_drops_the_flag_when_not_priority(client, user):
-    """The flag is conditional, and its row goes with it: no empty row is
-    left between the name and the dates."""
+    """The flag is conditional; the completion chip still leads the row."""
     project, col1, _col2 = _make_project_with_board(user)
     lead = _primary_member(project, user)
     task = Task.objects.create(
@@ -2028,8 +2022,6 @@ def test_pane_pill_row_drops_the_flag_when_not_priority(client, user):
 
     assert "High priority" not in pane
     assert pane.index("<span>Open</span>") < pane.index("Due Mar 12, 2026") < pane.index("Kanban column")
-    summary = pane[pane.index('id="task-summary"') : pane.index("<dl")]
-    assert "flex flex-wrap items-center gap-2 mt-2" not in summary
 
 
 @pytest.mark.django_db
@@ -3275,9 +3267,9 @@ def test_pane_body_text_is_one_size(client, user, other_user):
     pane = client.get(_pane_url(project, task)).content.decode()
     # The property list (dates, task type, created by).
     assert "gap-x-3 gap-y-2 text-sm" in pane
-    # The flag at text-sm; the status in the corner runs a size up.
+    # The two tags: flag, completion chip.
     assert 'gap-1 text-sm font-medium shrink-0 text-error' in pane
-    assert "inline-flex items-center gap-2 mt-0.5 text-base font-semibold" in pane
+    assert "inline-flex items-center gap-1.5 text-sm font-medium" in pane
     # Nothing in the pill row is left at text-xs.
     pill_row = pane[pane.index("flex flex-wrap items-center gap-2") : pane.index("<dl")]
     assert "text-xs" not in pill_row
