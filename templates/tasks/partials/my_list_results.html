@@ -99,7 +99,9 @@ so emitting it too would duplicate visible, unstyled-by-htmx content.
     </div>
   {% endif %}
 {% else %}
-  {% if current_type == "review" %}
+  {% if current_type == "assigned" %}
+    {% include "_components/empty_state.html" with title="No tasks found" body="Nothing assigned to you is waiting on your mark. Parts you've marked done are still under All." %}
+  {% elif current_type == "review" %}
     {% include "_components/empty_state.html" with title="No tasks found" body="No submissions are waiting on your review. Parts marked done on tasks you review show up here." %}
   {% elif current_type == "verify" %}
     {% include "_components/empty_state.html" with title="No tasks found" body="No contributions are waiting on your verification. Parts marked done in projects you lead show up here, once reviewed where the task requires review." %}

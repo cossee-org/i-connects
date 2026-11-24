@@ -6127,3 +6127,29 @@ def test_dashboard_row_waiting_on_both_shows_both_pills(client, user, other_user
     mark_reviewed(task_log=reviewed, reviewer=lead)
     mark_own_done(task=task, member=second)
     assert ">To review</span>" in row() and ">To verify</span>" in row()
+
+
+@pytest.mark.django_db
+def test_assigned_drops_a_part_the_user_marked_done_but_all_keeps_it(client, user):
+    from apps.tasks.services import mark_own_done
+
+    project, col1, _col2 = _make_project_with_board(user)
+    member = _primary_member(project, user)
+    task = Task.objects.create(
+        project=project, created_by=member, container=col1,
+        container_task_order=0, name="Mine to mark",
+    )
+    task.assigned_members.add(member)
+    TaskLog.objects.create(task=task, assigned_to=member)
+    url = reverse("tasks:my_list")
+    client.force_login(user)
+
+    assert task.name in client.get(url, {"type": "assigned"}).content.decode()
+    assert task.name in client.get(url).content.decode()
+
+    mark_own_done(task=task, member=member)
+    assert task.name not in client.get(url, {"type": "assigned"}).content.decode()
+    assert task.name not in client.get(
+        url, {"type": "assigned", "status": "all"}
+    ).content.decode()
+    assert task.name in client.get(url).content.decode()

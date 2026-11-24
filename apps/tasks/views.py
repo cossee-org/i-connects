@@ -118,20 +118,21 @@ class MyTaskListView(LoginRequiredMixin, ListView):
     """Tasks touching the current user, across all of their projects: those
     assigned to the user, and those with a submission waiting on the user's
     review or verification, merged into a single list. The page's tabs
-    (``?type=``) narrow that down: All, Assigned (assigned to the user), To
+    (``?type=``) narrow that down: All, Assigned (assigned to the user,
+    their part not yet marked done — All keeps the parts they have marked), To
     Review (the user reviews the task and an assignee's part is marked done
     and not yet reviewed) and To Verify (a task in a project the user leads
     with a part marked done and not yet verified — and reviewed, where the
     task requires review).
 
-    By default only active ("Not completed") tasks are shown, matching the
-    dashboard's task counts; the "Status" filter can switch to "Completed"
-    only or "All" regardless of status. A submission waiting on the user's
-    review or verification counts as active whatever the task's status,
-    since both go on after a task is completed. Excludes tasks the user
-    merely created, and tasks they review or lead with nothing waiting on
-    them. The one place tasks can be filtered and browsed across projects;
-    paginated so a heavy task load never gets fetched at once.
+    By default only active ("Not completed") tasks are shown; the "Status"
+    filter can switch to "Completed" only or "All" regardless of status. A
+    submission waiting on the user's review or verification counts as
+    active whatever the task's status, since both go on after a task is
+    completed. Excludes tasks the user merely created, and tasks they review
+    or lead with nothing waiting on them. The one place tasks can be
+    filtered and browsed across projects; paginated so a heavy task load
+    never gets fetched at once.
     """
 
     model = Task
@@ -196,30 +197,34 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         )
 
     def _apply_status_filter(self, qs, status_filter):
-        """Restrict by completion status. "all" applies no filter; "completed"
-        shows only fully-completed tasks; the default "not_completed" matches
-        the dashboard's task counts."""
+        """Restrict by the task's completion status. "all" applies no
+        filter; "completed" shows only completed tasks; the default
+        "not_completed" shows open ones. A submission waiting on the user's
+        review or verification keeps a task active whatever its status: both
+        go on after it is completed. Whether the user has marked their own
+        part done is the Assigned tab's business (``_apply_type_filter``),
+        not the status's, so All keeps parts the user has already marked."""
         if status_filter == "all":
             return qs
         if status_filter == "completed":
             return qs.filter(status=TaskStatus.COMPLETED)
-        # NULL-safe: a task with no TaskLog yet has user_log_status=NULL, and
-        # `.exclude(user_log_status=COMPLETED)` would silently drop it too
-        # (NOT (NULL = COMPLETED) is NULL/false in SQL), so it must be kept
-        # explicitly — matching the dashboard's active_task_count logic. A
-        # submission waiting on the user's review or verification keeps the
-        # task active whatever its status: both go on after it is completed.
-        open_for_user = Q(status=TaskStatus.NOT_COMPLETED, is_assigned=True) & (
-            Q(user_log_status__isnull=True)
-            | ~Q(user_log_status=TaskStatus.COMPLETED)
-        )
         return qs.filter(
-            open_for_user | Q(has_to_review=True) | Q(has_to_verify=True)
+            Q(status=TaskStatus.NOT_COMPLETED)
+            | Q(has_to_review=True)
+            | Q(has_to_verify=True)
         )
 
     def _apply_type_filter(self, qs, task_type):
         if task_type == "assigned":
-            return qs.filter(is_assigned=True)
+            # Only parts the user has still to mark done. NULL-safe: a task
+            # with no TaskLog yet for the user has user_log_status=NULL, and
+            # `~Q(user_log_status=COMPLETED)` alone would silently drop it
+            # (NOT (NULL = COMPLETED) is NULL/false in SQL), so it is kept
+            # explicitly — matching the dashboard's active_task_count logic.
+            return qs.filter(is_assigned=True).filter(
+                Q(user_log_status__isnull=True)
+                | ~Q(user_log_status=TaskStatus.COMPLETED)
+            )
         if task_type == "review":
             return qs.filter(has_to_review=True)
         if task_type == "verify":
