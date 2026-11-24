@@ -81,7 +81,7 @@ from apps.tasks.mixins import (
     ProjectManagerRequiredMixin,
     TaskMemberAccessMixin,
 )
-from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog
+from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog, TaskQuerySet
 from apps.tasks.services import (
     UNSET,
     apply_task_date_change,
@@ -173,25 +173,10 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         return task_type if task_type in self._TYPES else ""
 
     def _base_queryset(self):
-        user = self.request.user
-        user_member_qs = ProjectMember.objects.filter(users=user)
-        latest_log_status = Subquery(
-            TaskLog.objects.filter(task=OuterRef("pk"), assigned_to__in=user_member_qs)
-            .order_by("-created_at")
-            .values("status")[:1]
-        )
-        return (
-            # has_to_review / has_to_verify: the To Review and To Verify
-            # tabs' rules (TaskQuerySet.with_waiting_on).
-            Task.objects.with_my_deadline(user)
-            .with_waiting_on(user)
-            .annotate(
-                user_log_status=latest_log_status,
-                is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
-            )
-            .filter(
-                Q(is_assigned=True) | Q(has_to_review=True) | Q(has_to_verify=True)
-            )
+        # The All tab's tasks (TaskQuerySet.on_my_list): has_to_review /
+        # has_to_verify are the To Review and To Verify tabs' rules.
+        return Task.objects.with_my_deadline(self.request.user).on_my_list(
+            self.request.user
         )
 
     def _apply_status_filter(self, qs, status_filter):
@@ -209,21 +194,11 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         return qs.filter(status=TaskStatus.NOT_COMPLETED)
 
     def _apply_type_filter(self, qs, task_type):
-        if task_type == "assigned":
-            # Only parts the user has still to mark done. NULL-safe: a task
-            # with no TaskLog yet for the user has user_log_status=NULL, and
-            # `~Q(user_log_status=COMPLETED)` alone would silently drop it
-            # (NOT (NULL = COMPLETED) is NULL/false in SQL), so it is kept
-            # explicitly — matching the dashboard's active_task_count logic.
-            return qs.filter(is_assigned=True).filter(
-                Q(user_log_status__isnull=True)
-                | ~Q(user_log_status=TaskStatus.COMPLETED)
-            )
-        if task_type == "review":
-            return qs.filter(has_to_review=True)
-        if task_type == "verify":
-            return qs.filter(has_to_verify=True)
-        return qs
+        """Narrow to a tab (TaskQuerySet.MY_LIST_TABS); All, "", is every
+        task. Assigned holds only parts the user has still to mark done,
+        whatever the status."""
+        condition = TaskQuerySet.MY_LIST_TABS.get(task_type)
+        return qs.filter(condition) if condition is not None else qs
 
     def _apply_common_filters(self, qs):
         """Search/project/priority filters (not sort, not the type
@@ -269,7 +244,6 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
 
-        context["is_htmx_request"] = bool(self.request.headers.get("HX-Request"))
         current_q = self.request.GET.get("q", "").strip()
         current_sort = self.request.GET.get("sort", "newest")
         current_project = self.request.GET.get("project", "")
@@ -294,19 +268,16 @@ class MyTaskListView(LoginRequiredMixin, ListView):
         params.pop("page", None)
         context["filter_params"] = params.urlencode()
 
-        # The tabs' counts follow every filter but the tab itself; All's is
-        # the header total.
-        untyped = self._apply_status_filter(
-            self._apply_common_filters(self._base_queryset()), current_status
-        )
-        context["total_task_count"] = untyped.count()
+        # The header's and the tabs' numbers are the user's open-task
+        # totals, whatever the search and filters (the results summary gives
+        # the filtered count) -- the same numbers as the sidebar's badge.
+        counts = Task.objects.my_list_counts(user)
+        context["total_task_count"] = counts["total"]
         context["task_tabs"] = [
             {
                 "value": value,
                 "label": label,
-                "count": (
-                    self._apply_type_filter(untyped, value).count() if value else None
-                ),
+                "count": counts[value] if value else counts["total"],
             }
             for value, label in self.TABS
         ]
