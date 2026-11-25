@@ -1,0 +1,11 @@
+{% extends "emails/base_email.html" %}{% load email_tags %}
+{% block preheader %}{{ sender.name|default:sender.email }} wrote to the members of {{ project.name }}.{% endblock %}
+{% block heading %}{{ subject }}{% endblock %}
+{% block content %}
+<p>Hi {{ recipient.name|default:recipient.email }},</p>
+<p><strong>{{ sender.name|default:sender.email }}</strong> sent this message to the members of <strong>{{ project.name }}</strong>.</p>
+{% emailpart "quote" %}{{ body|linebreaksbr }}{% endemailpart %}
+{% emailpart "note" %}Reply to this email to answer {{ sender.name|default:sender.email }} directly at {% emailpart "link" href="mailto:"|add:sender.email %}{{ sender.email }}{% endemailpart %}.{% endemailpart %}
+{% endblock %}
+{% block signoff %}{% endblock %}
+{% block footer_reason %}You got this email because you're a member of {{ project.name }} on i-CONNECTS.{% endblock %}

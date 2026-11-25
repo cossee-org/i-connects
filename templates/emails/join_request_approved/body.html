@@ -1,0 +1,9 @@
+{% extends "emails/base_email.html" %}{% load email_tags %}
+{% block preheader %}You're now a member of {{ project.name }}.{% endblock %}
+{% block heading %}Your request to join was approved{% endblock %}
+{% block content %}
+<p>Hi,</p>
+<p>Your request to join <strong>{{ project.name }}</strong> as {{ join_request.get_requested_privilege_display }} was approved.</p>
+{% emailpart "button" href=url %}Open the project{% endemailpart %}
+{% endblock %}
+{% block footer_reason %}You got this email because you asked to join {{ project.name }} on i-CONNECTS.{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "emails/base_email.html" %}{% load email_tags %}
+{% block preheader %}{{ requester.name|default:requester.email }} asked to join as {{ join_request.get_requested_privilege_display }}.{% endblock %}
+{% block heading %}{{ requester.name|default:requester.email }} asked to join{% endblock %}
+{% block content %}
+<p>Hi,</p>
+<p><strong>{{ requester.name|default:requester.email }}</strong> has requested to join <strong>{{ project.name }}</strong> as {{ join_request.get_requested_privilege_display }}.</p>
+{% if join_request.message %}<p>They wrote:</p>
+{% emailpart "quote" %}{{ join_request.message|linebreaksbr }}{% endemailpart %}{% endif %}
+{% emailpart "button" href=url %}Review pending requests{% endemailpart %}
+{% endblock %}
+{% block footer_reason %}You got this email because you're a Lead of {{ project.name }} on i-CONNECTS.{% endblock %}

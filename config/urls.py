@@ -38,5 +38,11 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:
+    from apps.core.views import email_preview
+
+    urlpatterns += [
+        path("dev/emails/", email_preview, name="email_preview_index"),
+        path("dev/emails/<slug:name>/", email_preview, name="email_preview"),
+    ]
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils.text import Truncator
 
 from apps.communications.models import EmailKind
-from apps.core.emails import absolute_url, send_templated_email
+from apps.core.emails import absolute_url, send_email
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +63,10 @@ def send_comment_mention_email_task(comment_id: int, user_ids: list[int]) -> Non
         ),
     }
     for user in recipients:
-        send_templated_email(
-            subject_template="emails/comment_mention/subject.txt",
-            html_template="emails/comment_mention/body.html",
-            text_template="emails/comment_mention/body.txt",
-            context={**context_base, "user": user},
-            to=[user.email],
+        send_email(
+            "comment_mention",
+            {**context_base, "user": user},
+            [user.email],
             kind=EmailKind.COMMENT_MENTION,
             project=task.project,
             triggered_by=comment.author_user,

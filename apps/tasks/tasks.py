@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from apps.communications.models import EmailKind
-from apps.core.emails import absolute_url, send_templated_email
+from apps.core.emails import absolute_url, send_email
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +71,12 @@ def send_task_assigned_email_task(
         "user": user,
         "assigned_by": assigned_by,
         "entries": entries,
+        "project": project,
     }
-    send_templated_email(
-        subject_template="emails/task_assigned/subject.txt",
-        html_template="emails/task_assigned/body.html",
-        text_template="emails/task_assigned/body.txt",
-        context=context,
-        to=[user.email],
+    send_email(
+        "task_assigned",
+        context,
+        [user.email],
         kind=EmailKind.TASK_ASSIGNED,
         project=project,
         triggered_by=assigned_by,

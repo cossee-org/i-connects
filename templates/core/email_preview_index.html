@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Email preview &mdash; i&bull;CONNECTS{% endblock %}
+{% block page_header %}
+  {% include "_components/page_header.html" with title="Email preview" subtitle="Every email i-CONNECTS sends, rendered with made-up data. Development only." %}
+{% endblock %}
+{% block content %}
+<div class="brand-card overflow-hidden">
+  <table class="table">
+    <thead class="bg-brand-lighter text-brand-navy">
+      <tr><th scope="col">Email</th><th scope="col" class="text-right">Plain text</th></tr>
+    </thead>
+    <tbody>
+      {% for name in names %}
+        <tr>
+          <td><a class="text-brand-navy hover:text-brand-coral font-medium" href="{{ name }}/">{{ name }}</a></td>
+          <td class="text-right"><a class="text-brand-navy hover:text-brand-coral" href="{{ name }}/?format=text">Text</a></td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

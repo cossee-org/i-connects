@@ -1,0 +1,8 @@
+{% extends "emails/layouts/account.txt" %}
+{% block heading %}Welcome to i-CONNECTS{% endblock %}
+{% block content %}Hi {{ user.name|default:user.email }},
+
+Your i-CONNECTS account has been created. You can sign in any time at:
+{{ site_url }}
+
+If you have any questions, reply to this email.{% endblock %}

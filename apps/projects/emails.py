@@ -1,47 +1,18 @@
-"""Invitation email helpers.
+"""Project emails: invitations and join requests.
 
-Uses Django's ``send_mail`` + ``render_to_string``. The dev email backend
-is console-based, so this is visible in the runserver output.
+Each is a folder under ``templates/emails/`` sent with
+:func:`apps.core.emails.send_email` and recorded in the project's email log.
 """
 
 from __future__ import annotations
 
-import logging
-
-from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
-from django.template.loader import render_to_string
 from django.urls import NoReverseMatch, reverse
 
 from apps.communications.models import EmailKind
-from apps.communications.services import send_logged
-
-logger = logging.getLogger(__name__)
+from apps.core.emails import absolute_url, send_email
 
 
-def _absolute_url(path: str) -> str:
-    """Prefix ``path`` with ``settings.SITE_URL``.
-
-    These emails are sent from request-less contexts (services, Celery
-    tasks), so there's no ``request.build_absolute_uri`` to fall back on.
-    An unset ``SITE_URL`` would otherwise silently degrade to a bare
-    relative path that mail clients mangle into a broken link (e.g.
-    ``http:///invites/<code>/``) — log loudly instead.
-    """
-    site = getattr(settings, "SITE_URL", "").rstrip("/")
-    if not site:
-        logger.warning(
-            "SITE_URL is not set — email link for %s will be a bare "
-            "relative path instead of an absolute URL.",
-            path,
-        )
-        return path
-    return f"{site}{path}"
-
-
-def _send(
-    *, subject, body_text, body_html, recipients, kind, project, triggered_by=None
-) -> None:
+def _send(*, name, context, recipients, kind, project, triggered_by=None) -> None:
     """Send one project email and record it in the project's email log.
 
     One message per recipient, so nobody sees the others' addresses and each
@@ -51,15 +22,10 @@ def _send(
     down. The failure is in the email log instead.
     """
     for recipient in recipients:
-        message = EmailMultiAlternatives(
-            subject=subject,
-            body=body_text,
-            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-            to=[recipient],
-        )
-        message.attach_alternative(body_html, "text/html")
-        send_logged(
-            message,
+        send_email(
+            name,
+            context,
+            [recipient],
             kind=kind,
             project=project,
             triggered_by=triggered_by,
@@ -77,7 +43,7 @@ def _invitation_url(invitation) -> str:
         # Phase 5 may not yet have wired the project urls into the root
         # urlconf; fall back to a bare path so the message is still useful.
         path = f"/invites/{invitation.invitation_code}/"
-    return _absolute_url(path)
+    return absolute_url(path)
 
 
 def send_invitation_email(invitation, *, triggered_by=None) -> None:
@@ -90,13 +56,9 @@ def send_invitation_email(invitation, *, triggered_by=None) -> None:
         "project": invitation.project,
         "url": _invitation_url(invitation),
     }
-    subject = render_to_string("projects/emails/invitation_subject.txt", context).strip()
-    body_text = render_to_string("projects/emails/invitation.txt", context)
-    body_html = render_to_string("projects/emails/invitation.html", context)
     _send(
-        subject=subject,
-        body_text=body_text,
-        body_html=body_html,
+        name="invitation",
+        context=context,
         recipients=[invitation.email],
         kind=EmailKind.INVITATION,
         project=invitation.project,
@@ -109,7 +71,7 @@ def _project_join_requests_url(project) -> str:
         path = reverse("projects:join_requests", kwargs={"pk": project.pk})
     except NoReverseMatch:
         path = f"/projects/{project.pk}/join-requests/"
-    return _absolute_url(path)
+    return absolute_url(path)
 
 
 def send_join_request_email_to_pms(*, join_request, pm_user_ids) -> None:
@@ -138,15 +100,9 @@ def send_join_request_email_to_pms(*, join_request, pm_user_ids) -> None:
         "requester": join_request.user,
         "url": _project_join_requests_url(project),
     }
-    subject = render_to_string(
-        "projects/emails/join_request_subject.txt", context
-    ).strip()
-    body_text = render_to_string("projects/emails/join_request.txt", context)
-    body_html = render_to_string("projects/emails/join_request.html", context)
     _send(
-        subject=subject,
-        body_text=body_text,
-        body_html=body_html,
+        name="join_request",
+        context=context,
         recipients=recipients,
         kind=EmailKind.JOIN_REQUEST,
         project=project,
@@ -159,7 +115,7 @@ def _project_detail_url(project) -> str:
         path = reverse("projects:detail", kwargs={"pk": project.pk})
     except NoReverseMatch:
         path = f"/projects/{project.pk}/"
-    return _absolute_url(path)
+    return absolute_url(path)
 
 
 def send_join_request_decision_email(*, join_request, approved: bool) -> None:
@@ -174,22 +130,9 @@ def send_join_request_decision_email(*, join_request, approved: bool) -> None:
         "approved": approved,
         "url": _project_detail_url(project),
     }
-    template_stem = (
-        "join_request_approved" if approved else "join_request_declined"
-    )
-    subject = render_to_string(
-        f"projects/emails/{template_stem}_subject.txt", context
-    ).strip()
-    body_text = render_to_string(
-        f"projects/emails/{template_stem}.txt", context
-    )
-    body_html = render_to_string(
-        f"projects/emails/{template_stem}.html", context
-    )
     _send(
-        subject=subject,
-        body_text=body_text,
-        body_html=body_html,
+        name="join_request_approved" if approved else "join_request_declined",
+        context=context,
         recipients=[recipient],
         kind=EmailKind.JOIN_REQUEST_DECISION,
         project=project,

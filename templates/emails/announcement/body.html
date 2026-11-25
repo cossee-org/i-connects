@@ -1,7 +1,8 @@
-{% extends "emails/base_email.html" %}
-{% block title %}i-CONNECTS announcement{% endblock %}
+{% extends "emails/base_email.html" %}{% load email_tags %}
+{% block preheader %}{{ announcement.details|default:announcement.headline|truncatechars:90 }}{% endblock %}
+{% block heading %}{{ announcement.headline }}{% endblock %}
 {% block content %}
-{% if project %}<p><strong>{{ project.name }}</strong></p>{% endif %}
-
-<p>{{ announcement.message|linebreaksbr }}</p>
+{% if announcement.details %}{{ announcement.details|linebreaks }}{% endif %}
+{% if announcement.external_link %}{% emailpart "button" href=announcement.external_link %}Open the link{% endemailpart %}{% elif announcement.url %}{% emailpart "button" href=announcement.url|absolute %}Open in i-CONNECTS{% endemailpart %}{% endif %}
 {% endblock %}
+{% block footer_reason %}You got this email because an i-CONNECTS administrator sent an announcement{% if project %} to the members of {{ project.name }}{% endif %}.{% endblock %}

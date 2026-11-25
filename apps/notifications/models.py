@@ -73,6 +73,12 @@ class Notification(models.Model):
         return self.message.split("\n", 1)[0]
 
     @property
+    def details(self) -> str:
+        """Everything in ``message`` after the :attr:`headline`."""
+        parts = self.message.split("\n", 1)
+        return parts[1].strip() if len(parts) > 1 else ""
+
+    @property
     def url(self) -> str | None:
         """Where clicking this notification should land, or ``None``.
 

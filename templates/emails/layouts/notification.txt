@@ -1,0 +1,3 @@
+{% extends "emails/base_email.txt" %}{% load email_tags %}
+{% block footer_reason %}You got this email because of your notification settings.
+Change them in your profile: {% site_url "accounts:profile" %}{% endblock %}
