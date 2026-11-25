@@ -1290,9 +1290,9 @@ def notify_new_reviewers(
         return
     create_notification(
         users=list(user_ids),
-        title=f"Review requested: {task.name}",
+        title=f"Assigned as Reviewer: {task.name}",
         body=(
-            f"In project {task.project.name}. You'll sign off each "
+            f"In project {task.project.name}. Review and sign off each "
             "assignee's submission."
         ),
         project=task.project,

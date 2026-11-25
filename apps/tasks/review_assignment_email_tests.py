@@ -21,7 +21,7 @@ from apps.tasks.models import KanbanBoard, Task
 from apps.tasks.services import notify_new_reviewers
 from apps.tasks.tasks import send_review_assigned_email_task
 
-SUBJECT = 'i-CONNECTS: you were asked to review "Screen abstracts"'
+SUBJECT = 'i-CONNECTS: you were assigned as Reviewer on "Screen abstracts"'
 
 
 @pytest.fixture(autouse=True)
@@ -69,9 +69,15 @@ def _task(project, column, *, name="Screen abstracts", **kwargs):
     )
 
 
+def _make_user(email, name):
+    return get_user_model().objects.create_user(
+        email=email, password="password123", name=name, email_confirmed_at=timezone.now()
+    )
+
+
 def _review_notifications(user):
     return Notification.objects.for_user(user).filter(
-        message__startswith="Review requested"
+        message__startswith="Assigned as Reviewer"
     )
 
 
@@ -123,11 +129,39 @@ def test_creating_a_task_tells_its_reviewers_but_not_the_lead(
     )
     assert url in message.body
     assert "Coral reefs" in message.body
-    assert "Alice asked you to review a task" in message.body
-    assert f'href="{url}"' in message.alternatives[0][0]
+    assert "Alice assigned you as Reviewer" in message.body
 
-    assert _review_notifications(other_user).count() == 1
+    assert "Your role: Reviewer" in message.body
+    assert "No one is assigned to this task yet" in message.body
+    html = message.alternatives[0][0]
+    assert f'href="{url}"' in html
+    assert "Your role: Reviewer" in html
+    assert "Review the task" in html
+
+    notification = _review_notifications(other_user).get()
+    assert notification.message.startswith("Assigned as Reviewer: Screen abstracts")
     assert not _review_notifications(user).exists()
+
+
+@pytest.mark.django_db
+def test_the_email_names_the_assignees_whose_work_they_review(
+    user, other_user, pm_user, django_capture_on_commit_callbacks
+):
+    project, column = _make_project(user)
+    bob = _member(project, other_user)
+    team = _member(project, pm_user, name="Extraction team")
+    reviewer = _member(project, _make_user("rev@test.com", "Rita"))
+    task = _task(project, column, requires_review=True)
+    task.assigned_members.add(bob, team)
+    task.reviewers.add(reviewer)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        notify_new_reviewers(task, {reviewer.pk}, assigned_by=user)
+    message = mail.outbox[0]
+    line = f"Assignees whose work you'll review: {bob.display_name}, Extraction team"
+    assert line in message.body
+    assert "No one is assigned" not in message.body
+    assert f"{bob.display_name}, Extraction team" in message.alternatives[0][0]
 
 
 @pytest.mark.django_db
@@ -164,7 +198,7 @@ def test_editing_a_task_tells_only_reviewers_the_edit_adds(
     with django_capture_on_commit_callbacks(execute=True):
         _update(client, task, column, bob)
     assert mail.outbox == []
-    assert not Notification.objects.filter(message__startswith="Review requested").exists()
+    assert not Notification.objects.filter(message__startswith="Assigned as Reviewer").exists()
 
     with django_capture_on_commit_callbacks(execute=True):
         _update(client, task, column, bob, pm)
@@ -200,7 +234,7 @@ def test_a_team_reviewer_tells_each_of_its_users(
     with django_capture_on_commit_callbacks(execute=True):
         _create(client, project, column, team)
     assert sorted(m.to[0] for m in mail.outbox) == ["bob@test.com", "pm@test.com"]
-    notification = Notification.objects.get(message__startswith="Review requested")
+    notification = Notification.objects.get(message__startswith="Assigned as Reviewer")
     assert set(notification.recipients.values_list("pk", flat=True)) == {
         other_user.pk,
         pm_user.pk,
@@ -220,10 +254,10 @@ def test_an_assignee_who_also_reviews_hears_about_both(
             reverse("tasks:create", kwargs={"project_pk": project.pk}),
             {**_form_data(column, bob), "assigned_members": [bob.pk]},
         )
-    assert sorted(m.subject for m in mail.outbox) == [
-        'i-CONNECTS: you were asked to review "Screen abstracts"',
+    assert sorted(m.subject for m in mail.outbox) == sorted([
+        'i-CONNECTS: you were assigned as Reviewer on "Screen abstracts"',
         'i-CONNECTS: you were assigned "Screen abstracts"',
-    ]
+    ])
 
 
 @pytest.mark.django_db
@@ -349,7 +383,7 @@ def test_task_names_are_not_html_escaped_in_the_plain_text(
     with django_capture_on_commit_callbacks(execute=True):
         notify_new_reviewers(task, {bob.pk}, assigned_by=user)
     message = mail.outbox[0]
-    assert message.subject == 'i-CONNECTS: you were asked to review "Q&A <draft>"'
+    assert message.subject == 'i-CONNECTS: you were assigned as Reviewer on "Q&A <draft>"'
     assert "Q&A <draft> (Fish & frogs)" in message.body
     assert "Q&amp;A &lt;draft&gt;" in message.alternatives[0][0]
 
@@ -371,7 +405,7 @@ def test_review_email_is_on_by_default():
 def test_profile_form_turns_the_review_email_off(client_logged_in, user):
     url = reverse("accounts:profile")
     page = client_logged_in.get(url).content.decode()
-    assert "Email me when I&#x27;m asked to review a task" in page
+    assert "Email me when I&#x27;m assigned as a reviewer" in page
 
     response = client_logged_in.post(
         url,

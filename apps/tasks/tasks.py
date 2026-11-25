@@ -122,6 +122,11 @@ def send_review_assigned_email_task(
         "assigned_by": assigned_by,
         "task": task,
         "project": task.project,
+        # Whose work they will review. A team goes by its own name.
+        "assignees": [
+            member.name or member.display_name
+            for member in task.assigned_members.order_by("id")
+        ],
         "url": absolute_url(
             reverse(
                 "tasks:detail",

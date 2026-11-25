@@ -333,7 +333,7 @@ class ProfileForm(forms.ModelForm):
             "city": "City",
             "country": "Country",
             "email_task_assigned": "Email me when I'm assigned a task",
-            "email_review_assigned": "Email me when I'm asked to review a task",
+            "email_review_assigned": "Email me when I'm assigned as a reviewer",
             "email_comment_mention": "Email me when I'm mentioned in a comment",
         }
         widgets = {

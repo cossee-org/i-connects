@@ -263,7 +263,7 @@ def test_adding_a_reviewer_sends_no_assignment_email(
     assert task.reviewers.filter(pk=bob.pk).exists()
     # Bob hears he is a reviewer (review_assignment_email_tests), not an assignee.
     assert [m.subject for m in mail.outbox] == [
-        'i-CONNECTS: you were asked to review "Screen abstracts"'
+        'i-CONNECTS: you were assigned as Reviewer on "Screen abstracts"'
     ]
     assert not _assignment_notifications(other_user).exists()
 
