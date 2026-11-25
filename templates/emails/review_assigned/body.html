@@ -1,0 +1,10 @@
+{% extends "emails/layouts/notification.html" %}{% load email_tags task_tags %}
+{% block preheader %}{{ task.name }}{% if task.deadline %}, due {{ task.deadline|in_zone:task.timezone|date:"M j" }}{% endif %}{% endblock %}
+{% block heading %}{% if assigned_by %}{{ assigned_by.name|default:assigned_by.email }} asked you{% else %}You were asked{% endif %} to review a task{% endblock %}
+{% block content %}
+<p>Hi {{ user.name|default:user.email }},</p>
+<p>You are now a reviewer on:</p>
+{% emailpart "list" %}{% emailpart "item" title=task.name href=url %}{{ task.project.name }}{% if task.deadline %} &middot; Due {{ task.deadline|in_zone:task.timezone|date:"M j, Y g:i A T" }}{% endif %}{% endemailpart %}{% endemailpart %}
+<p>Each assignee's submission needs a reviewer's sign-off before the task counts as done.</p>
+{% emailpart "button" href=url %}Open the task{% endemailpart %}
+{% endblock %}

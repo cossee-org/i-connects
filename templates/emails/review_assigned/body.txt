@@ -1,0 +1,10 @@
+{% extends "emails/layouts/notification.txt" %}{% load task_tags %}
+{% block heading %}{% if assigned_by %}{{ assigned_by.name|default:assigned_by.email }} asked you{% else %}You were asked{% endif %} to review a task{% endblock %}
+{% block content %}Hi {{ user.name|default:user.email }},
+
+You are now a reviewer on:
+
+- {{ task.name }} ({{ task.project.name }}){% if task.deadline %} -- due {{ task.deadline|in_zone:task.timezone|date:"M j, Y g:i A T" }}{% endif %}
+  {{ url }}
+
+Each assignee's submission needs a reviewer's sign-off before the task counts as done. Open the task to see the submissions.{% endblock %}

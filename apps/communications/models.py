@@ -26,6 +26,7 @@ class EmailKind(models.TextChoices):
     JOIN_REQUEST = "join_request", "Join request"
     JOIN_REQUEST_DECISION = "join_request_decision", "Join request decision"
     TASK_ASSIGNED = "task_assigned", "Task assigned"
+    REVIEW_ASSIGNED = "review_assigned", "Review assigned"
     COMMENT_MENTION = "comment_mention", "Tagged in a comment"
     MAILING_LIST = "mailing_list", "Mailing list message"
     ANNOUNCEMENT = "announcement", "Announcement"
