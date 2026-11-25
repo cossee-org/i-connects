@@ -1193,6 +1193,24 @@ def _queue_assignment_email(user_id: int, task_ids: list[int], assigned_by_id):
     return queue_task_assigned_email
 
 
+def _member_user_ids(member_ids: Iterable[int], *, exclude=None) -> set[int]:
+    """The users behind the ``ProjectMember`` ids, less ``exclude`` (a user).
+
+    A team member reaches each of its users; a member with none left on it
+    reaches nobody.
+    """
+    member_ids = set(member_ids)
+    if not member_ids:
+        return set()
+    user_ids = set(
+        ProjectMember.objects.filter(pk__in=member_ids).values_list("users", flat=True)
+    )
+    user_ids.discard(None)
+    if exclude is not None:
+        user_ids.discard(exclude.pk)
+    return user_ids
+
+
 def notify_new_assignees(
     assignments: Iterable[tuple[Task, Iterable[int]]], *, assigned_by=None
 ) -> None:
@@ -1215,17 +1233,7 @@ def notify_new_assignees(
 
     task_ids_by_user: dict[int, list[int]] = {}
     for task, member_ids in assignments:
-        member_ids = set(member_ids)
-        if not member_ids:
-            continue
-        user_ids = set(
-            ProjectMember.objects.filter(pk__in=member_ids).values_list(
-                "users", flat=True
-            )
-        )
-        user_ids.discard(None)  # a member with no users left on it
-        if assigned_by is not None:
-            user_ids.discard(assigned_by.pk)
+        user_ids = _member_user_ids(member_ids, exclude=assigned_by)
         if not user_ids:
             continue
         create_notification(
@@ -1244,6 +1252,58 @@ def notify_new_assignees(
         transaction.on_commit(
             _queue_assignment_email(user_id, task_ids, assigned_by_id),
             # A broker that is down must not fail an assignment already saved.
+            robust=True,
+        )
+
+
+def _queue_review_email(user_id: int, task_id: int, assigned_by_id):
+    """Return an ``on_commit`` callback that queues one review email.
+
+    A named function for the same reason as :func:`_queue_assignment_email`.
+    """
+    from apps.tasks.tasks import send_review_assigned_email_task
+
+    def queue_review_assigned_email() -> None:
+        send_review_assigned_email_task.delay(user_id, task_id, assigned_by_id)
+
+    return queue_review_assigned_email
+
+
+def notify_new_reviewers(
+    task: Task, member_ids: Iterable[int], *, assigned_by=None
+) -> None:
+    """Tell members they were just named reviewers on ``task``, in-app and by email.
+
+    ``member_ids`` are the ``ProjectMember`` ids *newly* made reviewers —
+    callers compare reviewers before and after the change, so re-saving a
+    task does not tell its existing reviewers again. A team member reaches
+    each of its users; ``assigned_by`` (a user) is left out.
+
+    The email is queued for after the surrounding transaction commits;
+    whether to send at all is the recipient's ``email_review_assigned``
+    preference, read by the task itself.
+    """
+    from apps.notifications.services import create_notification
+
+    user_ids = _member_user_ids(member_ids, exclude=assigned_by)
+    if not user_ids:
+        return
+    create_notification(
+        users=list(user_ids),
+        title=f"Assigned as Reviewer: {task.name}",
+        body=(
+            f"In project {task.project.name}. Review and sign off each "
+            "assignee's submission."
+        ),
+        project=task.project,
+        route="tasks:detail",
+        route_kwargs={"project_pk": task.project_id, "pk": task.pk},
+    )
+    assigned_by_id = assigned_by.pk if assigned_by is not None else None
+    for user_id in user_ids:
+        transaction.on_commit(
+            _queue_review_email(user_id, task.pk, assigned_by_id),
+            # A broker that is down must not fail a change already saved.
             robust=True,
         )
 

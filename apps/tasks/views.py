@@ -94,6 +94,7 @@ from apps.tasks.services import (
     mark_reviewed,
     move_task,
     notify_new_assignees,
+    notify_new_reviewers,
     pending_members,
     reopen_own,
     reopen_task,
@@ -841,6 +842,9 @@ class TaskCreateView(
         notify_new_assignees(
             [(task, _assignee_ids(task))], assigned_by=self.request.user
         )
+        notify_new_reviewers(
+            task, _reviewer_ids(task), assigned_by=self.request.user
+        )
         log_action(
             AuditAction.TASK_CREATED,
             actor=self.request.user,
@@ -1056,6 +1060,7 @@ class TaskUpdateView(
         old_type = form.initial.get("contribution_type")
         # Read before saving: only members this edit adds hear about it.
         previous_ids = _assignee_ids(self.object)
+        previous_reviewer_ids = _reviewer_ids(self.object)
         task = form.save()
         actor = self.project_member or _fallback_member(self.request.user, self.project)
         # A new timezone: members whose own dates follow the task's zone keep
@@ -1088,6 +1093,11 @@ class TaskUpdateView(
         _seed_assignee_logs(task)
         notify_new_assignees(
             [(task, _assignee_ids(task) - previous_ids)],
+            assigned_by=self.request.user,
+        )
+        notify_new_reviewers(
+            task,
+            _reviewer_ids(task) - previous_reviewer_ids,
             assigned_by=self.request.user,
         )
         log_action(
@@ -1782,6 +1792,11 @@ def _task_activity_context(task, *, is_project_manager):
 def _assignee_ids(task) -> set[int]:
     """The ``ProjectMember`` ids currently assigned to ``task``, from the DB."""
     return set(task.assigned_members.values_list("pk", flat=True))
+
+
+def _reviewer_ids(task) -> set[int]:
+    """The ``ProjectMember`` ids currently reviewing ``task``, from the DB."""
+    return set(task.reviewers.values_list("pk", flat=True))
 
 
 def _seed_assignee_logs(task, actor=None) -> bool:

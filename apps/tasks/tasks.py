@@ -81,3 +81,64 @@ def send_task_assigned_email_task(
         project=project,
         triggered_by=assigned_by,
     )
+
+
+@shared_task(name="tasks.send_review_assigned_email")
+def send_review_assigned_email_task(
+    user_id: int, task_id: int, assigned_by_id: int | None = None
+) -> None:
+    """Email ``user_id`` that they were named a reviewer on ``task_id``.
+
+    Queued by :func:`apps.tasks.services.notify_new_reviewers`.
+
+    Everything is read again at send time: the recipient's
+    ``email_review_assigned`` preference, and whether they are still a
+    reviewer — a reviewer taken off (or a task deleted) before the worker got
+    to it is not emailed.
+    """
+    from .models import Task
+
+    User = get_user_model()
+    user = User.objects.filter(pk=user_id).first()
+    if user is None:
+        logger.warning("send_review_assigned_email_task: user %s not found", user_id)
+        return
+    if not (user.is_active and user.email and user.email_review_assigned):
+        return
+
+    task = (
+        Task.objects.filter(pk=task_id, reviewers__users=user)
+        .select_related("project")
+        .first()
+    )
+    if task is None:
+        return
+
+    assigned_by = (
+        User.objects.filter(pk=assigned_by_id).first() if assigned_by_id else None
+    )
+    context = {
+        "user": user,
+        "assigned_by": assigned_by,
+        "task": task,
+        "project": task.project,
+        # Whose work they will review. A team goes by its own name.
+        "assignees": [
+            member.name or member.display_name
+            for member in task.assigned_members.order_by("id")
+        ],
+        "url": absolute_url(
+            reverse(
+                "tasks:detail",
+                kwargs={"project_pk": task.project_id, "pk": task.pk},
+            )
+        ),
+    }
+    send_email(
+        "review_assigned",
+        context,
+        [user.email],
+        kind=EmailKind.REVIEW_ASSIGNED,
+        project=task.project,
+        triggered_by=assigned_by,
+    )

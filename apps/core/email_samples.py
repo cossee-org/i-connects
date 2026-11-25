@@ -135,6 +135,14 @@ def _samples() -> dict[str, dict]:
             "project": project,
             "entries": [{"task": photos, "url": task_url(photos)}],
         },
+        "review_assigned": {
+            "user": member,
+            "assigned_by": lead,
+            "project": project,
+            "task": photos,
+            "assignees": ["Sam Patel", "Field team"],
+            "url": task_url(photos),
+        },
         "comment_mention": {
             "user": member,
             "author_name": lead.name,
