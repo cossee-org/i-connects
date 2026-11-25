@@ -150,6 +150,19 @@ def _samples() -> dict[str, dict]:
             "overdue_tasks": [counts, report],
             "notifications": notifications,
         },
+        "unknown_account": {
+            "email": "sam.patel@example.edu",
+            "signup_url": absolute_url("/accounts/signup/"),
+        },
+        "account_already_exists": {
+            "email": member.email,
+            "password_reset_url": absolute_url("/accounts/password/reset/"),
+        },
+        "account_notice": {
+            "subject": "Your password was changed",
+            "message": "The password for your i-CONNECTS account was changed.\n\n"
+            "If you didn't do this, reset it now: " + absolute_url("/accounts/password/reset/"),
+        },
         "announcement": {"announcement": announcement, "project": None},
         "overdue_reminder": {"user": member, "overdue_tasks": [counts, report]},
     }

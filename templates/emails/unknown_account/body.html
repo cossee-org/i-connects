@@ -1,0 +1,10 @@
+{% extends "emails/layouts/account.html" %}{% load email_tags %}
+{% block preheader %}Someone tried to reach an i-CONNECTS account with this address.{% endblock %}
+{% block heading %}There's no account for this address{% endblock %}
+{% block content %}
+<p>Hi,</p>
+<p>Someone, perhaps you, tried to reach an i-CONNECTS account with <strong>{{ email }}</strong>, but no account uses this address.</p>
+<p>If it was you, you can create an account.</p>
+{% emailpart "button" href=signup_url %}Create an account{% endemailpart %}
+{% emailpart "note" %}If it wasn't you, you can ignore this email.{% endemailpart %}
+{% endblock %}
