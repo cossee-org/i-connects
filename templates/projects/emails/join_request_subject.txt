@@ -1,1 +1,1 @@
-New join request for "{{ project.name }}" (i-connects)
+New join request for "{{ project.name }}" (i-CONNECTS)

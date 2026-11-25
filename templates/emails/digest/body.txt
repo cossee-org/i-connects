@@ -3,7 +3,7 @@
 {% block content %}
 Hi {{ user.name|default:user.email }},
 
-Here is your {{ frequency }} summary of activity on i-connects.
+Here is your {{ frequency }} summary of activity on i-CONNECTS.
 
 Overdue tasks
 -------------

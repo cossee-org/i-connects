@@ -1,4 +1,4 @@
-"""Idempotently install the i-connects periodic tasks into django-celery-beat.
+"""Idempotently install the i-CONNECTS periodic tasks into django-celery-beat.
 
 Run once per deploy (or whenever the schedule changes)::
 
@@ -37,7 +37,7 @@ SCHEDULE: tuple[tuple[str, str, dict], ...] = (
 
 
 class Command(BaseCommand):
-    help = "Install/refresh django-celery-beat periodic task rows for i-connects cron jobs."
+    help = "Install/refresh django-celery-beat periodic task rows for i-CONNECTS cron jobs."
 
     def handle(self, *args, **options):
         for name, task, crontab_kwargs in SCHEDULE:

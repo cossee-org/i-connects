@@ -1,10 +1,10 @@
 {% extends "emails/base_email.html" %}
 {% load task_tags %}
-{% block title %}i-connects {{ frequency }} digest{% endblock %}
+{% block title %}i-CONNECTS {{ frequency }} digest{% endblock %}
 {% block content %}
 <p>Hi {{ user.name|default:user.email }},</p>
 
-<p>Here is your {{ frequency }} summary of activity on i-connects.</p>
+<p>Here is your {{ frequency }} summary of activity on i-CONNECTS.</p>
 
 <h3 style="margin:24px 0 8px;font-size:16px;color:#111827;">Overdue tasks</h3>
 {% if overdue_tasks %}

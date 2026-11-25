@@ -1,1 +1,1 @@
-You're invited to collaborate on "{{ project.name }}" (i-connects)
+You're invited to collaborate on "{{ project.name }}" (i-CONNECTS)

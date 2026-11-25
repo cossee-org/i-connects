@@ -58,7 +58,7 @@ and oob to send it as an htmx out-of-band swap (projects.views._viewer_row_oob).
   {% endcomment %}
   <td class="text-xs text-brand-text/70 whitespace-nowrap">{{ row.member.created_at|date:"M j, Y" }}</td>
   {% comment %}
-    Last email: when i-connects last sent this person an email about the
+    Last email: when i-CONNECTS last sent this person an email about the
     project, for Leads only. It opens the email log narrowed to them.
   {% endcomment %}
   {% if user_privilege == "PROJECT_MANAGER" %}

@@ -7,5 +7,5 @@ The following tasks assigned to you are past their deadline:
 
 {% for task in overdue_tasks %}- {{ task.name }}{% if task.project %} ({{ task.project.name }}){% endif %}{% if task.deadline %} -- due {{ task.deadline|in_zone:task.timezone|date:"M j, Y" }}{% endif %}
 {% endfor %}
-Please update their status in i-connects when you get a chance.
+Please update their status in i-CONNECTS when you get a chance.
 {% endblock %}

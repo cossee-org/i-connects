@@ -1,6 +1,6 @@
 """Models for the communications module.
 
-``EmailLog`` is the record of an email leaving i-connects: one row per
+``EmailLog`` is the record of an email leaving i-CONNECTS: one row per
 message per recipient, written at the moment of sending by
 :func:`apps.communications.services.send_logged`. It holds what a Lead needs
 to answer "did this person get an email, and when" — who, when, what kind,

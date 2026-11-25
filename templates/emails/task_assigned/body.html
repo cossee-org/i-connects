@@ -6,7 +6,7 @@
 
 <p>
   {% if assigned_by %}{{ assigned_by.name|default:assigned_by.email }} assigned you{% else %}You were assigned{% endif %}
-  {% if entries|length == 1 %}a task{% else %}{{ entries|length }} tasks{% endif %} on i-connects:
+  {% if entries|length == 1 %}a task{% else %}{{ entries|length }} tasks{% endif %} on i-CONNECTS:
 </p>
 
 <ul style="padding-left:20px;margin:0 0 16px;">
@@ -19,5 +19,5 @@
   {% endfor %}
 </ul>
 
-<p>Open {% if entries|length == 1 %}the task{% else %}a task{% endif %} in i-connects to see the details.</p>
+<p>Open {% if entries|length == 1 %}the task{% else %}a task{% endif %} in i-CONNECTS to see the details.</p>
 {% endblock %}

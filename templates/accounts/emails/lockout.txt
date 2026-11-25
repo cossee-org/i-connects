@@ -1,6 +1,6 @@
 Hi {{ user.name|default:user.email }},
 
-We detected too many failed sign-in attempts for your i-connects account
+We detected too many failed sign-in attempts for your i-CONNECTS account
 and locked it as a precaution. Use the link below to confirm this was you
 and unlock the account. The link expires in 24 hours.
 
@@ -10,4 +10,4 @@ If this wasn't you, someone may be trying to guess your password. The link
 is still safe to click; it only unlocks the account. Consider changing
 your password after signing back in.
 
-— The i-connects team
+— The i-CONNECTS team
