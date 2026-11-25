@@ -253,7 +253,7 @@ def test_invitation_email_names_the_privilege_label(user, privilege, label):
     assert len(mail.outbox) == 1
     message = mail.outbox[0]
     html = message.alternatives[0][0]
-    assert f"on i-connects as a {label}." in message.body
+    assert f"on i-CONNECTS as a {label}." in message.body
     assert f"as\n  a <em>{label}</em>." in html
     for body in (message.body, html):
         assert privilege.value not in body

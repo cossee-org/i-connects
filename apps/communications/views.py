@@ -45,7 +45,7 @@ class ProjectCommunicationsView(LoginRequiredMixin, ProjectContextMixin, Templat
 class ProjectEmailLogView(
     LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, ListView
 ):
-    """The emails i-connects sent about a project — Leads only.
+    """The emails i-CONNECTS sent about a project — Leads only.
 
     Newest first, one row per email per recipient. ``?member=<user id>``
     narrows it to one current member, ``?kind=`` to one kind of email, and

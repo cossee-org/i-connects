@@ -281,7 +281,7 @@ AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", "")
 AWS_SES_REGION_NAME = env("AWS_SES_REGION_NAME", "us-east-1")
 AWS_SES_REGION_ENDPOINT = env("AWS_SES_REGION_ENDPOINT", "email.us-east-1.amazonaws.com")
 
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "i-connects <noreply@iconnects.local>")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "i-CONNECTS <noreply@iconnects.local>")
 SITE_URL = env("SITE_URL", "")
 
 # Surveys and Communications are hidden for now: their sidebar links and

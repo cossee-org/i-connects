@@ -164,7 +164,7 @@ def email_confirm(request: HttpRequest, uidb64: str, token: str) -> HttpResponse
             send_welcome_email(user, request=request)
         except Exception:  # noqa: BLE001 — email failures shouldn't block confirmation
             pass
-        messages.success(request, "Your email is confirmed. Welcome to i-connects!")
+        messages.success(request, "Your email is confirmed. Welcome to i-CONNECTS!")
     return render(request, "accounts/email_confirm.html", {"success": success})
 
 

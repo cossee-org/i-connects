@@ -7,4 +7,4 @@ The project manager wrote:
 {{ join_request.decision_note }}
 {% endif %}
 
-— i-connects
+— i-CONNECTS

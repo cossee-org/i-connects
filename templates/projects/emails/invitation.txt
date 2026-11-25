@@ -1,11 +1,11 @@
 Hi,
 
 {{ invitation.added_by }} invited you to join the project
-"{{ project.name }}" on i-connects as a {{ invitation.get_privilege_display }}.
+"{{ project.name }}" on i-CONNECTS as a {{ invitation.get_privilege_display }}.
 
 Accept or decline here:
 {{ url }}
 
 If you weren't expecting this email, you can ignore it.
 
-— i-connects
+— i-CONNECTS

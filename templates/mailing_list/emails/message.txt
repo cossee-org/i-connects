@@ -10,4 +10,4 @@ Hi {{ recipient.name|default:recipient.email }},
 
 Reply directly to {{ sender.email }} to respond.
 
-— i-connects
+— i-CONNECTS

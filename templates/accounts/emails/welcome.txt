@@ -1,10 +1,10 @@
 Hi {{ user.name|default:user.email }},
 
-Welcome to i-connects! Your account has been created successfully.
+Welcome to i-CONNECTS! Your account has been created successfully.
 
 You can sign in any time at:
 {{ site_url }}
 
 If you have any questions, simply reply to this email.
 
-— The i-connects team
+— The i-CONNECTS team

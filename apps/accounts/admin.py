@@ -16,7 +16,7 @@ class UserAdmin(BaseUserAdmin):
 
     fieldsets = BaseUserAdmin.fieldsets + (
         (
-            "i-connects profile",
+            "i-CONNECTS profile",
             {
                 "fields": (
                     "name",

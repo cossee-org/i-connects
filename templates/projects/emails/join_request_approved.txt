@@ -6,4 +6,4 @@ Your request to join "{{ project.name }}" as
 Open the project here:
 {{ url }}
 
-— i-connects
+— i-CONNECTS

@@ -349,7 +349,7 @@ def test_a_tagged_person_is_notified_and_emailed(client, cast, django_capture_on
     assert len(mail.outbox) == 1
     email = mail.outbox[0]
     assert email.to == ["lena@test.com"]
-    assert email.subject == 'i-connects: Asha Rao mentioned you on "Count corals"'
+    assert email.subject == 'i-CONNECTS: Asha Rao mentioned you on "Count corals"'
     assert "https://iconnects.test" + cast.detail_url() in email.body
     assert "@Lena Park please <b>approve</b>" in email.body  # plain text
     html = email.alternatives[0][0]

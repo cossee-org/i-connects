@@ -10,4 +10,4 @@ Hi,
 {% endif %}Review pending requests here:
 {{ url }}
 
-— i-connects
+— i-CONNECTS

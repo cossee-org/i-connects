@@ -1,1 +1,1 @@
-i-connects {{ frequency|capfirst }} digest
+i-CONNECTS {{ frequency|capfirst }} digest
