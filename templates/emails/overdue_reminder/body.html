@@ -1,20 +1,9 @@
-{% extends "emails/base_email.html" %}
-{% load task_tags %}
-{% block title %}Overdue task reminder{% endblock %}
+{% extends "emails/layouts/notification.html" %}{% load email_tags task_tags %}
+{% block preheader %}{{ overdue_tasks|length }} task{{ overdue_tasks|length|pluralize }} past {{ overdue_tasks|length|pluralize:"its,their" }} deadline.{% endblock %}
+{% block heading %}You have overdue tasks{% endblock %}
 {% block content %}
 <p>Hi {{ user.name|default:user.email }},</p>
-
-<p>The following tasks assigned to you are past their deadline:</p>
-
-<ul style="padding-left:20px;margin:0 0 16px;">
-  {% for task in overdue_tasks %}
-    <li>
-      <strong>{{ task.name }}</strong>
-      {% if task.project %} &mdash; {{ task.project.name }}{% endif %}
-      {% if task.deadline %} (due {{ task.deadline|in_zone:task.timezone|date:"M j, Y" }}){% endif %}
-    </li>
-  {% endfor %}
-</ul>
-
-<p>Please update their status in i-CONNECTS when you get a chance.</p>
+<p>These tasks assigned to you are past their deadline:</p>
+{% emailpart "list" %}{% for task in overdue_tasks %}{% site_url "tasks:detail" project_pk=task.project_id pk=task.pk as task_url %}{% emailpart "item" title=task.name href=task_url %}{% if task.project %}{{ task.project.name }}{% endif %}{% if task.deadline %}{% if task.project %} &middot; {% endif %}Due {{ task.deadline|in_zone:task.timezone|date:"M j, Y" }}{% endif %}{% endemailpart %}{% endfor %}{% endemailpart %}
+<p>Please update their status when you get a chance.</p>
 {% endblock %}

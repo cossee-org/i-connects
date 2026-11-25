@@ -1,0 +1,10 @@
+{% extends "emails/layouts/account.txt" %}
+{% block heading %}You already have an account{% endblock %}
+{% block content %}Hi,
+
+Someone, perhaps you, tried to sign up for i-CONNECTS with {{ email }}, but an account already uses this address.
+
+If you've forgotten your password, you can reset it:
+{{ password_reset_url }}
+
+If it wasn't you, you can ignore this email.{% endblock %}

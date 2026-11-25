@@ -1,37 +1,14 @@
-{% extends "emails/base_email.html" %}
-{% load task_tags %}
-{% block title %}i-CONNECTS {{ frequency }} digest{% endblock %}
+{% extends "emails/layouts/notification.html" %}{% load email_tags task_tags %}
+{% block preheader %}{{ overdue_tasks|length }} overdue task{{ overdue_tasks|length|pluralize }}, {{ notifications|length }} update{{ notifications|length|pluralize }}.{% endblock %}
+{% block heading %}Your {{ frequency }} digest{% endblock %}
 {% block content %}
 <p>Hi {{ user.name|default:user.email }},</p>
-
 <p>Here is your {{ frequency }} summary of activity on i-CONNECTS.</p>
-
-<h3 style="margin:24px 0 8px;font-size:16px;color:#111827;">Overdue tasks</h3>
-{% if overdue_tasks %}
-  <ul style="padding-left:20px;margin:0 0 16px;">
-    {% for task in overdue_tasks %}
-      <li>
-        <strong>{{ task.name }}</strong>
-        {% if task.project %} &mdash; {{ task.project.name }}{% endif %}
-        {% if task.my_deadline %} (due {{ task.my_deadline|in_zone:task.my_deadline_tz|date:"M j, Y" }}{% if task.my_deadline != task.deadline %}, your individual deadline{% endif %}){% endif %}
-      </li>
-    {% endfor %}
-  </ul>
-{% else %}
-  <p style="color:#6b7280;margin:0 0 16px;">No overdue tasks.</p>
-{% endif %}
-
-<h3 style="margin:24px 0 8px;font-size:16px;color:#111827;">Recent project activity</h3>
-{% if notifications %}
-  <ul style="padding-left:20px;margin:0;">
-    {% for note in notifications %}
-      <li>
-        {% if note.project %}<strong>{{ note.project.name }}:</strong> {% endif %}
-        {{ note.message }}
-      </li>
-    {% endfor %}
-  </ul>
-{% else %}
-  <p style="color:#6b7280;margin:0;">No new notifications in this period.</p>
-{% endif %}
+{% emailpart "section" %}Overdue tasks{% endemailpart %}
+{% if overdue_tasks %}{% emailpart "list" %}{% for task in overdue_tasks %}{% site_url "tasks:detail" project_pk=task.project_id pk=task.pk as task_url %}{% emailpart "item" title=task.name href=task_url %}{% if task.project %}{{ task.project.name }}{% endif %}{% if task.my_deadline %}{% if task.project %} &middot; {% endif %}Due {{ task.my_deadline|in_zone:task.my_deadline_tz|date:"M j, Y" }}{% if task.my_deadline != task.deadline %} (your individual deadline){% endif %}{% endif %}{% endemailpart %}{% endfor %}{% endemailpart %}
+{% else %}{% emailpart "note" %}No overdue tasks.{% endemailpart %}{% endif %}
+{% emailpart "section" %}Recent project activity{% endemailpart %}
+{% if notifications %}{% emailpart "list" %}{% for note in notifications %}{% emailpart "item" title=note.headline href=note.url|absolute %}{% if note.project %}{{ note.project.name }}{% endif %}{% endemailpart %}{% endfor %}{% endemailpart %}
+{% else %}{% emailpart "note" %}No new notifications in this period.{% endemailpart %}{% endif %}
+{% site_url "notifications:list" as notifications_url %}{% emailpart "button" href=notifications_url %}Open your notifications{% endemailpart %}
 {% endblock %}

@@ -1,0 +1,9 @@
+{% extends "emails/layouts/account.html" %}{% load email_tags %}
+{% block preheader %}One step left: confirm your address to sign in.{% endblock %}
+{% block heading %}Confirm your email address{% endblock %}
+{% block content %}
+<p>Hi {{ user.name|default:user.email }},</p>
+<p>{% if adding_address %}Confirm this email address to add it to your i-CONNECTS account.{% else %}Thanks for signing up for i-CONNECTS. Confirm your email address to finish setting up your account and sign in.{% endif %} The link expires in a few days.</p>
+{% emailpart "button" href=confirm_url link=True %}Confirm email address{% endemailpart %}
+{% emailpart "note" %}{% if adding_address %}If you didn't ask for this, you can ignore this email.{% else %}If you didn't create this account, you can ignore this email.{% endif %}{% endemailpart %}
+{% endblock %}

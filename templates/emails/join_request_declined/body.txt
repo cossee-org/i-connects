@@ -1,0 +1,10 @@
+{% extends "emails/base_email.txt" %}
+{% block heading %}Your request to join was declined{% endblock %}
+{% block content %}Hi,
+
+Your request to join "{{ project.name }}" was declined.
+{% if join_request.decision_note %}
+The project Lead wrote:
+
+{{ join_request.decision_note }}{% endif %}{% endblock %}
+{% block footer_reason %}You got this email because you asked to join {{ project.name }} on i-CONNECTS.{% endblock %}

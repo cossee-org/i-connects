@@ -1,0 +1,10 @@
+{% extends "emails/base_email.html" %}{% load email_tags %}
+{% block preheader %}Your request to join {{ project.name }} was declined.{% endblock %}
+{% block heading %}Your request to join was declined{% endblock %}
+{% block content %}
+<p>Hi,</p>
+<p>Your request to join <strong>{{ project.name }}</strong> was declined.</p>
+{% if join_request.decision_note %}<p>The project Lead wrote:</p>
+{% emailpart "quote" %}{{ join_request.decision_note|linebreaksbr }}{% endemailpart %}{% endif %}
+{% endblock %}
+{% block footer_reason %}You got this email because you asked to join {{ project.name }} on i-CONNECTS.{% endblock %}

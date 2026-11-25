@@ -1,0 +1,9 @@
+{% extends "emails/layouts/account.html" %}{% load email_tags %}
+{% block preheader %}Too many failed sign-in attempts. Unlock your account here.{% endblock %}
+{% block heading %}Your account was locked{% endblock %}
+{% block content %}
+<p>Hi {{ user.name|default:user.email }},</p>
+<p>We detected too many failed sign-in attempts on your i-CONNECTS account and locked it as a precaution. Use the button below to confirm this was you and unlock the account. The link expires in 24 hours.</p>
+{% emailpart "button" href=unlock_url link=True %}Unlock my account{% endemailpart %}
+<p>If this wasn't you, someone may be trying to guess your password. The link is still safe to use: it only unlocks the account. Consider changing your password after you sign back in.</p>
+{% endblock %}

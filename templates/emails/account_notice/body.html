@@ -1,0 +1,5 @@
+{% extends "emails/layouts/account.html" %}{% load email_tags %}
+{% comment %}Fallback for an account email from django-allauth that has no template of its own here (apps.accounts.adapters.AccountAdapter.send_mail). Give it one when this appears in the logs.{% endcomment %}
+{% block preheader %}{{ subject }}{% endblock %}
+{% block heading %}{{ subject }}{% endblock %}
+{% block content %}{{ message|urlize|linebreaks }}{% endblock %}

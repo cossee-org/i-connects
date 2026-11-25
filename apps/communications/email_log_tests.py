@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from apps.communications.models import EmailKind, EmailLog, EmailStatus
 from apps.communications.services import last_sent_by_user, send_logged
-from apps.core.emails import send_templated_email
+from apps.core.emails import send_email
 from apps.core.enums import MemberPrivileges, ProjectStatus
 from apps.mailing_list.services import send_mailing_list_message
 from apps.notifications.services import create_notification
@@ -164,13 +164,7 @@ def test_a_log_that_cannot_be_written_does_not_stop_the_email(
 @pytest.mark.django_db
 def test_an_email_sent_without_a_kind_is_not_logged(user):
     """Account emails (welcome, password reset) stay out of the log."""
-    send_templated_email(
-        subject_template="accounts/emails/welcome_subject.txt",
-        html_template="accounts/emails/welcome.html",
-        text_template="accounts/emails/welcome.txt",
-        context={"user": user, "site_url": "/"},
-        to=[user.email],
-    )
+    send_email("welcome", {"user": user, "site_url": "/"}, [user.email])
 
     assert len(mail.outbox) == 1
     assert not EmailLog.objects.exists()
@@ -331,12 +325,10 @@ def test_an_announcement_records_the_admin_who_sent_it(project, pm_user, user):
 
 @pytest.mark.django_db
 def test_a_digest_is_triggered_by_no_one(user):
-    send_templated_email(
-        subject_template="emails/comment_mention/subject.txt",
-        html_template="emails/comment_mention/body.html",
-        text_template="emails/comment_mention/body.txt",
-        context={"user": user, "task": type("T", (), {"name": "x"})(), "project": None},
-        to=[user.email],
+    send_email(
+        "comment_mention",
+        {"user": user, "task": type("T", (), {"name": "x"})(), "project": None},
+        [user.email],
         kind=EmailKind.DIGEST,
     )
 
@@ -774,11 +766,9 @@ def test_an_email_about_no_project_keeps_no_body(user):
 
 @pytest.mark.django_db
 def test_a_templated_project_email_keeps_both_bodies(project, user):
-    send_templated_email(
-        subject_template="emails/comment_mention/subject.txt",
-        html_template="emails/comment_mention/body.html",
-        text_template="emails/comment_mention/body.txt",
-        context={
+    send_email(
+        "comment_mention",
+        {
             "user": user,
             "author_name": "Asha",
             "task": type("T", (), {"name": "Count corals"})(),
@@ -786,7 +776,7 @@ def test_a_templated_project_email_keeps_both_bodies(project, user):
             "excerpt": "Have a look",
             "url": "https://iconnects.test/t/1/",
         },
-        to=[user.email],
+        [user.email],
         kind=EmailKind.COMMENT_MENTION,
         project=project,
     )

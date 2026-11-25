@@ -1,0 +1,9 @@
+{% extends "emails/base_email.txt" %}
+{% block heading %}Your request to join was approved{% endblock %}
+{% block content %}Hi,
+
+Your request to join "{{ project.name }}" as {{ join_request.get_requested_privilege_display }} was approved.
+
+Open the project:
+{{ url }}{% endblock %}
+{% block footer_reason %}You got this email because you asked to join {{ project.name }} on i-CONNECTS.{% endblock %}

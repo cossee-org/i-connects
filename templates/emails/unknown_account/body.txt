@@ -1,0 +1,10 @@
+{% extends "emails/layouts/account.txt" %}
+{% block heading %}There's no account for this address{% endblock %}
+{% block content %}Hi,
+
+Someone, perhaps you, tried to reach an i-CONNECTS account with {{ email }}, but no account uses this address.
+
+If it was you, you can create an account:
+{{ signup_url }}
+
+If it wasn't you, you can ignore this email.{% endblock %}

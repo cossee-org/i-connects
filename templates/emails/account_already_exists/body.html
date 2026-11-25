@@ -1,0 +1,10 @@
+{% extends "emails/layouts/account.html" %}{% load email_tags %}
+{% block preheader %}This address already has an account. Reset the password if you've forgotten it.{% endblock %}
+{% block heading %}You already have an account{% endblock %}
+{% block content %}
+<p>Hi,</p>
+<p>Someone, perhaps you, tried to sign up for i-CONNECTS with <strong>{{ email }}</strong>, but an account already uses this address.</p>
+<p>If you've forgotten your password, you can reset it.</p>
+{% emailpart "button" href=password_reset_url %}Reset password{% endemailpart %}
+{% emailpart "note" %}If it wasn't you, you can ignore this email.{% endemailpart %}
+{% endblock %}

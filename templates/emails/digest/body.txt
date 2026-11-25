@@ -1,7 +1,6 @@
-{% extends "emails/base_email.txt" %}
-{% load task_tags %}
-{% block content %}
-Hi {{ user.name|default:user.email }},
+{% extends "emails/layouts/notification.txt" %}{% load task_tags %}
+{% block heading %}Your {{ frequency }} digest{% endblock %}
+{% block content %}Hi {{ user.name|default:user.email }},
 
 Here is your {{ frequency }} summary of activity on i-CONNECTS.
 
@@ -12,6 +11,6 @@ Overdue tasks
 {% endif %}
 Recent project activity
 -----------------------
-{% if notifications %}{% for note in notifications %}- {% if note.project %}{{ note.project.name }}: {% endif %}{{ note.message }}
+{% if notifications %}{% for note in notifications %}- {% if note.project %}{{ note.project.name }}: {% endif %}{{ note.headline }}
 {% endfor %}{% else %}No new notifications in this period.
 {% endif %}{% endblock %}

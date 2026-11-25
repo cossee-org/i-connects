@@ -10,15 +10,13 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.mail import EmailMultiAlternatives
 from django.db import transaction
-from django.template.loader import render_to_string
 
 from apps.audit.services import AuditAction, log_action
 from apps.communications.models import EmailKind
 from apps.communications.services import send_logged
+from apps.core.emails import build_message, render_email
 from apps.projects.models import ProjectMember
 
 from .models import MailingListMessage
@@ -43,25 +41,12 @@ def _collect_recipients(project, *, exclude_user=None) -> list:
     return list(User.objects.filter(pk__in=unique_ids, is_active=True))
 
 
-def _send_one(
-    *,
-    recipient,
-    sender,
-    project,
-    subject_line: str,
-    text_body: str,
-    html_body: str,
-) -> None:
+def _send_one(*, recipient, sender, project, context: dict) -> None:
     """Dispatch a single email with ``reply_to`` set to the sender's inbox."""
     reply_to = [sender.email] if sender and getattr(sender, "email", "") else None
-    msg = EmailMultiAlternatives(
-        subject=subject_line,
-        body=text_body,
-        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-        to=[recipient.email],
-        reply_to=reply_to,
+    msg = build_message(
+        render_email("mailing_list", context), [recipient.email], reply_to=reply_to
     )
-    msg.attach_alternative(html_body, "text/html")
     send_logged(
         msg, kind=EmailKind.MAILING_LIST, project=project, triggered_by=sender
     )
@@ -83,7 +68,6 @@ def send_mailing_list_message(
     """
     recipients: Iterable = _collect_recipients(project, exclude_user=sender)
 
-    subject_line = f"[{project.name}] {subject}"
     for recipient in recipients:
         context = {
             "recipient": recipient,
@@ -92,16 +76,7 @@ def send_mailing_list_message(
             "subject": subject,
             "body": body,
         }
-        text_body = render_to_string("mailing_list/emails/message.txt", context)
-        html_body = render_to_string("mailing_list/emails/message.html", context)
-        _send_one(
-            recipient=recipient,
-            sender=sender,
-            project=project,
-            subject_line=subject_line,
-            text_body=text_body,
-            html_body=html_body,
-        )
+        _send_one(recipient=recipient, sender=sender, project=project, context=context)
 
     message = MailingListMessage.objects.create(
         project=project,

@@ -1,0 +1,13 @@
+{% extends "emails/base_email.txt" %}
+{% block heading %}{{ requester.name|default:requester.email }} asked to join{% endblock %}
+{% block content %}Hi,
+
+{{ requester.name|default:requester.email }} has requested to join "{{ project.name }}" as {{ join_request.get_requested_privilege_display }}.
+{% if join_request.message %}
+They wrote:
+
+{{ join_request.message }}
+{% endif %}
+Review pending requests:
+{{ url }}{% endblock %}
+{% block footer_reason %}You got this email because you're a Lead of {{ project.name }} on i-CONNECTS.{% endblock %}

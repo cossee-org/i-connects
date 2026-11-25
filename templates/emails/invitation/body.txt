@@ -1,0 +1,11 @@
+{% extends "emails/base_email.txt" %}
+{% block heading %}You're invited to join {{ project.name }}{% endblock %}
+{% block content %}Hi,
+
+{{ invitation.added_by }} invited you to join the project "{{ project.name }}" on i-CONNECTS as a {{ invitation.get_privilege_display }}.
+
+Accept or decline:
+{{ url }}
+
+If you weren't expecting this email, you can ignore it.{% endblock %}
+{% block footer_reason %}You got this email because {{ invitation.added_by }} invited this address to a project on i-CONNECTS.{% endblock %}
