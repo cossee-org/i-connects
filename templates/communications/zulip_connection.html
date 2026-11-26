@@ -21,5 +21,22 @@
   {% include "_components/info_popover.html" with label="Zulip connection" body="Where this project posts on Zulip, with which bot, and what it posts. Saving a new organisation, bot, channel or topic sends one test message there first. Only Leads can see this." %}
 </div>
 
-{% include "communications/partials/zulip_connection_form.html" %}
+<div class="space-y-5">
+  {% include "communications/partials/zulip_connection_form.html" %}
+
+  {# Kept apart from the form, like Deletion and archiving in Settings. #}
+  <div class="brand-card p-6">
+    <h3 class="text-lg font-semibold text-brand-navy mb-4">Disconnect</h3>
+    <p class="text-xs text-brand-text/60 mb-4">
+      Stop posting to Zulip and remove the bot's details from i-CONNECTS. Nothing already
+      posted in the topic is deleted. To stop for a while instead, untick Post to Zulip above.
+    </p>
+    <form method="post" action="{% url 'communications:zulip_disconnect' project_pk=project.pk %}"
+          class="flex justify-end"
+          onsubmit="return confirm('Disconnect this project from Zulip? Nothing more will be posted and the bot details are removed.');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-sm btn-outline btn-error">Disconnect from Zulip</button>
+    </form>
+  </div>
+</div>
 {% endblock %}

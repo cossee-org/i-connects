@@ -270,10 +270,22 @@ def test_once_connected_the_tab_is_the_team_chat_and_the_connection_a_button(
     assert "Bot API key" not in content
     assert "iconnects-bot@cossee.zulipchat.com" not in content
 
-    # Its own page has the form, Disconnect, and a way back.
+    # Where the team talks is behind the Team chat (i), and Open in Zulip
+    # sits beside the Zulip connection button, opening a new tab.
+    assert 'aria-label="About Team chat"' in content
+    assert "team talks in shinichi-projects &gt; pigauto on Zulip" in content
+    buttons = content[content.index(f'href="{_url("zulip_connection", project)}"'):]
+    buttons = buttons[: buttons.index("</div>")]
+    assert "Open in Zulip" in buttons
+    assert 'target="_blank"' in buttons
+
+    # Its own page has the form, Disconnect on a card of its own after
+    # it, and a way back.
     page = client.get(_url("zulip_connection", project)).content.decode()
     assert "Bot API key" in page
-    assert _url("zulip_disconnect", project) in page
+    form_end = page.index("Save connection")
+    assert page.index(_url("zulip_disconnect", project)) > form_end
+    assert "Disconnect from Zulip" in page
     assert f'href="{_url("project", project)}"' in page
     assert "Send to the team" not in page
 

@@ -1,4 +1,4 @@
-{# The Zulip connection form, with Disconnect once there is a connection.  #}
+{# The Zulip connection form.                                               #}
 {# Drawn on the Communications tab until the project is connected, then on #}
 {# the connection's own page. Needs connection and connection_form.        #}
 <div class="brand-card p-6">
@@ -52,13 +52,4 @@
       </button>
     </div>
   </form>
-
-  {% if connection %}
-    <form method="post" action="{% url 'communications:zulip_disconnect' project_pk=project.pk %}"
-          class="flex justify-end mt-3"
-          onsubmit="return confirm('Disconnect this project from Zulip? Nothing more will be posted and the bot details are removed.');">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-sm btn-outline btn-error">Disconnect</button>
-    </form>
-  {% endif %}
 </div>
