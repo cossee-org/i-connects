@@ -17,11 +17,10 @@ already talks. Each project has its own connection; a Lead sets it up.
 Each group is a checkbox on the connection, and **Post to Zulip** pauses
 all of them. Tasks created by a CSV import are not announced one by one.
 
-The connection lives in the project's **Communications** section, a
-subsection of the **Project** tab (the **Communications** button beside
-the Project Overview heading). It is open to the project's Leads only for
-now. Once the project is connected, it also holds a link that opens the
-topic and a box to write to the team from i-CONNECTS.
+The connection lives on the project's **Communications** tab, which is
+shown to the project's Leads only for now. Once the project is connected,
+the tab also holds a link that opens the topic and a box to write to the
+team from i-CONNECTS.
 
 ## Setting it up
 
@@ -34,7 +33,7 @@ In Zulip:
 
 In i-CONNECTS, as a Lead of the project:
 
-1. **Project → Communications** (or **Settings → Team chat → Connect to Zulip**).
+1. The **Communications** tab (or **Settings → Team chat → Connect to Zulip**).
 2. Fill in the organisation URL (`https://your-group.zulipchat.com`), the
    bot's email and API key, the channel and the topic.
 3. **Connect**. A test message is sent to the topic; if Zulip refuses it,

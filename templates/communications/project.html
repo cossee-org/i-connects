@@ -9,16 +9,11 @@
 {% endblock %}
 
 {% block content %}
-{# A subsection of the Project tab, laid out like the email log under      #}
-{# Contributors: back to the tab, then the heading. Leads only for now.    #}
-<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-  <a href="{% url 'projects:detail' pk=project.pk %}"
-     class="btn btn-sm btn-ghost text-brand-navy">&larr; Project overview</a>
-</div>
-
-<div class="flex items-center gap-2 mb-5">
-  <h2 class="text-lg font-semibold text-brand-navy">Communications</h2>
-  {% include "_components/info_popover.html" with label="Communications" body="This project's team chat: connect the project to a Zulip topic, open it, and write to the team from i-CONNECTS. Only Leads can see this page." %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="flex items-center gap-2">
+    <h2 class="text-lg font-semibold text-brand-navy">Communications</h2>
+    {% include "_components/info_popover.html" with label="Communications" body="This project's team chat: connect the project to a Zulip topic, open it, and write to the team from i-CONNECTS. Only Leads can see this tab." %}
+  </div>
 </div>
 
 <div class="space-y-5">

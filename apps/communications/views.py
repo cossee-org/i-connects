@@ -1,19 +1,18 @@
 """Views for the communications module.
 
 The personal page in the sidebar is still a placeholder. A project's
-Communications section is a subsection of its Project tab, open to the
-project's Leads only for now: there a Lead connects the project to a Zulip
-topic, finds the link to it and can post to it without leaving i-CONNECTS.
-What the project posts on its own (tasks, deadlines, new members, comments,
-wiki edits) is :mod:`apps.integrations.signals`' business, not this
-module's.
+Communications tab is open to the project's Leads only for now: there a
+Lead connects the project to a Zulip topic, finds the link to it and can
+post to it without leaving i-CONNECTS. What the project posts on its own
+(tasks, deadlines, new members, comments, wiki edits) is
+:mod:`apps.integrations.signals`' business, not this module's.
 
 The project's email log (``ProjectEmailLogView``) is reached from the
 Contributors tab and open to the project's Leads only, with each email's
 full content in a modal (``ProjectEmailDetailView``).
 
 Access mirrors the rest of the app: the personal page needs a signed-in
-user; the project's Communications section and its email log need the
+user; the project's Communications tab and its email log need the
 project's Lead privilege (``ProjectManagerRequiredMixin`` answers 403
 otherwise) and render the project tab strip.
 """
@@ -53,7 +52,7 @@ def _connection(project) -> ZulipConnection | None:
 class _SectionBase(
     LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, TemplateView
 ):
-    """What every view of a project's Communications section shares: Leads
+    """What every view of a project's Communications tab shares: Leads
     only, the page it draws (each re-renders it when its own form is
     invalid) and its context."""
 
@@ -75,7 +74,7 @@ class _SectionBase(
 
 
 class ProjectCommunicationsView(_SectionBase):
-    """A project's Communications section — a subsection of the Project tab."""
+    """A project's Communications tab (Leads only for now)."""
 
 
 class ZulipConnectionSaveView(_SectionBase):

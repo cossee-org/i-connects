@@ -68,15 +68,6 @@
     <h2 class="text-lg font-semibold text-brand-navy">Project Overview</h2>
     {% include "_components/info_popover.html" with label="Project Overview" body="Where this project stands: what the project is about, its key wiki pages and what changed lately. Each number opens its tab." %}
   </div>
-  {% if is_project_manager %}
-    {# Subsections of the Project tab, Leads only for now. #}
-    <div class="flex flex-wrap items-center justify-end gap-2">
-      <a href="{% url 'communications:project' project_pk=project.pk %}"
-         class="btn btn-sm btn-ghost">
-        Communications
-      </a>
-    </div>
-  {% endif %}
 </div>
 
 <div x-data="taskPaneData()"

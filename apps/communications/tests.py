@@ -2,9 +2,8 @@
 
 What is guarded here is the module's shape: both surfaces answer, the
 project one is Leads-only, and the navigation names the modules and
-reaches them. A project's Communications section is a subsection of the
-Project tab rather than a tab of its own; its team chat (the Zulip
-connection) is tested in ``zulip_tests.py``. The label assertions are here
+reaches them. A project's Communications tab is for its Leads only for
+now; its team chat (the Zulip connection) is tested in ``zulip_tests.py``. The label assertions are here
 because a rename regresses silently — nothing else fails when a tab goes
 back to saying "Forms".
 
@@ -158,8 +157,8 @@ def test_a_lead_sees_the_project_communications_section(client, project, pm_user
     assert response.status_code == 200
     # Not connected to a team chat yet: the lead is offered the connection.
     assert "Connect this project to Zulip" in content
-    # The project chrome comes with it: header, and the tab strip with the
-    # Project tab marked, as this is one of its subsections.
+    # The project chrome comes with it: header, and the tab strip with this
+    # tab marked as the one you are on.
     assert project.name in content
     assert 'aria-label="Project sections"' in content
     assert "project-tab active" in content
@@ -181,9 +180,7 @@ def test_nor_can_someone_outside_the_project(client, project, other_user):
 
 @pytest.mark.django_db
 @override_settings(SHOW_SURVEYS_AND_COMMUNICATIONS=True)
-def test_the_project_tab_strip_names_surveys_but_not_communications(
-    client, project, pm_user
-):
+def test_the_project_tab_strip_names_both_modules(client, project, pm_user):
     client.force_login(pm_user)
 
     content = client.get(
@@ -198,10 +195,11 @@ def test_the_project_tab_strip_names_surveys_but_not_communications(
     assert ">Survey<" not in compact
     assert "Forms" not in strip
     # Surveys comes before Settings, which stays last.
-    assert strip.index("Surveys") < strip.index("Settings")
-    # Communications is a subsection of Project, not a tab.
-    assert _project_url(project) not in strip
-    assert ">Communications<" not in compact
+    assert _project_url(project) in strip
+    assert ">Communications<" in compact
+    assert ">Communication<" not in compact
+    # Communications comes after Surveys, and Settings stays last.
+    assert strip.index("Surveys") < strip.index("Communications") < strip.index("Settings")
 
 
 @pytest.mark.django_db
@@ -238,7 +236,6 @@ def test_every_project_tab_opens_with_its_heading_and_info(client, project, pm_u
         "Contribution Tracking": reverse("projects:contribution_tracking", kwargs={"pk": pk}),
         "Wiki": reverse("wiki:list", kwargs={"project_pk": pk}),
         "Surveys": reverse("projects:project_forms", kwargs={"pk": pk}),
-        # Not a tab but a subsection of Project; it opens the same way.
         "Communications": _project_url(project),
         "Settings": reverse("projects:update", kwargs={"pk": pk}),
     }

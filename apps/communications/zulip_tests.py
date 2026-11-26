@@ -1,7 +1,7 @@
 """Tests for a project's team chat: connecting it to Zulip, and writing to it.
 
-The team chat lives in the project's Communications section, a Leads-only
-subsection of the Project tab.
+The team chat lives in the project's Communications tab, for Leads only
+for now.
 
 Nothing here reaches the network — ``zulip.deliver`` is replaced by a
 recorder, which is also how the tests see what would have been sent.
@@ -285,32 +285,31 @@ def _tab_strip(content):
 
 
 @pytest.mark.django_db
-@override_settings(SHOW_SURVEYS_AND_COMMUNICATIONS=True)
-def test_communications_is_a_subsection_of_the_project_tab(client, project, pm_user):
-    _connect(project)
+@override_settings(SHOW_SURVEYS_AND_COMMUNICATIONS=False)
+def test_a_lead_has_a_communications_tab(client, project, pm_user):
     client.force_login(pm_user)
     detail = reverse("projects:detail", kwargs={"pk": project.pk})
-    section = _url("project", project)
+    tab = _url("project", project)
 
-    # No tab of its own, even with the module shown and a team chat…
-    detail_content = client.get(detail).content.decode()
-    assert f'href="{section}"' not in _tab_strip(detail_content)
-    assert ">Communications<" not in "".join(_tab_strip(detail_content).split())
-    # …but a way in from the Project Overview…
-    assert f'href="{section}"' in detail_content
+    # Drawn for a Lead whether or not the project is connected yet (they
+    # connect it there), and with the Surveys module hidden.
+    strip = _tab_strip(client.get(detail).content.decode())
+    assert f'href="{tab}"' in strip
+    assert ">Communications<" in "".join(strip.split())
+    # Not on the Project Overview itself, only in the tab strip.
+    content = client.get(detail).content.decode()
+    assert content.count(f'href="{tab}"') == 1
 
-    # …and the section keeps the Project tab marked, with a way back.
-    content = client.get(section).content.decode()
-    strip = _tab_strip(content)
-    project_tab = strip[strip.index(f'href="{detail}"'):]
-    project_tab = project_tab[: project_tab.index(">")]
-    assert "project-tab active" in project_tab
+    # On the tab, it is the one marked.
+    strip = _tab_strip(client.get(tab).content.decode())
+    marked = strip[strip.index(f'href="{tab}"'):]
+    marked = marked[: marked.index(">")]
+    assert "project-tab active" in marked
     assert strip.count("project-tab active") == 1
-    assert "Project overview" in content
 
 
 @pytest.mark.django_db
-def test_only_a_lead_is_shown_the_way_in(client, project, contributor):
+def test_a_contributor_has_no_communications_tab(client, project, contributor):
     _connect(project)
     client.force_login(contributor)
 
@@ -319,6 +318,18 @@ def test_only_a_lead_is_shown_the_way_in(client, project, contributor):
     ).content.decode()
 
     assert _url("project", project) not in content
+
+
+@pytest.mark.django_db
+def test_the_email_log_keeps_the_contributors_tab_marked(client, project, pm_user):
+    client.force_login(pm_user)
+    members = reverse("projects:members", kwargs={"pk": project.pk})
+
+    strip = _tab_strip(client.get(_url("email_log", project)).content.decode())
+    marked = strip[strip.index(f'href="{members}"'):]
+    marked = marked[: marked.index(">")]
+    assert "project-tab active" in marked
+    assert strip.count("project-tab active") == 1
 
 
 @pytest.mark.django_db
