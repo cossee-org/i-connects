@@ -73,6 +73,22 @@
 
   {% if object %}
     <div class="brand-card p-6">
+      <h2 class="text-lg font-semibold text-brand-navy mb-4">Team chat</h2>
+      <p class="text-xs text-brand-text/60 mb-4">
+        {% if object.zulip_connection %}
+          This project posts its activity to <strong>{{ object.zulip_connection.channel }} &gt; {{ object.zulip_connection.topic }}</strong> on Zulip{% if not object.zulip_connection.enabled %} (paused){% endif %}.
+        {% else %}
+          Connect this project to a Zulip topic so new tasks, deadlines, comments and new members are posted where the team already talks.
+        {% endif %}
+      </p>
+      <div class="flex flex-wrap gap-2 justify-end">
+        <a href="{% url 'communications:project' project_pk=object.pk %}" class="btn btn-sm btn-outline">
+          {% if object.zulip_connection %}Manage Zulip connection{% else %}Connect to Zulip{% endif %}
+        </a>
+      </div>
+    </div>
+
+    <div class="brand-card p-6">
       <h2 class="text-lg font-semibold text-brand-navy mb-4">Deletion and archiving</h2>
       <p class="text-xs text-brand-text/60 mb-4">
         Archive this project to hide it from active lists while keeping its data,

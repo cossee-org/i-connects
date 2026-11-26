@@ -12,9 +12,95 @@
 <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
   <div class="flex items-center gap-2">
     <h2 class="text-lg font-semibold text-brand-navy">Communications</h2>
-    {% include "_components/info_popover.html" with label="Communications" body="Messages sent to and from this project's members." %}
+    {% include "_components/info_popover.html" with label="Communications" body="This project's team chat: connect the project to a Zulip topic, open it, and write to the team from i-CONNECTS. Only Leads can see this tab." %}
   </div>
 </div>
 
-{% include "_components/empty_state.html" with title="Coming soon" body="Communications are on the way. Check back later." %}
+<div class="space-y-5">
+  {% if connection and connection.enabled %}
+    {# ---- The team chat: where it is, and a way to write to it ---------- #}
+    <div class="brand-card p-6">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+        <h3 class="text-lg font-semibold text-brand-navy">Team chat</h3>
+        <a href="{{ topic_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">Open in Zulip</a>
+      </div>
+      <p class="text-sm text-brand-text/70 mb-4">
+        This project's team talks in <strong>{{ connection.channel }} &gt; {{ connection.topic }}</strong> on Zulip.
+        New tasks, deadlines and other project activity are posted there too.
+      </p>
+
+      <form method="post" action="{% url 'communications:team_message' project_pk=project.pk %}">
+        {% csrf_token %}
+        {% include "_components/form_field.html" with field=message_form.text %}
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-xs text-brand-text/60">Posted to the topic under your name, for everyone who can read it there.</p>
+          <button type="submit" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Send to the team</button>
+        </div>
+      </form>
+    </div>
+  {% endif %}
+
+  {# ---- The connection itself ------------------------------------------- #}
+  <div class="brand-card p-6">
+    <h3 class="text-lg font-semibold text-brand-navy mb-1">
+      {% if connection %}Zulip connection{% else %}Connect this project to Zulip{% endif %}
+    </h3>
+    <p class="text-xs text-brand-text/60 mb-4">
+      In Zulip, add a bot (Settings &rarr; Personal &rarr; Bots &rarr; Add a new bot, type
+      <em>Incoming webhook</em>), subscribe it to the channel if the channel is private,
+      and copy its email and API key here. Saving sends one test message to the topic.
+    </p>
+
+    <form method="post" action="{% url 'communications:zulip_save' project_pk=project.pk %}">
+      {% csrf_token %}
+      {% if connection_form.non_field_errors %}
+        <div class="alert alert-error mb-4">{{ connection_form.non_field_errors }}</div>
+      {% endif %}
+
+      {% include "_components/form_field.html" with field=connection_form.site %}
+      {% include "_components/form_field.html" with field=connection_form.bot_email %}
+      {% include "_components/form_field.html" with field=connection_form.api_key %}
+      {% include "_components/form_field.html" with field=connection_form.channel %}
+      {% include "_components/form_field.html" with field=connection_form.topic %}
+
+      <fieldset class="mt-4 mb-4">
+        <legend class="text-sm text-brand-navy font-medium mb-2">What to post</legend>
+        {% for field in connection_form %}
+          {% if field.name|slice:":7" == "notify_" %}
+            <label for="{{ field.id_for_label }}" class="flex items-start gap-2 py-1 cursor-pointer">
+              {{ field }}
+              <span class="flex flex-col">
+                <span class="text-sm text-brand-text">{{ field.label }}</span>
+                {% if field.help_text %}<span class="text-xs text-brand-text/60">{{ field.help_text }}</span>{% endif %}
+              </span>
+            </label>
+          {% endif %}
+        {% endfor %}
+      </fieldset>
+
+      <label for="{{ connection_form.enabled.id_for_label }}" class="flex items-start gap-2 py-1 cursor-pointer">
+        {{ connection_form.enabled }}
+        <span class="flex flex-col">
+          <span class="text-sm text-brand-navy font-medium">{{ connection_form.enabled.label }}</span>
+          <span class="text-xs text-brand-text/60">{{ connection_form.enabled.help_text }}</span>
+        </span>
+      </label>
+
+      <div class="flex gap-2 justify-end mt-6">
+        <button type="submit" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+          {% if connection %}Save connection{% else %}Connect{% endif %}
+        </button>
+      </div>
+    </form>
+
+    {% if connection %}
+      <form method="post" action="{% url 'communications:zulip_disconnect' project_pk=project.pk %}"
+            class="flex justify-end mt-3"
+            onsubmit="return confirm('Disconnect this project from Zulip? Nothing more will be posted and the bot details are removed.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline btn-error">Disconnect</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}

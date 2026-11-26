@@ -1,15 +1,16 @@
 """Tests for the communications module and the Surveys rename.
 
-The module itself is empty, so what there is to guard is its shape: both
-surfaces answer, the project one is members-only, and the navigation names
-the two modules and reaches them. The label assertions are here because a
-rename regresses silently — nothing else fails when a tab goes back to
-saying "Forms".
+What is guarded here is the module's shape: both surfaces answer, the
+project one is Leads-only, and the navigation names the modules and
+reaches them. A project's Communications tab is for its Leads only for
+now; its team chat (the Zulip connection) is tested in ``zulip_tests.py``. The label assertions are here
+because a rename regresses silently — nothing else fails when a tab goes
+back to saying "Forms".
 
-Both modules are hidden from the navigation for now
-(SHOW_SURVEYS_AND_COMMUNICATIONS off), so the navigation tests turn the
-setting on, and the hidden-by-default tests guard that nothing is drawn
-while the pages still answer.
+Surveys and the personal Communications page are hidden from the
+navigation for now (SHOW_SURVEYS_AND_COMMUNICATIONS off), so the navigation
+tests turn the setting on, and the hidden-by-default tests guard that
+nothing is drawn while the pages still answer.
 """
 
 from __future__ import annotations
@@ -147,15 +148,15 @@ def test_the_surveys_page_answers_under_its_new_name(client, user):
 # The project section
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-@override_settings(SHOW_SURVEYS_AND_COMMUNICATIONS=True)
-def test_a_member_sees_the_project_communications_section(client, project, pm_user):
+def test_a_lead_sees_the_project_communications_section(client, project, pm_user):
     client.force_login(pm_user)
 
     response = client.get(_project_url(project))
     content = response.content.decode()
 
     assert response.status_code == 200
-    assert "Coming soon" in content
+    # Not connected to a team chat yet: the lead is offered the connection.
+    assert "Connect this project to Zulip" in content
     # The project chrome comes with it: header, and the tab strip with this
     # tab marked as the one you are on.
     assert project.name in content
@@ -164,14 +165,14 @@ def test_a_member_sees_the_project_communications_section(client, project, pm_us
 
 
 @pytest.mark.django_db
-def test_a_contributor_sees_it_too(client, project, contributor):
+def test_a_contributor_cannot_open_it_for_now(client, project, contributor):
     client.force_login(contributor)
 
-    assert client.get(_project_url(project)).status_code == 200
+    assert client.get(_project_url(project)).status_code == 403
 
 
 @pytest.mark.django_db
-def test_the_project_section_is_members_only(client, project, other_user):
+def test_nor_can_someone_outside_the_project(client, project, other_user):
     client.force_login(other_user)
 
     assert client.get(_project_url(project)).status_code == 403
@@ -186,22 +187,23 @@ def test_the_project_tab_strip_names_both_modules(client, project, pm_user):
         reverse("projects:detail", kwargs={"pk": project.pk})
     ).content.decode()
 
-    assert reverse("projects:project_forms", kwargs={"pk": project.pk}) in content
-    assert _project_url(project) in content
     strip = content[content.index('aria-label="Project sections"'):]
     strip = strip[: strip.index("</nav>")]
+    assert reverse("projects:project_forms", kwargs={"pk": project.pk}) in strip
     compact = "".join(strip.split())
     assert ">Surveys<" in compact
-    assert ">Communications<" in compact
     assert ">Survey<" not in compact
-    assert ">Communication<" not in compact
     assert "Forms" not in strip
+    # Surveys comes before Settings, which stays last.
+    assert _project_url(project) in strip
+    assert ">Communications<" in compact
+    assert ">Communication<" not in compact
     # Communications comes after Surveys, and Settings stays last.
     assert strip.index("Surveys") < strip.index("Communications") < strip.index("Settings")
 
 
 @pytest.mark.django_db
-def test_the_project_tab_strip_hides_both_modules_by_default(client, project, pm_user):
+def test_the_project_tab_strip_hides_surveys_by_default(client, project, pm_user):
     client.force_login(pm_user)
 
     content = client.get(
@@ -211,13 +213,11 @@ def test_the_project_tab_strip_hides_both_modules_by_default(client, project, pm
     strip = content[content.index('aria-label="Project sections"'):]
     strip = strip[: strip.index("</nav>")]
     assert reverse("projects:project_forms", kwargs={"pk": project.pk}) not in strip
-    assert _project_url(project) not in strip
     assert "Settings" in strip
-    # Hidden, not removed: both project pages still answer.
+    # Hidden, not removed: the page still answers.
     assert client.get(
         reverse("projects:project_forms", kwargs={"pk": project.pk})
     ).status_code == 200
-    assert client.get(_project_url(project)).status_code == 200
 
 
 # ---------------------------------------------------------------------------

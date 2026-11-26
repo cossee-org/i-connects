@@ -29,6 +29,11 @@ SCHEDULE: tuple[tuple[str, str, dict], ...] = (
         {"minute": "0", "hour": "9", "day_of_week": "*", "day_of_month": "*", "month_of_year": "*"},
     ),
     (
+        "zulip_deadline_reminder",
+        "cron.tasks.zulip_deadline_reminder_cron",
+        {"minute": "0", "hour": "8", "day_of_week": "*", "day_of_month": "*", "month_of_year": "*"},
+    ),
+    (
         "cleanup_tmp_files",
         "cron.tasks.cleanup_tmp_files_cron",
         {"minute": "0", "hour": "2", "day_of_week": "*", "day_of_month": "*", "month_of_year": "*"},
