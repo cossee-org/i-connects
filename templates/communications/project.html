@@ -22,6 +22,13 @@
 <div class="flex flex-wrap items-center justify-end gap-2 mb-4">
   <a href="{% url 'communications:zulip_connection' project_pk=project.pk %}"
      class="btn btn-sm btn-ghost">Zulip connection</a>
+  <a href="{{ topic_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">
+    Open in Zulip
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+    </svg>
+    <span class="sr-only">(opens in a new tab)</span>
+  </a>
 </div>
 {% endif %}
 
@@ -30,14 +37,10 @@
     {% if connection.enabled %}
       {# ---- The team chat: where it is, and a way to write to it -------- #}
       <div class="brand-card p-6">
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+        <div class="flex items-center gap-2 mb-3">
           <h3 class="text-lg font-semibold text-brand-navy">Team chat</h3>
-          <a href="{{ topic_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">Open in Zulip</a>
+          {% include "_components/info_popover.html" with label="Team chat" body=team_chat_info %}
         </div>
-        <p class="text-sm text-brand-text/70 mb-4">
-          This project's team talks in <strong>{{ connection.channel }} &gt; {{ connection.topic }}</strong> on Zulip.
-          New tasks, deadlines and other project activity are posted there too.
-        </p>
 
         <form method="post" action="{% url 'communications:team_message' project_pk=project.pk %}">
           {% csrf_token %}
@@ -50,10 +53,7 @@
     {% else %}
       {# ---- Connected, but paused --------------------------------------- #}
       <div class="brand-card p-6">
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
-          <h3 class="text-lg font-semibold text-brand-navy">Team chat</h3>
-          <a href="{{ topic_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">Open in Zulip</a>
-        </div>
+        <h3 class="text-lg font-semibold text-brand-navy mb-2">Team chat</h3>
         <p class="text-sm text-brand-text/70">
           Posting to <strong>{{ connection.channel }} &gt; {{ connection.topic }}</strong> is paused, so nothing is sent there from i-CONNECTS.
           Tick Post to Zulip under Zulip connection to start again.

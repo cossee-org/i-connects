@@ -69,6 +69,12 @@ class _SectionBase(
         connection = _connection(self.project)
         context["connection"] = connection
         context["topic_url"] = zulip.topic_url(connection) if connection else ""
+        if connection:
+            context["team_chat_info"] = (
+                f"This project's team talks in {connection.channel} > "
+                f"{connection.topic} on Zulip. New tasks, deadlines and other "
+                "project activity are posted there too."
+            )
         context.setdefault("message_form", TeamMessageForm())
         context.setdefault("connection_form", ZulipConnectionForm(instance=connection))
         return context
