@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Zulip connection &mdash; {{ project.name }}{% endblock %}
+
+{% block page_header %}
+  <header class="mb-6">
+    {% include "_components/project_header.html" %}
+  </header>
+{% endblock %}
+
+{% block content %}
+{# Opened from the Communications tab's Zulip connection button, and laid  #}
+{# out like the email log under Contributors: back, then the heading.      #}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <a href="{% url 'communications:project' project_pk=project.pk %}"
+     class="btn btn-sm btn-ghost text-brand-navy">&larr; Team chat</a>
+</div>
+
+<div class="flex items-center gap-2 mb-5">
+  <h2 class="text-lg font-semibold text-brand-navy">Zulip connection</h2>
+  {% include "_components/info_popover.html" with label="Zulip connection" body="Where this project posts on Zulip, with which bot, and what it posts. Saving a new organisation, bot, channel or topic sends one test message there first. Only Leads can see this." %}
+</div>
+
+{% include "communications/partials/zulip_connection_form.html" %}
+{% endblock %}

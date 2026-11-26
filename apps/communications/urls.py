@@ -21,13 +21,18 @@ urlpatterns = [
     ),
     path(
         "projects/<int:project_pk>/communications/zulip/",
-        views.ZulipConnectionSaveView.as_view(),
-        name="zulip_save",
+        views.ZulipConnectionView.as_view(),
+        name="zulip_connection",
     ),
     path(
         "projects/<int:project_pk>/communications/zulip/disconnect/",
         views.ZulipDisconnectView.as_view(),
         name="zulip_disconnect",
+    ),
+    path(
+        "projects/<int:project_pk>/communications/tab/",
+        views.CommunicationsTabView.as_view(),
+        name="tab",
     ),
     path(
         "projects/<int:project_pk>/communications/message/",

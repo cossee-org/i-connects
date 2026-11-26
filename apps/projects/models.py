@@ -50,6 +50,9 @@ class Project(models.Model):
         default=ContributionTracking.NONE,
     )
     public_summary = models.TextField(null=True, blank=True)
+    # Whether the project's Leads get a Communications tab. Off, the
+    # Communications pages are still reached from the project's Settings.
+    show_communications_tab = models.BooleanField(default=False)
 
     discord_webhook_url = models.URLField(
         max_length=500,

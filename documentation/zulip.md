@@ -17,10 +17,15 @@ already talks. Each project has its own connection; a Lead sets it up.
 Each group is a checkbox on the connection, and **Post to Zulip** pauses
 all of them. Tasks created by a CSV import are not announced one by one.
 
-The connection lives on the project's **Communications** tab, which is
-shown to the project's Leads only for now. Once the project is connected,
-the tab also holds a link that opens the topic and a box to write to the
-team from i-CONNECTS.
+Communications is for the project's Leads only for now. Until the project
+is connected, the Communications page is the connection form. Once it is
+connected, the page is the **Team chat**: a link that opens the topic and
+a box to write to the team from i-CONNECTS. The connection itself then
+opens from the page's **Zulip connection** button.
+
+Communications has its own project tab only when **Settings →
+Communications → Show the Communications tab** is on (it is off for a new
+project). Off, Leads open it from that same Settings card.
 
 ## Setting it up
 
@@ -33,7 +38,7 @@ In Zulip:
 
 In i-CONNECTS, as a Lead of the project:
 
-1. The **Communications** tab (or **Settings → Team chat → Connect to Zulip**).
+1. **Settings → Communications → Connect to Zulip** (or the Communications tab, if it is shown).
 2. Fill in the organisation URL (`https://your-group.zulipchat.com`), the
    bot's email and API key, the channel and the topic.
 3. **Connect**. A test message is sent to the topic; if Zulip refuses it,
@@ -45,7 +50,8 @@ One bot can serve several projects — point each project at its own topic.
 
 - `SITE_URL` must be set, or messages carry names without links.
 - `python manage.py migrate` creates the connection table
-  (`integrations_zulipconnection`).
+  (`integrations_zulipconnection`) and the project's
+  `show_communications_tab` setting.
 - `python manage.py setup_cron` installs the daily deadline reminder
   (08:00, `cron.tasks.zulip_deadline_reminder_cron`).
 - Messages are sent by the Celery worker after the change commits, so a

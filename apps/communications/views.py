@@ -27,8 +27,9 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.shortcuts import redirect
 from django.urls import reverse
-from django.views.generic import DetailView, ListView, TemplateView
+from django.views.generic import DetailView, ListView, TemplateView, View
 
+from apps.audit.services import AuditAction, log_action
 from apps.integrations import zulip
 from apps.integrations.models import ZulipConnection
 from apps.projects.models import ProjectMember
@@ -52,9 +53,14 @@ def _connection(project) -> ZulipConnection | None:
 class _SectionBase(
     LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, TemplateView
 ):
-    """What every view of a project's Communications tab shares: Leads
-    only, the page it draws (each re-renders it when its own form is
-    invalid) and its context."""
+    """What every view of a project's Communications pages shares: Leads
+    only, the page each draws (and re-renders when its own form is invalid)
+    and its context.
+
+    The tab itself shows the team chat once the project is connected to
+    Zulip, and the connection form until then. The connection, once made,
+    has a page of its own, opened from the tab's Zulip connection button.
+    """
 
     template_name = "communications/project.html"
 
@@ -77,8 +83,21 @@ class ProjectCommunicationsView(_SectionBase):
     """A project's Communications tab (Leads only for now)."""
 
 
-class ZulipConnectionSaveView(_SectionBase):
-    """Create or change the project's Zulip connection (Leads)."""
+class ZulipConnectionView(_SectionBase):
+    """The project's Zulip connection: see it, change it (Leads).
+
+    A project not connected yet has no page here: its connection form is on
+    the Communications tab itself, so a visit is sent there. Saving from
+    either place posts here, and a form with errors is drawn again where it
+    was filled in.
+    """
+
+    template_name = "communications/zulip_connection.html"
+
+    def get(self, request, *args, **kwargs):
+        if _connection(self.project) is None:
+            return redirect(self._url())
+        return super().get(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
         connection = _connection(self.project)
@@ -102,6 +121,8 @@ class ZulipConnectionSaveView(_SectionBase):
                 None,
                 f"The test message could not be sent, so nothing was saved. {detail}",
             )
+        if connection is None:
+            self.template_name = _SectionBase.template_name
         return self.render_to_response(
             self.get_context_data(connection_form=form), status=400
         )
@@ -114,6 +135,37 @@ class ZulipDisconnectView(_SectionBase):
         ZulipConnection.objects.filter(project=self.project).delete()
         messages.success(request, "Zulip disconnected.")
         return redirect(self._url())
+
+
+class CommunicationsTabView(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, View
+):
+    """Show or hide the project's Communications tab (Leads), from the
+    project's Settings. Hidden, the pages still answer, reached from
+    Settings."""
+
+    def post(self, request, *args, **kwargs):
+        shown = request.POST.get("show_communications_tab") == "on"
+        if self.project.show_communications_tab != shown:
+            self.project.show_communications_tab = shown
+            self.project.save(update_fields=["show_communications_tab", "updated_at"])
+            log_action(
+                AuditAction.PROJECT_UPDATED,
+                actor=request.user,
+                entity=self.project,
+                project=self.project,
+                metadata={
+                    "name": self.project.name,
+                    "show_communications_tab": shown,
+                },
+            )
+        messages.success(
+            request,
+            "The Communications tab is shown."
+            if shown
+            else "The Communications tab is hidden. Open it from Settings.",
+        )
+        return redirect(reverse("projects:update", kwargs={"pk": self.project.pk}))
 
 
 class TeamMessageView(_SectionBase):
