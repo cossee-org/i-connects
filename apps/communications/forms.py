@@ -18,13 +18,24 @@ class ZulipConnectionForm(forms.ModelForm):
     blank keeps the one already stored.
     """
 
+    API_KEY_HELP = (
+        "On the bot's card in Zulip (Settings → Personal → Bots), click the key "
+        "icon to copy it. It is 32 letters and numbers, for example "
+        "aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY. It is never shown here again."
+    )
+
     api_key = forms.CharField(
         label="Bot API key",
         required=False,
         strip=True,
+        help_text=API_KEY_HELP,
         widget=forms.PasswordInput(
             render_value=False,
-            attrs={"class": _INPUT, "autocomplete": "off"},
+            attrs={
+                "class": _INPUT,
+                "autocomplete": "off",
+                "placeholder": "32 letters and numbers",
+            },
         ),
     )
 
@@ -55,16 +66,63 @@ class ZulipConnectionForm(forms.ModelForm):
             "notify_wiki": "Wiki pages created or edited",
             "enabled": "Post to Zulip",
         }
+        # Every field says what to put in it and shows an example: most Leads
+        # set this up once, from a Zulip screen they rarely visit.
         help_texts = {
-            "site": "For example https://your-group.zulipchat.com",
-            "bot_email": "",
-            "enabled": "",
+            "site": (
+                "The address you open Zulip at, without anything after the "
+                "domain. For example: https://your-group.zulipchat.com"
+            ),
+            "bot_email": (
+                "Shown on the bot's card in Zulip, under Settings → Personal → "
+                "Bots. For example: iconnects-bot@your-group.zulipchat.com"
+            ),
+            "channel": (
+                "The channel to post in, as Zulip names it. The # is optional. "
+                "If the channel is private, subscribe the bot to it first. "
+                "For example: coral-reef-lab"
+            ),
+            "topic": (
+                "The topic inside that channel. Zulip starts it with the first "
+                "message if it does not exist yet. For example: Reef survey 2026"
+            ),
+            "notify_tasks": (
+                "For example: Bea Lund created the task Survey site B, "
+                "assigned to Sam Chen, due 12 Dec 2026"
+            ),
+            "notify_deadlines": (
+                "Posted once a day for open tasks due within 3 days and tasks "
+                "that just went overdue. For example: Deadlines coming up, "
+                "Survey site B, 12 Dec 2026, Sam Chen"
+            ),
+            "notify_members": "For example: Sam Chen joined Reef survey 2026",
+            "notify_comments": (
+                "The comment is quoted in full. For example: Sam Chen commented "
+                "on Survey site B: Samples are in the freezer."
+            ),
+            "notify_wiki": (
+                "Pages only Leads can see are never posted. For example: Bea "
+                "Lund edited the wiki page Field protocol"
+            ),
+            "enabled": "Untick to pause every message and keep the settings.",
         }
         widgets = {
-            "site": forms.URLInput(attrs={"class": _INPUT, "placeholder": "https://your-group.zulipchat.com"}),
-            "bot_email": forms.EmailInput(attrs={"class": _INPUT, "autocomplete": "off"}),
-            "channel": forms.TextInput(attrs={"class": _INPUT}),
-            "topic": forms.TextInput(attrs={"class": _INPUT}),
+            "site": forms.URLInput(
+                attrs={"class": _INPUT, "placeholder": "https://your-group.zulipchat.com"}
+            ),
+            "bot_email": forms.EmailInput(
+                attrs={
+                    "class": _INPUT,
+                    "autocomplete": "off",
+                    "placeholder": "iconnects-bot@your-group.zulipchat.com",
+                }
+            ),
+            "channel": forms.TextInput(
+                attrs={"class": _INPUT, "placeholder": "coral-reef-lab"}
+            ),
+            "topic": forms.TextInput(
+                attrs={"class": _INPUT, "placeholder": "Reef survey 2026"}
+            ),
             "notify_tasks": forms.CheckboxInput(attrs={"class": _CHECKBOX}),
             "notify_deadlines": forms.CheckboxInput(attrs={"class": _CHECKBOX}),
             "notify_members": forms.CheckboxInput(attrs={"class": _CHECKBOX}),
@@ -77,10 +135,15 @@ class ZulipConnectionForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self._stored_key = self.instance.api_key if self.instance.pk else ""
         # As stored, before validation writes the posted values onto the
-        # instance — what ``destination_changed`` compares against.
+        # instance: what ``destination_changed`` compares against.
         self._stored_destination = self._destination(self.instance)
         if self._stored_key:
-            self.fields["api_key"].help_text = "Leave blank to keep the current key."
+            self.fields["api_key"].help_text = (
+                "Leave blank to keep the current key. To change it, "
+                + self.API_KEY_HELP[0].lower()
+                + self.API_KEY_HELP[1:]
+            )
+            self.fields["api_key"].widget.attrs["placeholder"] = "Unchanged"
 
     def clean_site(self):
         site = zulip.normalise_site(self.cleaned_data.get("site", ""))

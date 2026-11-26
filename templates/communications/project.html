@@ -67,18 +67,23 @@
         <legend class="text-sm text-brand-navy font-medium mb-2">What to post</legend>
         {% for field in connection_form %}
           {% if field.name|slice:":7" == "notify_" %}
-            <label for="{{ field.id_for_label }}" class="flex items-center gap-2 py-1 cursor-pointer">
+            <label for="{{ field.id_for_label }}" class="flex items-start gap-2 py-1 cursor-pointer">
               {{ field }}
-              <span class="text-sm text-brand-text">{{ field.label }}</span>
+              <span class="flex flex-col">
+                <span class="text-sm text-brand-text">{{ field.label }}</span>
+                {% if field.help_text %}<span class="text-xs text-brand-text/60">{{ field.help_text }}</span>{% endif %}
+              </span>
             </label>
           {% endif %}
         {% endfor %}
       </fieldset>
 
-      <label for="{{ connection_form.enabled.id_for_label }}" class="flex items-center gap-2 py-1 cursor-pointer">
+      <label for="{{ connection_form.enabled.id_for_label }}" class="flex items-start gap-2 py-1 cursor-pointer">
         {{ connection_form.enabled }}
-        <span class="text-sm text-brand-navy font-medium">{{ connection_form.enabled.label }}</span>
-        <span class="text-xs text-brand-text/60">Untick to pause every message and keep the settings.</span>
+        <span class="flex flex-col">
+          <span class="text-sm text-brand-navy font-medium">{{ connection_form.enabled.label }}</span>
+          <span class="text-xs text-brand-text/60">{{ connection_form.enabled.help_text }}</span>
+        </span>
       </label>
 
       <div class="flex gap-2 justify-end mt-6">

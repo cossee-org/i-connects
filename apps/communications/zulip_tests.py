@@ -158,6 +158,31 @@ def test_editing_keeps_the_key_and_sends_no_second_test_message(
 
 
 @pytest.mark.django_db
+def test_every_field_of_the_connection_form_explains_itself(client, project, pm_user):
+    """Each field carries help text with an example, each text field a
+    placeholder, and none of it uses an em or en dash."""
+    from django.utils.html import escape
+
+    from apps.communications.forms import ZulipConnectionForm
+
+    form = ZulipConnectionForm()
+    for name, field in form.fields.items():
+        assert field.help_text, name
+        if name != "enabled":
+            assert "example" in field.help_text.lower(), name
+        if not name.startswith("notify_") and name != "enabled":
+            assert field.widget.attrs.get("placeholder"), name
+
+    client.force_login(pm_user)
+    content = client.get(_url("project", project)).content.decode()
+    card = content[content.index("Connect this project to Zulip"):]
+    card = card[: card.index("</form>")]
+    for name, field in form.fields.items():
+        assert escape(field.help_text) in card, name
+    assert "\u2014" not in card and "\u2013" not in card
+
+
+@pytest.mark.django_db
 def test_the_key_is_never_sent_back_to_the_browser(client, project, pm_user):
     _connect(project)
     client.force_login(pm_user)
