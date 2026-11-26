@@ -1,0 +1,8 @@
+{# With the project's Communications tab hidden, its pages are reached from #}
+{# Settings, so they lead back there.                                        #}
+{% if not project.show_communications_tab %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <a href="{% url 'projects:update' pk=project.pk %}"
+     class="btn btn-sm btn-ghost text-brand-navy">&larr; Settings</a>
+</div>
+{% endif %}

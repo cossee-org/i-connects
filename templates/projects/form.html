@@ -17,7 +17,7 @@
 <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
   <div class="flex items-center gap-2">
     <h2 class="text-lg font-semibold text-brand-navy">Settings</h2>
-    {% include "_components/info_popover.html" with label="Settings" body="The project's name, description, status, visibility and contribution tracking, and where to archive or delete it. Only leads can see this tab." %}
+    {% include "_components/info_popover.html" with label="Settings" body="The project's name, description, status, visibility and contribution tracking, whether it has a Communications tab, and where to archive or delete it. Only leads can see this tab." %}
   </div>
 </div>
 {% endif %}
@@ -73,7 +73,29 @@
 
   {% if object %}
     <div class="brand-card p-6">
-      <h2 class="text-lg font-semibold text-brand-navy mb-4">Team chat</h2>
+      <h2 class="text-lg font-semibold text-brand-navy mb-4">Communications</h2>
+      {# Saved on its own as soon as it is switched; the button is for a #}
+      {# browser without scripting.                                     #}
+      <form method="post" action="{% url 'communications:tab' project_pk=object.pk %}" class="mb-4">
+        {% csrf_token %}
+        <label for="id_show_communications_tab" class="flex justify-between items-center gap-4 border border-gray-200 rounded-lg px-4 py-3 cursor-pointer">
+          <span class="flex-1 min-w-0">
+            <span class="block label-text text-sm text-brand-navy font-medium">Show the Communications tab</span>
+            <span class="block text-xs text-brand-text/60 mt-0.5">
+              Adds a Communications tab to this project, for Leads only. When it is off, open Communications from here.
+            </span>
+          </span>
+          <input type="checkbox" name="show_communications_tab" id="id_show_communications_tab"
+                 class="toggle toggle-sm toggle-primary"
+                 {% if object.show_communications_tab %}checked{% endif %}
+                 onchange="this.form.requestSubmit()">
+        </label>
+        <noscript>
+          <div class="flex justify-end mt-2">
+            <button type="submit" class="btn btn-sm btn-outline">Save</button>
+          </div>
+        </noscript>
+      </form>
       <p class="text-xs text-brand-text/60 mb-4">
         {% if object.zulip_connection %}
           This project posts its activity to <strong>{{ object.zulip_connection.channel }} &gt; {{ object.zulip_connection.topic }}</strong> on Zulip{% if not object.zulip_connection.enabled %} (paused){% endif %}.
@@ -82,9 +104,13 @@
         {% endif %}
       </p>
       <div class="flex flex-wrap gap-2 justify-end">
-        <a href="{% url 'communications:project' project_pk=object.pk %}" class="btn btn-sm btn-outline">
-          {% if object.zulip_connection %}Manage Zulip connection{% else %}Connect to Zulip{% endif %}
-        </a>
+        {% if object.zulip_connection %}
+          <a href="{% url 'communications:zulip_connection' project_pk=object.pk %}" class="btn btn-sm btn-outline">Manage Zulip connection</a>
+          <a href="{% url 'communications:project' project_pk=object.pk %}" class="btn btn-sm btn-outline">Open Communications</a>
+        {% else %}
+          {# Until it is connected, the Communications page is the form. #}
+          <a href="{% url 'communications:project' project_pk=object.pk %}" class="btn btn-sm btn-outline">Connect to Zulip</a>
+        {% endif %}
       </div>
     </div>
 

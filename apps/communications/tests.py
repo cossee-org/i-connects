@@ -181,6 +181,8 @@ def test_nor_can_someone_outside_the_project(client, project, other_user):
 @pytest.mark.django_db
 @override_settings(SHOW_SURVEYS_AND_COMMUNICATIONS=True)
 def test_the_project_tab_strip_names_both_modules(client, project, pm_user):
+    project.show_communications_tab = True
+    project.save()
     client.force_login(pm_user)
 
     content = client.get(
