@@ -1,20 +1,21 @@
 """Views for the communications module.
 
 The personal page in the sidebar is still a placeholder. A project's
-section is where the project meets its team chat: a Lead connects the
-project to a Zulip topic there, and from then on every member finds the
-link to that topic and can post to it without leaving i-CONNECTS. What the
-project posts on its own (tasks, deadlines, new members, comments, wiki
-edits) is :mod:`apps.integrations.signals`' business, not this module's.
+Communications section is a subsection of its Project tab, open to the
+project's Leads only for now: there a Lead connects the project to a Zulip
+topic, finds the link to it and can post to it without leaving i-CONNECTS.
+What the project posts on its own (tasks, deadlines, new members, comments,
+wiki edits) is :mod:`apps.integrations.signals`' business, not this
+module's.
 
 The project's email log (``ProjectEmailLogView``) is reached from the
 Contributors tab and open to the project's Leads only, with each email's
 full content in a modal (``ProjectEmailDetailView``).
 
 Access mirrors the rest of the app: the personal page needs a signed-in
-user, the project section needs project membership (``ProjectContextMixin``
-raises 403 otherwise) and renders the project tab strip. Changing the
-connection is for Leads.
+user; the project's Communications section and its email log need the
+project's Lead privilege (``ProjectManagerRequiredMixin`` answers 403
+otherwise) and render the project tab strip.
 """
 
 from __future__ import annotations
@@ -49,9 +50,12 @@ def _connection(project) -> ZulipConnection | None:
     return ZulipConnection.objects.filter(project=project).first()
 
 
-class _SectionBase(LoginRequiredMixin, ProjectContextMixin, TemplateView):
-    """What every view of a project's section shares: the page it draws
-    (each re-renders it when its own form is invalid) and its context."""
+class _SectionBase(
+    LoginRequiredMixin, ProjectManagerRequiredMixin, ProjectContextMixin, TemplateView
+):
+    """What every view of a project's Communications section shares: Leads
+    only, the page it draws (each re-renders it when its own form is
+    invalid) and its context."""
 
     template_name = "communications/project.html"
 
@@ -61,10 +65,7 @@ class _SectionBase(LoginRequiredMixin, ProjectContextMixin, TemplateView):
         context["connection"] = connection
         context["topic_url"] = zulip.topic_url(connection) if connection else ""
         context.setdefault("message_form", TeamMessageForm())
-        if self.is_project_manager:
-            context.setdefault(
-                "connection_form", ZulipConnectionForm(instance=connection)
-            )
+        context.setdefault("connection_form", ZulipConnectionForm(instance=connection))
         return context
 
     def _url(self) -> str:
@@ -74,10 +75,10 @@ class _SectionBase(LoginRequiredMixin, ProjectContextMixin, TemplateView):
 
 
 class ProjectCommunicationsView(_SectionBase):
-    """A project's communications section — the project tab."""
+    """A project's Communications section — a subsection of the Project tab."""
 
 
-class ZulipConnectionSaveView(ProjectManagerRequiredMixin, _SectionBase):
+class ZulipConnectionSaveView(_SectionBase):
     """Create or change the project's Zulip connection (Leads)."""
 
     def post(self, request, *args, **kwargs):
@@ -107,7 +108,7 @@ class ZulipConnectionSaveView(ProjectManagerRequiredMixin, _SectionBase):
         )
 
 
-class ZulipDisconnectView(ProjectManagerRequiredMixin, _SectionBase):
+class ZulipDisconnectView(_SectionBase):
     """Remove the project's Zulip connection (Leads)."""
 
     def post(self, request, *args, **kwargs):
@@ -117,7 +118,7 @@ class ZulipDisconnectView(ProjectManagerRequiredMixin, _SectionBase):
 
 
 class TeamMessageView(_SectionBase):
-    """Post a member's message to the project's Zulip topic."""
+    """Post a Lead's message to the project's Zulip topic."""
 
     def post(self, request, *args, **kwargs):
         connection = zulip.connection_for(self.project)

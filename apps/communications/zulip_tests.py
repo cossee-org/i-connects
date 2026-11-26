@@ -1,5 +1,8 @@
 """Tests for a project's team chat: connecting it to Zulip, and writing to it.
 
+The team chat lives in the project's Communications section, a Leads-only
+subsection of the Project tab.
+
 Nothing here reaches the network — ``zulip.deliver`` is replaced by a
 recorder, which is also how the tests see what would have been sent.
 """
@@ -176,10 +179,10 @@ def test_a_contributor_cannot_connect_or_disconnect(client, project, contributor
     assert client.post(_url("zulip_disconnect", project)).status_code == 403
     assert ZulipConnection.objects.filter(project=project).exists()
 
-    # Nor do they see the bot's details.
-    content = client.get(_url("project", project)).content.decode()
-    assert "iconnects-bot@cossee.zulipchat.com" not in content
-    assert "Bot API key" not in content
+    # Nor can they open the section and see the bot's details.
+    response = client.get(_url("project", project))
+    assert response.status_code == 403
+    assert "iconnects-bot@cossee.zulipchat.com" not in response.content.decode()
 
 
 @pytest.mark.django_db
@@ -194,12 +197,12 @@ def test_a_lead_disconnects(client, project, pm_user):
 
 
 # ---------------------------------------------------------------------------
-# The team chat, for members
+# The team chat
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-def test_a_member_finds_the_link_to_the_topic(client, project, contributor):
+def test_a_lead_finds_the_link_to_the_topic(client, project, pm_user):
     _connect(project, channel="team/cossee.acb", topic="pig auto")
-    client.force_login(contributor)
+    client.force_login(pm_user)
 
     content = client.get(_url("project", project)).content.decode()
 
@@ -212,21 +215,19 @@ def test_a_member_finds_the_link_to_the_topic(client, project, contributor):
 
 
 @pytest.mark.django_db
-def test_a_member_without_a_connection_is_told_there_is_no_chat_yet(
-    client, project, contributor
-):
-    client.force_login(contributor)
+def test_without_a_connection_a_lead_is_offered_one(client, project, pm_user):
+    client.force_login(pm_user)
 
     content = client.get(_url("project", project)).content.decode()
 
-    assert "No team chat yet" in content
+    assert "Connect this project to Zulip" in content
     assert "Open in Zulip" not in content
 
 
 @pytest.mark.django_db
-def test_a_member_writes_to_the_team(client, project, contributor, sent):
+def test_a_lead_writes_to_the_team(client, project, pm_user, sent):
     _connect(project)
-    client.force_login(contributor)
+    client.force_login(pm_user)
 
     response = client.post(
         _url("team_message", project), {"text": "Draft is ready, @**all** please read"}
@@ -235,7 +236,7 @@ def test_a_member_writes_to_the_team(client, project, contributor, sent):
     assert response.status_code == 302
     assert len(sent) == 1
     content = sent[0][1]
-    assert content.startswith("**Alice** (via i-CONNECTS):")
+    assert content.startswith("**PM** (via i-CONNECTS):")
     assert "Draft is ready" in content
     # A mention typed into the box is text, not a ping for the whole channel.
     assert "@**all**" not in content
@@ -243,13 +244,24 @@ def test_a_member_writes_to_the_team(client, project, contributor, sent):
 
 @pytest.mark.django_db
 def test_a_message_goes_nowhere_when_the_project_is_not_connected(
-    client, project, contributor, sent
+    client, project, pm_user, sent
 ):
-    client.force_login(contributor)
+    client.force_login(pm_user)
 
     response = client.post(_url("team_message", project), {"text": "Hello"})
 
     assert response.status_code == 302
+    assert sent == []
+
+
+@pytest.mark.django_db
+def test_the_section_is_for_leads_only_for_now(client, project, contributor, sent):
+    _connect(project)
+    client.force_login(contributor)
+
+    assert client.get(_url("project", project)).status_code == 403
+    response = client.post(_url("team_message", project), {"text": "Hello"})
+    assert response.status_code == 403
     assert sent == []
 
 
@@ -267,19 +279,46 @@ def test_an_outsider_cannot_write_to_the_team(client, project, other_user, sent)
 # ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
+def _tab_strip(content):
+    strip = content[content.index('aria-label="Project sections"'):]
+    return strip[: strip.index("</nav>")]
+
+
 @pytest.mark.django_db
-@override_settings(SHOW_SURVEYS_AND_COMMUNICATIONS=False)
-def test_a_connected_project_shows_the_communications_tab(client, project, pm_user):
+@override_settings(SHOW_SURVEYS_AND_COMMUNICATIONS=True)
+def test_communications_is_a_subsection_of_the_project_tab(client, project, pm_user):
+    _connect(project)
     client.force_login(pm_user)
     detail = reverse("projects:detail", kwargs={"pk": project.pk})
-    tab = _url("project", project)
+    section = _url("project", project)
 
-    # Hidden with the rest of the module while there is nothing behind it…
-    assert f'href="{tab}"' not in client.get(detail).content.decode()
+    # No tab of its own, even with the module shown and a team chat…
+    detail_content = client.get(detail).content.decode()
+    assert f'href="{section}"' not in _tab_strip(detail_content)
+    assert ">Communications<" not in "".join(_tab_strip(detail_content).split())
+    # …but a way in from the Project Overview…
+    assert f'href="{section}"' in detail_content
 
-    # …and drawn once the project has a team chat.
+    # …and the section keeps the Project tab marked, with a way back.
+    content = client.get(section).content.decode()
+    strip = _tab_strip(content)
+    project_tab = strip[strip.index(f'href="{detail}"'):]
+    project_tab = project_tab[: project_tab.index(">")]
+    assert "project-tab active" in project_tab
+    assert strip.count("project-tab active") == 1
+    assert "Project overview" in content
+
+
+@pytest.mark.django_db
+def test_only_a_lead_is_shown_the_way_in(client, project, contributor):
     _connect(project)
-    assert f'href="{tab}"' in client.get(detail).content.decode()
+    client.force_login(contributor)
+
+    content = client.get(
+        reverse("projects:detail", kwargs={"pk": project.pk})
+    ).content.decode()
+
+    assert _url("project", project) not in content
 
 
 @pytest.mark.django_db
