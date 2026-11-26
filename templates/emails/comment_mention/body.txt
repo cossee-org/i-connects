@@ -1,0 +1,10 @@
+{% extends "emails/layouts/notification.txt" %}
+{% block heading %}{{ author_name }} mentioned you in a comment{% endblock %}
+{% block content %}Hi {{ user.display_name }},
+
+{{ author_name }} mentioned you in a comment on "{{ task.name }}"{% if project %} ({{ project.name }}){% endif %}:
+
+{{ excerpt }}
+
+Open the task to read the thread:
+{{ url }}{% endblock %}

@@ -1530,6 +1530,19 @@ def test_contributions_module_shows_the_profile_card(client, user):
     assert tiles["Data curation"] == 1
     assert tiles["Investigation"] == 0
     assert context["contribution_total"] == 3
+    # The legacy Writing type is not a role anyone can earn any more.
+    assert "Writing (legacy)" not in tiles
+
+
+@pytest.mark.django_db
+def test_contributions_module_card_keeps_legacy_writing_when_earned(client, user):
+    project, col, pm = _make_project(user, name="Alpha")
+    _credit(project, col, pm, pm, ContributionType.WRITING)
+
+    client.force_login(user)
+    context = client.get(reverse("contributions:contributions")).context
+    tiles = dict(context["contribution_tiles"])
+    assert tiles["Writing (legacy)"] == 1
 
 
 @pytest.mark.django_db

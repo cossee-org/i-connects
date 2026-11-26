@@ -129,6 +129,45 @@ Use these rather than rewriting the markup each time:
 
 ---
 
+## Email
+
+Every email i-CONNECTS sends uses one layout ("Letterhead"): the logo on white over a coral rule, a white card on a lavender ground, a navy heading, one coral button, and a footer saying why the reader got it. Preview them all, with made-up data, at `/dev/emails/` while `DEBUG` is on.
+
+**Where things live**
+
+| Path | What it is |
+| ---- | ---------- |
+| `templates/emails/<name>/` | One folder per email: `subject.txt`, `body.txt`, `body.html` |
+| `templates/emails/base_email.html` / `.txt` | The shared layout. The only place the frame is styled |
+| `templates/emails/layouts/` | Shared footers: `account` (account emails) and `notification` (emails a member can turn off) |
+| `templates/emails/_parts/` | The building blocks, used with `{% emailpart %}` |
+| `apps/core/emails.py` | `send_email(name, context, to, kind=..., project=...)`: the one way an email is sent |
+| `apps/core/email_samples.py` | Sample context for every email (preview page and tests) |
+
+**Blocks to fill:** `preheader` (the inbox preview line), `heading` (one sentence saying what happened), `content`, and `footer_reason` unless a layout sets it. `eyebrow` defaults to the project name when the context has a `project`; `signoff` defaults to "The i-CONNECTS team".
+
+**Parts** (`{% load email_tags %}`):
+
+```django
+{% emailpart "button" href=url %}Open the task{% endemailpart %}          {# at most one per email; link=True prints the URL under it #}
+{% emailpart "link" href=url strong=True %}{{ task.name }}{% endemailpart %}
+{% emailpart "quote" %}{{ excerpt|linebreaksbr }}{% endemailpart %}
+{% emailpart "list" %}{% for t in tasks %}{% emailpart "item" title=t.name href=t.url %}Due {{ t.deadline|date:"M j" }}{% endemailpart %}{% endfor %}{% endemailpart %}
+{% emailpart "section" %}Overdue tasks{% endemailpart %}
+{% emailpart "note" %}If you weren't expecting this email, you can ignore it.{% endemailpart %}
+```
+
+Links in email must be absolute: `{% site_url "accounts:profile" %}`, `{{ path|absolute }}`, and `{% email_static "img/email/logo@2x.png" %}` for images (never `{% static %}`, whose hashed names change on each deploy and break images in emails already sent).
+
+**Rules** (enforced by `apps/core/email_template_tests.py`)
+
+- An email template never carries `style=` attributes or colours; only the base and `_parts/` do. Need a new look? Add a part.
+- Every email has a preheader, a heading, a footer reason, and a plain-text part with the same order and footer.
+- One coral button at most.
+- Add a sample to `email_samples.py` for every new email.
+
+---
+
 ## When in doubt
 
 1. Look at `templates/base.html` and `templates/projects/my_list.html` as the reference.

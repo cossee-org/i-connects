@@ -16,7 +16,7 @@ class UserAdmin(BaseUserAdmin):
 
     fieldsets = BaseUserAdmin.fieldsets + (
         (
-            "i-connects profile",
+            "i-CONNECTS profile",
             {
                 "fields": (
                     "name",
@@ -37,6 +37,8 @@ class UserAdmin(BaseUserAdmin):
                     "email_project_activity_frequency",
                     "email_overdue_task_frequency",
                     "email_task_assigned",
+                    "email_review_assigned",
+                    "email_comment_mention",
                     "email_confirmed_at",
                 )
             },

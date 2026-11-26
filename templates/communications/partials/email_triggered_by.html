@@ -1,0 +1,15 @@
+{% comment %}
+  Who set off an email: the member's name, linked to their profile, with
+  their address; "Automatic" for an email i-CONNECTS sends on its own;
+  a dash when it was not recorded (rows from before it was, or an account
+  since removed).
+{% endcomment %}
+{% if email.triggered_by %}
+  <a href="{% url 'public_profile' pk=email.triggered_by.pk %}"
+     class="{{ link_class|default:'text-brand-navy hover:text-brand-coral' }}">{{ email.triggered_by.name|default:email.triggered_by.email }}</a>
+  {% if email.triggered_by.name %}<span class="{{ email_class|default:'text-brand-text/60' }}">{% if brackets %}&lt;{{ email.triggered_by.email }}&gt;{% else %}{{ email.triggered_by.email }}{% endif %}</span>{% endif %}
+{% elif email.is_automatic %}
+  <span class="text-brand-text/60">Automatic</span>
+{% else %}
+  <span class="text-brand-text/40" title="Not recorded">&mdash;</span>
+{% endif %}

@@ -1,0 +1,9 @@
+{% extends "emails/layouts/account.html" %}{% load email_tags %}
+{% block preheader %}Your account is ready. Sign in any time.{% endblock %}
+{% block heading %}Welcome to i-CONNECTS{% endblock %}
+{% block content %}
+<p>Hi {{ user.name|default:user.email }},</p>
+<p>Your i-CONNECTS account has been created. You can sign in any time.</p>
+{% emailpart "button" href=site_url %}Sign in to i-CONNECTS{% endemailpart %}
+<p>If you have any questions, reply to this email.</p>
+{% endblock %}

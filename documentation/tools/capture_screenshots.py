@@ -3,7 +3,7 @@ photograph every step.
 
 Everything happens through the real web UI in a real (headless) Chromium:
 four people sign up, a lead creates a project, invites the others, sets tasks,
-members mark their parts done, a reviewer signs off, the lead completes tasks,
+members mark their parts done, a reviewer signs off, the lead closes tasks,
 and a member writes a wiki page. Screenshots land in ../screenshots/.
 
 Run it against an EMPTY database (see README.md in this folder): the scenario
@@ -530,13 +530,13 @@ def s09_complete(pg):
     mark_own(pg, 4)
     # The lead closes a task with no review step.
     go(pg, task_url(2))
-    btn = pg.locator("button:has-text('Mark Completed')").first
+    btn = pg.locator("button:has-text('Close Task')").first
     shot(pg, "09_complete_before", hl=[btn])
     btn.click()
     settle(pg)
-    shot(pg, "09_complete_after", hl=[pg.locator("button:has-text('Mark Not Complete')").first])
+    shot(pg, "09_complete_after", hl=[pg.locator("button:has-text('Re-open Task')").first])
     go(pg, task_url(4))
-    pg.locator("button:has-text('Mark Completed')").first.click()
+    pg.locator("button:has-text('Close Task')").first.click()
     settle(pg)
     # Tidy the board: finished cards to Done, the analysis to In Progress.
     go(pg, "/projects/1/board/")

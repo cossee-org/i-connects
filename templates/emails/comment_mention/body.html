@@ -1,0 +1,9 @@
+{% extends "emails/layouts/notification.html" %}{% load email_tags %}
+{% block preheader %}{{ excerpt|truncatechars:90 }}{% endblock %}
+{% block heading %}{{ author_name }} mentioned you in a comment{% endblock %}
+{% block content %}
+<p>Hi {{ user.display_name }},</p>
+<p>{{ author_name }} mentioned you in a comment on {% emailpart "link" href=url strong=True %}{{ task.name }}{% endemailpart %}:</p>
+{% emailpart "quote" %}{{ excerpt|linebreaksbr }}{% endemailpart %}
+{% emailpart "button" href=url %}Open the task{% endemailpart %}
+{% endblock %}

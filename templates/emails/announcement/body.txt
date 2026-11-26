@@ -1,6 +1,7 @@
-{% extends "emails/base_email.txt" %}
-{% block content %}
-{% if project %}{{ project.name }}
-
-{% endif %}{{ announcement.message }}
-{% endblock %}
+{% extends "emails/base_email.txt" %}{% load email_tags %}
+{% block heading %}{{ announcement.headline }}{% endblock %}
+{% block content %}{% if announcement.details %}{{ announcement.details }}
+{% endif %}{% if announcement.external_link %}
+{{ announcement.external_link }}{% elif announcement.url %}
+{{ announcement.url|absolute }}{% endif %}{% endblock %}
+{% block footer_reason %}You got this email because an i-CONNECTS administrator sent an announcement{% if project %} to the members of {{ project.name }}{% endif %}.{% endblock %}

@@ -105,7 +105,7 @@ def test_assign_view_emails_only_newly_added_members(
     # Bob was already assigned and the Lead assigned themselves: only PM hears.
     assert [m.to for m in mail.outbox] == [["pm@test.com"]]
     message = mail.outbox[0]
-    assert message.subject == 'i-connects: you were assigned "Screen abstracts"'
+    assert message.subject == 'i-CONNECTS: you were assigned "Screen abstracts"'
     url = "https://iconnects.test" + reverse(
         "tasks:detail", kwargs={"project_pk": project.pk, "pk": task.pk}
     )
@@ -261,7 +261,11 @@ def test_adding_a_reviewer_sends_no_assignment_email(
             },
         )
     assert task.reviewers.filter(pk=bob.pk).exists()
-    assert mail.outbox == []
+    # Bob hears he is a reviewer (review_assignment_email_tests), not an assignee.
+    assert [m.subject for m in mail.outbox] == [
+        'i-CONNECTS: you were assigned as Reviewer on "Screen abstracts"'
+    ]
+    assert not _assignment_notifications(other_user).exists()
 
 
 # ---------------------------------------------------------------------------
@@ -289,11 +293,11 @@ def test_csv_import_sends_one_email_per_person_listing_their_tasks(
     by_recipient = {m.to[0]: m for m in mail.outbox}
     assert sorted(by_recipient) == ["bob@test.com", "pm@test.com"]
     bob_email = by_recipient["bob@test.com"]
-    assert bob_email.subject == "i-connects: you were assigned 3 tasks"
+    assert bob_email.subject == "i-CONNECTS: you were assigned 3 tasks"
     for name in ("Task A", "Task B", "Task C"):
         assert name in bob_email.body
     assert by_recipient["pm@test.com"].subject == (
-        'i-connects: you were assigned "Task B"'
+        'i-CONNECTS: you were assigned "Task B"'
     )
     # The bell still gets one entry per task.
     assert _assignment_notifications(other_user).count() == 3
@@ -429,7 +433,7 @@ def test_task_names_are_not_html_escaped_in_the_plain_text(
     with django_capture_on_commit_callbacks(execute=True):
         notify_new_assignees([(task, {bob.pk})], assigned_by=user)
     message = mail.outbox[0]
-    assert message.subject == 'i-connects: you were assigned "Q&A <draft>"'
+    assert message.subject == 'i-CONNECTS: you were assigned "Q&A <draft>"'
     assert "Q&A <draft> (Fish & frogs)" in message.body
     assert "Q&amp;A &lt;draft&gt;" in message.alternatives[0][0]
 

@@ -158,7 +158,7 @@ def test_dropdown_syncs_badges(client, user):
 def test_route_resolves_to_the_component_url(user):
     n = create_notification(
         users=[user],
-        title="Task completed: Draft",
+        title="Task closed: Draft",
         body="",
         route="tasks:detail",
         route_kwargs={"project_pk": 7, "pk": 3},

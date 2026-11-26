@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
@@ -23,6 +24,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET
 
 from apps.audit.services import AuditAction, log_action
+from apps.communications.services import last_sent_by_user
 from apps.contributions.services import (
     get_project_contributions,
     get_project_contributions_matrix,
@@ -254,6 +256,14 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 Q(assigned_members__users=user) | Q(reviewers__users=user),
                 status=TaskStatus.NOT_COMPLETED,
             )
+            # my_deadline: the user's individual deadline where a Lead set
+            # one, else the task's -- what "overdue" and the date on each
+            # row mean for this user.
+            .with_my_deadline(user)
+            # has_to_review / has_to_verify: the rows' To review and To
+            # verify marks, by the All tasks page's rules — a row waiting on
+            # both carries both.
+            .with_waiting_on(user)
             .annotate(
                 user_log_status=latest_log_status,
                 is_assigned=Exists(user_member_qs.filter(assigned_tasks=OuterRef("pk"))),
@@ -275,7 +285,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # so the section's badge and the "All N ..." link below the rows
         # both describe the filtered set rather than the whole one.
         if current_type == "overdue":
-            matching_tasks_qs = active_tasks_qs.filter(deadline__lt=now)
+            matching_tasks_qs = active_tasks_qs.filter(my_deadline__lt=now)
         elif current_type == "review":
             matching_tasks_qs = active_tasks_qs.filter(is_reviewing=True)
         else:
@@ -284,9 +294,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         # nulls_last keeps undated tasks at the end in both directions
         # (SQLite orders NULLs before everything by default, Postgres after).
         if current_sort == "newest":
-            task_order = (F("deadline").desc(nulls_last=True), "-created_at", "id")
+            task_order = (F("my_deadline").desc(nulls_last=True), "-created_at", "id")
         else:
-            task_order = (F("deadline").asc(nulls_last=True), "created_at", "id")
+            task_order = (F("my_deadline").asc(nulls_last=True), "created_at", "id")
 
         if not shows_tasks:
             context["active_tasks"] = []
@@ -337,7 +347,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         # --- Invitation requests (invitations addressed to the current user) ---
         invitation_requests = list(
-            Invitation.objects.filter(email__iexact=(user.email or "").lower())
+            Invitation.objects.addressed_to(user)
             .select_related("project")
             .order_by("-created_at")
         )
@@ -681,11 +691,11 @@ def _project_summary(project, now, *, is_lead: bool) -> dict:
         .select_related("closed_by")
         .order_by("-closed_at")[:8]
     ):
-        # Only a Lead completes a task, so the line names whoever did.
+        # Only a Lead closes a task, so the line names whoever did.
         events.append({
             "when": t.closed_at,
             "who": t.closed_by.display_name if t.closed_by else "A lead",
-            "verb": "completed", "kind": "task", "task": t,
+            "verb": "closed", "kind": "task", "task": t,
         })
     for r in (
         WikiRevision.objects.filter(page__in=readable_pages)
@@ -785,12 +795,10 @@ class ProjectDetailView(DetailView):
                     status=JoinRequestStatus.PENDING,
                 ).first()
             )
-            user_email = (self.request.user.email or "").lower()
             context["pending_invitation"] = (
-                Invitation.objects.filter(
-                    project=project,
-                    email__iexact=user_email,
-                ).first()
+                Invitation.objects.addressed_to(self.request.user)
+                .filter(project=project)
+                .first()
             )
             if context["user_privilege"] == MemberPrivileges.PROJECT_MANAGER:
                 context["pending_join_request_count"] = JoinRequest.objects.filter(
@@ -824,12 +832,10 @@ class ProjectDetailView(DetailView):
         task_qs = Task.objects.filter(project=project)
         context["task_count"] = task_qs.count()
         # Overdue means still open past its deadline; a finished task whose
-        # deadline has passed is not late.
-        context["overdue_count"] = (
-            task_qs.exclude(status=TaskStatus.COMPLETED)
-            .filter(deadline__lt=context["today"])
-            .count()
-        )
+        # deadline has passed is not late, and nor is one Extended: every
+        # assignee still working on it has a later individual deadline
+        # (Task.is_overdue).
+        context["overdue_count"] = task_qs.overdue(context["today"]).count()
         context["contributor_count"] = ProjectPrivilege.objects.filter(
             project=project
         ).values("user").distinct().count()
@@ -944,6 +950,9 @@ def _member_rows(project, *, viewer=None):
     When ``viewer`` is supplied, each row is annotated with ``is_self`` so
     the template can disable PM-mutating controls on the viewer's own row
     when the last-PM invariant would otherwise be broken.
+
+    ``last_email`` is when the member was last sent an email about the
+    project (``None`` if never). The template shows it to Leads only.
     """
     members = (
         ProjectMember.objects.filter(project=project, deleted=False)
@@ -955,6 +964,8 @@ def _member_rows(project, *, viewer=None):
         for p in ProjectPrivilege.objects.filter(project=project)
     }
     viewer_id = getattr(viewer, "id", None) if viewer is not None else None
+    members = list(members)
+    last_emails = last_sent_by_user(project, [m.users.first() for m in members])
     rows = []
     for m in members:
         primary_user = m.users.first()
@@ -970,6 +981,9 @@ def _member_rows(project, *, viewer=None):
                 "privilege": effective,
                 "is_self": (
                     primary_user is not None and primary_user.id == viewer_id
+                ),
+                "last_email": (
+                    last_emails.get(primary_user.id) if primary_user else None
                 ),
             }
         )
@@ -995,6 +1009,9 @@ def _render_member_row(request, project, member, *, oob=False):
         "user": primary_user,
         "privilege": privilege,
         "is_self": primary_user is not None and primary_user.id == request.user.id,
+        "last_email": last_sent_by_user(project, [primary_user]).get(
+            primary_user.id if primary_user else None
+        ),
     }
     return render_to_string(
         "projects/member_row.html",
@@ -1423,24 +1440,47 @@ class MyInvitationsView(LoginRequiredMixin, ListView):
     context_object_name = "invitations"
 
     def get_queryset(self):
-        email = (self.request.user.email or "").lower()
         return (
-            Invitation.objects.filter(email__iexact=email)
+            Invitation.objects.addressed_to(self.request.user)
             .select_related("project")
             .order_by("-created_at")
         )
 
 
 class AcceptOrDeclineInviteView(View):
-    """Single URL that handles showing, accepting, and declining an invite."""
+    """Single URL that handles showing, accepting, and declining an invite.
+
+    Only the invitee may see or act on an invitation. Anyone else who is
+    signed in -- say, on a shared computer -- gets a page saying the link
+    belongs to another account, with nothing about the project, and a way to
+    sign out and come back to the link as the right person.
+    """
 
     template_name = "invites/accept.html"
+    wrong_account_template = "invites/wrong_account.html"
+
+    def _invitation_or_response(self, request, code):
+        """Return ``(invitation, None)`` for the invitee, else ``(None, response)``."""
+        # Sign-in comes first, so a signed-out visitor learns nothing about
+        # whether the code exists.
+        if not request.user.is_authenticated:
+            return None, redirect_to_login(request.path)
+        invitation = get_object_or_404(
+            Invitation.objects.select_related("project"), invitation_code=code
+        )
+        if not invitation.is_addressed_to(request.user):
+            return None, render(
+                request,
+                self.wrong_account_template,
+                {"invitation_path": request.path},
+                status=403,
+            )
+        return invitation, None
 
     def get(self, request, code):
-        invitation = get_object_or_404(Invitation, invitation_code=code)
-        if not request.user.is_authenticated:
-            login_url = reverse("account_login")
-            return HttpResponseRedirect(f"{login_url}?next={request.path}")
+        invitation, response = self._invitation_or_response(request, code)
+        if response is not None:
+            return response
         return render(
             request,
             self.template_name,
@@ -1448,18 +1488,10 @@ class AcceptOrDeclineInviteView(View):
         )
 
     def post(self, request, code):
-        if not request.user.is_authenticated:
-            login_url = reverse("account_login")
-            return HttpResponseRedirect(f"{login_url}?next={request.path}")
-        invitation = get_object_or_404(Invitation, invitation_code=code)
+        invitation, response = self._invitation_or_response(request, code)
+        if response is not None:
+            return response
         action = request.POST.get("action", "accept")
-
-        # Only the invited email may act on the invitation.
-        user_email = (request.user.email or "").lower()
-        if invitation.email.lower() != user_email:
-            raise PermissionDenied(
-                "This invitation is addressed to a different account."
-            )
 
         if action == "decline":
             decline_invitation(invitation=invitation, user=request.user)
@@ -1827,7 +1859,6 @@ class RequestsView(LoginRequiredMixin, TemplateView):
 
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        user_email = (user.email or "").lower()
 
         current_q = self.request.GET.get("q", "").strip()
         current_status = self.request.GET.get("status", "")
@@ -1849,7 +1880,7 @@ class RequestsView(LoginRequiredMixin, TemplateView):
         ).values_list("project_id", flat=True)
 
         incoming_jr_qs = JoinRequest.objects.filter(project_id__in=pm_project_ids)
-        incoming_inv_qs = Invitation.objects.filter(email__iexact=user_email)
+        incoming_inv_qs = Invitation.objects.addressed_to(user)
         outgoing_jr_qs = JoinRequest.objects.filter(user=user)
         # Invitations sent out to others, for projects the user manages.
         outgoing_inv_qs = Invitation.objects.filter(project_id__in=pm_project_ids)

@@ -19,7 +19,7 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode
+from django.utils.http import url_has_allowed_host_and_scheme, urlsafe_base64_decode
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, FormView, ListView, UpdateView
 from django_countries import countries
@@ -121,8 +121,17 @@ class LoginView(FormView):
 
 @require_POST
 def logout_view(request: HttpRequest) -> HttpResponse:
-    """POST-only logout. CSRF is enforced by Django's middleware."""
+    """POST-only logout. CSRF is enforced by Django's middleware.
+
+    Honours a same-site ``next`` (e.g. the sign-in page with an invitation
+    link to return to); anything else lands on the home page.
+    """
     logout(request)
+    next_url = request.POST.get("next", "")
+    if url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return HttpResponseRedirect(next_url)
     return redirect("/")
 
 
@@ -155,7 +164,7 @@ def email_confirm(request: HttpRequest, uidb64: str, token: str) -> HttpResponse
             send_welcome_email(user, request=request)
         except Exception:  # noqa: BLE001 — email failures shouldn't block confirmation
             pass
-        messages.success(request, "Your email is confirmed. Welcome to i-connects!")
+        messages.success(request, "Your email is confirmed. Welcome to i-CONNECTS!")
     return render(request, "accounts/email_confirm.html", {"success": success})
 
 

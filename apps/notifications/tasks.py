@@ -17,8 +17,9 @@ from celery import shared_task
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from apps.core.emails import send_templated_email
-from apps.core.enums import EmailFrequency, TaskStatus
+from apps.communications.models import EmailKind
+from apps.core.emails import send_email
+from apps.core.enums import EmailFrequency
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +42,18 @@ def _recent_notifications(user, since):
 
 
 def _overdue_tasks_for(user):
-    """Return tasks past deadline and not completed that ``user`` is assigned to."""
+    """Return open tasks ``user`` is assigned to that are past *their*
+    deadline: their individual one where a Lead set it, else the task's.
+    Each carries ``my_deadline``."""
     from apps.tasks.models import Task
 
     now = timezone.now()
     return list(
-        Task.objects.filter(
-            deadline__lt=now,
-            status=TaskStatus.NOT_COMPLETED,
-            assigned_members__users=user,
-        )
+        Task.objects.filter(assigned_members__users=user)
+        .overdue_for(user, now)
         .select_related("project")
         .distinct()
-        .order_by("deadline")[:50]
+        .order_by("my_deadline")[:50]
     )
 
 
@@ -88,18 +88,21 @@ def send_digest_email_task(user_id: int, frequency: str = "daily") -> None:
         "overdue_tasks": overdue,
         "since": since,
     }
-    send_templated_email(
-        subject_template="emails/digest/subject.txt",
-        html_template="emails/digest/body.html",
-        text_template="emails/digest/body.txt",
-        context=context,
-        to=[user.email],
+    send_email(
+        "digest",
+        context,
+        [user.email],
+        kind=EmailKind.DIGEST,
     )
 
 
 @shared_task(name="notifications.broadcast_announcement")
-def broadcast_announcement_task(announcement_id: int) -> None:
-    """Email every recipient of an announcement notification."""
+def broadcast_announcement_task(announcement_id: int, sent_by_id: int | None = None) -> None:
+    """Email every recipient of an announcement notification.
+
+    ``sent_by_id`` is the admin who made the announcement, recorded in the
+    email log.
+    """
     from .models import Notification
 
     try:
@@ -120,13 +123,17 @@ def broadcast_announcement_task(announcement_id: int) -> None:
         "announcement": announcement,
         "project": announcement.project,
     }
+    sent_by = (
+        get_user_model().objects.filter(pk=sent_by_id).first() if sent_by_id else None
+    )
     for email in recipients:
-        send_templated_email(
-            subject_template="emails/announcement/subject.txt",
-            html_template="emails/announcement/body.html",
-            text_template="emails/announcement/body.txt",
-            context=context,
-            to=[email],
+        send_email(
+            "announcement",
+            context,
+            [email],
+            kind=EmailKind.ANNOUNCEMENT,
+            project=announcement.project,
+            triggered_by=sent_by,
         )
 
 

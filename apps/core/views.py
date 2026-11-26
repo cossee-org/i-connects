@@ -113,11 +113,7 @@ class AdminConsoleView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
         ctx["task_count"] = Task.objects.count()
         ctx["open_task_count"] = Task.objects.exclude(status=TaskStatus.COMPLETED).count()
         ctx["completed_task_count"] = Task.objects.filter(status=TaskStatus.COMPLETED).count()
-        ctx["overdue_task_count"] = (
-            Task.objects.exclude(status=TaskStatus.COMPLETED)
-            .filter(deadline__lt=now)
-            .count()
-        )
+        ctx["overdue_task_count"] = Task.objects.overdue(now).count()
 
         # Contributions
         ctx["contribution_count"] = ContributionRecord.objects.count()
@@ -135,3 +131,30 @@ class AdminConsoleView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
         )
 
         return ctx
+
+
+def email_preview(request, name: str | None = None):
+    """Development-only preview of every email, with made-up data.
+
+    ``/dev/emails/`` lists them; ``/dev/emails/<name>/`` shows one as its
+    recipient would see it, and ``?format=text`` shows its plain-text part.
+    Mounted only when ``DEBUG`` is on (``config/urls.py``).
+    """
+    from django.http import Http404, HttpResponse
+
+    from apps.core.email_samples import email_names, sample_context
+    from apps.core.emails import render_email
+
+    if name is None:
+        return render(request, "core/email_preview_index.html", {"names": email_names()})
+    try:
+        context = sample_context(name)
+    except KeyError:
+        raise Http404("No such email")
+    rendered = render_email(name, context)
+    if request.GET.get("format") == "text":
+        return HttpResponse(
+            f"Subject: {rendered.subject}\n\n{rendered.text}",
+            content_type="text/plain; charset=utf-8",
+        )
+    return HttpResponse(rendered.html)

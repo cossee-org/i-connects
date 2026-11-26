@@ -1,0 +1,1 @@
+{% autoescape off %}i-CONNECTS: you were assigned as Reviewer on "{{ task.name }}"{% endautoescape %}

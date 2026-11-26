@@ -1,0 +1,3 @@
+{% extends "emails/base_email.html" %}{% load email_tags %}
+{% comment %}Emails a member can turn off: task assigned, mentions, digests.{% endcomment %}
+{% block footer_reason %}{% site_url "accounts:profile" as profile_url %}You got this email because of your notification settings. {% emailpart "link" href=profile_url muted=True %}Change them in your profile.{% endemailpart %}{% endblock %}

@@ -1,8 +1,10 @@
-i-connects
-==========
+{% load email_tags %}{% if project %}{% filter upper %}{% block eyebrow %}{{ project.name }}{% endblock %}{% endfilter %}
+{% endif %}{% block heading %}{% endblock %}
 
 {% block content %}{% endblock %}
 
+{% block signoff %}The i-CONNECTS team{% endblock %}
+
 --
-You are receiving this email because of your i-connects notification settings.
-Manage preferences in your profile.
+{% block footer_reason %}{% endblock %}
+i-CONNECTS: {% site_url %}

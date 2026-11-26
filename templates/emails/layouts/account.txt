@@ -1,0 +1,2 @@
+{% extends "emails/base_email.txt" %}
+{% block footer_reason %}You got this email about your i-CONNECTS account.{% endblock %}

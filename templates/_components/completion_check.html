@@ -1,13 +1,13 @@
-{# Completed indicator — {% include "_components/completion_check.html" with task=task %}. #}
-{# Renders a check circle on completed tasks and nothing at all on the rest, so the #}
+{# Closed indicator — {% include "_components/completion_check.html" with task=task %}. #}
+{# Renders a check circle on tasks a Lead has closed and nothing at all on the rest, so the #}
 {# browsing views (Kanban, List, Calendar) can drop it in unconditionally. The icon #}
 {# stands alone in those views, so it carries its own accessible name and tooltip #}
 {# rather than relying on the colour (A11Y_GUIDE #7). Blue, so it is not read as #}
 {# the green of a part marked done in the side pane. Pass compact=True for the #}
 {# smaller calendar pills. #}
 {% if task.status == "COMPLETED" %}
-  <span class="inline-flex shrink-0 text-blue-600{% if tooltip %} hover-tooltip{% endif %}" role="img" aria-label="Complete"
-        {% if tooltip %}data-tooltip="Task marked complete"{% else %}title="Complete"{% endif %}>
+  <span class="inline-flex shrink-0 text-blue-600{% if tooltip %} hover-tooltip{% endif %}" role="img" aria-label="Closed"
+        {% if tooltip %}data-tooltip="Task closed"{% else %}title="Closed"{% endif %}>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
          class="{% if compact %}w-3 h-3{% else %}w-4 h-4{% endif %}" fill="currentColor" aria-hidden="true">
       <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm4.7-9.3a1 1 0 0 0-1.4-1.4L9 11.6 6.7 9.3a1 1 0 0 0-1.4 1.4l3 3a1 1 0 0 0 1.4 0l5-5Z" clip-rule="evenodd" />

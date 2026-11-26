@@ -98,7 +98,7 @@ def create_invitation(
     )
     if roles:
         invitation.roles.set(roles)
-    send_invitation_email(invitation)
+    send_invitation_email(invitation, triggered_by=inviter)
     log_action(
         AuditAction.INVITATION_SENT,
         actor=inviter,
@@ -125,7 +125,7 @@ def resend_invitation(*, invitation: Invitation, resender=None) -> Invitation:
     invitation.invitation_code = generate_invitation_code()
     invitation.created_at = timezone.now()
     invitation.save(update_fields=["invitation_code", "created_at"])
-    send_invitation_email(invitation)
+    send_invitation_email(invitation, triggered_by=resender)
     log_action(
         AuditAction.INVITATION_RESENT,
         actor=resender,

@@ -1,0 +1,9 @@
+{% extends "emails/layouts/account.html" %}{% load email_tags %}
+{% block preheader %}Choose a new password. The link expires in a few hours.{% endblock %}
+{% block heading %}Reset your password{% endblock %}
+{% block content %}
+<p>Hi {{ user.name|default:user.email }},</p>
+<p>We received a request to reset your i-CONNECTS password. Use the button below to choose a new one. The link expires in a few hours.</p>
+{% emailpart "button" href=reset_url link=True %}Reset password{% endemailpart %}
+{% emailpart "note" %}If you didn't ask for this, you can ignore this email. Your password won't change.{% endemailpart %}
+{% endblock %}

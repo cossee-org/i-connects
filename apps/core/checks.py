@@ -27,7 +27,7 @@ def check_default_from_email(app_configs, **kwargs):
             Warning(
                 f"DEFAULT_FROM_EMAIL={value!r} is not a valid address once "
                 "parsed. A display name must be wrapped around the address "
-                'in angle brackets, e.g. "i-connects <you@gmail.com>" — '
+                'in angle brackets, e.g. "i-CONNECTS <you@gmail.com>" — '
                 "without them, the whole string (including the space) is "
                 "read as the address, which then mismatches the SMTP-"
                 "authenticated account and gets outgoing mail rejected by "

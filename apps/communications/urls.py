@@ -34,4 +34,14 @@ urlpatterns = [
         views.TeamMessageView.as_view(),
         name="team_message",
     ),
+    path(
+        "projects/<int:project_pk>/communications/emails/",
+        views.ProjectEmailLogView.as_view(),
+        name="email_log",
+    ),
+    path(
+        "projects/<int:project_pk>/communications/emails/<int:pk>/",
+        views.ProjectEmailDetailView.as_view(),
+        name="email_detail",
+    ),
 ]
