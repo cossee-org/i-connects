@@ -4,11 +4,11 @@
   ``open-comments`` window event, whose detail (built per row by
   views._comment_state) says what to do:
 
-    mode     "mark": ticking Reviewed / Verified — optional comments, then
-             Mark reviewed / Verify posts the verdict with them;
-             "view": View comments — the comments, who left them and when,
-             and Edit comments for whoever may change them, which turns the
-             dialog into "edit"
+    mode     "edit": Add comment (or Edit comment from "view") — write the
+             comment and Save comment posts it;
+             "view": View comment — the comment, who left it and when, and
+             Edit comment for whoever may change it, which turns the dialog
+             into "edit"
     title, confirm, url, vals     the heading, the button, and the request
     author, when, comment, canEdit   what "view" shows
 
@@ -22,13 +22,13 @@
 <dialog id="comments-modal-{{ task.pk }}" class="modal"
         aria-labelledby="comments-modal-title-{{ task.pk }}"
         data-comments-modal
-        x-data="{ mode: 'mark', title: '', confirm: '', url: '', vals: {}, author: '', when: '', comment: '', canEdit: false,
+        x-data="{ mode: 'edit', title: '', confirm: '', url: '', vals: {}, author: '', when: '', comment: '', canEdit: false,
                   draft: '', error: '', busy: false,
                   open(detail) {
                     Object.assign(this, { author: '', when: '', comment: '', canEdit: false }, detail, { error: '', busy: false });
                     this.draft = this.mode === 'view' ? '' : (this.comment || '');
                     this.$el.showModal();
-                    if (this.mode === 'mark') this.$nextTick(() => this.$refs.text && this.$refs.text.focus());
+                    if (this.mode === 'edit') this.$nextTick(() => this.$refs.text && this.$refs.text.focus());
                   },
                   edit() { this.mode = 'edit'; this.draft = this.comment; this.$nextTick(() => this.$refs.text.focus()) },
                   send() {
@@ -50,7 +50,7 @@
 
     <form x-ref="form" @submit.prevent="send()" class="mt-4 flex flex-col gap-3">
       <label class="flex flex-col gap-1 text-sm" x-show="mode !== 'view'" x-cloak>
-        <span class="font-medium text-brand-navy">Comments <span class="font-normal text-brand-text/60" x-show="mode === 'mark'">(optional)</span></span>
+        <span class="font-medium text-brand-navy">Comment</span>
         <textarea x-ref="text" name="comment" rows="4" maxlength="2000"
                   class="textarea textarea-bordered w-full"
                   x-model="draft" placeholder="What did you check? Anything they should know?" data-comments-input></textarea>
@@ -58,7 +58,7 @@
       <p class="text-sm text-error" role="alert" x-show="error" x-text="error" x-cloak data-comments-error></p>
       <div class="flex flex-wrap gap-2 justify-end mt-1">
         <button type="button" class="btn btn-ghost mr-auto text-brand-navy" x-show="mode === 'view' && canEdit" x-cloak
-                @click="edit()" data-comments-edit>Edit comments</button>
+                @click="edit()" data-comments-edit>Edit comment</button>
         <button type="button" class="btn btn-ghost" @click="$el.closest('dialog').close()"
                 x-text="mode === 'view' ? 'Close' : 'Cancel'">Cancel</button>
         <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0"

@@ -70,8 +70,8 @@
           <p class="text-sm font-semibold text-brand-navy">How completion works</p>
           <ol class="mt-2 flex flex-col gap-2">
             <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished, optionally adding attachments — a note and a list of links — which only the task's reviewers and Leads can see, through View attachments. A Lead can tick Done for anyone. Untick to undo: you are asked to confirm first, and told what else it clears. A comment goes with the review or verification it was left on. The attachments can be changed until the part is reviewed or verified; after that, untick Done to change them.</li>
-            <li><span class="font-semibold text-violet-600">2. Reviewed.</span> On a task with reviewers, a reviewer or a Lead ticks Reviewed once a part is done, optionally leaving comments, which the assignee, the reviewers and Leads read through View comments. Whoever reviewed it, or a Lead, can untick it. Undoing a Done mark clears its review.</li>
-            <li><span class="font-semibold text-sky-700">3. Verified.</span> A Lead ticks Verified to confirm a member's contribution, optionally leaving comments too.{% if task.project.tracks_credit %} On this CRediT project, that is what credits them: it records their contribution under the task's CRediT role ({{ task.get_contribution_type_display }}) on Contribution Tracking — or under a member's own role, where a Lead gave them one — and nothing is credited until then.{% else %} This project doesn't track CRediT, so it records the sign-off only.{% endif %} Leads can verify one part at a time, or use Verify all marked done or Verify all marked reviewed. Undoing a Done mark clears its verification.</li>
+            <li><span class="font-semibold text-violet-600">2. Reviewed.</span> On a task with reviewers, a reviewer or a Lead ticks Reviewed once a part is done. Add comment under the tick leaves a comment on the review, which the assignee, the reviewers and Leads read through View comment. Whoever reviewed it, or a Lead, can untick it. Undoing a Done mark clears its review.</li>
+            <li><span class="font-semibold text-sky-700">3. Verified.</span> A Lead ticks Verified to confirm a member's contribution, and can add a comment under it the same way.{% if task.project.tracks_credit %} On this CRediT project, that is what credits them: it records their contribution under the task's CRediT role ({{ task.get_contribution_type_display }}) on Contribution Tracking — or under a member's own role, where a Lead gave them one — and nothing is credited until then.{% else %} This project doesn't track CRediT, so it records the sign-off only.{% endif %} Leads can verify one part at a time, or use Verify all marked done or Verify all marked reviewed. Undoing a Done mark clears its verification.</li>
             <li><span class="font-semibold text-brand-navy">4. Closed.</span> A Lead closes the whole task with Close Task at the top. Assignees can still tick their own Done and Leads can still verify after that, and reviewers can review parts marked done after it was closed. Parts already marked when the task was closed stay as they were: a review given then is locked, and a part left unreviewed can no longer be reviewed. The Done marks a Lead sets for others are locked too; a Lead re-opens the task to change any of these. A review given after the task was closed can still be unticked, and an assignee can still untick their own Done, which clears its review and verification.</li>
           </ol>
           </div>
@@ -459,7 +459,7 @@
                  data-sort-done="{% if s.done %}{% if s.done_at %}{{ s.done_at|date:'U' }}{% else %}0{% endif %}{% else %}100000000000{% endif %}"
                  data-sort-reviewed="{% if s.reviewed %}{% if s.reviewed_at %}{{ s.reviewed_at|date:'U' }}{% else %}0{% endif %}{% elif s.done %}100000000000{% else %}200000000000{% endif %}"
                  data-sort-verified="{% if s.verified %}{% if s.verified_at %}{{ s.verified_at|date:'U' }}{% else %}0{% endif %}{% elif s.done %}100000000000{% else %}200000000000{% endif %}">
-            {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs or s.shows_attachments_link or s.review_view or s.verify_view %}{% firstof "1" as has_sub %}{% else %}{% firstof "" as has_sub %}{% endif %}
+            {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs or s.shows_attachments_link or s.review_view or s.verify_view or s.review_add or s.verify_add %}{% firstof "1" as has_sub %}{% else %}{% firstof "" as has_sub %}{% endif %}
             <tr data-assignee-row="{{ s.member.pk }}"{% if has_sub %} class="completion-has-sub"{% endif %}>
               <td class="cc-name">
                 {# The name wraps beside the avatar, never below it. #}
@@ -529,9 +529,10 @@
               in it lines up across the columns, however tall the row above
               grew (a "date · by" that wraps): the custom values under the
               Assignee column — Starts, Due and the custom task type, joined
-              by middle dots — View attachments under Done, and View comments
-              under Reviewed and Verified when those verdicts carry comments
-              the viewer may read, all level with them.
+              by middle dots — View attachments under Done, and under Reviewed
+              and Verified, once ticked, Add comment (for whoever may comment)
+              or View comment (once there is one, for those who may read it),
+              all level with them.
             {% endcomment %}
             {% if has_sub %}
               <tr class="completion-sub" data-assignee-sub="{{ s.member.pk }}">
@@ -558,14 +559,14 @@
                 </td>
                 {% if show_review %}
                   <td class="cc-sub cc-review-sub">
-                    {% if s.review_view %}
-                      <div class="completion-sub-done">{% include "tasks/partials/task_comments_link.html" with view=s.review_view kind="review" %}</div>
+                    {% if s.review_view or s.review_add %}
+                      <div class="completion-sub-done">{% include "tasks/partials/task_comments_link.html" with view=s.review_view|default:s.review_add kind="review" %}</div>
                     {% endif %}
                   </td>
                 {% endif %}
                 <td class="cc-sub cc-verify-sub">
-                  {% if s.verify_view %}
-                    <div class="completion-sub-done">{% include "tasks/partials/task_comments_link.html" with view=s.verify_view kind="verify" %}</div>
+                  {% if s.verify_view or s.verify_add %}
+                    <div class="completion-sub-done">{% include "tasks/partials/task_comments_link.html" with view=s.verify_view|default:s.verify_add kind="verify" %}</div>
                   {% endif %}
                 </td>
                 <td class="cc-empty"></td>
@@ -597,7 +598,7 @@
                     <dd>
                       {% if s.reviewed %}
                         <span>{% if s.reviewed_at %}{{ s.reviewed_at|date:"M j" }} &middot; {% endif %}by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}</span>
-                        {% if s.review_view %}{% include "tasks/partials/task_comments_link.html" with view=s.review_view kind="review" details=True %}{% endif %}
+                        {% if s.review_view or s.review_add %}{% include "tasks/partials/task_comments_link.html" with view=s.review_view|default:s.review_add kind="review" details=True %}{% endif %}
                       {% elif s.review_closed %}
                         <span class="text-brand-text/60">Not reviewed</span>
                       {% elif s.done %}
@@ -611,7 +612,7 @@
                   <dd>
                     {% if s.verified %}
                       <span>{% if s.verified_at %}{{ s.verified_at|date:"M j" }} &middot; {% endif %}by {% if s.verified_by %}{{ s.verified_by.display_name }}{% else %}a former member{% endif %}</span>
-                      {% if s.verify_view %}{% include "tasks/partials/task_comments_link.html" with view=s.verify_view kind="verify" details=True %}{% endif %}
+                      {% if s.verify_view or s.verify_add %}{% include "tasks/partials/task_comments_link.html" with view=s.verify_view|default:s.verify_add kind="verify" details=True %}{% endif %}
                     {% elif s.done %}
                       <span class="text-brand-text/60">Awaiting verification</span>
                     {% else %}

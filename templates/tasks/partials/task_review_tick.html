@@ -48,12 +48,12 @@
            aria-label="{{ s.member.display_name }}: reviewed">
   {% endif %}
 {% elif s.awaiting_review and s.log and s.can_review %}
-  {# Ticking opens the comments dialog (task_comments_modal.html), which marks it. #}
-  {{ s.review_mark|json_script }}
+  {# Ticking marks it straight away; Add comment appears under it after. #}
   <input type="checkbox" class="completion-tick completion-tick-review"
-         @click.prevent="$dispatch('open-comments', JSON.parse($el.previousElementSibling.textContent))"
-         aria-haspopup="dialog"
-         data-open-comments="review"
+         hx-post="{% url 'tasks:review_log' pk=task.pk log_pk=s.log.pk %}"
+         hx-vals='{"reviewed": "1", "pane_mode": "1"}'
+         hx-target="#task-status-block"
+         hx-swap="outerHTML"
          aria-label="Mark {% if s.is_viewer %}your{% else %}{{ s.member.display_name }}'s{% endif %} part reviewed"
          title="Tick to mark reviewed">
 {% else %}

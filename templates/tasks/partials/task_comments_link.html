@@ -1,10 +1,11 @@
 {% comment %}
-  View comments: opens the comments dialog (task_comments_modal.html) to read
-  the comments left with a review or a verification, and, for whoever may,
-  edit them. Expects ``view`` (the row's ``review_view`` / ``verify_view``,
-  from views._comment_state) and ``kind`` ("review" / "verify"). Only the
-  table row's link carries ``data-view-comments``; the details row's is
-  drawn with ``details``.
+  The link under a Reviewed or Verified tick: View comment once the verdict
+  carries one (``view`` is the row's ``review_view`` / ``verify_view``), or
+  Add comment for whoever may write one (``review_add`` / ``verify_add``) —
+  both from views._comment_state, both opening the comments dialog
+  (task_comments_modal.html). ``kind`` is "review" or "verify". Only the
+  table row's link carries ``data-view-comments`` / ``data-add-comment``; the
+  details row's is drawn with ``details``.
 {% endcomment %}
 <span class="inline-flex items-center text-xs">
   {# Read by the button below as its previous sibling: keep them together. #}
@@ -13,7 +14,7 @@
           class="font-medium text-left text-brand-navy no-underline hover:text-brand-coral"
           @click="$dispatch('open-comments', JSON.parse($el.previousElementSibling.textContent))"
           aria-haspopup="dialog"
-          {% if details %}data-details-comments="{{ kind }}"{% else %}data-view-comments="{{ kind }}"{% endif %}>
-    View comments<span class="sr-only"> on the {% if kind == "review" %}review{% else %}verification{% endif %}</span>
+          {% if details %}data-details-comments="{{ kind }}"{% elif view.mode == "view" %}data-view-comments="{{ kind }}"{% else %}data-add-comment="{{ kind }}"{% endif %}>
+    {% if view.mode == "view" %}View comment{% else %}Add comment{% endif %}<span class="sr-only"> on the {% if kind == "review" %}review{% else %}verification{% endif %}</span>
   </button>
 </span>

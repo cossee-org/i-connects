@@ -1392,80 +1392,74 @@ def _comment_state(
     *, task, log, member, is_viewer, sees, project_member, is_project_manager,
     locked_review, needs_review, can_review, can_verify,
 ) -> dict:
-    """One row's comments, and what the comments dialog
-    (task_comments_modal.html) is handed for each action on them:
+    """One row's verdict comments, and what the comments dialog
+    (task_comments_modal.html) is handed for the link under each tick:
 
-    - ``review_mark`` / ``verify_mark``: ticking Reviewed / Verified opens the
-      dialog to mark it with optional comments;
-    - ``review_view`` / ``verify_view``: View comments opens it to read them,
-      with Edit for whoever may change them.
+    - ``review_add`` / ``verify_add``: Add comment, for whoever may comment
+      on a review or verification that has none yet — it opens the dialog
+      ready to write one;
+    - ``review_view`` / ``verify_view``: View comment, for the assignee, the
+      task's reviewers and Leads, once there is one — it opens the dialog to
+      read it, with Edit comment for whoever may change it.
+
+    A review's comment is the reviewer's who gave it, or a Lead's, and is
+    fixed once the review is locked on a closed task; a verification's is a
+    Lead's. Ticking Reviewed or Verified asks nothing: it marks straight away.
     """
     from django.urls import reverse
 
     whose = "your" if is_viewer else f"{member.display_name}'s"
     state = {
         "review_comment": "", "verify_comment": "",
-        "review_mark": None, "verify_mark": None,
+        "review_add": None, "verify_add": None,
         "review_view": None, "verify_view": None,
     }
     if log is None:
         return state
-    review_url = reverse("tasks:review_log", kwargs={"pk": task.pk, "log_pk": log.pk})
-    verify_url = reverse("tasks:verify_log", kwargs={"pk": task.pk, "log_pk": log.pk})
     comment_url = reverse("tasks:log_comment", kwargs={"pk": task.pk, "log_pk": log.pk})
-    if can_review and log.is_reviewable and not log.is_reviewed:
-        state["review_mark"] = {
-            "mode": "mark",
-            "title": f"Mark {whose} part reviewed",
-            "confirm": "Mark reviewed",
-            "url": review_url,
-            "vals": {"reviewed": "1", "pane_mode": "1"},
-        }
-    if can_verify:
-        state["verify_mark"] = {
-            "mode": "mark",
-            "title": f"Verify {whose} contribution",
-            "confirm": "Verify",
-            "url": verify_url,
-            "vals": {"verified": "1", "pane_mode": "1"},
-        }
+    can_comment_review = bool(
+        log.is_reviewed
+        and needs_review
+        and not locked_review
+        and (
+            is_project_manager
+            or (project_member is not None and log.reviewed_by_id == project_member.pk)
+        )
+    )
+    can_comment_verify = bool(log.is_verified and is_project_manager)
 
     def name_of(m):
         return m.display_name if m is not None else "a former member"
 
-    if sees and log.review_comment:
-        state["review_comment"] = log.review_comment
-        state["review_view"] = {
-            "mode": "view",
-            "title": f"Review comments on {whose} part",
-            "author": name_of(log.reviewed_by),
-            "when": f"{log.review_comment_updated_at:%b %-d, %Y}" if log.review_comment_updated_at else "",
-            "comment": log.review_comment,
-            "canEdit": bool(
-                needs_review
-                and not locked_review
-                and (
-                    is_project_manager
-                    or (project_member is not None and log.reviewed_by_id == project_member.pk)
-                )
-            ),
-            "confirm": "Save comments",
+    for kind, can, noun, on in (
+        ("review", can_comment_review, "Review", f"{whose} part"),
+        ("verify", can_comment_verify, "Verification", f"{whose} contribution"),
+    ):
+        comment = getattr(log, f"{kind}_comment")
+        common = {
+            "confirm": "Save comment",
             "url": comment_url,
-            "vals": {"kind": "review", "pane_mode": "1"},
+            "vals": {"kind": kind, "pane_mode": "1"},
         }
-    if sees and log.verify_comment:
-        state["verify_comment"] = log.verify_comment
-        state["verify_view"] = {
-            "mode": "view",
-            "title": f"Verification comments on {whose} contribution",
-            "author": name_of(log.verified_by),
-            "when": f"{log.verify_comment_updated_at:%b %-d, %Y}" if log.verify_comment_updated_at else "",
-            "comment": log.verify_comment,
-            "canEdit": bool(is_project_manager),
-            "confirm": "Save comments",
-            "url": comment_url,
-            "vals": {"kind": "verify", "pane_mode": "1"},
-        }
+        if comment and sees:
+            when = getattr(log, f"{kind}_comment_updated_at")
+            author = log.reviewed_by if kind == "review" else log.verified_by
+            state[f"{kind}_comment"] = comment
+            state[f"{kind}_view"] = {
+                "mode": "view",
+                "title": f"{noun} comment on {on}",
+                "author": name_of(author),
+                "when": f"{when:%b %-d, %Y}" if when else "",
+                "comment": comment,
+                "canEdit": can,
+                **common,
+            }
+        elif not comment and can:
+            state[f"{kind}_add"] = {
+                "mode": "edit",
+                "title": f"Comment on the {noun.lower()} of {on}",
+                **common,
+            }
     return state
 
 
@@ -1515,12 +1509,12 @@ def _withdraw_prompts(
     if reviewed:
         done_lines.append(
             f"The review by {name_of(reviewed_by)} is cleared"
-            + (", along with its comments." if review_comment else ".")
+            + (", along with its comment." if review_comment else ".")
         )
     if verified:
         done_lines.append(
             f"The verification by {name_of(verified_by)} is cleared"
-            + (", along with its comments" if verify_comment else "")
+            + (", along with its comment" if verify_comment else "")
             + (f", and {credited}." if tracks_credit else ".")
         )
     if has_attachments:
@@ -1541,7 +1535,7 @@ def _withdraw_prompts(
         review_title = f"Withdraw {name_of(reviewed_by)}'s review of {whose} part?"
     review_lines = []
     if review_comment:
-        review_lines.append("The review's comments go with it.")
+        review_lines.append("The review's comment goes with it.")
     review_lines.append(
         "The Done mark and any verification stay, and the part can be "
         "reviewed again."
@@ -1553,7 +1547,7 @@ def _withdraw_prompts(
         else "This project doesn't track CRediT, so only the sign-off is removed."
     ]
     if verify_comment:
-        verify_lines.append("The verification's comments go with it.")
+        verify_lines.append("The verification's comment goes with it.")
     verify_lines.append(
         "The Done mark and any review stay, and the part can be verified again."
     )
