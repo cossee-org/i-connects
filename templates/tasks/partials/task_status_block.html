@@ -281,7 +281,15 @@
         .completion-table col.completion-chevron-col { width: 6.25rem; }
         .completion-mark { display: flex; align-items: flex-start; gap: 0.625rem; min-width: 0; padding-top: 1px; }
         /* Padded so its first line centres on the 22px tick beside it. */
-        .completion-mark-note { font-size: 0.8125rem; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; padding-top: 3px; }
+        .completion-mark-note { font-size: 0.8125rem; line-height: 1.25; min-width: 0; overflow-wrap: break-word; padding-top: 3px; }
+        /* "by …" on a line of its own under the date, kept to one line and
+           cut short with "…" (the full name is its title, and in the
+           details row); left out when the assignee marked their own part. */
+        .completion-by { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.75rem; color: rgb(51 51 51 / 0.6); }
+        .completion-by-self { display: none; }
+        .completion-mark-note { overflow: hidden; }
+        /* The table's short words; the cards have room for the long ones. */
+        .cs-long { display: none; }
         .completion-tick { appearance: none; -webkit-appearance: none; margin: 0; width: 22px; height: 22px; border-radius: 999px; border: 2px solid #9aa3c7; background: #fff; position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0; }
         .completion-tick:checked::after { content: ""; position: absolute; left: 6px; top: 2px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
         .completion-tick-done:checked { background: #16a34a; border-color: #16a34a; }
@@ -306,8 +314,60 @@
         .completion-details dl { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 0.4rem 0.9rem; font-size: 0.8125rem; margin: 0; }
         .completion-details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; }
         tbody.completion-person + tbody.completion-person > tr:first-child > td { border-top: 1px solid rgb(189 203 232 / 0.6); }
+
+        /* The table measures its own width, not the screen's: the side pane
+           is narrow even on a wide monitor. */
+        .completion-wrap { container-type: inline-size; }
+        /* A little short of room: Expand shows as its arrow alone. */
+        @container (max-width: 52rem) {
+          .completion-toggle-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+          .completion-table col.completion-chevron-col { width: 2.5rem; }
+        }
+        /* Too narrow for four columns: each person becomes a card. Their
+           rows stay as they are in the page — tr turns into display:contents
+           and each cell takes a place in the card's grid — so the ticks, the
+           links and the dialogs are the very same; only the header (and with
+           it sorting) is left out. One line per stage, its name on the left. */
+        @container (max-width: 44rem) {
+          .completion-table { display: block; min-width: 0; table-layout: auto; }
+          .completion-table > thead, .completion-table > colgroup { display: none; }
+          .completion-table tbody.completion-person {
+            display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 0.6rem 0 0.5rem;
+            grid-template-areas: "name toggle" "under under" "done done" "donesub donesub" "review review" "reviewsub reviewsub" "verify verify" "verifysub verifysub" "details details";
+          }
+          .completion-table tbody.completion-person + tbody.completion-person { border-top: 1px solid rgb(189 203 232 / 0.6); }
+          .completion-table tbody.completion-person tr { display: contents; }
+          .completion-table tbody.completion-person td { display: block; border: 0; padding: 0.2rem 0.75rem; }
+          /* No rules inside a card: the table's rule between people sits on its cells. */
+          .completion-table tbody.completion-person + tbody.completion-person > tr > td { border-top: 0; }
+          .completion-table tbody.completion-person td.cc-name { grid-area: name; }
+          .completion-table tbody.completion-person td.cc-toggle { grid-area: toggle; padding-left: 0; }
+          .completion-table tbody.completion-person td.cc-under { grid-area: under; padding-top: 0; padding-bottom: 0.3rem; }
+          .completion-table tbody.completion-person td.cc-done { grid-area: done; }
+          .completion-table tbody.completion-person td.cc-review { grid-area: review; }
+          .completion-table tbody.completion-person td.cc-verify { grid-area: verify; }
+          .completion-table tbody.completion-person td.cc-done-sub { grid-area: donesub; }
+          .completion-table tbody.completion-person td.cc-review-sub { grid-area: reviewsub; }
+          .completion-table tbody.completion-person td.cc-verify-sub { grid-area: verifysub; }
+          .completion-table tbody.completion-person td.cc-details { grid-area: details; margin-top: 0.4rem; padding: 0.75rem 0.9rem 0.9rem; }
+          .completion-table tbody.completion-person td.cc-empty { display: none; }
+          /* Stage cells: the stage's name, then its tick and "date · by …". */
+          .completion-table tbody.completion-person td.cc-stage { display: grid; grid-template-columns: 4.75rem minmax(0, 1fr); align-items: start; }
+          .completion-table tbody.completion-person td.cc-stage::before { content: attr(data-label); font-size: 0.75rem; font-weight: 500; color: rgb(51 51 51 / 0.6); padding-top: 4px; }
+          /* Links under a stage line up with its "date · by". */
+          .completion-table tbody.completion-person td.cc-sub { padding-top: 0; padding-bottom: 0; padding-left: calc(0.75rem + 4.75rem); }
+          .completion-table tbody.completion-person td.cc-sub > div { padding-bottom: 0.25rem; }
+          .completion-by { display: inline; white-space: normal; font-size: inherit; color: inherit; }
+          .completion-by::before { content: " \00B7  "; }
+          .completion-by-first::before { content: none; }
+          .completion-by-self { display: inline; }
+          .cs-short { display: none; }
+          .cs-long { display: inline; }
+          /* A card has room for the word beside its arrow again. */
+          .completion-toggle-word { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+        }
       </style>
-      <div class="brand-card overflow-x-auto mt-3">
+      <div class="brand-card overflow-x-auto mt-3 completion-wrap">
       <table class="table table-sm completion-table{% if not show_review %} no-review{% endif %}" data-assignee-rows
              :class="{ 'rows-expanded': rowsExpanded }"
              x-data="{
@@ -397,52 +457,54 @@
                  data-sort-verified="{% if s.verified %}{% if s.verified_at %}{{ s.verified_at|date:'U' }}{% else %}0{% endif %}{% elif s.done %}100000000000{% else %}200000000000{% endif %}">
             {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs or s.shows_attachments_link or s.review_view or s.verify_view %}{% firstof "1" as has_sub %}{% else %}{% firstof "" as has_sub %}{% endif %}
             <tr data-assignee-row="{{ s.member.pk }}"{% if has_sub %} class="completion-has-sub"{% endif %}>
-              <td>
-                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+              <td class="cc-name">
+                {# The name wraps beside the avatar, never below it. #}
+                <div class="flex items-start gap-2 min-w-0">
                   <span class="w-6 h-6 rounded-full bg-brand-navy/80 text-white text-[11px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
-                  <span class="text-sm font-medium text-brand-navy break-words min-w-0" data-assignee-name>{{ s.member.display_name }}</span>
-                  {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
+                  <span class="text-sm font-medium text-brand-navy break-words min-w-0 pt-0.5" data-assignee-name>{{ s.member.display_name }}</span>
+                  {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0 pt-1">(you)</span>{% endif %}
                 </div>
               </td>
-              <td data-done-cell data-mark="{% if s.done %}yes{% else %}no{% endif %}">
+              <td class="cc-stage cc-done" data-label="Done" data-done-cell data-mark="{% if s.done %}yes{% else %}no{% endif %}">
                 <div class="completion-mark">
                   {% include "tasks/partials/task_done_tick.html" with s=s task=task %}
                   {% if s.done %}
-                    <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
+                    {% firstof s.member.display_name as self_name %}
+                    <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }}{% endif %}<span class="completion-by{% if not s.done_at %} completion-by-first{% endif %}{% if s.done_by_self %} completion-by-self{% endif %}" title="by {% if s.done_by_self %}{{ self_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}">by {% if s.done_by_self %}{{ self_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span></span>
                   {% else %}
-                    <span class="completion-mark-note text-brand-text/60">Not done yet</span>
+                    <span class="completion-mark-note text-brand-text/60"><span class="cs-short">Not yet</span><span class="cs-long">Not done yet</span></span>
                   {% endif %}
                 </div>
               </td>
               {% if show_review %}
-                <td data-review-cell data-mark="{% if s.reviewed %}yes{% elif s.done %}pending{% else %}none{% endif %}">
+                <td class="cc-stage cc-review" data-label="Reviewed" data-review-cell data-mark="{% if s.reviewed %}yes{% elif s.done %}pending{% else %}none{% endif %}">
                   <div class="completion-mark">
                     {% include "tasks/partials/task_review_tick.html" with s=s task=task %}
                     {% if s.reviewed %}
-                      <span class="completion-mark-note text-brand-text/80" data-review-line>{% if s.reviewed_at %}{{ s.reviewed_at|date:"M j" }} &middot; {% endif %}by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}</span>
+                      <span class="completion-mark-note text-brand-text/80" data-review-line>{% if s.reviewed_at %}{{ s.reviewed_at|date:"M j" }}{% endif %}<span class="completion-by{% if not s.reviewed_at %} completion-by-first{% endif %}" title="by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}">by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}</span></span>
                     {% elif s.review_closed %}
                       <span class="completion-mark-note text-brand-text/60">Not reviewed</span>
                     {% elif s.done %}
-                      <span class="completion-mark-note text-brand-text/60">Awaiting review</span>
+                      <span class="completion-mark-note text-brand-text/60"><span class="cs-short">Awaiting</span><span class="cs-long">Awaiting review</span></span>
                     {% else %}
                       <span class="completion-mark-note text-brand-text/60" aria-hidden="true">&mdash;</span>
                     {% endif %}
                   </div>
                 </td>
               {% endif %}
-              <td data-verify-cell data-mark="{% if s.verified %}yes{% elif s.done %}pending{% else %}none{% endif %}">
+              <td class="cc-stage cc-verify" data-label="Verified" data-verify-cell data-mark="{% if s.verified %}yes{% elif s.done %}pending{% else %}none{% endif %}">
                 <div class="completion-mark">
                   {% include "tasks/partials/task_verify_tick.html" with s=s task=task %}
                   {% if s.verified %}
-                    <span class="completion-mark-note text-brand-text/80" data-verify-line>{% if s.verified_at %}{{ s.verified_at|date:"M j" }} &middot; {% endif %}by {% if s.verified_by %}{{ s.verified_by.display_name }}{% else %}a former member{% endif %}</span>
+                    <span class="completion-mark-note text-brand-text/80" data-verify-line>{% if s.verified_at %}{{ s.verified_at|date:"M j" }}{% endif %}<span class="completion-by{% if not s.verified_at %} completion-by-first{% endif %}" title="by {% if s.verified_by %}{{ s.verified_by.display_name }}{% else %}a former member{% endif %}">by {% if s.verified_by %}{{ s.verified_by.display_name }}{% else %}a former member{% endif %}</span></span>
                   {% elif s.done %}
-                    <span class="completion-mark-note text-brand-text/60">Awaiting verification</span>
+                    <span class="completion-mark-note text-brand-text/60"><span class="cs-short">Awaiting</span><span class="cs-long">Awaiting verification</span></span>
                   {% else %}
                     <span class="completion-mark-note text-brand-text/60" aria-hidden="true">&mdash;</span>
                   {% endif %}
                 </div>
               </td>
-              <td class="px-1 text-right">
+              <td class="cc-toggle px-1 text-right">
                 <button type="button" style="margin-top: -2px"
                         class="inline-flex items-center gap-0.5 h-7 px-1.5 rounded-md text-xs font-medium text-brand-text/70 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors whitespace-nowrap"
                         @click="toggleDetails('{{ s.member.pk }}')"
@@ -450,7 +512,7 @@
                         aria-expanded="false"
                         aria-controls="completion-details-{{ task.pk }}-{{ s.member.pk }}"
                         data-details-toggle="{{ s.member.pk }}">
-                  <span x-text="openDetails['{{ s.member.pk }}'] ? 'Collapse' : 'Expand'">Expand</span><span class="sr-only"> details for {{ s.member.display_name }}</span>
+                  <span class="completion-toggle-word" x-text="openDetails['{{ s.member.pk }}'] ? 'Collapse' : 'Expand'">Expand</span><span class="sr-only"> details for {{ s.member.display_name }}</span>
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transition-transform" aria-hidden="true"
                        :class="{ 'rotate-180': openDetails['{{ s.member.pk }}'] }">
                     <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
@@ -469,7 +531,7 @@
             {% endcomment %}
             {% if has_sub %}
               <tr class="completion-sub" data-assignee-sub="{{ s.member.pk }}">
-                <td>
+                <td class="cc-under">
                   {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs %}
                     {# One line, the parts joined by a middle dot; it wraps between parts when narrow. #}
                     <div class="completion-under text-brand-text/70">
@@ -485,24 +547,24 @@
                     </div>
                   {% endif %}
                 </td>
-                <td>
+                <td class="cc-sub cc-done-sub">
                   {% if s.shows_attachments_link %}
                     <div class="completion-sub-done">{% include "tasks/partials/task_attachments_line.html" with s=s %}</div>
                   {% endif %}
                 </td>
                 {% if show_review %}
-                  <td>
+                  <td class="cc-sub cc-review-sub">
                     {% if s.review_view %}
                       <div class="completion-sub-done">{% include "tasks/partials/task_comments_link.html" with view=s.review_view kind="review" %}</div>
                     {% endif %}
                   </td>
                 {% endif %}
-                <td>
+                <td class="cc-sub cc-verify-sub">
                   {% if s.verify_view %}
                     <div class="completion-sub-done">{% include "tasks/partials/task_comments_link.html" with view=s.verify_view kind="verify" %}</div>
                   {% endif %}
                 </td>
-                <td></td>
+                <td class="cc-empty"></td>
               </tr>
             {% endif %}
             {% comment %}
@@ -515,7 +577,7 @@
             <tr class="completion-details"
                 x-show="openDetails['{{ s.member.pk }}']" x-cloak
                 data-member-details="{{ s.member.pk }}">
-              <td colspan="{% if show_review %}5{% else %}4{% endif %}">
+              <td class="cc-details" colspan="{% if show_review %}5{% else %}4{% endif %}">
                 <dl id="completion-details-{{ task.pk }}-{{ s.member.pk }}">
                   <dt class="text-brand-text/60 font-medium">Done</dt>
                   <dd>

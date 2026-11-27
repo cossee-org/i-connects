@@ -175,3 +175,38 @@ def test_confirming_posts_what_the_untick_did(client, pm_user, marked):
     assert response.status_code == 200
     log = task.task_logs.filter(assigned_to=bob).first()
     assert log.reviewed_by is None and log.verified_by is None
+
+
+@pytest.mark.django_db
+def test_the_table_turns_into_cards_when_narrow(client, pm_user, marked):
+    """The table measures its own width: under 44rem each person becomes a
+    card (the same rows, laid out by CSS), with each stage named beside its
+    tick; the table's short words and the cards' long ones are both there,
+    and "by …" sits on its own line in the table."""
+    _project, task, _lead, bob, _carol = marked
+    client.force_login(pm_user)
+    html = _block(client, task)
+
+    assert ".completion-wrap { container-type: inline-size; }" in html
+    assert "@container (max-width: 44rem)" in html
+    row = html[html.index(f'data-assignee-row="{bob.pk}"') :]
+    row = row[: row.index("</tr>")]
+    for label in ("Done", "Reviewed", "Verified"):
+        assert f'data-label="{label}"' in row
+    assert 'class="completion-by' in row
+    # Bob marked his own part: his name is left out of the table's Done cell
+    # (shown again in the card and the details row).
+    assert "completion-by-self" in row
+
+
+
+@pytest.mark.django_db
+def test_waiting_cells_carry_short_and_long_words(client, pm_user, user):
+    _project, task, _lead, [bob] = _setup(pm_user, user, deadline_days=10)
+    mark_own_done(task=task, member=bob)
+    client.force_login(pm_user)
+    html = _block(client, task)
+
+    row = html[html.index(f'data-assignee-row="{bob.pk}"') :]
+    row = row[: row.index("</tr>")]
+    assert '<span class="cs-short">Awaiting</span><span class="cs-long">Awaiting verification</span>' in row
