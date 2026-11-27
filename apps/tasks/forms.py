@@ -15,7 +15,7 @@ from apps.core.enums import (
     credit_role_choices,
 )
 from apps.projects.models import ProjectMember
-from apps.tasks.models import MAX_EVIDENCE_ITEMS, KanbanBoard, Milestone, Task, TaskLog
+from apps.tasks.models import MAX_ATTACHMENTS, KanbanBoard, Milestone, Task, TaskLog
 from apps.tasks.timezones import (
     DEFAULT_DUE_TIME,
     DEFAULT_START_TIME,
@@ -846,24 +846,24 @@ class AssigneeDatesForm(forms.Form):
 
 
 
-class EvidenceForm(forms.Form):
-    """One evidence link, checked on its own.
+class AttachmentLinkForm(forms.Form):
+    """One attachment link, checked on its own.
 
     The link must be ``http`` or ``https`` — it is shown as a link the
     task's reviewers and Leads can open, so ``javascript:``, ``data:`` and
     the like are refused outright. Blank is allowed here;
-    :class:`EvidenceListForm` drops a blank row.
+    :class:`AttachmentsForm` drops a blank row.
     """
 
-    evidence_url = forms.URLField(
+    attachment_url = forms.URLField(
         required=False,
         max_length=500,
         assume_scheme="https",
-        label="Evidence link",
+        label="Attachments link",
     )
 
-    def clean_evidence_url(self):
-        url = (self.cleaned_data.get("evidence_url") or "").strip()
+    def clean_attachment_url(self):
+        url = (self.cleaned_data.get("attachment_url") or "").strip()
         if url and not url.lower().startswith(("http://", "https://")):
             raise forms.ValidationError("Use a link that starts with http:// or https://.")
         return url
@@ -874,14 +874,14 @@ class EvidenceForm(forms.Form):
         )
 
 
-class EvidenceListForm:
-    """An assignee's evidence, as the evidence dialog posts it: one note,
+class AttachmentsForm:
+    """An assignee's attachments, as the attachments dialog posts them: one note,
     and a list of links.
 
-    The dialog sends one ``evidence_note`` and one ``evidence_url`` per row
+    The dialog sends one ``attachment_note`` and one ``attachment_url`` per row
     of its links table, in the assignee's order. Each link is checked by
-    :class:`EvidenceForm`; a blank row is dropped. At most
-    ``MAX_EVIDENCE_ITEMS`` links; the note at most 1000 characters. Errors
+    :class:`AttachmentLinkForm`; a blank row is dropped. At most
+    ``MAX_ATTACHMENTS`` links; the note at most 1000 characters. Errors
     name the row they are on ("Link 2: …"), counted as the dialog shows them.
 
     Not a Django form: the links have no fixed fields, and the dialog's rows
@@ -891,20 +891,20 @@ class EvidenceListForm:
     NOTE_LIMIT = 1000
 
     def __init__(self, data):
-        self.urls = data.getlist("evidence_url")
-        self.note = (data.get("evidence_note") or "").strip()
+        self.urls = data.getlist("attachment_url")
+        self.note = (data.get("attachment_note") or "").strip()
         self.errors: list[str] = []
-        self.evidence = None
+        self.attachments = None
 
     @staticmethod
     def present(data) -> bool:
-        """Whether ``data`` carries evidence at all. The dialog marks its post
-        with ``evidence_list``, so evidence whose links were all removed
+        """Whether ``data`` carries attachments at all. The dialog marks its post
+        with ``attachment_list``, so a post whose links were all removed
         (which sends no link fields) still counts, and clears them."""
-        return any(key in data for key in ("evidence_list", "evidence_url", "evidence_note"))
+        return any(key in data for key in ("attachment_list", "attachment_url", "attachment_note"))
 
     def is_valid(self) -> bool:
-        from apps.tasks.services import Evidence
+        from apps.tasks.services import Attachments
 
         self.errors, urls = [], []
         if len(self.note) > self.NOTE_LIMIT:
@@ -913,14 +913,14 @@ class EvidenceListForm:
                 f"(it has {len(self.note)})."
             )
         for number, url in enumerate(self.urls, start=1):
-            row = EvidenceForm({"evidence_url": url})
+            row = AttachmentLinkForm({"attachment_url": url})
             if not row.is_valid():
                 self.errors.append(f"Link {number}: {row.error_text()}")
-            elif row.cleaned_data["evidence_url"]:
-                urls.append(row.cleaned_data["evidence_url"])
-        if len(urls) > MAX_EVIDENCE_ITEMS:
-            self.errors.append(f"You can add at most {MAX_EVIDENCE_ITEMS} links.")
-        self.evidence = None if self.errors else Evidence(urls, self.note)
+            elif row.cleaned_data["attachment_url"]:
+                urls.append(row.cleaned_data["attachment_url"])
+        if len(urls) > MAX_ATTACHMENTS:
+            self.errors.append(f"You can add at most {MAX_ATTACHMENTS} links.")
+        self.attachments = None if self.errors else Attachments(urls, self.note)
         return not self.errors
 
     def error_text(self) -> str:

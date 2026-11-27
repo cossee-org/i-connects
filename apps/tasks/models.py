@@ -732,23 +732,23 @@ class TaskLog(models.Model):
             "when the assignee reverts their own done mark."
         ),
     )
-    evidence_note = models.TextField(
+    attachment_note = models.TextField(
         max_length=1000,
         blank=True,
         default="",
         help_text=(
-            "The assignee's one note on their evidence, covering every link "
-            "they gave (``evidence_items``). Shown only to the assignee, the "
+            "The assignee's one note on their attachments, covering every link "
+            "they gave (``attachments``). Shown only to the assignee, the "
             "task's reviewers and the project's Leads."
         ),
     )
-    evidence_updated_at = models.DateTimeField(
+    attachments_updated_at = models.DateTimeField(
         null=True,
         blank=True,
         help_text=(
-            "When the assignee last set or changed their evidence (the note "
-            "and the ``evidence_items`` links). Kept when they undo their "
-            "done mark, as the evidence is, so it is still there "
+            "When the assignee last set or changed their attachments (the note "
+            "and the ``attachments`` links). Kept when they undo their "
+            "done mark, as the attachments are, so they are still there "
             "if they mark it done again."
         ),
     )
@@ -791,24 +791,24 @@ class TaskLog(models.Model):
         return self.status == TaskStatus.COMPLETED
 
 
-# The most links an assignee can give as evidence for one part.
-MAX_EVIDENCE_ITEMS = 10
+# The most links an assignee can give as attachments for one part.
+MAX_ATTACHMENTS = 10
 
 
-class TaskEvidence(models.Model):
-    """One link in the evidence an assignee gave for their part.
+class TaskAttachment(models.Model):
+    """One link in the attachments an assignee gave for their part.
 
     Belongs to the assignee's TaskLog (their submission), in the order they
-    gave it; the one note covering all of them is ``TaskLog.evidence_note``.
-    The links are replaced whole each time they save their evidence
-    (``services.set_evidence``). Shown only to the assignee, the task's
+    gave it; the one note covering all of them is ``TaskLog.attachment_note``.
+    The links are replaced whole each time they save their attachments
+    (``services.set_attachments``). Shown only to the assignee, the task's
     reviewers and the project's Leads.
     """
 
     task_log = models.ForeignKey(
         TaskLog,
         on_delete=models.CASCADE,
-        related_name="evidence_items",
+        related_name="attachments",
     )
     url = models.URLField(
         max_length=500,
@@ -824,7 +824,7 @@ class TaskEvidence(models.Model):
         indexes = [models.Index(fields=["task_log"])]
 
     def __str__(self) -> str:
-        return f"Evidence #{self.pk} for TaskLog {self.task_log_id}"
+        return f"Attachments #{self.pk} for TaskLog {self.task_log_id}"
 
 
 class AssigneeDeadline(models.Model):

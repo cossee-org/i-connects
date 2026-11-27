@@ -2,8 +2,8 @@
   Task completion status block (HTMX swap target: #task-status-block).
   Context comes from views._task_status_context: task, is_project_manager,
   assignee_states (each with member, log, done, done_at, done_by,
-  done_by_self, evidence ({links, note}), evidence_count, evidence_updated_at,
-  has_evidence, own_evidence, evidence_limit, can_edit_evidence,
+  done_by_self, attachments ({links, note}), attachment_count, attachments_updated_at,
+  has_attachments, own_attachments, attachment_limit, can_edit_attachments,
   reviewed, reviewed_by, reviewed_at, awaiting_review,
   verified, verified_by, verified_at, awaiting_verification,
   can_mark_done, can_review, can_unreview, can_verify, can_unverify,
@@ -68,7 +68,7 @@
           <div id="task-completion-info">
           <p class="text-sm font-semibold text-brand-navy">How completion works</p>
           <ol class="mt-2 flex flex-col gap-2">
-            <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished, optionally adding evidence — a note and a list of links — which only the task's reviewers and Leads can see, through View evidence. A Lead can tick Done for anyone. Untick to undo. The evidence can be changed until the part is reviewed or verified; after that, untick Done to change it.</li>
+            <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished, optionally adding attachments — a note and a list of links — which only the task's reviewers and Leads can see, through View attachments. A Lead can tick Done for anyone. Untick to undo. The attachments can be changed until the part is reviewed or verified; after that, untick Done to change them.</li>
             <li><span class="font-semibold text-violet-600">2. Reviewed.</span> On a task with reviewers, a reviewer or a Lead ticks Reviewed once a part is done. Whoever reviewed it, or a Lead, can untick it. Undoing a Done mark clears its review.</li>
             <li><span class="font-semibold text-sky-700">3. Verified.</span> A Lead ticks Verified to confirm a member's contribution.{% if task.project.tracks_credit %} On this CRediT project, that is what credits them: it records their contribution under the task's CRediT role ({{ task.get_contribution_type_display }}) on Contribution Tracking — or under a member's own role, where a Lead gave them one — and nothing is credited until then.{% else %} This project doesn't track CRediT, so it records the sign-off only.{% endif %} Leads can verify one part at a time, or use Verify all marked done or Verify all marked reviewed. Undoing a Done mark clears its verification.</li>
             <li><span class="font-semibold text-brand-navy">4. Closed.</span> A Lead closes the whole task with Close Task at the top. Assignees can still tick their own Done and Leads can still verify after that, and reviewers can review parts marked done after it was closed. Parts already marked when the task was closed stay as they were: a review given then is locked, and a part left unreviewed can no longer be reviewed. The Done marks a Lead sets for others are locked too; a Lead re-opens the task to change any of these. A review given after the task was closed can still be unticked, and an assignee can still untick their own Done, which clears its review and verification.</li>
@@ -104,9 +104,9 @@
                   hx-swap="outerHTML">Undo my mark</button>
         {% else %}
           <button type="button" x-data class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                  @click="$dispatch('open-evidence')"
+                  @click="$dispatch('open-attachments')"
                   aria-haspopup="dialog"
-                  data-open-evidence>Mark my part done</button>
+                  data-open-attachments>Mark my part done</button>
         {% endif %}
       </div>
     {% endif %}
@@ -410,7 +410,7 @@
                   {% if s.done %}
                     <div class="flex flex-col gap-0.5 min-w-0">
                     <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
-                    {% include "tasks/partials/task_evidence_line.html" with s=s %}
+                    {% include "tasks/partials/task_attachments_line.html" with s=s %}
                     </div>
                   {% else %}
                     <span class="completion-mark-note text-brand-text/60">Not done yet</span>
@@ -522,7 +522,7 @@
             {% if s.tracks_credit and s.type_differs %}
               <span class="text-xs text-brand-text/60" data-member-type="own">&middot; {{ s.contribution_type_label }}</span>
             {% endif %}
-            {% if s.done %}{% include "tasks/partials/task_evidence_line.html" with s=s inline=True %}{% endif %}
+            {% if s.done %}{% include "tasks/partials/task_attachments_line.html" with s=s inline=True %}{% endif %}
             {% if s.dates_differ %}
               <span class="text-xs {% if s.overdue %}text-error{% else %}text-brand-text/60{% endif %}">&middot; {% if s.start_differs %}starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}{% endif %}{% if s.start_differs and s.deadline_differs %}, {% endif %}{% if s.deadline_differs %}due {{ s.own_deadline|in_zone:s.deadline_tz|date:"M j" }}{% endif %}{% if s.zone_differs %}{% if s.start_differs or s.deadline_differs %}, {% endif %}{{ s.zone_short }}{% endif %}</span>
             {% endif %}
@@ -532,14 +532,14 @@
     {% endif %}
   {% endif %}
   {% comment %}
-    One evidence dialog for both layouts, where evidence is read and, on the
-    viewer's own part, edited (task_evidence_modal.html). View evidence in a
-    Done cell opens it to read (task_evidence_line.html); only those allowed
-    to see a row's evidence get a button that fills it in. The viewer's own
+    One attachments dialog for both layouts, where attachments are read and, on the
+    viewer's own part, edited (task_attachments_modal.html). View attachments in a
+    Done cell opens it to read (task_attachments_line.html); only those allowed
+    to see a row's attachments get a button that fills it in. The viewer's own
     Done tick and Mark my part done open it to edit.
   {% endcomment %}
   {% if assignee_states %}
-    {% include "tasks/partials/task_evidence_modal.html" with task=task my_state=my_state my_done=my_done pane_mode=pane_mode %}
+    {% include "tasks/partials/task_attachments_modal.html" with task=task my_state=my_state my_done=my_done pane_mode=pane_mode %}
   {% endif %}
 </div>
 

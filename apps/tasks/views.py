@@ -60,7 +60,7 @@ from apps.tasks.calendar import (
 )
 from apps.tasks.forms import (
     AssigneeDatesForm,
-    EvidenceListForm,
+    AttachmentsForm,
     KanbanBoardForm,
     MilestoneForm,
     TaskAssignForm,
@@ -82,12 +82,12 @@ from apps.tasks.mixins import (
     ProjectManagerRequiredMixin,
     TaskMemberAccessMixin,
 )
-from apps.tasks.models import MAX_EVIDENCE_ITEMS, ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskEvidence, TaskLog, TaskQuerySet
+from apps.tasks.models import MAX_ATTACHMENTS, ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskAttachment, TaskLog, TaskQuerySet
 from apps.tasks.services import (
     UNSET,
-    EvidenceLocked,
+    AttachmentsLocked,
     apply_task_date_change,
-    evidence_editable,
+    attachments_editable,
     rezone_following_members,
     approve_completion,
     clear_member_dates,
@@ -95,7 +95,7 @@ from apps.tasks.services import (
     close_task,
     mark_own_done,
     mark_reviewed,
-    set_evidence,
+    set_attachments,
     move_task,
     notify_new_assignees,
     notify_new_reviewers,
@@ -1405,10 +1405,10 @@ def _task_status_context(task, *, project_member, is_project_manager):
     current = {}
     for log in task.task_logs.all():  # newest-first; first seen is current
         current.setdefault(log.assigned_to_id, log)
-    # Every current entry's evidence links, in one query rather than one per
+    # Every current entry's attachment links, in one query rather than one per
     # row; who gets to see them is decided per row below.
     links_by_log: dict[int, list[str]] = {}
-    for log_id, url in TaskEvidence.objects.filter(
+    for log_id, url in TaskAttachment.objects.filter(
         task_log_id__in=[log.pk for log in current.values()]
     ).order_by("task_log_id", "position", "id").values_list("task_log_id", "url"):
         links_by_log.setdefault(log_id, []).append(url)
@@ -1423,13 +1423,13 @@ def _task_status_context(task, *, project_member, is_project_manager):
     viewer_reviews = bool(
         needs_review and (is_project_manager or task.is_reviewer(project_member))
     )
-    # Who sees the evidence assignees attach to their parts: the task's Leads
+    # Who sees the attachments assignees add to their parts: the task's Leads
     # and its current reviewers, on every row, and each assignee on their own.
     # Read from the live reviewer set, so a reviewer taken off the task stops
     # seeing it on the next render. Independent of needs_review: a reviewer
     # on a task that asks for no review is still someone the Lead named to
     # look at the work.
-    viewer_sees_all_evidence = bool(
+    viewer_sees_all_attachments = bool(
         is_project_manager or task.is_reviewer(project_member)
     )
     locked = _marks_locked(task)
@@ -1461,18 +1461,18 @@ def _task_status_context(task, *, project_member, is_project_manager):
         log = current.get(member.id)
         done = log is not None and log.status == TaskStatus.COMPLETED
         is_viewer = bool(project_member and member.id == project_member.id)
-        # Evidence is shown on a part marked done, and only to its audience;
+        # Attachments are shown on a part marked done, and only to its audience;
         # everyone else gets empty strings, so the markup has nothing of it
         # to give away — not even that there is any.
-        sees_evidence = bool(log is not None and (viewer_sees_all_evidence or is_viewer))
-        shown_evidence = sees_evidence and done
-        # The part's evidence as the evidence dialog takes it (JSON): its
+        sees_attachments = bool(log is not None and (viewer_sees_all_attachments or is_viewer))
+        shown_attachments = sees_attachments and done
+        # The part's attachments as the attachments dialog takes them (JSON): its
         # links in order and its one note.
-        own_evidence = {
+        own_attachments = {
             "links": links_by_log.get(log.pk, []) if log is not None else [],
-            "note": log.evidence_note if log is not None else "",
+            "note": log.attachment_note if log is not None else "",
         }
-        shown = own_evidence if shown_evidence else {"links": [], "note": ""}
+        shown = own_attachments if shown_attachments else {"links": [], "note": ""}
         individual = individual_dates.get(member.id)
         own_type = own_types.get(member.id)
         effective_type = (
@@ -1532,24 +1532,24 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # The viewer's own row: they tick their own part done (and
                 # untick it) from it, even once the task is completed.
                 "is_viewer": is_viewer,
-                # The assignee's evidence for their part, for the viewers
-                # allowed to see it (see viewer_sees_all_evidence above).
+                # The assignee's attachments for their part, for the viewers
+                # allowed to see them (see viewer_sees_all_attachments above).
                 # {links, note}: empty for everyone else, so nothing of it
                 # reaches their page.
-                "evidence": shown,
-                "evidence_count": len(shown["links"]),
-                "evidence_updated_at": (
-                    log.evidence_updated_at if shown_evidence else None
+                "attachments": shown,
+                "attachment_count": len(shown["links"]),
+                "attachments_updated_at": (
+                    log.attachments_updated_at if shown_attachments else None
                 ),
-                "has_evidence": bool(shown["links"] or shown["note"]),
-                # The assignee's own: what pre-fills their evidence dialog,
+                "has_attachments": bool(shown["links"] or shown["note"]),
+                # The assignee's own: what pre-fills their attachments dialog,
                 # kept from an earlier mark they have since undone.
-                "own_evidence": own_evidence if is_viewer else {"links": [], "note": ""},
+                "own_attachments": own_attachments if is_viewer else {"links": [], "note": ""},
                 # How many items the dialog lets them add.
-                "evidence_limit": MAX_EVIDENCE_ITEMS,
+                "attachment_limit": MAX_ATTACHMENTS,
                 # Whether the viewer may change it: their own part, done, and
-                # not yet reviewed or verified (services.evidence_editable).
-                "can_edit_evidence": is_viewer and evidence_editable(log),
+                # not yet reviewed or verified (services.attachments_editable).
+                "can_edit_attachments": is_viewer and attachments_editable(log),
                 # The entry the review buttons act on. None until the member
                 # has one seeded, in which case there is nothing to review.
                 "log": log,
@@ -1772,15 +1772,15 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseBadRequest("No project membership.")
         if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
             return HttpResponseForbidden("Only an assignee can mark their part done.")
-        # The mark-done dialog sends the evidence fields; a post without them
-        # (an older page, a script) marks done and leaves the evidence alone.
-        evidence = None
-        if EvidenceListForm.present(request.POST):
-            form = EvidenceListForm(request.POST)
+        # The mark-done dialog sends the attachments fields; a post without them
+        # (an older page, a script) marks done and leaves the attachments alone.
+        attachments = None
+        if AttachmentsForm.present(request.POST):
+            form = AttachmentsForm(request.POST)
             if not form.is_valid():
                 return HttpResponseBadRequest(form.error_text())
-            evidence = form.evidence
-        mark_own_done(task=self.task, member=self.project_member, evidence=evidence)
+            attachments = form.attachments
+        mark_own_done(task=self.task, member=self.project_member, attachments=attachments)
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,
@@ -1788,16 +1788,16 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         )
 
 
-class TaskEvidenceView(LoginRequiredMixin, TaskMemberAccessMixin, View):
-    """An assignee sets, changes or clears the evidence on their done part.
+class TaskAttachmentsView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """An assignee sets, changes or clears the attachments on their done part.
 
     Only on their own part, once it is marked done and until it is reviewed
-    or verified (``services.evidence_editable``); after that the assignee
+    or verified (``services.attachments_editable``); after that the assignee
     unticks Done to change it. The post is the whole list
-    (``EvidenceListForm``), which replaces what was there; an empty one
+    (``AttachmentsForm``), which replaces what was there; an empty one
     clears it. Like marking, it stays open on a completed task.
 
-    The evidence is shown to the task's reviewers and Leads — see
+    The attachments are shown to the task's reviewers and Leads — see
     ``_task_status_context`` — and to the assignee themselves.
     """
 
@@ -1805,16 +1805,16 @@ class TaskEvidenceView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         if self.project_member is None:
             return HttpResponseBadRequest("No project membership.")
         if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
-            return HttpResponseForbidden("Only the assignee can give evidence for their part.")
-        form = EvidenceListForm(request.POST)
+            return HttpResponseForbidden("Only the assignee can add attachments for their part.")
+        form = AttachmentsForm(request.POST)
         if not form.is_valid():
             return HttpResponseBadRequest(form.error_text())
         log = self.task.task_logs.filter(
             assigned_to=self.project_member
         ).order_by("-created_at").first()
         try:
-            set_evidence(task_log=log, evidence=form.evidence, actor=self.project_member)
-        except EvidenceLocked as exc:
+            set_attachments(task_log=log, attachments=form.attachments, actor=self.project_member)
+        except AttachmentsLocked as exc:
             return HttpResponseBadRequest(str(exc))
         return _respond_status_block(
             request, self.task,

@@ -9,10 +9,10 @@
   (``s.is_viewer``, through the self-mark endpoints), and a Lead for anyone
   else (``s.can_mark_done``, posting by member so a row with no entry yet
   still works). Everyone else sees it read-only. An assignee ticking their
-  own part opens the evidence dialog (task_evidence_modal.html), which does
+  own part opens the attachments dialog (task_attachments_modal.html), which does
   the marking, so they can attach a link as they do; unticking undoes it
-  straight away. A Lead ticking for someone else attaches no evidence: that
-  is the assignee's to give.
+  straight away. A Lead ticking for someone else adds no attachments: those
+  are the assignee's to give.
 
   Once the task is marked completed, the marks a Lead sets for others
   freeze; an assignee's own box stays live, so whoever had not ticked when
@@ -34,13 +34,13 @@
            aria-label="Mark your part not done"
            title="Untick to undo">
   {% else %}
-    {# Opens the evidence dialog (task_evidence_modal.html), which marks it. #}
+    {# Opens the attachments dialog (task_attachments_modal.html), which marks it. #}
     <input type="checkbox" class="completion-tick completion-tick-done"
-           @click.prevent="$dispatch('open-evidence')"
+           @click.prevent="$dispatch('open-attachments')"
            aria-haspopup="dialog"
            aria-label="Mark your part done"
            title="Tick to mark your part done"
-           data-open-evidence>
+           data-open-attachments>
   {% endif %}
 {% elif s.can_mark_done %}
   <input type="checkbox" class="completion-tick completion-tick-done"{% if s.done %} checked{% endif %}

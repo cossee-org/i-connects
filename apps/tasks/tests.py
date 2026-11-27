@@ -2852,9 +2852,9 @@ def test_an_assignee_ticks_and_unticks_their_own_part(client, user, other_user):
 
     pane = client.get(_pane_url(project, task)).content.decode()
     own = _row_for(pane, contrib)
-    # The tick opens the evidence dialog, and the dialog posts the mark.
-    assert "(you)" in own and "Mark your part done" in own and "data-open-evidence" in own
-    assert 'data-evidence-modal="done"' in pane and complete_url in pane
+    # The tick opens the attachments dialog, and the dialog posts the mark.
+    assert "(you)" in own and "Mark your part done" in own and "data-open-attachments" in own
+    assert 'data-attachments-modal="done"' in pane and complete_url in pane
     other = _row_for(pane, lead)
     assert "hx-post" not in other and "disabled" in other
 
@@ -4376,10 +4376,10 @@ def test_a_completed_tasks_boxes_explain_the_lock_when_clicked(client, user, oth
         # for the Lead.
         assert rows.count("data-locked") == 2
         assert rows.count('@click.prevent="showLocked()"') == 2
-        # The Lead's own box stays live: it opens the evidence dialog, which
+        # The Lead's own box stays live: it opens the attachments dialog, which
         # posts the mark.
         own = _row_for(html, lead)
-        assert "data-open-evidence" in own and "data-locked" not in own
+        assert "data-open-attachments" in own and "data-locked" not in own
         assert reverse("tasks:complete", kwargs={"pk": task.pk}) in html
         row = _row_for(html, contrib)
         # Done and Reviewed still read as ticked and are locked; the part

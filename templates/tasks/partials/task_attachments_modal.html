@@ -1,15 +1,15 @@
 {% comment %}
-  The evidence dialog: where evidence is both read and edited. One dialog
+  The attachments dialog: where attachments are both read and edited. One dialog
   serves the whole Completion block.
 
-  An assignee's evidence for their part is one note and a list of links (up
-  to ``evidence_limit``). Either may be empty. The dialog shows the note on
+  An assignee's attachments for their part are one note and a list of links
+  (up to ``attachment_limit``). Either may be empty. The dialog shows the note on
   top and the links under it as a table, in both of its modes:
 
-  view   Opened by View evidence in a Done cell (task_evidence_line.html)
-         with a ``view-evidence`` window event whose detail fills it in:
+  view   Opened by View attachments in a Done cell (task_attachments_line.html)
+         with a ``view-attachments`` window event whose detail fills it in:
            name      whose part, for the title ("Bob", or "your part")
-           evidence  {links: [...], note: "..."}
+           attachments  {links: [...], note: "..."}
            updated   when it last changed, as display text, or ""
            own       whether it is the viewer's own part
            canEdit   whether the viewer may change it now (their own part,
@@ -23,47 +23,47 @@
          same host is not. Open is a plain link rather than one marked
          data-external-link: this dialog already gave the warning, so it is
          not asked a second time.
-         With ``canEdit``, Add / Edit evidence switches it to edit mode;
+         With ``canEdit``, Add / Edit attachments switches it to edit mode;
          on the viewer's own part once reviewed or verified, it says instead
          that unticking Done is the way to change it.
 
   edit   The same layout as a form: the note as a text box on top, the links
          as a table of link fields with Remove on each row, and Add another
          link under it (switched off at the limit). It starts from the
-         viewer's saved evidence each time (``my_state.own_evidence``, kept
+         viewer's saved attachments each time (``my_state.own_attachments``, kept
          from an earlier mark they may since have undone), with one empty
          link row when they have none, so Cancel discards any change: back
          to view mode when it came from there, closed when it did not.
-         Opened straight in this mode by an ``open-evidence`` window event,
+         Opened straight in this mode by an ``open-attachments`` window event,
          from the viewer's own Done tick or the plain layout's Mark my part
          done button.
 
-         Saving posts the note and one ``evidence_url`` per row, in order,
-         with ``evidence_list`` marking the post as carrying evidence even
-         with no rows (forms.EvidenceListForm). It replaces what was there;
+         Saving posts the note and one ``attachment_url`` per row, in order,
+         with ``attachment_list`` marking the post as carrying attachments even
+         with no rows (forms.AttachmentsForm). It replaces what was there;
          clearing the note and removing every link clears it. Blank rows are
          dropped. Which endpoint it posts to is decided when the block
          renders, since the block is swapped after every change:
            not done yet   "Mark done": tasks:complete, marking the part done
-                          and saving the evidence together.
-           done           "Save evidence": tasks:evidence.
+                          and saving the attachments together.
+           done           "Save attachments": tasks:attachments.
          A refusal (a link that is not http/https, too many links, a note too
-         long, or evidence frozen by a review) comes back as a 400 whose text
+         long, or attachments frozen by a review) comes back as a 400 whose text
          — naming the row, as "Link 2: …" — is shown above the buttons.
 
   The edit mode is only rendered for an assignee (``my_state``). Who sees
-  the evidence is decided before this point: View evidence is only drawn for
+  the attachments is decided before this point: View attachments is only drawn for
   the assignee, the task's reviewers and its Leads.
 
   Expects ``task``, ``my_state`` (the viewer's own assignee state, or None),
   ``my_done`` and ``pane_mode``.
 {% endcomment %}
-<dialog id="evidence-modal-{{ task.pk }}" class="modal"
-        aria-labelledby="evidence-modal-title-{{ task.pk }}"
-        data-evidence-modal{% if my_state %}="{% if my_done %}edit{% else %}done{% endif %}"{% endif %}
+<dialog id="attachments-modal-{{ task.pk }}" class="modal"
+        aria-labelledby="attachments-modal-title-{{ task.pk }}"
+        data-attachments-modal{% if my_state %}="{% if my_done %}edit{% else %}done{% endif %}"{% endif %}
         x-data="{ mode: 'view', origin: 'view',
                   name: '', note: '', links: [], updated: '', own: false, canEdit: false,
-                  draft: { note: '', rows: [] }, next: 0, limit: {{ my_state.evidence_limit|default:10 }}, error: '',
+                  draft: { note: '', rows: [] }, next: 0, limit: {{ my_state.attachment_limit|default:10 }}, error: '',
                   isExternal(url) {
                     if (!url) return false
                     try { return new URL(url, location.href).host !== location.host }
@@ -84,21 +84,21 @@
                     this.draft.rows.push(this.row())
                     // The new row's link field, for keyboard users; $root is
                     // this dialog ($el would be the button clicked).
-                    this.$nextTick(() => [...this.$root.querySelectorAll('[data-evidence-url]')].pop()?.focus())
+                    this.$nextTick(() => [...this.$root.querySelectorAll('[data-attachments-url]')].pop()?.focus())
                   } }"
-        @view-evidence.window="Object.assign($data, { name: '', updated: '', own: false, canEdit: false }, $event.detail, { note: $event.detail.evidence.note, links: $event.detail.evidence.links, mode: 'view', error: '' }); $el.showModal()"
-        @open-evidence.window="Object.assign($data, { name: 'your part', own: true, canEdit: true }); edit('direct'); $el.showModal()"
+        @view-attachments.window="Object.assign($data, { name: '', updated: '', own: false, canEdit: false }, $event.detail, { note: $event.detail.attachments.note, links: $event.detail.attachments.links, mode: 'view', error: '' }); $el.showModal()"
+        @open-attachments.window="Object.assign($data, { name: 'your part', own: true, canEdit: true }); edit('direct'); $el.showModal()"
         @keydown.escape.stop>
   {% if my_state %}
-    {# The viewer's saved evidence, read by edit(). json_script escapes it for a <script> element. #}
-    <div x-ref="seed" hidden>{{ my_state.own_evidence|json_script }}</div>
+    {# The viewer's saved attachments, read by edit(). json_script escapes them for a <script> element. #}
+    <div x-ref="seed" hidden>{{ my_state.own_attachments|json_script }}</div>
   {% endif %}
   <div class="modal-box max-w-2xl bg-base-100 border border-brand-light/60 p-0">
     <div class="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-brand-light/60">
-      <h2 id="evidence-modal-title-{{ task.pk }}" class="text-xl font-semibold text-brand-navy">
-        <span x-show="mode === 'view'">Evidence for <span x-text="name"></span></span>
+      <h2 id="attachments-modal-title-{{ task.pk }}" class="text-xl font-semibold text-brand-navy">
+        <span x-show="mode === 'view'">Attachments for <span x-text="name"></span></span>
         {% if my_state %}
-          <span x-show="mode === 'edit'" x-cloak>{% if my_done %}Evidence for your part{% else %}Mark your part done{% endif %}</span>
+          <span x-show="mode === 'edit'" x-cloak>{% if my_done %}Attachments for your part{% else %}Mark your part done{% endif %}</span>
         {% endif %}
       </h2>
       <form method="dialog">
@@ -107,17 +107,17 @@
     </div>
 
     {# ---- View ---- #}
-    <div x-show="mode === 'view'" data-evidence-view>
+    <div x-show="mode === 'view'" data-attachments-view>
       <div class="px-6 py-5 text-brand-text max-h-[60vh] overflow-y-auto">
-        <section x-show="note" data-evidence-view-note-section>
+        <section x-show="note" data-attachments-view-note-section>
           <h3 class="text-sm font-medium text-brand-text/70">Note</h3>
           <p class="mt-1 rounded-lg bg-brand-lighter/60 px-3 py-2 text-sm text-brand-text whitespace-pre-line break-words"
-             x-text="note" data-evidence-view-note></p>
+             x-text="note" data-attachments-view-note></p>
         </section>
 
-        <section x-show="links.length" :class="note && 'mt-5'" data-evidence-view-links>
+        <section x-show="links.length" :class="note && 'mt-5'" data-attachments-view-links>
           <h3 class="text-sm font-medium text-brand-text/70">Links</h3>
-          <p x-show="externalCount" class="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-evidence-external>
+          <p x-show="externalCount" class="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-attachments-external>
             {# arrow-top-right-on-square #}
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
@@ -127,7 +127,7 @@
                            : 'The link marked External goes outside i-CONNECTS. Opening it will take you away from i-CONNECTS. We are not responsible for the content of external websites.'"></span>
           </p>
           <div class="mt-2 rounded-lg border border-brand-light/60 overflow-hidden">
-            <table class="table table-sm" data-evidence-view-table>
+            <table class="table table-sm" data-attachments-view-table>
               <thead class="bg-brand-lighter text-brand-navy">
                 <tr>
                   <th scope="col" class="w-10">#</th>
@@ -137,18 +137,18 @@
               </thead>
               <tbody>
                 <template x-for="(url, i) in links" :key="i">
-                  <tr data-evidence-view-row>
+                  <tr data-attachments-view-row>
                     <td class="text-brand-text/60 align-top" x-text="i + 1"></td>
                     <td class="align-top">
-                      <span class="text-sm text-brand-navy break-all" x-text="url" data-evidence-view-url></span>
+                      <span class="text-sm text-brand-navy break-all" x-text="url" data-attachments-view-url></span>
                       <span x-show="isExternal(url)"
                             class="ml-1 inline-flex items-center rounded px-1.5 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-semibold uppercase tracking-wide leading-none align-middle"
-                            data-evidence-external-tag>External</span>
+                            data-attachments-external-tag>External</span>
                     </td>
                     <td class="align-top text-right">
                       <a :href="url" target="_blank" rel="noopener noreferrer nofollow"
                          class="btn btn-xs btn-primary"
-                         data-evidence-open>Open<span class="sr-only"> link <span x-text="i + 1"></span> (opens in a new tab)</span></a>
+                         data-attachments-open>Open<span class="sr-only"> link <span x-text="i + 1"></span> (opens in a new tab)</span></a>
                     </td>
                   </tr>
                 </template>
@@ -157,12 +157,12 @@
           </div>
         </section>
 
-        <p x-show="!note && !links.length" class="text-sm text-brand-text/70" data-evidence-view-empty>
-          You haven't added any evidence for your part yet. Only this task's reviewers and the project's Leads will see it.
+        <p x-show="!note && !links.length" class="text-sm text-brand-text/70" data-attachments-view-empty>
+          You haven't added any attachments for your part yet. Only this task's reviewers and the project's Leads will see them.
         </p>
         <p x-show="updated" class="mt-4 text-xs text-brand-text/60">Last updated <span x-text="updated"></span></p>
-        <p x-show="own && !canEdit && (note || links.length)" class="mt-4 text-xs text-brand-text/60" data-evidence-view-locked>
-          Your part has been reviewed or verified, so this evidence is locked. To change it, untick Done (that clears the review and verification) and mark it done again.
+        <p x-show="own && !canEdit && (note || links.length)" class="mt-4 text-xs text-brand-text/60" data-attachments-view-locked>
+          Your part has been reviewed or verified, so these attachments are locked. To change them, untick Done (that clears the review and verification) and mark it done again.
         </p>
       </div>
       <div class="flex flex-wrap gap-2 justify-end px-6 py-4 border-t border-brand-light/60">
@@ -170,8 +170,8 @@
           <button type="button" x-show="canEdit" x-cloak
                   class="btn btn-ghost mr-auto text-brand-navy"
                   @click="edit('view')"
-                  data-edit-evidence
-                  x-text="note || links.length ? 'Edit evidence' : 'Add evidence'">Edit evidence</button>
+                  data-edit-attachments
+                  x-text="note || links.length ? 'Edit attachments' : 'Add attachments'">Edit attachments</button>
         {% endif %}
         <button type="button"
                 class="btn bg-base-100 border-brand-light text-brand-text hover:bg-brand-lighter hover:border-brand-light"
@@ -182,15 +182,15 @@
     {# ---- Edit (the viewer's own part only) ---- #}
     {% if my_state %}
       <form method="post" x-show="mode === 'edit'" x-cloak
-            action="{% if my_done %}{% url 'tasks:evidence' pk=task.pk %}{% else %}{% url 'tasks:complete' pk=task.pk %}{% endif %}"
-            hx-post="{% if my_done %}{% url 'tasks:evidence' pk=task.pk %}{% else %}{% url 'tasks:complete' pk=task.pk %}{% endif %}"
+            action="{% if my_done %}{% url 'tasks:attachments' pk=task.pk %}{% else %}{% url 'tasks:complete' pk=task.pk %}{% endif %}"
+            hx-post="{% if my_done %}{% url 'tasks:attachments' pk=task.pk %}{% else %}{% url 'tasks:complete' pk=task.pk %}{% endif %}"
             {% if pane_mode %}hx-vals='{"pane_mode": "1"}'{% endif %}
             hx-target="#task-status-block"
             hx-swap="outerHTML"
             @htmx:response-error.camel="error = $event.detail.xhr.responseText"
-            data-evidence-form>
+            data-attachments-form>
         {% csrf_token %}
-        <input type="hidden" name="evidence_list" value="1">
+        <input type="hidden" name="attachment_list" value="1">
         <div class="px-6 py-5 text-brand-text max-h-[60vh] overflow-y-auto">
           <p class="text-sm text-brand-text/80">
             Optionally add a note and links to your work, such as documents,
@@ -199,15 +199,15 @@
           </p>
           <label class="mt-4 flex flex-col gap-1 text-sm">
             <span class="font-medium text-brand-navy">Note <span class="font-normal text-brand-text/60">(optional)</span></span>
-            <textarea name="evidence_note" maxlength="1000" rows="3"
+            <textarea name="attachment_note" maxlength="1000" rows="3"
                       class="textarea textarea-bordered w-full"
                       x-model="draft.note"
-                      data-evidence-note-input></textarea>
+                      data-attachments-note-input></textarea>
           </label>
 
           <h3 class="mt-5 text-sm font-medium text-brand-navy">Links <span class="font-normal text-brand-text/60">(optional)</span></h3>
           <div class="mt-2 rounded-lg border border-brand-light/60 overflow-hidden" x-show="draft.rows.length">
-            <table class="table table-sm" data-evidence-edit-table>
+            <table class="table table-sm" data-attachments-edit-table>
               <thead class="bg-brand-lighter text-brand-navy">
                 <tr>
                   <th scope="col" class="w-10">#</th>
@@ -217,39 +217,39 @@
               </thead>
               <tbody>
                 <template x-for="(r, i) in draft.rows" :key="r.key">
-                  <tr data-evidence-row>
+                  <tr data-attachments-row>
                     <td class="text-brand-text/60" x-text="i + 1"></td>
                     <td>
-                      <input type="url" name="evidence_url" maxlength="500"
+                      <input type="url" name="attachment_url" maxlength="500"
                              class="input input-bordered input-sm w-full"
                              placeholder="https://"
                              :aria-label="'Link ' + (i + 1)"
                              x-model="r.url"
-                             data-evidence-url>
+                             data-attachments-url>
                     </td>
                     <td class="text-right">
                       <button type="button" class="btn btn-ghost btn-xs text-error"
                               @click="draft.rows.splice(i, 1)"
-                              data-evidence-remove>Remove<span class="sr-only" x-text="' link ' + (i + 1)"></span></button>
+                              data-attachments-remove>Remove<span class="sr-only" x-text="' link ' + (i + 1)"></span></button>
                     </td>
                   </tr>
                 </template>
               </tbody>
             </table>
           </div>
-          <p x-show="!draft.rows.length" class="mt-2 text-sm text-brand-text/60" data-evidence-rows-empty>No links.</p>
+          <p x-show="!draft.rows.length" class="mt-2 text-sm text-brand-text/60" data-attachments-rows-empty>No links.</p>
           <div class="mt-2 flex items-center gap-2">
             <button type="button" class="btn btn-ghost btn-sm text-brand-navy"
                     @click="add()" :disabled="draft.rows.length >= limit"
-                    data-evidence-add>+ Add another link</button>
+                    data-attachments-add>+ Add another link</button>
             <span class="text-xs text-brand-text/60" x-text="draft.rows.length + ' of ' + limit"></span>
           </div>
-          <p class="mt-3 text-sm text-error" role="alert" x-show="error" x-text="error" x-cloak data-evidence-error></p>
+          <p class="mt-3 text-sm text-error" role="alert" x-show="error" x-text="error" x-cloak data-attachments-error></p>
         </div>
         <div class="flex flex-wrap gap-2 justify-end px-6 py-4 border-t border-brand-light/60">
           <button type="button" class="btn btn-ghost" @click="cancel()">Cancel</button>
           <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
-            {% if my_done %}Save evidence{% else %}Mark done{% endif %}
+            {% if my_done %}Save attachments{% else %}Mark done{% endif %}
           </button>
         </div>
       </form>
