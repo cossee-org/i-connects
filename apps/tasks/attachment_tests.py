@@ -508,7 +508,6 @@ def test_the_dialog_shows_the_note_above_a_table_of_links(client, setup):
     client.force_login(s["users"]["alice"])
     view = _modal(_pane(client, s))
     view = view[view.index("data-attachments-view>") :]
-    assert view.index("data-attachments-view-note") < view.index("data-attachments-view-table")
     assert 'x-for="(url, i) in links"' in view and "data-attachments-view-row" in view
     assert "data-attachments-external-tag" in view
     # The leaving notice sits behind an (i) beside the Links heading, offered
@@ -521,8 +520,14 @@ def test_the_dialog_shows_the_note_above_a_table_of_links(client, setup):
         "from i-CONNECTS. We are not responsible for the content of external websites."
     ) in info
     assert links.index(">Links</h3>") < links.index("data-attachments-external-info")
-    # Last updated is the first line under the header.
-    assert view.index("data-attachments-updated") < view.index("data-attachments-view-note")
+    # The note comes after the links.
+    assert view.index("data-attachments-view-table") < view.index("data-attachments-view-note")
+    # An external link's button says so, with an icon; others say Open.
+    assert "isExternal(url) ? 'Open external' : 'Open'" in view
+    assert '<svg x-show="isExternal(url)"' in view
+    # Last updated is in the header, under the title, before the body.
+    modal = _modal(_pane(client, s))
+    assert modal.index("attachments-modal-title") < modal.index("data-attachments-updated") < modal.index("data-attachments-view>")
     assert 'target="_blank" rel="noopener noreferrer nofollow"' in view
     assert "data-attachments-open" in view
 

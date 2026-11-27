@@ -14,9 +14,11 @@
            own       whether it is the viewer's own part
            canEdit   whether the viewer may change it now (their own part,
                      done, not yet reviewed or verified)
-         When it last changed is the first line under the header.
+         When it last changed is shown under the title, in the header.
+         The links come first, the note under them.
          Each row of the table numbers a link, shows it in full so the
-         reader sees where it really goes, and has its own Open (a new tab,
+         reader sees where it really goes, and has its own Open — Open external, with an external-link
+         icon, on a link to another host — (a new tab,
          without the opener or the referrer). A link to another host gets an
          External tag, and when any has one an (i) beside the Links heading
          opens the same notice as the site's "Leaving i-CONNECTS" dialog
@@ -96,12 +98,16 @@
   {% endif %}
   <div class="modal-box max-w-2xl bg-base-100 border border-brand-light/60 p-0">
     <div class="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-brand-light/60">
-      <h2 id="attachments-modal-title-{{ task.pk }}" class="text-xl font-semibold text-brand-navy">
-        <span x-show="mode === 'view'">Attachments for <span x-text="name"></span></span>
-        {% if my_state %}
-          <span x-show="mode === 'edit'" x-cloak>{% if my_done %}Attachments for your part{% else %}Mark your part done{% endif %}</span>
-        {% endif %}
-      </h2>
+      <div class="min-w-0">
+        <h2 id="attachments-modal-title-{{ task.pk }}" class="text-xl font-semibold text-brand-navy">
+          <span x-show="mode === 'view'">Attachments for <span x-text="name"></span></span>
+          {% if my_state %}
+            <span x-show="mode === 'edit'" x-cloak>{% if my_done %}Attachments for your part{% else %}Mark your part done{% endif %}</span>
+          {% endif %}
+        </h2>
+        {# When they last changed, under the title, above the header's rule. #}
+        <p x-show="mode === 'view' && updated" class="mt-1 text-xs text-brand-text/60" data-attachments-updated>Last updated <span x-text="updated"></span></p>
+      </div>
       <form method="dialog">
         <button class="btn btn-sm btn-circle btn-ghost -mr-2 -mt-1" aria-label="Close">&times;</button>
       </form>
@@ -110,15 +116,7 @@
     {# ---- View ---- #}
     <div x-show="mode === 'view'" data-attachments-view>
       <div class="px-6 py-5 text-brand-text max-h-[60vh] overflow-y-auto">
-        {# When they last changed, first thing under the header. #}
-        <p x-show="updated" class="-mt-1 mb-4 text-xs text-brand-text/60" data-attachments-updated>Last updated <span x-text="updated"></span></p>
-        <section x-show="note" data-attachments-view-note-section>
-          <h3 class="text-sm font-medium text-brand-text/70">Note</h3>
-          <p class="mt-1 rounded-lg bg-brand-lighter/60 px-3 py-2 text-sm text-brand-text whitespace-pre-line break-words"
-             x-text="note" data-attachments-view-note></p>
-        </section>
-
-        <section x-show="links.length" :class="note && 'mt-5'" data-attachments-view-links>
+        <section x-show="links.length" data-attachments-view-links>
           {% comment %}
             The (i) beside the heading carries the site's leaving notice, shown
             only when a link here goes to another host (tagged External in
@@ -155,7 +153,7 @@
                 <tr>
                   <th scope="col" class="w-10">#</th>
                   <th scope="col">Link</th>
-                  <th scope="col" class="w-20"><span class="sr-only">Open</span></th>
+                  <th scope="col" class="w-36"><span class="sr-only">Open</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -170,14 +168,28 @@
                     </td>
                     <td class="align-top text-right">
                       <a :href="url" target="_blank" rel="noopener noreferrer nofollow"
-                         class="btn btn-xs btn-primary"
-                         data-attachments-open>Open<span class="sr-only"> link <span x-text="i + 1"></span> (opens in a new tab)</span></a>
+                         class="btn btn-xs btn-primary gap-1 flex-nowrap whitespace-nowrap"
+                         :data-attachments-open="isExternal(url) ? 'external' : 'internal'"
+                         data-attachments-open>
+                        <span x-text="isExternal(url) ? 'Open external' : 'Open'">Open</span>
+                        {# arrow-top-right-on-square, on an external link only #}
+                        <svg x-show="isExternal(url)" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3 shrink-0" aria-hidden="true">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                        </svg>
+                        <span class="sr-only"> link <span x-text="i + 1"></span> (opens in a new tab)</span>
+                      </a>
                     </td>
                   </tr>
                 </template>
               </tbody>
             </table>
           </div>
+        </section>
+
+        <section x-show="note" :class="links.length && 'mt-5'" data-attachments-view-note-section>
+          <h3 class="text-sm font-medium text-brand-text/70">Note</h3>
+          <p class="mt-1 rounded-lg bg-brand-lighter/60 px-3 py-2 text-sm text-brand-text whitespace-pre-line break-words"
+             x-text="note" data-attachments-view-note></p>
         </section>
 
         <p x-show="!note && !links.length" class="text-sm text-brand-text/70" data-attachments-view-empty>
