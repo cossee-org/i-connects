@@ -1405,15 +1405,13 @@ def _task_status_context(task, *, project_member, is_project_manager):
     current = {}
     for log in task.task_logs.all():  # newest-first; first seen is current
         current.setdefault(log.assigned_to_id, log)
-    # Every current entry's evidence items, in one query rather than one per
+    # Every current entry's evidence links, in one query rather than one per
     # row; who gets to see them is decided per row below.
-    evidence_by_log: dict[int, list[dict]] = {}
-    for item in TaskEvidence.objects.filter(
+    links_by_log: dict[int, list[str]] = {}
+    for log_id, url in TaskEvidence.objects.filter(
         task_log_id__in=[log.pk for log in current.values()]
-    ).order_by("task_log_id", "position", "id"):
-        evidence_by_log.setdefault(item.task_log_id, []).append(
-            {"url": item.url, "note": item.note}
-        )
+    ).order_by("task_log_id", "position", "id").values_list("task_log_id", "url"):
+        links_by_log.setdefault(log_id, []).append(url)
     assignees = list(task.assigned_members.all())
     # A Lead can review as well as the task's named reviewers, and a Lead can
     # also set or clear anyone's done mark — the two per-member actions they
@@ -1468,8 +1466,13 @@ def _task_status_context(task, *, project_member, is_project_manager):
         # to give away — not even that there is any.
         sees_evidence = bool(log is not None and (viewer_sees_all_evidence or is_viewer))
         shown_evidence = sees_evidence and done
-        own_items = evidence_by_log.get(log.pk, []) if log is not None else []
-        shown_evidence_items = own_items if shown_evidence else []
+        # The part's evidence as the evidence dialog takes it (JSON): its
+        # links in order and its one note.
+        own_evidence = {
+            "links": links_by_log.get(log.pk, []) if log is not None else [],
+            "note": log.evidence_note if log is not None else "",
+        }
+        shown = own_evidence if shown_evidence else {"links": [], "note": ""}
         individual = individual_dates.get(member.id)
         own_type = own_types.get(member.id)
         effective_type = (
@@ -1531,17 +1534,17 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 "is_viewer": is_viewer,
                 # The assignee's evidence for their part, for the viewers
                 # allowed to see it (see viewer_sees_all_evidence above).
-                # A list of {url, note}, in the assignee's order; empty for
-                # everyone else, so nothing of it reaches their page.
-                "evidence_items": shown_evidence_items,
-                "evidence_count": len(shown_evidence_items),
+                # {links, note}: empty for everyone else, so nothing of it
+                # reaches their page.
+                "evidence": shown,
+                "evidence_count": len(shown["links"]),
                 "evidence_updated_at": (
                     log.evidence_updated_at if shown_evidence else None
                 ),
-                "has_evidence": bool(shown_evidence_items),
+                "has_evidence": bool(shown["links"] or shown["note"]),
                 # The assignee's own: what pre-fills their evidence dialog,
                 # kept from an earlier mark they have since undone.
-                "own_evidence_items": own_items if is_viewer else [],
+                "own_evidence": own_evidence if is_viewer else {"links": [], "note": ""},
                 # How many items the dialog lets them add.
                 "evidence_limit": MAX_EVIDENCE_ITEMS,
                 # Whether the viewer may change it: their own part, done, and
@@ -1776,7 +1779,7 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             form = EvidenceListForm(request.POST)
             if not form.is_valid():
                 return HttpResponseBadRequest(form.error_text())
-            evidence = form.items
+            evidence = form.evidence
         mark_own_done(task=self.task, member=self.project_member, evidence=evidence)
         return _respond_status_block(
             request, self.task,
@@ -1810,7 +1813,7 @@ class TaskEvidenceView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             assigned_to=self.project_member
         ).order_by("-created_at").first()
         try:
-            set_evidence(task_log=log, items=form.items, actor=self.project_member)
+            set_evidence(task_log=log, evidence=form.evidence, actor=self.project_member)
         except EvidenceLocked as exc:
             return HttpResponseBadRequest(str(exc))
         return _respond_status_block(

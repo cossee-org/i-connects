@@ -847,11 +847,12 @@ class AssigneeDatesForm(forms.Form):
 
 
 class EvidenceForm(forms.Form):
-    """One evidence item: a link and a short note.
+    """One evidence link, checked on its own.
 
-    Both optional here; :class:`EvidenceListForm` drops a row with neither. The link must be ``http`` or ``https`` — it is rendered as
-    a clickable link for the task's reviewers and Leads, so ``javascript:``,
-    ``data:`` and the like are refused outright.
+    The link must be ``http`` or ``https`` — it is shown as a link the
+    task's reviewers and Leads can open, so ``javascript:``, ``data:`` and
+    the like are refused outright. Blank is allowed here;
+    :class:`EvidenceListForm` drops a blank row.
     """
 
     evidence_url = forms.URLField(
@@ -860,12 +861,6 @@ class EvidenceForm(forms.Form):
         assume_scheme="https",
         label="Evidence link",
     )
-    evidence_note = forms.CharField(
-        required=False,
-        max_length=1000,
-        label="Note",
-        widget=forms.Textarea,
-    )
 
     def clean_evidence_url(self):
         url = (self.cleaned_data.get("evidence_url") or "").strip()
@@ -873,64 +868,59 @@ class EvidenceForm(forms.Form):
             raise forms.ValidationError("Use a link that starts with http:// or https://.")
         return url
 
-    def evidence(self) -> tuple[str, str]:
-        """The cleaned ``(url, note)`` pair, for the services."""
-        return (
-            self.cleaned_data.get("evidence_url") or "",
-            (self.cleaned_data.get("evidence_note") or "").strip(),
-        )
-
     def error_text(self) -> str:
-        """Every error on one line, as the dialog shows a refusal's text."""
         return " ".join(
             str(message) for errors in self.errors.values() for message in errors
         )
 
 
 class EvidenceListForm:
-    """An assignee's whole evidence list, as the evidence dialog posts it.
+    """An assignee's evidence, as the evidence dialog posts it: one note,
+    and a list of links.
 
-    The dialog sends one ``evidence_url`` and one ``evidence_note`` per row,
-    in the assignee's order, so the two lists pair up by position. Each row
-    is checked by :class:`EvidenceForm`; a row with neither a link nor a note
-    is dropped. At most ``MAX_EVIDENCE_ITEMS`` rows may hold anything. Errors
-    name the row they are on ("Item 2: …"), counted as the dialog shows them.
+    The dialog sends one ``evidence_note`` and one ``evidence_url`` per row
+    of its links table, in the assignee's order. Each link is checked by
+    :class:`EvidenceForm`; a blank row is dropped. At most
+    ``MAX_EVIDENCE_ITEMS`` links; the note at most 1000 characters. Errors
+    name the row they are on ("Link 2: …"), counted as the dialog shows them.
 
-    Not a Django form: a list of rows has no fixed fields, and the dialog's
-    rows come and go in the browser without a formset's management form.
+    Not a Django form: the links have no fixed fields, and the dialog's rows
+    come and go in the browser without a formset's management form.
     """
 
+    NOTE_LIMIT = 1000
+
     def __init__(self, data):
-        urls = data.getlist("evidence_url")
-        notes = data.getlist("evidence_note")
-        size = max(len(urls), len(notes))
-        urls += [""] * (size - len(urls))
-        notes += [""] * (size - len(notes))
-        self.rows = list(zip(urls, notes))
+        self.urls = data.getlist("evidence_url")
+        self.note = (data.get("evidence_note") or "").strip()
         self.errors: list[str] = []
-        self.items: list[tuple[str, str]] = []
+        self.evidence = None
 
     @staticmethod
     def present(data) -> bool:
-        """Whether ``data`` carries an evidence list at all. The dialog marks
-        its post with ``evidence_list``, so a list whose rows were all removed
-        (which sends no row fields) still counts, and clears the evidence."""
+        """Whether ``data`` carries evidence at all. The dialog marks its post
+        with ``evidence_list``, so evidence whose links were all removed
+        (which sends no link fields) still counts, and clears them."""
         return any(key in data for key in ("evidence_list", "evidence_url", "evidence_note"))
 
     def is_valid(self) -> bool:
-        self.errors, self.items = [], []
-        for number, (url, note) in enumerate(self.rows, start=1):
-            row = EvidenceForm({"evidence_url": url, "evidence_note": note})
-            if not row.is_valid():
-                self.errors.append(f"Item {number}: {row.error_text()}")
-                continue
-            item_url, item_note = row.evidence()
-            if item_url or item_note:
-                self.items.append((item_url, item_note))
-        if len(self.items) > MAX_EVIDENCE_ITEMS:
+        from apps.tasks.services import Evidence
+
+        self.errors, urls = [], []
+        if len(self.note) > self.NOTE_LIMIT:
             self.errors.append(
-                f"You can add at most {MAX_EVIDENCE_ITEMS} evidence items."
+                f"Note: Ensure this value has at most {self.NOTE_LIMIT} characters "
+                f"(it has {len(self.note)})."
             )
+        for number, url in enumerate(self.urls, start=1):
+            row = EvidenceForm({"evidence_url": url})
+            if not row.is_valid():
+                self.errors.append(f"Link {number}: {row.error_text()}")
+            elif row.cleaned_data["evidence_url"]:
+                urls.append(row.cleaned_data["evidence_url"])
+        if len(urls) > MAX_EVIDENCE_ITEMS:
+            self.errors.append(f"You can add at most {MAX_EVIDENCE_ITEMS} links.")
+        self.evidence = None if self.errors else Evidence(urls, self.note)
         return not self.errors
 
     def error_text(self) -> str:

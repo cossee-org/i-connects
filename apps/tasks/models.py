@@ -732,13 +732,23 @@ class TaskLog(models.Model):
             "when the assignee reverts their own done mark."
         ),
     )
+    evidence_note = models.TextField(
+        max_length=1000,
+        blank=True,
+        default="",
+        help_text=(
+            "The assignee's one note on their evidence, covering every link "
+            "they gave (``evidence_items``). Shown only to the assignee, the "
+            "task's reviewers and the project's Leads."
+        ),
+    )
     evidence_updated_at = models.DateTimeField(
         null=True,
         blank=True,
         help_text=(
-            "When the assignee last set or changed their evidence (the "
-            "``evidence_items`` list). Kept when they undo their done mark, "
-            "as the items are, so the evidence is still there "
+            "When the assignee last set or changed their evidence (the note "
+            "and the ``evidence_items`` links). Kept when they undo their "
+            "done mark, as the evidence is, so it is still there "
             "if they mark it done again."
         ),
     )
@@ -781,15 +791,16 @@ class TaskLog(models.Model):
         return self.status == TaskStatus.COMPLETED
 
 
+# The most links an assignee can give as evidence for one part.
 MAX_EVIDENCE_ITEMS = 10
 
 
 class TaskEvidence(models.Model):
-    """One item of the evidence an assignee gave for their part: a link, a
-    note, or both.
+    """One link in the evidence an assignee gave for their part.
 
     Belongs to the assignee's TaskLog (their submission), in the order they
-    gave it. The list is replaced whole each time they save it
+    gave it; the one note covering all of them is ``TaskLog.evidence_note``.
+    The links are replaced whole each time they save their evidence
     (``services.set_evidence``). Shown only to the assignee, the task's
     reviewers and the project's Leads.
     """
@@ -801,18 +812,10 @@ class TaskEvidence(models.Model):
     )
     url = models.URLField(
         max_length=500,
-        blank=True,
-        default="",
         help_text="A link to the work (a document, a folder, a pull request).",
     )
-    note = models.TextField(
-        max_length=1000,
-        blank=True,
-        default="",
-        help_text="The assignee's note on this item.",
-    )
     position = models.PositiveSmallIntegerField(
-        help_text="Where the assignee put this item in their list, from 0."
+        help_text="Where the assignee put this link in their list, from 0."
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

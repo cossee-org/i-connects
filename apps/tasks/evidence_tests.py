@@ -1,7 +1,7 @@
 """Tests for the evidence an assignee attaches when marking their part done.
 
-The evidence is a list of items — each a link, a note, or both — on the
-assignee's TaskLog (``TaskEvidence``). It is shown to the assignee themselves, the task's current reviewers and the
+The evidence is one note (``TaskLog.evidence_note``) and a list of links
+(``TaskEvidence``) on the assignee's TaskLog. It is shown to the assignee themselves, the task's current reviewers and the
 project's Leads, and to nobody else — not in the Completion table, not in
 notifications, emails or the project's Zulip topic.
 """
@@ -26,6 +26,7 @@ from apps.projects.models import ProjectMember, ProjectPrivilege
 from apps.projects.services import create_project_with_owner
 from apps.tasks.models import MAX_EVIDENCE_ITEMS, KanbanBoard, Task, TaskEvidence, TaskLog
 from apps.tasks.services import (
+    Evidence,
     EvidenceLocked,
     mark_own_done,
     mark_reviewed,
@@ -38,7 +39,7 @@ URL = "https://drive.example.org/folder/evidence-42"
 NOTE = "Analysis notebook and the figures for section 3."
 URL2 = "https://github.com/org/repo/pull/7"
 NOTE2 = "The pull request with the cleaning script."
-TWO = [(URL, NOTE), (URL2, NOTE2)]
+LINKS = [URL, URL2]
 
 
 def _user(email, name):
@@ -123,18 +124,18 @@ def _complete(client, task, **data):
     )
 
 
-def _items(task, member):
+def _evidence(task, member):
+    """The member's saved evidence, as ``(links, note)``."""
     log = _log(task, member)
-    return list(log.evidence_items.values_list("url", "note"))
+    return list(log.evidence_items.values_list("url", flat=True)), log.evidence_note
 
 
-def _rows_data(items):
-    """The dialog's post for ``items``: one url and one note per row."""
-    return {
-        "evidence_list": "1",
-        "evidence_url": [url for url, _ in items],
-        "evidence_note": [note for _, note in items],
-    }
+def _form(links=(), note=""):
+    """The dialog's post: the note, and one link per row of its table."""
+    return {"evidence_list": "1", "evidence_url": list(links), "evidence_note": note}
+
+
+EV = Evidence(LINKS, NOTE)
 
 
 def _set(client, task, **data):
@@ -149,57 +150,61 @@ def _set(client, task, **data):
 # Saving it
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-def test_marking_done_saves_the_list_with_the_mark(client, setup):
+def test_marking_done_saves_the_note_and_links_with_the_mark(client, setup):
     s = setup
     client.force_login(s["users"]["bob"])
-    response = _complete(client, s["task"], **_rows_data([(URL, f"  {NOTE} "), (URL2, NOTE2)]))
+    response = _complete(client, s["task"], **_form([URL, f" {URL2} "], f"  {NOTE} "))
     assert response.status_code == 200
     log = _log(s["task"], s["bob"])
     assert log.status == TaskStatus.COMPLETED
-    assert _items(s["task"], s["bob"]) == TWO
+    assert _evidence(s["task"], s["bob"]) == (LINKS, NOTE)
     assert list(log.evidence_items.values_list("position", flat=True)) == [0, 1]
     assert log.evidence_updated_at is not None
     entry = AuditLog.objects.get(action=AuditAction.TASK_EVIDENCE_SET)
-    assert entry.metadata["evidence_urls"] == [URL, URL2]
-    assert entry.metadata["evidence_count"] == 2
+    assert entry.metadata["evidence_urls"] == LINKS
+    assert entry.metadata["evidence_count"] == 2 and entry.metadata["has_note"] is True
     assert entry.metadata["assignee_member_id"] == s["bob"].pk
 
 
 @pytest.mark.django_db
-def test_items_can_be_a_link_or_a_note_and_empty_rows_are_dropped(client, setup):
+def test_a_note_alone_or_links_alone_will_do_and_blank_rows_are_dropped(client, setup):
     s = setup
     client.force_login(s["users"]["bob"])
-    _complete(client, s["task"], **_rows_data([("", ""), (URL, ""), ("  ", " "), ("", NOTE)]))
-    assert _items(s["task"], s["bob"]) == [(URL, ""), ("", NOTE)]
+    _complete(client, s["task"], **_form(["", "  "], NOTE))
+    assert _evidence(s["task"], s["bob"]) == ([], NOTE)
+    _set(client, s["task"], **_form(["", URL, " ", URL2], ""))
+    assert _evidence(s["task"], s["bob"]) == (LINKS, "")
 
 
 @pytest.mark.django_db
 def test_evidence_is_optional(client, setup):
     s = setup
     client.force_login(s["users"]["bob"])
-    assert _complete(client, s["task"], **_rows_data([("", "")])).status_code == 200
+    assert _complete(client, s["task"], **_form([""], "")).status_code == 200
     assert _log(s["task"], s["bob"]).status == TaskStatus.COMPLETED
-    assert _items(s["task"], s["bob"]) == []
+    assert _evidence(s["task"], s["bob"]) == ([], "")
     assert not AuditLog.objects.filter(action=AuditAction.TASK_EVIDENCE_SET).exists()
     # A post without any evidence fields (an older page, a script) still
     # marks done, and leaves what evidence there is alone.
     reopen_own(task=s["task"], member=s["bob"])
-    set_evidence_on = _log(s["task"], s["bob"])
-    TaskEvidence.objects.create(task_log=set_evidence_on, url=URL, position=0)
+    log = _log(s["task"], s["bob"])
+    log.evidence_note = NOTE
+    log.save()
+    TaskEvidence.objects.create(task_log=log, url=URL, position=0)
     assert _complete(client, s["task"]).status_code == 200
-    assert _items(s["task"], s["bob"]) == [(URL, "")]
+    assert _evidence(s["task"], s["bob"]) == ([URL], NOTE)
 
 
 @pytest.mark.django_db
-def test_marking_done_with_every_row_removed_clears_kept_evidence(client, setup):
-    """The dialog marks its post with evidence_list, so a list whose rows
-    were all removed is read as an empty list, not as no list at all."""
+def test_marking_done_with_everything_cleared_clears_kept_evidence(client, setup):
+    """The dialog marks its post with evidence_list, so evidence whose links
+    were all removed is read as empty, not as no evidence sent at all."""
     s = setup
-    mark_own_done(task=s["task"], member=s["bob"], evidence=TWO)
+    mark_own_done(task=s["task"], member=s["bob"], evidence=EV)
     reopen_own(task=s["task"], member=s["bob"])
     client.force_login(s["users"]["bob"])
-    _complete(client, s["task"], evidence_list="1")
-    assert _items(s["task"], s["bob"]) == []
+    _complete(client, s["task"], evidence_list="1", evidence_note="")
+    assert _evidence(s["task"], s["bob"]) == ([], "")
 
 
 @pytest.mark.parametrize(
@@ -207,63 +212,68 @@ def test_marking_done_with_every_row_removed_clears_kept_evidence(client, setup)
     ["javascript:alert(1)", "data:text/html,hi", "ftp://example.org/x", "not a link"],
 )
 @pytest.mark.django_db
-def test_only_http_links_are_taken_and_the_item_is_named(client, setup, bad):
+def test_only_http_links_are_taken_and_the_row_is_named(client, setup, bad):
     s = setup
     client.force_login(s["users"]["bob"])
-    response = _complete(client, s["task"], **_rows_data([(URL, NOTE), (bad, "")]))
+    response = _complete(client, s["task"], **_form([URL, bad], NOTE))
     assert response.status_code == 400
-    assert response.content.decode().startswith("Item 2:")
+    assert response.content.decode().startswith("Link 2:")
     log = _log(s["task"], s["bob"])
-    # Refused whole: the mark is not set, and no item is kept.
-    assert log.status != TaskStatus.COMPLETED and _items(s["task"], s["bob"]) == []
+    # Refused whole: the mark is not set, and nothing is kept.
+    assert log.status != TaskStatus.COMPLETED
+    assert _evidence(s["task"], s["bob"]) == ([], "")
 
 
 @pytest.mark.django_db
 def test_an_overlong_note_is_refused(client, setup):
     s = setup
     client.force_login(s["users"]["bob"])
-    response = _complete(client, s["task"], **_rows_data([(URL, "x" * 1001)]))
-    assert response.status_code == 400 and b"1000" in response.content
+    response = _complete(client, s["task"], **_form([URL], "x" * 1001))
+    assert response.status_code == 400
+    assert response.content.decode().startswith("Note:") and b"1000" in response.content
 
 
 @pytest.mark.django_db
-def test_at_most_ten_items(client, setup):
+def test_at_most_ten_links(client, setup):
     s = setup
     client.force_login(s["users"]["bob"])
-    ten = [(f"https://example.org/{i}", "") for i in range(MAX_EVIDENCE_ITEMS)]
-    assert _complete(client, s["task"], **_rows_data(ten)).status_code == 200
-    assert len(_items(s["task"], s["bob"])) == MAX_EVIDENCE_ITEMS
-    eleven = ten + [("https://example.org/extra", "")]
-    response = _set(client, s["task"], **_rows_data(eleven))
+    ten = [f"https://example.org/{i}" for i in range(MAX_EVIDENCE_ITEMS)]
+    assert _complete(client, s["task"], **_form(ten)).status_code == 200
+    assert len(_evidence(s["task"], s["bob"])[0]) == MAX_EVIDENCE_ITEMS
+    eleven = ten + ["https://example.org/extra"]
+    response = _set(client, s["task"], **_form(eleven))
     assert response.status_code == 400 and b"at most 10" in response.content
-    assert len(_items(s["task"], s["bob"])) == MAX_EVIDENCE_ITEMS
+    assert len(_evidence(s["task"], s["bob"])[0]) == MAX_EVIDENCE_ITEMS
     with pytest.raises(ValueError):
-        set_evidence(task_log=_log(s["task"], s["bob"]), items=eleven)
+        set_evidence(task_log=_log(s["task"], s["bob"]), evidence=Evidence(eleven))
 
 
 @pytest.mark.django_db
-def test_saving_replaces_the_whole_list(client, setup):
+def test_saving_replaces_the_whole_evidence(client, setup):
     s = setup
     client.force_login(s["users"]["bob"])
     _complete(client, s["task"])
-    assert _set(client, s["task"], **_rows_data(TWO)).status_code == 200
-    assert _items(s["task"], s["bob"]) == TWO
-    # Reordered, one changed, one dropped, one added.
-    _set(client, s["task"], **_rows_data([(URL2, "changed"), ("", "only a note")]))
-    assert _items(s["task"], s["bob"]) == [(URL2, "changed"), ("", "only a note")]
-    # An empty list clears it.
-    _set(client, s["task"], evidence_list="1")
-    assert _items(s["task"], s["bob"]) == []
-    assert AuditLog.objects.filter(action=AuditAction.TASK_EVIDENCE_SET).count() == 3
+    assert _set(client, s["task"], **_form(LINKS, NOTE)).status_code == 200
+    assert _evidence(s["task"], s["bob"]) == (LINKS, NOTE)
+    # Reordered, one dropped, one added, the note changed.
+    _set(client, s["task"], **_form([URL2, "https://example.org/new"], NOTE2))
+    assert _evidence(s["task"], s["bob"]) == ([URL2, "https://example.org/new"], NOTE2)
+    # Only the note changed: the links stay as they were.
+    _set(client, s["task"], **_form([URL2, "https://example.org/new"], ""))
+    assert _evidence(s["task"], s["bob"]) == ([URL2, "https://example.org/new"], "")
+    # Emptied, it clears.
+    _set(client, s["task"], evidence_list="1", evidence_note="")
+    assert _evidence(s["task"], s["bob"]) == ([], "")
+    assert AuditLog.objects.filter(action=AuditAction.TASK_EVIDENCE_SET).count() == 4
 
 
 @pytest.mark.django_db
-def test_saving_the_same_list_writes_nothing(client, setup):
+def test_saving_the_same_evidence_writes_nothing(client, setup):
     s = setup
-    mark_own_done(task=s["task"], member=s["bob"], evidence=TWO)
+    mark_own_done(task=s["task"], member=s["bob"], evidence=EV)
     before = _log(s["task"], s["bob"]).evidence_updated_at
     client.force_login(s["users"]["bob"])
-    _set(client, s["task"], **_rows_data(TWO))
+    _set(client, s["task"], **_form(LINKS, NOTE))
     assert _log(s["task"], s["bob"]).evidence_updated_at == before
     assert AuditLog.objects.filter(action=AuditAction.TASK_EVIDENCE_SET).count() == 1
 
@@ -272,9 +282,9 @@ def test_saving_the_same_list_writes_nothing(client, setup):
 def test_evidence_needs_a_part_marked_done(client, setup):
     s = setup
     client.force_login(s["users"]["bob"])
-    response = _set(client, s["task"], **_rows_data([(URL, "")]))
+    response = _set(client, s["task"], **_form([URL]))
     assert response.status_code == 400
-    assert _items(s["task"], s["bob"]) == []
+    assert _evidence(s["task"], s["bob"]) == ([], "")
 
 
 @pytest.mark.django_db
@@ -285,15 +295,15 @@ def test_only_the_assignee_gives_evidence_for_their_part(client, setup):
     # is an assignee, so none of them has a part to give evidence for.
     for name in ("carol", "alice", "eve"):
         client.force_login(s["users"][name])
-        assert _set(client, s["task"], **_rows_data([(URL, "")])).status_code == 403
-        assert _complete(client, s["task"], **_rows_data([(URL, "")])).status_code == 403
-    assert _items(s["task"], s["bob"]) == []
+        assert _set(client, s["task"], **_form([URL], NOTE)).status_code == 403
+        assert _complete(client, s["task"], **_form([URL], NOTE)).status_code == 403
+    assert _evidence(s["task"], s["bob"]) == ([], "")
 
 
 @pytest.mark.django_db
 def test_a_lead_marking_someone_done_leaves_their_evidence_alone(client, setup):
     s = setup
-    mark_own_done(task=s["task"], member=s["bob"], evidence=TWO)
+    mark_own_done(task=s["task"], member=s["bob"], evidence=EV)
     reopen_own(task=s["task"], member=s["bob"])
     client.force_login(s["users"]["alice"])
     client.post(
@@ -303,7 +313,7 @@ def test_a_lead_marking_someone_done_leaves_their_evidence_alone(client, setup):
     )
     log = _log(s["task"], s["bob"])
     assert log.status == TaskStatus.COMPLETED and log.completed_by == s["lead"]
-    assert _items(s["task"], s["bob"]) == TWO
+    assert _evidence(s["task"], s["bob"]) == (LINKS, NOTE)
 
 
 # ---------------------------------------------------------------------------
@@ -312,37 +322,37 @@ def test_a_lead_marking_someone_done_leaves_their_evidence_alone(client, setup):
 @pytest.mark.django_db
 def test_a_review_freezes_the_evidence_until_the_mark_is_undone(client, setup):
     s = setup
-    log = mark_own_done(task=s["task"], member=s["bob"], evidence=TWO)
+    log = mark_own_done(task=s["task"], member=s["bob"], evidence=EV)
     mark_reviewed(task_log=log, reviewer=s["carol"])
-    other = [("https://example.org/other", "")]
+    other = _form(["https://example.org/other"], "changed")
     client.force_login(s["users"]["bob"])
-    response = _set(client, s["task"], **_rows_data(other))
+    response = _set(client, s["task"], **other)
     assert response.status_code == 400 and b"Untick Done" in response.content
     # Re-marking an already-done, reviewed part does not slip a change in.
-    _complete(client, s["task"], **_rows_data(other))
-    assert _items(s["task"], s["bob"]) == TWO
+    _complete(client, s["task"], **other)
+    assert _evidence(s["task"], s["bob"]) == (LINKS, NOTE)
 
-    # Undoing clears the review but keeps the items, so the dialog comes back
-    # filled in; marking again can then change them.
+    # Undoing clears the review but keeps the evidence, so the dialog comes
+    # back filled in; marking again can then change it.
     client.post(reverse("tasks:undo", kwargs={"pk": s["task"].pk}))
     assert not _log(s["task"], s["bob"]).is_reviewed
-    assert _items(s["task"], s["bob"]) == TWO
+    assert _evidence(s["task"], s["bob"]) == (LINKS, NOTE)
     pane = _pane(client, s)
     modal = pane[pane.index('data-evidence-modal="done"') :]
     modal = modal[: modal.index("</dialog>")]
-    assert URL in modal and URL2 in modal and NOTE2 in modal
-    _complete(client, s["task"], **_rows_data(other))
-    assert _items(s["task"], s["bob"]) == other
+    assert URL in modal and URL2 in modal and NOTE in modal
+    _complete(client, s["task"], **other)
+    assert _evidence(s["task"], s["bob"]) == (["https://example.org/other"], "changed")
 
 
 @pytest.mark.django_db
 def test_a_verification_freezes_the_evidence(setup):
     s = setup
-    log = mark_own_done(task=s["task"], member=s["bob"], evidence=TWO)
+    log = mark_own_done(task=s["task"], member=s["bob"], evidence=EV)
     verify_part(task_log=log, lead=s["lead"])
     with pytest.raises(EvidenceLocked):
-        set_evidence(task_log=_log(s["task"], s["bob"]), items=[])
-    assert _items(s["task"], s["bob"]) == TWO
+        set_evidence(task_log=_log(s["task"], s["bob"]), evidence=Evidence([]))
+    assert _evidence(s["task"], s["bob"]) == (LINKS, NOTE)
 
 
 # ---------------------------------------------------------------------------
@@ -359,44 +369,58 @@ def _row_for(pane, member):
     return body[body.rindex("<tr", 0, start) : body.index("</tr>", start)]
 
 
+def _modal(pane):
+    start = pane.index("data-evidence-modal")
+    return pane[start : pane.index("</dialog>", start)]
+
+
 @pytest.mark.django_db
-def test_reviewers_leads_and_the_assignee_see_every_item_and_nobody_else(client, setup):
+def test_reviewers_leads_and_the_assignee_see_it_and_nobody_else(client, setup):
     s = setup
-    mark_own_done(task=s["task"], member=s["bob"], evidence=TWO)
+    mark_own_done(task=s["task"], member=s["bob"], evidence=EV)
     mark_own_done(task=s["task"], member=s["dave"])
     for name in ("alice", "carol", "bob"):
         client.force_login(s["users"][name])
         row = _row_for(_pane(client, s), s["bob"])
-        # View evidence carries the list as JSON for the viewer dialog,
-        # rather than linking straight to anything from the table.
+        # View evidence carries the evidence as JSON for the dialog, rather
+        # than linking straight to anything from the table.
         assert "data-view-evidence" in row and "View evidence (2)" in row, name
-        for text in (URL, NOTE, URL2, NOTE2):
+        for text in (URL, URL2, NOTE):
             assert text in row, (name, text)
         assert 'type="application/json"' in row
         assert f'href="{URL}"' not in row
     # Another assignee on the same task, and a plain project member, get no
-    # trace of it — not the links, not the notes, not a marker.
+    # trace of it — not the links, not the note, not a marker.
     for name in ("dave", "eve"):
         client.force_login(s["users"][name])
         pane = _pane(client, s)
-        for text in (URL, NOTE, URL2, NOTE2):
+        for text in (URL, URL2, NOTE):
             assert text not in pane, (name, text)
         assert f'data-evidence="{s["bob"].pk}"' not in _rows(pane), name
 
 
 @pytest.mark.django_db
-def test_a_single_item_shows_no_count(client, setup):
+def test_a_single_link_shows_no_count(client, setup):
     s = setup
-    mark_own_done(task=s["task"], member=s["bob"], evidence=[(URL, "")])
+    mark_own_done(task=s["task"], member=s["bob"], evidence=Evidence([URL], NOTE))
     client.force_login(s["users"]["carol"])
     row = _row_for(_pane(client, s), s["bob"])
     assert "data-view-evidence" in row and "View evidence (" not in row
 
 
 @pytest.mark.django_db
+def test_a_note_without_links_can_still_be_viewed(client, setup):
+    s = setup
+    mark_own_done(task=s["task"], member=s["bob"], evidence=Evidence([], NOTE))
+    client.force_login(s["users"]["carol"])
+    row = _row_for(_pane(client, s), s["bob"])
+    assert "data-view-evidence" in row and NOTE in row
+
+
+@pytest.mark.django_db
 def test_a_reviewer_taken_off_the_task_stops_seeing_it(client, setup):
     s = setup
-    mark_own_done(task=s["task"], member=s["bob"], evidence=TWO)
+    mark_own_done(task=s["task"], member=s["bob"], evidence=EV)
     s["task"].reviewers.remove(s["carol"])
     client.force_login(s["users"]["carol"])
     assert URL not in _pane(client, s)
@@ -405,7 +429,7 @@ def test_a_reviewer_taken_off_the_task_stops_seeing_it(client, setup):
 @pytest.mark.django_db
 def test_evidence_shows_only_on_a_part_marked_done(client, setup):
     s = setup
-    mark_own_done(task=s["task"], member=s["bob"], evidence=TWO)
+    mark_own_done(task=s["task"], member=s["bob"], evidence=EV)
     reopen_own(task=s["task"], member=s["bob"])
     client.force_login(s["users"]["carol"])
     assert URL not in _pane(client, s)
@@ -414,7 +438,7 @@ def test_evidence_shows_only_on_a_part_marked_done(client, setup):
 @pytest.mark.django_db
 def test_view_evidence_is_the_only_evidence_control_in_the_table(client, setup):
     """The table offers View evidence and nothing else: no link, no note, no
-    Add / Edit. Those live in the viewer dialog, whose Edit is offered only
+    Add / Edit. Those live in the evidence dialog, whose Edit is offered only
     on the viewer's own part until it is reviewed or verified."""
     s = setup
     client.force_login(s["users"]["bob"])
@@ -424,30 +448,31 @@ def test_view_evidence_is_the_only_evidence_control_in_the_table(client, setup):
     row = _row_for(_pane(client, s), s["bob"])
     assert "data-view-evidence" in row and "data-can-edit-evidence" in row
     assert "data-edit-evidence" not in row
-    _set(client, s["task"], **_rows_data(TWO))
+    _set(client, s["task"], **_form(LINKS, NOTE))
     pane = _pane(client, s)
     row = _row_for(pane, s["bob"])
     assert row.count("<button") == 1 and "<a " not in row and "<details" not in row
     assert "data-can-edit-evidence" in row
-    # The viewer dialog carries the edit action, handing over to the
-    # evidence dialog.
-    modal = pane[pane.index("data-evidence-view-modal") :]
-    assert "data-edit-evidence" in modal[: modal.index("</dialog>")]
-    assert 'data-evidence-modal="edit"' in pane
+    # The dialog is where it is both read and edited.
+    modal = _modal(pane)
+    assert 'data-evidence-modal="edit"' in modal
+    assert "data-edit-evidence" in modal and "data-evidence-form" in modal
 
     mark_reviewed(task_log=_log(s["task"], s["bob"]), reviewer=s["carol"])
     row = _row_for(_pane(client, s), s["bob"])
     assert "data-view-evidence" in row and "data-can-edit-evidence" not in row
-    # Nobody else may edit it, even a Lead.
+    # Nobody else may edit it, even a Lead: their dialog has no form at all.
     client.force_login(s["users"]["alice"])
-    assert "data-can-edit-evidence" not in _rows(_pane(client, s))
+    pane = _pane(client, s)
+    assert "data-can-edit-evidence" not in _rows(pane)
+    assert "data-evidence-form" not in _modal(pane)
 
 
 @pytest.mark.django_db
-def test_notes_and_links_are_escaped_in_the_json(client, setup):
+def test_the_note_and_links_are_escaped_in_the_json(client, setup):
     s = setup
     evil = "</script><script>x()</script>"
-    mark_own_done(task=s["task"], member=s["bob"], evidence=[(URL, evil)])
+    mark_own_done(task=s["task"], member=s["bob"], evidence=Evidence([URL], evil))
     client.force_login(s["users"]["alice"])
     pane = _pane(client, s)
     assert evil not in pane and "<script>x()" not in pane
@@ -456,10 +481,10 @@ def test_notes_and_links_are_escaped_in_the_json(client, setup):
 
 @pytest.mark.django_db
 def test_the_status_block_loads_evidence_in_one_query(client, setup):
-    """However many items there are, loading them costs the same queries."""
+    """However many links there are, loading them costs the same queries."""
     s = setup
-    mark_own_done(task=s["task"], member=s["bob"], evidence=TWO)
-    mark_own_done(task=s["task"], member=s["dave"], evidence=[(URL, "")])
+    mark_own_done(task=s["task"], member=s["bob"], evidence=EV)
+    mark_own_done(task=s["task"], member=s["dave"], evidence=Evidence([URL]))
     client.force_login(s["users"]["alice"])
     url = reverse("tasks:status_block", kwargs={"pk": s["task"].pk}) + "?pane=1"
     with CaptureQueriesContext(connection) as one:
@@ -474,34 +499,34 @@ def test_the_status_block_loads_evidence_in_one_query(client, setup):
 
 
 @pytest.mark.django_db
-def test_the_viewer_dialog_lists_items_and_warns_before_external_links(client, setup):
-    """The dialog lists every item with its own Open link (a new tab without
-    the opener or referrer), tags external ones, and carries the site's
-    leaving notice for when any is external."""
+def test_the_dialog_shows_the_note_above_a_table_of_links(client, setup):
+    """Read mode: the note on top, then the links as a table, each row with
+    its own Open (a new tab without the opener or referrer), external ones
+    tagged, and the site's leaving notice for when any is external."""
     s = setup
-    mark_own_done(task=s["task"], member=s["bob"], evidence=TWO)
+    mark_own_done(task=s["task"], member=s["bob"], evidence=EV)
     client.force_login(s["users"]["alice"])
-    pane = _pane(client, s)
-    modal = pane[pane.index("data-evidence-view-modal") :]
-    modal = modal[: modal.index("</dialog>")]
-    assert 'x-for="(item, i) in items"' in modal and "data-evidence-view-item" in modal
-    assert "data-evidence-external-tag" in modal and 'x-show="anyExternal"' in modal
-    assert "We are not responsible for the content of external websites." in modal
-    assert "location.host" in modal
-    assert 'target="_blank" rel="noopener noreferrer nofollow"' in modal
-    assert "data-evidence-open" in modal
+    view = _modal(_pane(client, s))
+    view = view[view.index("data-evidence-view>") :]
+    assert view.index("data-evidence-view-note") < view.index("data-evidence-view-table")
+    assert 'x-for="(url, i) in links"' in view and "data-evidence-view-row" in view
+    assert "data-evidence-external-tag" in view and 'x-show="externalCount"' in view
+    assert "We are not responsible for the content of external websites." in view
+    assert 'target="_blank" rel="noopener noreferrer nofollow"' in view
+    assert "data-evidence-open" in view
 
 
 @pytest.mark.django_db
-def test_the_evidence_dialog_offers_rows_up_to_the_limit(client, setup):
+def test_the_edit_form_has_the_note_above_a_table_of_link_rows(client, setup):
     s = setup
     client.force_login(s["users"]["bob"])
-    pane = _pane(client, s)
-    modal = pane[pane.index("data-evidence-modal=") :]
-    modal = modal[: modal.index("</dialog>")]
-    assert 'name="evidence_list"' in modal
-    assert 'x-for="(r, i) in rows"' in modal and "data-evidence-add" in modal
-    assert "data-evidence-remove" in modal and f"limit: {MAX_EVIDENCE_ITEMS}" in modal
+    form = _modal(_pane(client, s))
+    form = form[form.index("data-evidence-form") :]
+    assert 'name="evidence_list"' in form
+    assert form.index('name="evidence_note"') < form.index("data-evidence-edit-table")
+    assert 'x-for="(r, i) in draft.rows"' in form and 'name="evidence_url"' in form
+    assert "data-evidence-add" in form and "data-evidence-remove" in form
+    assert f"limit: {MAX_EVIDENCE_ITEMS}" in _modal(_pane(client, s))
 
 
 # ---------------------------------------------------------------------------
@@ -511,16 +536,16 @@ def test_the_evidence_dialog_offers_rows_up_to_the_limit(client, setup):
 def test_no_notification_or_email_carries_it(client, setup, django_capture_on_commit_callbacks):
     s = setup
     with django_capture_on_commit_callbacks(execute=True):
-        log = mark_own_done(task=s["task"], member=s["bob"], evidence=TWO)
+        log = mark_own_done(task=s["task"], member=s["bob"], evidence=EV)
         mark_reviewed(task_log=log, reviewer=s["carol"])
         verify_part(task_log=log, lead=s["lead"])
     assert Notification.objects.exists()  # the flow does notify people
     for notification in Notification.objects.all():
         text = f"{notification.message} {notification.route_data}"
-        for secret in (URL, NOTE, URL2, NOTE2):
+        for secret in (URL, URL2, NOTE):
             assert secret not in text
     for message in mail.outbox:
-        for secret in (URL, NOTE, URL2, NOTE2):
+        for secret in (URL, URL2, NOTE):
             assert secret not in message.body
 
 
@@ -543,9 +568,9 @@ def test_the_zulip_topic_hears_of_the_mark_but_not_the_evidence(
     )
     with django_capture_on_commit_callbacks(execute=True):
         log = mark_own_done(task=s["task"], member=s["bob"])
-        set_evidence(task_log=log, items=TWO)
+        set_evidence(task_log=log, evidence=EV)
     assert sent, "the mark itself is still announced"
-    for secret in (URL, NOTE, URL2, NOTE2):
+    for secret in (URL, URL2, NOTE):
         assert all(secret not in m for m in sent)
 
 
@@ -601,5 +626,69 @@ def test_the_migration_moves_each_entrys_evidence_into_one_item():
         OldLog = apps.get_model("tasks", "TaskLog")
         restored = OldLog.objects.get(pk=with_both.pk)
         assert (restored.evidence_url, restored.evidence_note) == (URL, NOTE)
+    finally:
+        MigrationExecutor(connection).migrate(leaves)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_migration_merges_item_notes_into_one_note():
+    """0026: a single item note is kept as it is; several are joined, each
+    labelled with its link's number; note-only items go and the remaining
+    links are renumbered. Going back puts the note on the first link."""
+    from django.db.migrations.executor import MigrationExecutor
+
+    before = [("tasks", "0025_tasklog_evidence_note")]
+    after = [("tasks", "0027_remove_taskevidence_note")]
+    executor = MigrationExecutor(connection)
+    leaves = executor.loader.graph.leaf_nodes()
+    try:
+        executor.migrate(before)
+        apps = executor.loader.project_state(before).apps
+        OldLog = apps.get_model("tasks", "TaskLog")
+        OldItem = apps.get_model("tasks", "TaskEvidence")
+        user = _user("m@test.com", "M")
+        project = create_project_with_owner(
+            user=user,
+            form_data={"name": "P", "status": ProjectStatus.ACTIVE, "is_public": True},
+        )
+        member = project.project_members.first()
+        task = Task.objects.create(
+            project=project, created_by=member, container=project.containers.first(),
+            container_task_order=0, name="T",
+        )
+        common = {"task_id": task.pk, "assigned_to_id": member.pk}
+        one = OldLog.objects.create(**common)
+        OldItem.objects.create(task_log_id=one.pk, url=URL, note=NOTE, position=0)
+        OldItem.objects.create(task_log_id=one.pk, url=URL2, note="", position=1)
+        many = OldLog.objects.create(**common)
+        OldItem.objects.create(task_log_id=many.pk, url="", note="Just a note", position=0)
+        OldItem.objects.create(task_log_id=many.pk, url=URL, note=NOTE, position=1)
+        OldItem.objects.create(task_log_id=many.pk, url=URL2, note=NOTE2, position=2)
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(after)
+        apps = executor.loader.project_state(after).apps
+        Log = apps.get_model("tasks", "TaskLog")
+        Item = apps.get_model("tasks", "TaskEvidence")
+
+        def links(log_id):
+            return list(
+                Item.objects.filter(task_log_id=log_id)
+                .order_by("position")
+                .values_list("url", "position")
+            )
+
+        assert Log.objects.get(pk=one.pk).evidence_note == NOTE
+        assert links(one.pk) == [(URL, 0), (URL2, 1)]
+        assert Log.objects.get(pk=many.pk).evidence_note == (
+            f"Just a note\n\nLink 1: {NOTE}\n\nLink 2: {NOTE2}"
+        )
+        assert links(many.pk) == [(URL, 0), (URL2, 1)]
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(before)
+        apps = executor.loader.project_state(before).apps
+        first = apps.get_model("tasks", "TaskEvidence").objects.get(task_log_id=one.pk, position=0)
+        assert (first.url, first.note) == (URL, NOTE)
     finally:
         MigrationExecutor(connection).migrate(leaves)

@@ -7,7 +7,7 @@ focused on request/response handling and concentrate the mutation logic
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, NamedTuple
 
 from django.db import transaction
 from django.utils import timezone
@@ -243,39 +243,42 @@ def evidence_editable(log: TaskLog | None) -> bool:
     )
 
 
-EvidenceItems = list[tuple[str, str]]
+class Evidence(NamedTuple):
+    """An assignee's evidence for their part: their links, in order, and one
+    note covering all of them. Either may be empty."""
+
+    urls: list[str]
+    note: str = ""
 
 
-def _clean_items(items: Iterable[tuple[str, str]]) -> EvidenceItems:
-    """``items`` stripped, with rows holding neither a link nor a note
-    dropped."""
-    cleaned = []
-    for url, note in items:
-        url, note = (url or "").strip(), (note or "").strip()
-        if url or note:
-            cleaned.append((url, note))
-    return cleaned
+def _clean(evidence: Evidence) -> Evidence:
+    """``evidence`` stripped, with blank links dropped."""
+    urls = [url.strip() for url in evidence.urls if url and url.strip()]
+    return Evidence(urls, (evidence.note or "").strip())
 
 
-def _replace_evidence(log: TaskLog, items: Iterable[tuple[str, str]]) -> bool:
-    """Make ``log``'s evidence exactly ``items``, in order. True if it changed.
+def _replace_evidence(log: TaskLog, evidence: Evidence) -> bool:
+    """Make ``log``'s evidence exactly ``evidence``. True if it changed.
 
-    The list is replaced whole: what the assignee saves is the list. Nothing
-    is written when it is the same as what is there, so saving the dialog
+    Replaced whole: what the assignee saves is their evidence. Nothing is
+    written when it is the same as what is there, so saving the dialog
     unchanged leaves no audit row and no new timestamp. ``log`` must be saved.
     """
-    if len(items := _clean_items(items)) > MAX_EVIDENCE_ITEMS:
-        raise ValueError(f"At most {MAX_EVIDENCE_ITEMS} evidence items.")
-    current = list(log.evidence_items.order_by("position", "id").values_list("url", "note"))
-    if current == items:
+    evidence = _clean(evidence)
+    if len(evidence.urls) > MAX_EVIDENCE_ITEMS:
+        raise ValueError(f"At most {MAX_EVIDENCE_ITEMS} evidence links.")
+    current = list(log.evidence_items.order_by("position", "id").values_list("url", flat=True))
+    if current == evidence.urls and log.evidence_note == evidence.note:
         return False
-    log.evidence_items.all().delete()
-    TaskEvidence.objects.bulk_create(
-        TaskEvidence(task_log=log, url=url, note=note, position=i)
-        for i, (url, note) in enumerate(items)
-    )
+    if current != evidence.urls:
+        log.evidence_items.all().delete()
+        TaskEvidence.objects.bulk_create(
+            TaskEvidence(task_log=log, url=url, position=i)
+            for i, url in enumerate(evidence.urls)
+        )
+    log.evidence_note = evidence.note
     log.evidence_updated_at = timezone.now()
-    log.save(update_fields=["evidence_updated_at"])
+    log.save(update_fields=["evidence_note", "evidence_updated_at"])
     return True
 
 
@@ -283,24 +286,24 @@ def _replace_evidence(log: TaskLog, items: Iterable[tuple[str, str]]) -> bool:
 def set_evidence(
     *,
     task_log: TaskLog,
-    items: Iterable[tuple[str, str]],
+    evidence: Evidence,
     actor: ProjectMember | None = None,
 ) -> TaskLog:
-    """Replace the evidence on an assignee's done part with ``items``.
+    """Replace the evidence on an assignee's done part with ``evidence``.
 
-    ``items`` is the whole list, as ``(url, note)`` pairs in the assignee's
-    order; rows with neither are dropped, and an empty list clears it. At
-    most ``MAX_EVIDENCE_ITEMS``. Refused with :class:`EvidenceLocked` unless
-    :func:`evidence_editable`. Writes an audit row when anything changed; the
-    links go in it, which is fine because the project's activity log is
-    Lead-only.
+    ``evidence.urls`` is the whole list of links in the assignee's order
+    (blank ones are dropped; at most ``MAX_EVIDENCE_ITEMS``), and
+    ``evidence.note`` the one note on them; empty both clears it. Refused
+    with :class:`EvidenceLocked` unless :func:`evidence_editable`. Writes an
+    audit row when anything changed; the links go in it, which is fine
+    because the project's activity log is Lead-only.
     """
     if not evidence_editable(task_log):
         raise EvidenceLocked(
             "Evidence can be changed only on a part marked done and not yet "
             "reviewed or verified. Untick Done to change it."
         )
-    if _replace_evidence(task_log, items):
+    if _replace_evidence(task_log, evidence):
         _log_evidence_action(task_log=task_log, actor_member=actor or task_log.assigned_to)
     return task_log
 
@@ -313,7 +316,7 @@ def _log_evidence_action(*, task_log: TaskLog, actor_member: ProjectMember | Non
     reviewers and Leads only.
     """
     task = task_log.task
-    urls = [url for url in task_log.evidence_items.values_list("url", flat=True) if url]
+    urls = list(task_log.evidence_items.values_list("url", flat=True))
     log_action(
         AuditAction.TASK_EVIDENCE_SET,
         actor=actor_member.users.first() if actor_member is not None else None,
@@ -323,8 +326,9 @@ def _log_evidence_action(*, task_log: TaskLog, actor_member: ProjectMember | Non
             "task_name": task.name,
             "assignee_member_id": task_log.assigned_to_id,
             "task_log_id": task_log.pk,
-            "evidence_count": task_log.evidence_items.count(),
+            "evidence_count": len(urls),
             "evidence_urls": urls,
+            "has_note": bool(task_log.evidence_note),
         },
     )
 
@@ -335,7 +339,7 @@ def mark_own_done(
     task: Task,
     member: ProjectMember,
     actor: ProjectMember | None = None,
-    evidence: Iterable[tuple[str, str]] | None = None,
+    evidence: Evidence | None = None,
 ) -> TaskLog:
     """Mark a single assignee's part of an INDIVIDUAL-mode task done.
 
@@ -356,8 +360,8 @@ def mark_own_done(
     Every change of the mark writes an audit row, so who marked whose part
     done, and when, survives the TaskLog being updated in place.
 
-    ``evidence`` is the assignee's list of ``(url, note)`` items from the
-    mark-done dialog, written with the mark (see :func:`set_evidence`). ``None`` leaves whatever evidence the entry already
+    ``evidence`` is the assignee's :class:`Evidence` (links and a note) from
+    the mark-done dialog, written with the mark (see :func:`set_evidence`). ``None`` leaves whatever evidence the entry already
     holds untouched, which is what a Lead marking someone else done passes:
     the evidence is the assignee's to give. On a part already done and since
     reviewed or verified the evidence is frozen (:func:`evidence_editable`),
