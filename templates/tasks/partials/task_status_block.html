@@ -327,7 +327,8 @@
            rows stay as they are in the page — tr turns into display:contents
            and each cell takes a place in the card's grid — so the ticks, the
            links and the dialogs are the very same; only the header (and with
-           it sorting) is left out. One line per stage, its name on the left. */
+           it sorting) is left out. One line per stage, its name on the left
+           edge, as the custom values under the person's name are. */
         @container (max-width: 44rem) {
           .completion-table { display: block; min-width: 0; table-layout: auto; }
           .completion-table > thead, .completion-table > colgroup { display: none; }
@@ -356,6 +357,9 @@
           .completion-table tbody.completion-person td.cc-stage::before { content: attr(data-label); font-size: 0.75rem; font-weight: 500; color: rgb(51 51 51 / 0.6); padding-top: 4px; }
           /* Links under a stage line up with its "date · by". */
           .completion-table tbody.completion-person td.cc-sub { padding-top: 0; padding-bottom: 0; padding-left: calc(0.75rem + 4.75rem); }
+          /* The custom values start at the card's left edge, under the
+             avatar, level with the stage names below them. */
+          .completion-table tbody.completion-person .completion-under { padding-left: 0; }
           .completion-table tbody.completion-person td.cc-sub > div { padding-bottom: 0.25rem; }
           .completion-by { display: inline; white-space: normal; font-size: inherit; color: inherit; }
           .completion-by::before { content: " \00B7  "; }
