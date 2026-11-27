@@ -194,15 +194,15 @@
 
       {% comment %}
         One table body per assignee, under Assignee / Done / Reviewed (only on
-        a task under review) / Verified, and a chevron that opens the
-        person's details row under it.
+        a task under review) / Verified, and an Expand button (Collapse once
+        open) with a chevron, which opens the person's details row under it.
 
         The Assignee cell names them and, under the name, only what is custom
         for them, on one line joined by middle dots: "Starts Nov 18 · Due
-        Dec 10 · Writing – review & editing · View attachments". View
-        attachments, which opens the attachments dialog, ends the line on a
-        part marked done that has attachments the viewer may see (or is the
-        viewer's own, so they can add some). "Starts" and "Due" show when a Lead
+        Dec 10 · Writing – review & editing". On the same line, under Done,
+        sits View attachments, which opens the attachments dialog, on a part
+        marked done that has attachments the viewer may see (or is the
+        viewer's own, so they can add some). That line is a row of its own. "Starts" and "Due" show when a Lead
         gave them their own start date or deadline at another moment than the
         task's (the deadline red, with Overdue, once it has passed and their
         part is not done), and the type when theirs is another than the
@@ -276,7 +276,7 @@
         .completion-table:not(.rows-expanded) tbody:nth-of-type(n+4) { display: none; }
         .completion-table col.completion-name-col { width: 28%; }
         .completion-table.no-review col.completion-name-col { width: 34%; }
-        .completion-table col.completion-chevron-col { width: 2.75rem; }
+        .completion-table col.completion-chevron-col { width: 6.25rem; }
         .completion-mark { display: flex; align-items: flex-start; gap: 0.625rem; min-width: 0; padding-top: 1px; }
         /* Padded so its first line centres on the 22px tick beside it. */
         .completion-mark-note { font-size: 0.8125rem; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; padding-top: 3px; }
@@ -291,7 +291,15 @@
         .completion-tick[aria-disabled="true"]:not(:checked) { opacity: 0.45; }
         .completion-locked-notice { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
         .completion-tick:focus-visible { outline: 2px solid #f03d30; outline-offset: 2px; }
-        .completion-under { margin-top: 0.3rem; padding-left: 2rem; font-size: 0.75rem; line-height: 1.45; }
+        /* A person with a line under their name gets a second row for it:
+           no rule between the two, and the gap of a line's spacing. */
+        .completion-table tr.completion-has-sub { border-bottom-width: 0; }
+        .completion-table tr.completion-has-sub > td { padding-bottom: 0.15rem; }
+        .completion-table tr.completion-sub { border-bottom-width: 0; }
+        .completion-table tr.completion-sub > td { padding-top: 0; }
+        .completion-under { padding-left: 2rem; font-size: 0.75rem; line-height: 1.45; }
+        /* Under the "date · by", past the 22px tick and its gap. */
+        .completion-sub-done { padding-left: calc(22px + 0.625rem); font-size: 0.75rem; line-height: 1.45; }
         .completion-details > td { background: #eaeff8; padding: 0.75rem 0.9rem 0.9rem; }
         .completion-details dl { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 0.4rem 0.9rem; font-size: 0.8125rem; margin: 0; }
         .completion-details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; }
@@ -385,32 +393,14 @@
                  data-sort-done="{% if s.done %}{% if s.done_at %}{{ s.done_at|date:'U' }}{% else %}0{% endif %}{% else %}100000000000{% endif %}"
                  data-sort-reviewed="{% if s.reviewed %}{% if s.reviewed_at %}{{ s.reviewed_at|date:'U' }}{% else %}0{% endif %}{% elif s.done %}100000000000{% else %}200000000000{% endif %}"
                  data-sort-verified="{% if s.verified %}{% if s.verified_at %}{{ s.verified_at|date:'U' }}{% else %}0{% endif %}{% elif s.done %}100000000000{% else %}200000000000{% endif %}">
-            <tr data-assignee-row="{{ s.member.pk }}">
+            {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs or s.shows_attachments_link %}{% firstof "1" as has_sub %}{% else %}{% firstof "" as has_sub %}{% endif %}
+            <tr data-assignee-row="{{ s.member.pk }}"{% if has_sub %} class="completion-has-sub"{% endif %}>
               <td>
                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                   <span class="w-6 h-6 rounded-full bg-brand-navy/80 text-white text-[11px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
                   <span class="text-sm font-medium text-brand-navy break-words min-w-0" data-assignee-name>{{ s.member.display_name }}</span>
                   {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
                 </div>
-                {# Under the name, only what is custom for them: their own start, their own deadline, their own type. #}
-                {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs or s.shows_attachments_link %}
-                  {# One line, the parts joined by a middle dot; it wraps between parts when narrow. #}
-                  <div class="completion-under text-brand-text/70">
-                    {% if s.start_differs %}<span class="whitespace-nowrap" data-member-start-line>Starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}</span>{% endif %}
-                    {% if s.deadline_differs %}
-                      {% if s.start_differs %}<span aria-hidden="true">&middot;</span>{% endif %}
-                      <span class="whitespace-nowrap" data-member-dates><span class="{% if s.overdue %}text-error font-medium{% endif %}">Due {{ s.own_deadline|in_zone:s.deadline_tz|date:"M j" }}</span>{% if s.overdue %} <span class="inline-flex items-center rounded px-1 py-0.5 bg-error/10 text-error text-[10px] font-semibold leading-none align-middle" data-member-overdue>Overdue</span>{% endif %}</span>
-                    {% endif %}
-                    {% if s.tracks_credit and s.type_differs %}
-                      {% if s.start_differs or s.deadline_differs %}<span aria-hidden="true">&middot;</span>{% endif %}
-                      <span class="break-words" data-member-type-line>{{ s.contribution_type_label }}</span>
-                    {% endif %}
-                    {% if s.shows_attachments_link %}
-                      {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs %}<span aria-hidden="true">&middot;</span>{% endif %}
-                      {% include "tasks/partials/task_attachments_line.html" with s=s inline=True %}
-                    {% endif %}
-                  </div>
-                {% endif %}
               </td>
               <td data-done-cell data-mark="{% if s.done %}yes{% else %}no{% endif %}">
                 <div class="completion-mark">
@@ -450,15 +440,15 @@
                   {% endif %}
                 </div>
               </td>
-              <td class="px-1 text-center">
+              <td class="px-1 text-right">
                 <button type="button" style="margin-top: -2px"
-                        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-brand-text/60 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors"
+                        class="inline-flex items-center gap-0.5 h-7 px-1.5 rounded-md text-xs font-medium text-brand-text/70 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors whitespace-nowrap"
                         @click="toggleDetails('{{ s.member.pk }}')"
                         :aria-expanded="openDetails['{{ s.member.pk }}'] ? 'true' : 'false'"
                         aria-expanded="false"
                         aria-controls="completion-details-{{ task.pk }}-{{ s.member.pk }}"
                         data-details-toggle="{{ s.member.pk }}">
-                  <span class="sr-only">Details for {{ s.member.display_name }}</span>
+                  <span x-text="openDetails['{{ s.member.pk }}'] ? 'Collapse' : 'Expand'">Expand</span><span class="sr-only"> details for {{ s.member.display_name }}</span>
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transition-transform" aria-hidden="true"
                        :class="{ 'rotate-180': openDetails['{{ s.member.pk }}'] }">
                     <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
@@ -466,6 +456,42 @@
                 </button>
               </td>
             </tr>
+            {% comment %}
+              The line under the name, as a row of its own so whatever sits
+              in it lines up across the columns, however tall the row above
+              grew (a "date · by" that wraps): the custom values under the
+              Assignee column — Starts, Due and the custom task type, joined
+              by middle dots — and View attachments under Done, level with
+              them.
+            {% endcomment %}
+            {% if has_sub %}
+              <tr class="completion-sub" data-assignee-sub="{{ s.member.pk }}">
+                <td>
+                  {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs %}
+                    {# One line, the parts joined by a middle dot; it wraps between parts when narrow. #}
+                    <div class="completion-under text-brand-text/70">
+                      {% if s.start_differs %}<span class="whitespace-nowrap" data-member-start-line>Starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}</span>{% endif %}
+                      {% if s.deadline_differs %}
+                        {% if s.start_differs %}<span aria-hidden="true">&middot;</span>{% endif %}
+                        <span class="whitespace-nowrap" data-member-dates><span class="{% if s.overdue %}text-error font-medium{% endif %}">Due {{ s.own_deadline|in_zone:s.deadline_tz|date:"M j" }}</span>{% if s.overdue %} <span class="inline-flex items-center rounded px-1 py-0.5 bg-error/10 text-error text-[10px] font-semibold leading-none align-middle" data-member-overdue>Overdue</span>{% endif %}</span>
+                      {% endif %}
+                      {% if s.tracks_credit and s.type_differs %}
+                        {% if s.start_differs or s.deadline_differs %}<span aria-hidden="true">&middot;</span>{% endif %}
+                        <span class="break-words" data-member-type-line>{{ s.contribution_type_label }}</span>
+                      {% endif %}
+                    </div>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if s.shows_attachments_link %}
+                    <div class="completion-sub-done">{% include "tasks/partials/task_attachments_line.html" with s=s %}</div>
+                  {% endif %}
+                </td>
+                {% if show_review %}<td></td>{% endif %}
+                <td></td>
+                <td></td>
+              </tr>
+            {% endif %}
             {% comment %}
               No id on the row x-show hides: when HTMX swaps the block after a
               tick it puts an id'd element's old style attribute back, then

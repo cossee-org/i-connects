@@ -364,9 +364,13 @@ def _rows(pane):
 
 
 def _row_for(pane, member):
+    """``member``'s rows in the table: their first row and, when they have
+    one, the line under it (where View attachments sits) — not the details
+    row, which is opened on demand."""
     body = _rows(pane)
     start = body.index(f"data-assignee-name>{member.display_name}<")
-    return body[body.rindex("<tr", 0, start) : body.index("</tr>", start)]
+    end = body.index('<tr class="completion-details"', start)
+    return body[body.rindex("<tr", 0, start) : end]
 
 
 def _modal(pane):
@@ -768,19 +772,21 @@ def test_the_attachments_dialog_template_has_balanced_tags():
 
 @pytest.mark.django_db
 def test_view_attachments_sits_under_the_name(client, setup):
-    """View attachments joins the custom values on the line under the
-    assignee's name, not the Done cell, so the stages' dates stay in line."""
+    """View attachments sits under Done on the line beneath the row, level
+    with the custom values under the assignee's name."""
     s = setup
     client.force_login(s["users"]["bob"])
     _complete(client, s["task"])
     _set(client, s["task"], **_form(LINKS, NOTE))
 
     row = _row_for(_pane(client, s), s["bob"])
-    name_cell = row[: row.index("data-done-cell")]
-    done_cell = row[row.index("data-done-cell") : row.index("data-verify-cell")]
-    assert "data-view-attachments" in name_cell
-    assert 'class="completion-under' in name_cell
-    assert "data-view-attachments" not in done_cell
+    first = row[: row.index('data-assignee-sub=')]
+    sub = row[row.index('data-assignee-sub=') :]
+    # Not in the first row's Done cell, beside the date, but under it, in
+    # the Done column of the line beneath — level with the custom values.
+    assert "data-view-attachments" not in first
+    assert "data-view-attachments" in sub
+    assert sub.index("completion-sub-done") > sub.index("<td")
 
 
 @pytest.mark.django_db
