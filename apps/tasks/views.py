@@ -1546,6 +1546,12 @@ def _task_status_context(task, *, project_member, is_project_manager):
                     log.attachments_updated_at if shown_attachments else None
                 ),
                 "has_attachments": bool(shown["links"] or shown["note"]),
+                # Whether the row offers View attachments (under the name): a
+                # part marked done, with attachments this viewer may see, or
+                # the viewer's own, so they can add some.
+                "shows_attachments_link": bool(
+                    done and (shown["links"] or shown["note"] or is_viewer)
+                ),
                 # The assignee's own: what pre-fills their attachments dialog,
                 # kept from an earlier mark they have since undone.
                 "own_attachments": own_attachments if is_viewer else {"links": [], "note": ""},

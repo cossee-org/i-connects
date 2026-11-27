@@ -199,7 +199,10 @@
 
         The Assignee cell names them and, under the name, only what is custom
         for them, on one line joined by middle dots: "Starts Nov 18 · Due
-        Dec 10 · Writing – review & editing". "Starts" and "Due" show when a Lead
+        Dec 10 · Writing – review & editing · View attachments". View
+        attachments, which opens the attachments dialog, ends the line on a
+        part marked done that has attachments the viewer may see (or is the
+        viewer's own, so they can add some). "Starts" and "Due" show when a Lead
         gave them their own start date or deadline at another moment than the
         task's (the deadline red, with Overdue, once it has passed and their
         part is not done), and the type when theirs is another than the
@@ -209,10 +212,8 @@
         beside it, when and by whom ("Oct 14 · by …"), in plain text — the
         round boxes carry the colour, green for Done, purple for Reviewed
         and blue for Verified; otherwise "Not done yet", "Awaiting review",
-        "Awaiting verification" or a dash. Under the Done note sits View
-        attachments, a link that opens the attachments dialog; the cells sit
-        at the top of the row, so it adds a line below without moving the
-        dates out of line with Reviewed and Verified. The boxes — tick to mark, untick to undo — are
+        "Awaiting verification" or a dash. The cells sit at the top of the
+        row, so the lines under the name never move the dates out of line. The boxes — tick to mark, untick to undo — are
         live only for whoever may make that change (task_done_tick.html,
         task_review_tick.html, task_verify_tick.html), and read-only for
         everyone else. Each tick cell carries its state as ``data-mark``
@@ -277,7 +278,6 @@
         .completion-table.no-review col.completion-name-col { width: 34%; }
         .completion-table col.completion-chevron-col { width: 2.75rem; }
         .completion-mark { display: flex; align-items: flex-start; gap: 0.625rem; min-width: 0; padding-top: 1px; }
-        .completion-mark-body { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; min-width: 0; }
         /* Padded so its first line centres on the 22px tick beside it. */
         .completion-mark-note { font-size: 0.8125rem; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; padding-top: 3px; }
         .completion-tick { appearance: none; -webkit-appearance: none; margin: 0; width: 22px; height: 22px; border-radius: 999px; border: 2px solid #9aa3c7; background: #fff; position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0; }
@@ -393,8 +393,8 @@
                   {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
                 </div>
                 {# Under the name, only what is custom for them: their own start, their own deadline, their own type. #}
-                {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs %}
-                  {# One line, the parts joined by a middle dot; it wraps between words when narrow. #}
+                {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs or s.shows_attachments_link %}
+                  {# One line, the parts joined by a middle dot; it wraps between parts when narrow. #}
                   <div class="completion-under text-brand-text/70">
                     {% if s.start_differs %}<span class="whitespace-nowrap" data-member-start-line>Starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}</span>{% endif %}
                     {% if s.deadline_differs %}
@@ -405,6 +405,10 @@
                       {% if s.start_differs or s.deadline_differs %}<span aria-hidden="true">&middot;</span>{% endif %}
                       <span class="break-words" data-member-type-line>{{ s.contribution_type_label }}</span>
                     {% endif %}
+                    {% if s.shows_attachments_link %}
+                      {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs %}<span aria-hidden="true">&middot;</span>{% endif %}
+                      {% include "tasks/partials/task_attachments_line.html" with s=s inline=True %}
+                    {% endif %}
                   </div>
                 {% endif %}
               </td>
@@ -412,10 +416,7 @@
                 <div class="completion-mark">
                   {% include "tasks/partials/task_done_tick.html" with s=s task=task %}
                   {% if s.done %}
-                    <div class="completion-mark-body">
-                      <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
-                      {% include "tasks/partials/task_attachments_line.html" with s=s %}
-                    </div>
+                    <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
                   {% else %}
                     <span class="completion-mark-note text-brand-text/60">Not done yet</span>
                   {% endif %}
@@ -465,11 +466,18 @@
                 </button>
               </td>
             </tr>
-            <tr class="completion-details" id="completion-details-{{ task.pk }}-{{ s.member.pk }}"
+            {% comment %}
+              No id on the row x-show hides: when HTMX swaps the block after a
+              tick it puts an id'd element's old style attribute back, then
+              settles to the new markup's, which has none — wiping Alpine's
+              display:none and opening every closed panel. The id the chevron
+              points at sits on the list inside instead.
+            {% endcomment %}
+            <tr class="completion-details"
                 x-show="openDetails['{{ s.member.pk }}']" x-cloak
                 data-member-details="{{ s.member.pk }}">
               <td colspan="{% if show_review %}5{% else %}4{% endif %}">
-                <dl>
+                <dl id="completion-details-{{ task.pk }}-{{ s.member.pk }}">
                   <dt class="text-brand-text/60 font-medium">Done</dt>
                   <dd>
                     {% if s.done %}

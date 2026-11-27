@@ -764,3 +764,37 @@ def test_the_attachments_dialog_template_has_balanced_tags():
         opened = len(re.findall(rf"<{tag}[\s>]", text))
         closed = len(re.findall(rf"</{tag}>", text))
         assert opened == closed, (tag, opened, closed)
+
+
+@pytest.mark.django_db
+def test_view_attachments_sits_under_the_name(client, setup):
+    """View attachments joins the custom values on the line under the
+    assignee's name, not the Done cell, so the stages' dates stay in line."""
+    s = setup
+    client.force_login(s["users"]["bob"])
+    _complete(client, s["task"])
+    _set(client, s["task"], **_form(LINKS, NOTE))
+
+    row = _row_for(_pane(client, s), s["bob"])
+    name_cell = row[: row.index("data-done-cell")]
+    done_cell = row[row.index("data-done-cell") : row.index("data-verify-cell")]
+    assert "data-view-attachments" in name_cell
+    assert 'class="completion-under' in name_cell
+    assert "data-view-attachments" not in done_cell
+
+
+@pytest.mark.django_db
+def test_details_row_keeps_no_id_for_htmx_to_settle(client, setup):
+    """The details row is hidden with x-show; an id on it would let HTMX put
+    its old style back after a tick, which opens every closed panel. The id
+    the chevron points at sits on the list inside."""
+    s = setup
+    client.force_login(s["users"]["alice"])
+    pane = _pane(client, s)
+
+    assert '<tr class="completion-details"\n' in pane
+    tr = pane[pane.index('<tr class="completion-details"') :]
+    tr = tr[: tr.index(">")]
+    assert "id=" not in tr
+    assert f'<dl id="completion-details-{s["task"].pk}-{s["bob"].pk}">' in pane
+    assert f'aria-controls="completion-details-{s["task"].pk}-{s["bob"].pk}"' in pane
