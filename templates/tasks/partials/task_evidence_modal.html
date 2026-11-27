@@ -1,0 +1,77 @@
+{% comment %}
+  The assignee's evidence dialog, in the app's standard modal (the same shape
+  as task_member_type_modal.html). It opens on an ``open-evidence`` window
+  event, from the viewer's own Done tick, the plain layout's Mark my part
+  done button, or Add / Edit evidence in their Done cell.
+
+  It does one of two things, decided when the block renders, since the
+  block is swapped after every change:
+
+    not done yet   "Mark done": posts tasks:complete with the evidence, so
+                   the part is marked done and the evidence saved together.
+    done           "Save evidence": posts tasks:evidence, changing it (empty
+                   fields clear it). Only offered while the part is not yet
+                   reviewed or verified (``s.can_edit_evidence``).
+
+  Both fields are optional. The fields start filled with the viewer's own
+  evidence, kept from an earlier mark they may since have undone. A refusal
+  (a link that is not http/https, or evidence frozen by a review) comes back
+  as a 400 whose text is shown above the buttons.
+
+  Who sees the evidence is said in the dialog, because it is not everyone on
+  the project: the task's reviewers and its Leads.
+
+  Expects ``task``, ``my_state`` (the viewer's own assignee state),
+  ``my_done`` and ``pane_mode``.
+{% endcomment %}
+<dialog id="evidence-modal-{{ task.pk }}" class="modal"
+        aria-labelledby="evidence-modal-title-{{ task.pk }}"
+        data-evidence-modal="{% if my_done %}edit{% else %}done{% endif %}"
+        x-data="{ error: '' }"
+        @open-evidence.window="error = ''; $el.showModal()">
+  <div class="modal-box">
+    <h3 id="evidence-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
+      {% if my_done %}Evidence for your part{% else %}Mark your part done{% endif %}
+    </h3>
+    <p class="mt-3 text-sm text-brand-text">
+      Optionally add a link to your work, such as a document, a shared
+      folder or a pull request, and a short note.
+      Only this task's reviewers and the project's Leads can see it.
+    </p>
+    <form method="post"
+          action="{% if my_done %}{% url 'tasks:evidence' pk=task.pk %}{% else %}{% url 'tasks:complete' pk=task.pk %}{% endif %}"
+          hx-post="{% if my_done %}{% url 'tasks:evidence' pk=task.pk %}{% else %}{% url 'tasks:complete' pk=task.pk %}{% endif %}"
+          {% if pane_mode %}hx-vals='{"pane_mode": "1"}'{% endif %}
+          hx-target="#task-status-block"
+          hx-swap="outerHTML"
+          @htmx:response-error.camel="error = $event.detail.xhr.responseText"
+          class="mt-4 flex flex-col gap-3">
+      {% csrf_token %}
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="font-medium text-brand-navy">Evidence link <span class="font-normal text-brand-text/60">(optional)</span></span>
+        <input type="url" name="evidence_url" maxlength="500"
+               class="input input-bordered w-full"
+               placeholder="https://"
+               value="{{ my_state.own_evidence_url }}"
+               data-evidence-url>
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="font-medium text-brand-navy">Note <span class="font-normal text-brand-text/60">(optional)</span></span>
+        <textarea name="evidence_note" maxlength="1000" rows="3"
+                  class="textarea textarea-bordered w-full"
+                  data-evidence-note-input>{{ my_state.own_evidence_note }}</textarea>
+      </label>
+      <p class="text-sm text-error" role="alert" x-show="error" x-text="error" x-cloak data-evidence-error></p>
+      <div class="flex flex-wrap gap-2 justify-end mt-2">
+        <button type="button" class="btn btn-ghost"
+                @click="$el.closest('dialog').close()">Cancel</button>
+        <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">
+          {% if my_done %}Save evidence{% else %}Mark done{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>

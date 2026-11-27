@@ -60,6 +60,7 @@ from apps.tasks.calendar import (
 )
 from apps.tasks.forms import (
     AssigneeDatesForm,
+    EvidenceForm,
     KanbanBoardForm,
     MilestoneForm,
     TaskAssignForm,
@@ -84,7 +85,9 @@ from apps.tasks.mixins import (
 from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog, TaskQuerySet
 from apps.tasks.services import (
     UNSET,
+    EvidenceLocked,
     apply_task_date_change,
+    evidence_editable,
     rezone_following_members,
     approve_completion,
     clear_member_dates,
@@ -92,6 +95,7 @@ from apps.tasks.services import (
     close_task,
     mark_own_done,
     mark_reviewed,
+    set_evidence,
     move_task,
     notify_new_assignees,
     notify_new_reviewers,
@@ -1412,6 +1416,15 @@ def _task_status_context(task, *, project_member, is_project_manager):
     viewer_reviews = bool(
         needs_review and (is_project_manager or task.is_reviewer(project_member))
     )
+    # Who sees the evidence assignees attach to their parts: the task's Leads
+    # and its current reviewers, on every row, and each assignee on their own.
+    # Read from the live reviewer set, so a reviewer taken off the task stops
+    # seeing it on the next render. Independent of needs_review: a reviewer
+    # on a task that asks for no review is still someone the Lead named to
+    # look at the work.
+    viewer_sees_all_evidence = bool(
+        is_project_manager or task.is_reviewer(project_member)
+    )
     locked = _marks_locked(task)
     individual_dates = {d.member_id: d for d in task.assignee_deadlines.all()}
     # Each member's own contribution type, on CRediT projects only: the type
@@ -1440,6 +1453,12 @@ def _task_status_context(task, *, project_member, is_project_manager):
     for member in assignees:
         log = current.get(member.id)
         done = log is not None and log.status == TaskStatus.COMPLETED
+        is_viewer = bool(project_member and member.id == project_member.id)
+        # Evidence is shown on a part marked done, and only to its audience;
+        # everyone else gets empty strings, so the markup has nothing of it
+        # to give away — not even that there is any.
+        sees_evidence = bool(log is not None and (viewer_sees_all_evidence or is_viewer))
+        shown_evidence = sees_evidence and done
         individual = individual_dates.get(member.id)
         own_type = own_types.get(member.id)
         effective_type = (
@@ -1498,7 +1517,21 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 "can_unverify": is_project_manager and verified,
                 # The viewer's own row: they tick their own part done (and
                 # untick it) from it, even once the task is completed.
-                "is_viewer": bool(project_member and member.id == project_member.id),
+                "is_viewer": is_viewer,
+                # The assignee's evidence for their part, for the viewers
+                # allowed to see it (see viewer_sees_all_evidence above).
+                "evidence_url": log.evidence_url if shown_evidence else "",
+                "evidence_note": log.evidence_note if shown_evidence else "",
+                "has_evidence": bool(
+                    shown_evidence and (log.evidence_url or log.evidence_note)
+                ),
+                # The assignee's own: what pre-fills their mark-done dialog,
+                # kept from an earlier mark they have since undone.
+                "own_evidence_url": log.evidence_url if is_viewer and log is not None else "",
+                "own_evidence_note": log.evidence_note if is_viewer and log is not None else "",
+                # Whether the viewer may change it: their own part, done, and
+                # not yet reviewed or verified (services.evidence_editable).
+                "can_edit_evidence": is_viewer and evidence_editable(log),
                 # The entry the review buttons act on. None until the member
                 # has one seeded, in which case there is nothing to review.
                 "log": log,
@@ -1638,6 +1671,8 @@ def _task_status_context(task, *, project_member, is_project_manager):
         ),
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
+        # The viewer's own row, for the mark-done dialog's pre-fill.
+        "my_state": my_state,
         # Whether the viewer reviews on this task at all. The per-row
         # ``can_review`` above is what actually gates the buttons.
         "viewer_reviews": viewer_reviews,
@@ -1719,7 +1754,50 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseBadRequest("No project membership.")
         if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
             return HttpResponseForbidden("Only an assignee can mark their part done.")
-        mark_own_done(task=self.task, member=self.project_member)
+        # The mark-done dialog sends the evidence fields; a post without them
+        # (an older page, a script) marks done and leaves the evidence alone.
+        evidence = None
+        if "evidence_url" in request.POST or "evidence_note" in request.POST:
+            form = EvidenceForm(request.POST)
+            if not form.is_valid():
+                return HttpResponseBadRequest(form.error_text())
+            evidence = form.evidence()
+        mark_own_done(task=self.task, member=self.project_member, evidence=evidence)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
+class TaskEvidenceView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """An assignee sets, changes or clears the evidence on their done part.
+
+    Only on their own part, once it is marked done and until it is reviewed
+    or verified (``services.evidence_editable``); after that the assignee
+    unticks Done to change it. Empty fields clear it. Like marking, it stays
+    open on a completed task.
+
+    The evidence is shown to the task's reviewers and Leads — see
+    ``_task_status_context`` — and to the assignee themselves.
+    """
+
+    def post(self, request, *args, **kwargs):
+        if self.project_member is None:
+            return HttpResponseBadRequest("No project membership.")
+        if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
+            return HttpResponseForbidden("Only the assignee can give evidence for their part.")
+        form = EvidenceForm(request.POST)
+        if not form.is_valid():
+            return HttpResponseBadRequest(form.error_text())
+        log = self.task.task_logs.filter(
+            assigned_to=self.project_member
+        ).order_by("-created_at").first()
+        url, note = form.evidence()
+        try:
+            set_evidence(task_log=log, url=url, note=note, actor=self.project_member)
+        except EvidenceLocked as exc:
+            return HttpResponseBadRequest(str(exc))
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,

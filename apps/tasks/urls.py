@@ -91,6 +91,11 @@ urlpatterns = [
         name="complete",
     ),
     path(
+        "tasks/<int:pk>/evidence/",
+        views.TaskEvidenceView.as_view(),
+        name="evidence",
+    ),
+    path(
         "tasks/<int:pk>/undo/",
         views.TaskUndoOwnView.as_view(),
         name="undo",

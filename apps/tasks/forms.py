@@ -844,3 +844,44 @@ class AssigneeDatesForm(forms.Form):
                 )
         return cleaned
 
+
+
+class EvidenceForm(forms.Form):
+    """An assignee's evidence for their part: one link and a short note.
+
+    Both optional. The link must be ``http`` or ``https`` — it is rendered as
+    a clickable link for the task's reviewers and Leads, so ``javascript:``,
+    ``data:`` and the like are refused outright.
+    """
+
+    evidence_url = forms.URLField(
+        required=False,
+        max_length=500,
+        assume_scheme="https",
+        label="Evidence link",
+    )
+    evidence_note = forms.CharField(
+        required=False,
+        max_length=1000,
+        label="Note",
+        widget=forms.Textarea,
+    )
+
+    def clean_evidence_url(self):
+        url = (self.cleaned_data.get("evidence_url") or "").strip()
+        if url and not url.lower().startswith(("http://", "https://")):
+            raise forms.ValidationError("Use a link that starts with http:// or https://.")
+        return url
+
+    def evidence(self) -> tuple[str, str]:
+        """The cleaned ``(url, note)`` pair, for the services."""
+        return (
+            self.cleaned_data.get("evidence_url") or "",
+            (self.cleaned_data.get("evidence_note") or "").strip(),
+        )
+
+    def error_text(self) -> str:
+        """Every error on one line, as the dialog shows a refusal's text."""
+        return " ".join(
+            str(message) for errors in self.errors.values() for message in errors
+        )

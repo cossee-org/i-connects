@@ -732,6 +732,31 @@ class TaskLog(models.Model):
             "when the assignee reverts their own done mark."
         ),
     )
+    evidence_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text=(
+            "A link the assignee gave as evidence of their part (a document, "
+            "a folder, a pull request). Shown only to the assignee, the task's "
+            "reviewers and the project's Leads."
+        ),
+    )
+    evidence_note = models.TextField(
+        max_length=1000,
+        blank=True,
+        default="",
+        help_text="The assignee's short note on their evidence. Same audience.",
+    )
+    evidence_updated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the assignee last set or changed their evidence. Kept "
+            "when they undo their done mark, so the evidence is still there "
+            "if they mark it done again."
+        ),
+    )
 
     class Meta:
         ordering = ["-created_at"]
