@@ -182,7 +182,7 @@ class _InfoBoxNode(template.Node):
         from django.utils.safestring import mark_safe
 
         return render_to_string(
-            "_components/info_popover.html",
+            "_components/info_box.html",
             {
                 "content": mark_safe(self.nodelist.render(context)),
                 "label": self.label.resolve(context),
@@ -193,7 +193,7 @@ class _InfoBoxNode(template.Node):
 @register.tag("infobox")
 def do_infobox(parser, token):
     """An (i) button that opens a small box holding what the tag wraps —
-    ``_components/info_popover.html``::
+    ``_components/info_box.html``::
 
         <div class="relative flex items-center gap-1.5">
           <h3>Start date for …</h3>
