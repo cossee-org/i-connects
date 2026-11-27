@@ -198,11 +198,12 @@
         person's details row under it.
 
         The Assignee cell names them and, under the name, only what is custom
-        for them, one line each: "Starts Nov 18" and "Due Dec 10" when a Lead
+        for them, on one line joined by middle dots: "Starts Nov 18 · Due
+        Dec 10 · Writing – review & editing". "Starts" and "Due" show when a Lead
         gave them their own start date or deadline at another moment than the
         task's (the deadline red, with Overdue, once it has passed and their
-        part is not done), then their own task type when it is another than
-        the task's. Someone with none of these shows just their name.
+        part is not done), and the type when theirs is another than the
+        task's. Someone with none of these shows just their name.
 
         The Done, Reviewed and Verified cells each hold a tick box and,
         beside it, when and by whom ("Oct 14 · by …"), in plain text — the
@@ -290,7 +291,7 @@
         .completion-tick[aria-disabled="true"]:not(:checked) { opacity: 0.45; }
         .completion-locked-notice { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
         .completion-tick:focus-visible { outline: 2px solid #f03d30; outline-offset: 2px; }
-        .completion-under { margin-top: 0.3rem; padding-left: 2rem; display: flex; flex-direction: column; gap: 0.1rem; font-size: 0.75rem; line-height: 1.3; }
+        .completion-under { margin-top: 0.3rem; padding-left: 2rem; font-size: 0.75rem; line-height: 1.45; }
         .completion-details > td { background: #eaeff8; padding: 0.75rem 0.9rem 0.9rem; }
         .completion-details dl { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 0.4rem 0.9rem; font-size: 0.8125rem; margin: 0; }
         .completion-details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; }
@@ -393,20 +394,16 @@
                 </div>
                 {# Under the name, only what is custom for them: their own start, their own deadline, their own type. #}
                 {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs %}
-                  <div class="completion-under">
-                    {% if s.start_differs %}
-                      <div class="text-brand-text/70" data-member-start-line>Starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}</div>
-                    {% endif %}
+                  {# One line, the parts joined by a middle dot; it wraps between words when narrow. #}
+                  <div class="completion-under text-brand-text/70">
+                    {% if s.start_differs %}<span class="whitespace-nowrap" data-member-start-line>Starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}</span>{% endif %}
                     {% if s.deadline_differs %}
-                      <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5" data-member-dates>
-                        <span class="{% if s.overdue %}text-error font-medium{% else %}text-brand-text/70{% endif %}">Due {{ s.own_deadline|in_zone:s.deadline_tz|date:"M j" }}</span>
-                        {% if s.overdue %}
-                          <span class="inline-flex items-center rounded px-1 py-0.5 bg-error/10 text-error text-[10px] font-semibold leading-none" data-member-overdue>Overdue</span>
-                        {% endif %}
-                      </div>
+                      {% if s.start_differs %}<span aria-hidden="true">&middot;</span>{% endif %}
+                      <span class="whitespace-nowrap" data-member-dates><span class="{% if s.overdue %}text-error font-medium{% endif %}">Due {{ s.own_deadline|in_zone:s.deadline_tz|date:"M j" }}</span>{% if s.overdue %} <span class="inline-flex items-center rounded px-1 py-0.5 bg-error/10 text-error text-[10px] font-semibold leading-none align-middle" data-member-overdue>Overdue</span>{% endif %}</span>
                     {% endif %}
                     {% if s.tracks_credit and s.type_differs %}
-                      <div class="text-brand-text/70 break-words" data-member-type-line>{{ s.contribution_type_label }}</div>
+                      {% if s.start_differs or s.deadline_differs %}<span aria-hidden="true">&middot;</span>{% endif %}
+                      <span class="break-words" data-member-type-line>{{ s.contribution_type_label }}</span>
                     {% endif %}
                   </div>
                 {% endif %}

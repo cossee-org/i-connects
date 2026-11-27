@@ -695,7 +695,7 @@ def test_an_own_start_shows_with_its_zone(client, pm_user, zoned):
         "Tokyo (UTC+9)</span>"
     ) in content
     # Under the name, the start as a date; its zone is in the details row.
-    assert "data-member-start-line>Starts Jan 10</div>" in content
+    assert "data-member-start-line>Starts Jan 10</span>" in content
     assert "data-member-dates" not in content
 
 
