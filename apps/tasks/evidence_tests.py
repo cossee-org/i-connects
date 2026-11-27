@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.core import mail
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import escapejs
 
 from apps.audit.models import AuditLog
 from apps.audit.services import AuditAction
@@ -278,6 +279,12 @@ def _rows(pane):
     return pane[start : pane.index("</table>", start)]
 
 
+def _row_for(pane, member):
+    body = _rows(pane)
+    start = body.index(f"data-assignee-name>{member.display_name}<")
+    return body[body.rindex("<tr", 0, start) : body.index("</tr>", start)]
+
+
 @pytest.mark.django_db
 def test_reviewers_leads_and_the_assignee_see_it_and_nobody_else(client, setup):
     s = setup
@@ -285,9 +292,14 @@ def test_reviewers_leads_and_the_assignee_see_it_and_nobody_else(client, setup):
     mark_own_done(task=s["task"], member=s["dave"])
     for name in ("alice", "carol", "bob"):
         client.force_login(s["users"][name])
-        rows = _rows(_pane(client, s))
-        assert URL in rows and NOTE in rows and "data-evidence-link" in rows, name
-        assert 'rel="noopener noreferrer nofollow"' in rows
+        pane = _pane(client, s)
+        rows = _rows(pane)
+        # View evidence hands the link and note to the viewer dialog, rather
+        # than linking straight to it from the table.
+        assert "data-view-evidence" in rows, name
+        assert escapejs(URL) in rows and escapejs(NOTE) in rows, name
+        assert f'href="{URL}"' not in rows
+        assert "data-evidence-view-modal" in pane
     # Another assignee on the same task, and a plain project member, get no
     # trace of it — not the link, not the note, not a marker.
     for name in ("dave", "eve"):
@@ -316,20 +328,35 @@ def test_evidence_shows_only_on_a_part_marked_done(client, setup):
 
 
 @pytest.mark.django_db
-def test_the_assignee_gets_add_then_edit_until_it_is_reviewed(client, setup):
+def test_view_evidence_is_the_only_evidence_control_in_the_table(client, setup):
+    """The table offers View evidence and nothing else: no link, no note, no
+    Add / Edit. Those live in the viewer dialog, whose Edit is offered only
+    on the viewer's own part until it is reviewed or verified."""
     s = setup
     client.force_login(s["users"]["bob"])
     _complete(client, s["task"])
+    # Their own done part with no evidence yet still gets View evidence, so
+    # they can open the dialog and add some from there.
+    row = _row_for(_pane(client, s), s["bob"])
+    assert "data-view-evidence" in row and "data-can-edit-evidence" in row
+    assert "data-edit-evidence" not in row
+    _set(client, s["task"], evidence_url=URL, evidence_note=NOTE)
     pane = _pane(client, s)
-    assert "Add evidence" in pane and 'data-evidence-modal="edit"' in pane
-    _set(client, s["task"], evidence_url=URL)
-    assert "Edit evidence" in _pane(client, s)
+    row = _row_for(pane, s["bob"])
+    assert row.count("<button") == 1 and "<a " not in row and "<details" not in row
+    assert "data-can-edit-evidence" in row
+    # The viewer dialog carries the edit action, handing over to the
+    # evidence dialog.
+    modal = pane[pane.index("data-evidence-view-modal") :]
+    assert "data-edit-evidence" in modal[: modal.index("</dialog>")]
+    assert 'data-evidence-modal="edit"' in pane
+
     mark_reviewed(task_log=_log(s["task"], s["bob"]), reviewer=s["carol"])
-    pane = _pane(client, s)
-    assert "Edit evidence" not in pane and URL in pane
-    # Nobody else is offered the edit, even a Lead.
+    row = _row_for(_pane(client, s), s["bob"])
+    assert "data-view-evidence" in row and "data-can-edit-evidence" not in row
+    # Nobody else may edit it, even a Lead.
     client.force_login(s["users"]["alice"])
-    assert "data-edit-evidence" not in _pane(client, s)
+    assert "data-can-edit-evidence" not in _rows(_pane(client, s))
 
 
 @pytest.mark.django_db
@@ -339,7 +366,7 @@ def test_the_note_is_escaped(client, setup):
     client.force_login(s["users"]["alice"])
     pane = _pane(client, s)
     assert "<script>x()</script>" not in pane
-    assert "&lt;script&gt;x()&lt;/script&gt;" in pane
+    assert escapejs("<script>x()</script>") in pane
 
 
 # ---------------------------------------------------------------------------
@@ -382,3 +409,30 @@ def test_the_zulip_topic_hears_of_the_mark_but_not_the_evidence(
         set_evidence(task_log=log, url=URL, note=NOTE)
     assert sent, "the mark itself is still announced"
     assert all(URL not in m and NOTE not in m for m in sent)
+
+
+@pytest.mark.django_db
+def test_the_viewer_dialog_warns_before_an_external_link(client, setup):
+    """The dialog carries the site's leaving notice, shown for a link to
+    another host, and opens the link only from its own button, in a new tab
+    without the opener or referrer."""
+    s = setup
+    mark_own_done(task=s["task"], member=s["bob"], evidence=(URL, ""))
+    client.force_login(s["users"]["alice"])
+    pane = _pane(client, s)
+    modal = pane[pane.index("data-evidence-view-modal") :]
+    modal = modal[: modal.index("</dialog>")]
+    assert "data-evidence-external" in modal and 'x-show="external"' in modal
+    assert "We are not responsible for the content of external websites." in modal
+    assert "location.host" in modal
+    assert 'target="_blank" rel="noopener noreferrer nofollow"' in modal
+    assert "data-evidence-open" in modal
+
+
+@pytest.mark.django_db
+def test_a_note_without_a_link_can_still_be_viewed(client, setup):
+    s = setup
+    mark_own_done(task=s["task"], member=s["bob"], evidence=("", NOTE))
+    client.force_login(s["users"]["carol"])
+    rows = _rows(_pane(client, s))
+    assert "data-view-evidence" in rows and escapejs(NOTE) in rows

@@ -1522,6 +1522,9 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # allowed to see it (see viewer_sees_all_evidence above).
                 "evidence_url": log.evidence_url if shown_evidence else "",
                 "evidence_note": log.evidence_note if shown_evidence else "",
+                "evidence_updated_at": (
+                    log.evidence_updated_at if shown_evidence else None
+                ),
                 "has_evidence": bool(
                     shown_evidence and (log.evidence_url or log.evidence_note)
                 ),

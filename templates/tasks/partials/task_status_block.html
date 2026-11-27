@@ -2,7 +2,7 @@
   Task completion status block (HTMX swap target: #task-status-block).
   Context comes from views._task_status_context: task, is_project_manager,
   assignee_states (each with member, log, done, done_at, done_by,
-  done_by_self, evidence_url, evidence_note, has_evidence,
+  done_by_self, evidence_url, evidence_note, evidence_updated_at, has_evidence,
   own_evidence_url, own_evidence_note, can_edit_evidence,
   reviewed, reviewed_by, reviewed_at, awaiting_review,
   verified, verified_by, verified_at, awaiting_verification,
@@ -68,7 +68,7 @@
           <div id="task-completion-info">
           <p class="text-sm font-semibold text-brand-navy">How completion works</p>
           <ol class="mt-2 flex flex-col gap-2">
-            <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished, optionally adding an evidence link and note, which only the task's reviewers and Leads can see. A Lead can tick Done for anyone. Untick to undo. The evidence can be changed until the part is reviewed or verified; after that, untick Done to change it.</li>
+            <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished, optionally adding an evidence link and note, which only the task's reviewers and Leads can see, through View evidence. A Lead can tick Done for anyone. Untick to undo. The evidence can be changed until the part is reviewed or verified; after that, untick Done to change it.</li>
             <li><span class="font-semibold text-violet-600">2. Reviewed.</span> On a task with reviewers, a reviewer or a Lead ticks Reviewed once a part is done. Whoever reviewed it, or a Lead, can untick it. Undoing a Done mark clears its review.</li>
             <li><span class="font-semibold text-sky-700">3. Verified.</span> A Lead ticks Verified to confirm a member's contribution.{% if task.project.tracks_credit %} On this CRediT project, that is what credits them: it records their contribution under the task's CRediT role ({{ task.get_contribution_type_display }}) on Contribution Tracking — or under a member's own role, where a Lead gave them one — and nothing is credited until then.{% else %} This project doesn't track CRediT, so it records the sign-off only.{% endif %} Leads can verify one part at a time, or use Verify all marked done or Verify all marked reviewed. Undoing a Done mark clears its verification.</li>
             <li><span class="font-semibold text-brand-navy">4. Closed.</span> A Lead closes the whole task with Close Task at the top. Assignees can still tick their own Done and Leads can still verify after that, and reviewers can review parts marked done after it was closed. Parts already marked when the task was closed stay as they were: a review given then is locked, and a part left unreviewed can no longer be reviewed. The Done marks a Lead sets for others are locked too; a Lead re-opens the task to change any of these. A review given after the task was closed can still be unticked, and an assignee can still untick their own Done, which clears its review and verification.</li>
@@ -536,6 +536,14 @@
         {% include "tasks/partials/task_evidence_modal.html" with task=task my_state=my_state my_done=my_done pane_mode=pane_mode %}
       {% endif %}
     {% endif %}
+  {% endif %}
+  {% comment %}
+    One evidence viewer for both layouts; View evidence in a Done cell opens
+    it (task_evidence_line.html). Only those allowed to see a row's evidence
+    get a button that fills it in.
+  {% endcomment %}
+  {% if assignee_states %}
+    {% include "tasks/partials/task_evidence_view_modal.html" with task=task %}
   {% endif %}
 </div>
 
