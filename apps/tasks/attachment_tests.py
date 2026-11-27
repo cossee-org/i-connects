@@ -499,27 +499,22 @@ def test_the_status_block_loads_evidence_in_one_query(client, setup):
 
 
 @pytest.mark.django_db
-def test_the_dialog_shows_the_note_above_a_table_of_links(client, setup):
-    """Read mode: the note on top, then the links as a table, each row with
-    its own Open (a new tab without the opener or referrer), external ones
-    tagged, and the site's leaving notice for when any is external."""
+def test_the_dialog_shows_a_table_of_links_then_the_note(client, setup):
+    """Read mode: the links as a table, each row with its own Open (a new tab
+    without the opener or referrer) — Open external on an off-site link —
+    then the note; Last updated in the header."""
     s = setup
     mark_own_done(task=s["task"], member=s["bob"], attachments=EV)
     client.force_login(s["users"]["alice"])
     view = _modal(_pane(client, s))
     view = view[view.index("data-attachments-view>") :]
     assert 'x-for="(url, i) in links"' in view and "data-attachments-view-row" in view
-    assert "data-attachments-external-tag" in view
-    # The leaving notice sits behind an (i) beside the Links heading, offered
-    # only when a link is external.
-    links = view[view.index("data-attachments-view-links") :]
-    info = links[links.index("data-attachments-external-info") - 400 : links.index("data-attachments-view-table")]
-    assert 'x-show="externalCount"' in info and 'aria-label="About external links"' in info
-    assert (
-        "Links marked External go outside i-CONNECTS. Opening one will take you away "
-        "from i-CONNECTS. We are not responsible for the content of external websites."
-    ) in info
-    assert links.index(">Links</h3>") < links.index("data-attachments-external-info")
+    # No External pill beside the links: the button says it instead.
+    assert "data-attachments-external-tag" not in view and ">External</span>" not in view
+    # No leaving notice in the dialog, behind an (i) or otherwise: the
+    # Open external button is what says a link leaves the site.
+    assert "data-attachments-external-info" not in view and "data-attachments-external>" not in view
+    assert "We are not responsible for the content of external websites." not in view
     # The note comes after the links.
     assert view.index("data-attachments-view-table") < view.index("data-attachments-view-note")
     # An external link's button says so, with an icon; others say Open.
@@ -750,3 +745,20 @@ def test_the_rename_carries_old_audit_rows_over_to_attachments():
         assert AuditLog.objects.get(pk=listed.pk).action == "task.evidence_set"
     finally:
         MigrationExecutor(connection).migrate(leaves)
+
+
+def test_the_attachments_dialog_template_has_balanced_tags():
+    """A stray closing tag in the dialog pulls its body out of the padded
+    box (it happened once, when the (i) beside Links was taken out)."""
+    import re
+    from pathlib import Path
+
+    from django.conf import settings
+
+    path = Path(settings.BASE_DIR) / "templates/tasks/partials/task_attachments_modal.html"
+    text = re.sub(r"{%\s*comment\s*%}.*?{%\s*endcomment\s*%}", "", path.read_text(), flags=re.S)
+    text = re.sub(r"{#.*?#}", "", text, flags=re.S)
+    for tag in ("div", "section", "form", "table", "template", "dialog"):
+        opened = len(re.findall(rf"<{tag}[\s>]", text))
+        closed = len(re.findall(rf"</{tag}>", text))
+        assert opened == closed, (tag, opened, closed)

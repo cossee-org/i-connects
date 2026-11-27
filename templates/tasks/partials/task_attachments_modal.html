@@ -17,15 +17,14 @@
          When it last changed is shown under the title, in the header.
          The links come first, the note under them.
          Each row of the table numbers a link, shows it in full so the
-         reader sees where it really goes, and has its own Open — Open external, with an external-link
-         icon, on a link to another host — (a new tab,
-         without the opener or the referrer). A link to another host gets an
-         External tag, and when any has one an (i) beside the Links heading
-         opens the same notice as the site's "Leaving i-CONNECTS" dialog
-         (base.html). External is judged the same way as there: a different host from this page is leaving, the
-         same host is not. Open is a plain link rather than one marked
-         data-external-link: this dialog already gave the warning, so it is
-         not asked a second time.
+         reader sees where it really goes, and has its own button opening
+         it in a new tab, without the opener or the referrer: Open, or on a
+         link to another host Open external with an external-link icon.
+         External is judged as the site's "Leaving i-CONNECTS" dialog
+         (base.html) judges it: a different host from this page is leaving,
+         the same host is not. The buttons are plain links rather than
+         ones marked data-external-link: Open external already says where it
+         goes, so the site's leaving dialog is not put in front of it.
          With ``canEdit``, Add / Edit attachments switches it to edit mode;
          on the viewer's own part once reviewed or verified, it says instead
          that unticking Done is the way to change it.
@@ -72,7 +71,6 @@
                     try { return new URL(url, location.href).host !== location.host }
                     catch (e) { return true }
                   },
-                  get externalCount() { return this.links.filter(url => this.isExternal(url)).length },
                   row(url) { return { key: this.next++, url: url || '' } },
                   edit(origin) {
                     const saved = this.$refs.seed ? JSON.parse(this.$refs.seed.textContent) : { links: [], note: '' }
@@ -117,36 +115,7 @@
     <div x-show="mode === 'view'" data-attachments-view>
       <div class="px-6 py-5 text-brand-text max-h-[60vh] overflow-y-auto">
         <section x-show="links.length" data-attachments-view-links>
-          {% comment %}
-            The (i) beside the heading carries the site's leaving notice, shown
-            only when a link here goes to another host (tagged External in
-            the table). The id sits on the inner element, not on the one
-            x-show hides, as with the Completion card's (i).
-          {% endcomment %}
-          <div class="relative flex items-center gap-1.5"
-               x-data="{ info: false }"
-               @view-attachments.window="info = false"
-               @click.outside="info = false"
-               @keydown.escape="if (info) { info = false; $event.preventDefault() }">
-            <h3 class="text-sm font-medium text-brand-text/70">Links</h3>
-            <button type="button" x-show="externalCount" @click="info = !info"
-                    aria-label="About external links"
-                    :aria-expanded="info"
-                    aria-controls="attachments-external-info-{{ task.pk }}"
-                    class="inline-flex items-center justify-center w-5 h-5 rounded-full text-brand-text/50 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors"
-                    data-attachments-external-info>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4" aria-hidden="true">
-                <path fill-rule="evenodd" d="M18 10A8 8 0 1 1 2 10a8 8 0 0 1 16 0ZM9 9a1 1 0 0 1 2 0v4a1 1 0 1 1-2 0V9Zm1-3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
-              </svg>
-            </button>
-            <div x-cloak x-show="info"
-                 x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-                 x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
-                 class="absolute left-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-30 text-sm text-brand-text/80"
-                 style="width: min(22rem, calc(100vw - 4rem))">
-              <p id="attachments-external-info-{{ task.pk }}" data-attachments-external>Links marked External go outside i-CONNECTS. Opening one will take you away from i-CONNECTS. We are not responsible for the content of external websites.</p>
-            </div>
-          </div>
+          <h3 class="text-sm font-medium text-brand-text/70">Links</h3>
           <div class="mt-2 rounded-lg border border-brand-light/60 overflow-hidden">
             <table class="table table-sm" data-attachments-view-table>
               <thead class="bg-brand-lighter text-brand-navy">
@@ -162,9 +131,6 @@
                     <td class="text-brand-text/60 align-top" x-text="i + 1"></td>
                     <td class="align-top">
                       <span class="text-sm text-brand-navy break-all" x-text="url" data-attachments-view-url></span>
-                      <span x-show="isExternal(url)"
-                            class="ml-1 inline-flex items-center rounded px-1.5 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-semibold uppercase tracking-wide leading-none align-middle"
-                            data-attachments-external-tag>External</span>
                     </td>
                     <td class="align-top text-right">
                       <a :href="url" target="_blank" rel="noopener noreferrer nofollow"
