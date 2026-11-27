@@ -10,9 +10,8 @@
   (``s.is_viewer``, through the self-mark endpoints), and a Lead for anyone
   else (``s.can_mark_done``, posting by member so a row with no entry yet
   still works). Everyone else sees it read-only. An assignee ticking their
-  own part opens the attachments dialog (task_attachments_modal.html), which does
-  the marking, so they can attach a link as they do; unticking undoes it
-  straight away. A Lead ticking for someone else adds no attachments: those
+  own part marks it straight away; Add attachment then appears under it, to
+  add a note and links (task_attachments_modal.html). Unticking asks first. A Lead ticking for someone else adds no attachments: those
   are the assignee's to give.
 
   Once the task is marked completed, the marks a Lead sets for others
@@ -36,13 +35,15 @@
            title="Untick to undo"
            data-confirm-withdraw="done">
   {% else %}
-    {# Opens the attachments dialog (task_attachments_modal.html), which marks it. #}
+    {# Marks it straight away; Add attachment appears under it after. #}
     <input type="checkbox" class="completion-tick completion-tick-done"
-           @click.prevent="$dispatch('open-attachments')"
-           aria-haspopup="dialog"
+           hx-post="{% url 'tasks:complete' pk=task.pk %}"
+           hx-vals='{"pane_mode": "1"}'
+           hx-target="#task-status-block"
+           hx-swap="outerHTML"
            aria-label="Mark your part done"
            title="Tick to mark your part done"
-           data-open-attachments>
+           data-mark-own-done>
   {% endif %}
 {% elif s.can_mark_done and s.done %}
   {{ s.withdraw.done|json_script }}

@@ -69,7 +69,7 @@
           <div id="task-completion-info">
           <p class="text-sm font-semibold text-brand-navy">How completion works</p>
           <ol class="mt-2 flex flex-col gap-2">
-            <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished, optionally adding attachments — a note and a list of links — which only the task's reviewers and Leads can see, through View attachments. A Lead can tick Done for anyone. Untick to undo: you are asked to confirm first, and told what else it clears. A comment goes with the review or verification it was left on. The attachments can be changed until the part is reviewed or verified; after that, untick Done to change them.</li>
+            <li><span class="font-semibold text-success">1. Done.</span> Each assignee ticks Done when their part is finished; it saves straight away. Add attachment then appears under it, to add a note and a list of links, which only the task's reviewers and Leads can see, through View attachment. A Lead can tick Done for anyone. Untick to undo: you are asked to confirm first, and told what else it clears. A comment goes with the review or verification it was left on. The attachments can be changed until the part is reviewed or verified; after that, untick Done to change them.</li>
             <li><span class="font-semibold text-violet-600">2. Reviewed.</span> On a task with reviewers, a reviewer or a Lead ticks Reviewed once a part is done. Add comment under the tick leaves a comment on the review, which the assignee, the reviewers and Leads read through View comment. Whoever reviewed it, or a Lead, can untick it. Undoing a Done mark clears its review.</li>
             <li><span class="font-semibold text-sky-700">3. Verified.</span> A Lead ticks Verified to confirm a member's contribution, and can add a comment under it the same way.{% if task.project.tracks_credit %} On this CRediT project, that is what credits them: it records their contribution under the task's CRediT role ({{ task.get_contribution_type_display }}) on Contribution Tracking — or under a member's own role, where a Lead gave them one — and nothing is credited until then.{% else %} This project doesn't track CRediT, so it records the sign-off only.{% endif %} Leads can verify one part at a time, or use Verify all marked done or Verify all marked reviewed. Undoing a Done mark clears its verification.</li>
             <li><span class="font-semibold text-brand-navy">4. Closed.</span> A Lead closes the whole task with Close Task at the top. Assignees can still tick their own Done and Leads can still verify after that, and reviewers can review parts marked done after it was closed. Parts already marked when the task was closed stay as they were: a review given then is locked, and a part left unreviewed can no longer be reviewed. The Done marks a Lead sets for others are locked too; a Lead re-opens the task to change any of these. A review given after the task was closed can still be unticked, and an assignee can still untick their own Done, which clears its review and verification.</li>
@@ -105,10 +105,11 @@
                   aria-haspopup="dialog"
                   data-confirm-withdraw="done">Undo my mark</button>
         {% else %}
-          <button type="button" x-data class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
-                  @click="$dispatch('open-attachments')"
-                  aria-haspopup="dialog"
-                  data-open-attachments>Mark my part done</button>
+          <button type="button" class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
+                  hx-post="{% url 'tasks:complete' pk=task.pk %}"
+                  hx-target="#task-status-block"
+                  hx-swap="outerHTML"
+                  data-mark-own-done>Mark my part done</button>
         {% endif %}
       </div>
     {% endif %}
@@ -284,9 +285,9 @@
         .completion-mark-note { font-size: 0.8125rem; line-height: 1.25; min-width: 0; overflow-wrap: break-word; padding-top: 3px; }
         /* "by …" on a line of its own under the date, kept to one line and
            cut short with "…" (the full name is its title, and in the
-           details row); left out when the assignee marked their own part. */
+           details row) — in every stage, the assignee's own name
+           included. */
         .completion-by { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.75rem; color: rgb(51 51 51 / 0.6); }
-        .completion-by-self { display: none; }
         .completion-mark-note { overflow: hidden; }
         /* The table's short words; the cards have room for the long ones. */
         .cs-long { display: none; }
@@ -364,7 +365,6 @@
           .completion-by { display: inline; white-space: normal; font-size: inherit; color: inherit; }
           .completion-by::before { content: " \00B7  "; }
           .completion-by-first::before { content: none; }
-          .completion-by-self { display: inline; }
           .cs-short { display: none; }
           .cs-long { display: inline; }
           /* A card has room for the word beside its arrow again. */
@@ -474,7 +474,7 @@
                   {% include "tasks/partials/task_done_tick.html" with s=s task=task %}
                   {% if s.done %}
                     {% firstof s.member.display_name as self_name %}
-                    <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }}{% endif %}<span class="completion-by{% if not s.done_at %} completion-by-first{% endif %}{% if s.done_by_self %} completion-by-self{% endif %}" title="by {% if s.done_by_self %}{{ self_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}">by {% if s.done_by_self %}{{ self_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span></span>
+                    <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }}{% endif %}<span class="completion-by{% if not s.done_at %} completion-by-first{% endif %}" title="by {% if s.done_by_self %}{{ self_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}">by {% if s.done_by_self %}{{ self_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span></span>
                   {% else %}
                     <span class="completion-mark-note text-brand-text/60"><span class="cs-short">Not yet</span><span class="cs-long">Not done yet</span></span>
                   {% endif %}

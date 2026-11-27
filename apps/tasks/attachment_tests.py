@@ -388,7 +388,9 @@ def test_reviewers_leads_and_the_assignee_see_it_and_nobody_else(client, setup):
         row = _row_for(_pane(client, s), s["bob"])
         # View attachments carries the attachments as JSON for the dialog, rather
         # than linking straight to anything from the table.
-        assert "data-view-attachments" in row and "View attachments (2)" in row, name
+        assert "data-view-attachments" in row and "View attachment<span" in row, name
+        # No count beside it any more; screen readers still hear it.
+        assert "s (2) for" in row, name
         for text in (URL, URL2, NOTE):
             assert text in row, (name, text)
         assert 'type="application/json"' in row
@@ -409,7 +411,7 @@ def test_a_single_link_shows_no_count(client, setup):
     mark_own_done(task=s["task"], member=s["bob"], attachments=Attachments([URL], NOTE))
     client.force_login(s["users"]["carol"])
     row = _row_for(_pane(client, s), s["bob"])
-    assert "data-view-attachments" in row and "View attachments (" not in row
+    assert "data-view-attachments" in row and "s (" not in row[row.index("View attachment") :][:80]
 
 
 @pytest.mark.django_db
@@ -447,11 +449,11 @@ def test_view_evidence_is_the_only_evidence_control_in_the_table(client, setup):
     s = setup
     client.force_login(s["users"]["bob"])
     _complete(client, s["task"])
-    # Their own done part with no attachments yet still gets View attachments, so
-    # they can open the dialog and add some from there.
+    # Their own done part with no attachments yet gets Add attachment, which
+    # opens the dialog straight on its form.
     row = _row_for(_pane(client, s), s["bob"])
-    assert "data-view-attachments" in row and "data-can-edit-attachments" in row
-    assert "data-edit-attachments" not in row
+    assert "data-add-attachments" in row and "Add attachment<" in row
+    assert "data-view-attachments" not in row and "data-edit-attachments" not in row
     _set(client, s["task"], **_form(LINKS, NOTE))
     pane = _pane(client, s)
     row = _row_for(pane, s["bob"])

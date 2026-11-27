@@ -182,7 +182,7 @@ def test_the_table_turns_into_cards_when_narrow(client, pm_user, marked):
     """The table measures its own width: under 44rem each person becomes a
     card (the same rows, laid out by CSS), with each stage named beside its
     tick; the table's short words and the cards' long ones are both there,
-    and "by …" sits on its own line in the table."""
+    and "by …" sits on its own line in the table, for every stage."""
     _project, task, _lead, bob, _carol = marked
     client.force_login(pm_user)
     html = _block(client, task)
@@ -194,9 +194,10 @@ def test_the_table_turns_into_cards_when_narrow(client, pm_user, marked):
     for label in ("Done", "Reviewed", "Verified"):
         assert f'data-label="{label}"' in row
     assert 'class="completion-by' in row
-    # Bob marked his own part: his name is left out of the table's Done cell
-    # (shown again in the card and the details row).
-    assert "completion-by-self" in row
+    # Bob marked his own part: his name shows in the Done cell all the same,
+    # as Reviewed and Verified show theirs.
+    done = row[row.index("data-done-line") :]
+    assert f">by {bob.display_name}</span>" in done[: done.index("</td>")]
 
 
 

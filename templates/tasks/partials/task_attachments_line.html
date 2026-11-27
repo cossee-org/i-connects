@@ -1,6 +1,6 @@
 {% comment %}
-  The attachments under a done part: one control, View attachments (with the
-  number of links when there is more than one), which opens the attachments
+  The attachments under a done part: one control, View attachment, which
+  opens the attachments
   dialog (task_attachments_modal.html) to read them. Everything else lives in
   that dialog — the note on top, the links as a table under it with the
   site's "leaving i-CONNECTS" notice for links off the site, and, on the
@@ -8,8 +8,10 @@
   attachments, which turns the same dialog into the form. No link is ever
   opened straight from the table.
 
-  On the viewer's own done part it shows even with no attachments yet, so the
-  viewer can open the dialog to add some.
+  On the viewer's own done part with nothing added yet it reads Add
+  attachment instead, and opens the dialog straight on its form — as long as
+  the part can still take attachments (not yet reviewed or verified); once
+  it cannot, an empty part shows no link.
 
   The attachments ({links, note}) reach the dialog as JSON from Django's
   ``json_script``, which escapes it for a <script> element, rather than as
@@ -26,8 +28,18 @@
   the table's row (``details``) it is drawn again; only the Done cell's
   button carries ``data-view-attachments``, so there is one per part to find.
 {% endcomment %}
-{% if s.has_attachments or s.can_edit_attachments or s.is_viewer and s.done %}
+{% if s.has_attachments or s.can_edit_attachments %}
   <div class="{% if inline %}inline-flex{% else %}flex{% endif %} items-center text-xs"{% if not details %} data-attachments="{{ s.member.pk }}"{% endif %}>
+    {% if not s.has_attachments %}
+      {# Nothing added yet: Add attachment opens the dialog straight on its form. #}
+      <button type="button" x-data
+              class="font-medium text-left text-brand-navy no-underline hover:text-brand-coral"
+              @click="$dispatch('open-attachments')"
+              aria-haspopup="dialog"
+              {% if details %}data-details-attachments{% else %}data-add-attachments{% endif %}>
+        Add attachment<span class="sr-only"> to your part</span>
+      </button>
+    {% else %}
     {# Read by the button below as its previous sibling: keep them together. #}
     {{ s.attachments|json_script }}
     <button type="button" x-data
@@ -35,7 +47,8 @@
             @click="$dispatch('view-attachments', { name: '{% if s.is_viewer %}your part{% else %}{{ s.member.display_name|escapejs }}{% endif %}', attachments: JSON.parse($el.previousElementSibling.textContent), updated: '{% if s.attachments_updated_at %}{{ s.attachments_updated_at|date:"M j, Y"|escapejs }}{% endif %}', own: {% if s.is_viewer %}true{% else %}false{% endif %}, canEdit: {% if s.can_edit_attachments %}true{% else %}false{% endif %} })"
             aria-haspopup="dialog"
             {% if details %}data-details-attachments{% else %}data-view-attachments{% if s.can_edit_attachments %} data-can-edit-attachments{% endif %}{% endif %}>
-      View attachments{% if s.attachment_count > 1 %} ({{ s.attachment_count }}){% endif %}<span class="sr-only"> for {% if s.is_viewer %}your part{% else %}{{ s.member.display_name }}'s part{% endif %}</span>
+      View attachment<span class="sr-only">{% if s.attachment_count > 1 %}s ({{ s.attachment_count }}){% endif %} for {% if s.is_viewer %}your part{% else %}{{ s.member.display_name }}'s part{% endif %}</span>
     </button>
+    {% endif %}
   </div>
 {% endif %}
