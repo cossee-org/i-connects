@@ -426,6 +426,11 @@ def reopen_own(
     log.reviewed_at = None
     log.verified_by = None
     log.verified_at = None
+    # Comments belong to the verdicts, which go with the mark.
+    log.review_comment = ""
+    log.review_comment_updated_at = None
+    log.verify_comment = ""
+    log.verify_comment_updated_at = None
     log.save(
         update_fields=[
             "status",
@@ -434,6 +439,10 @@ def reopen_own(
             "reviewed_at",
             "verified_by",
             "verified_at",
+            "review_comment",
+            "review_comment_updated_at",
+            "verify_comment",
+            "verify_comment_updated_at",
         ]
     )
     if had_review:
@@ -548,7 +557,9 @@ def all_submissions_reviewed(task: Task) -> bool:
 
 
 @transaction.atomic
-def mark_reviewed(*, task_log: TaskLog, reviewer: ProjectMember) -> TaskLog:
+def mark_reviewed(
+    *, task_log: TaskLog, reviewer: ProjectMember, comment: str = ""
+) -> TaskLog:
     """Record ``reviewer``'s sign-off on one assignee's submission.
 
     Peer review is deliberately separate from a Lead's verification
@@ -564,11 +575,20 @@ def mark_reviewed(*, task_log: TaskLog, reviewer: ProjectMember) -> TaskLog:
     task's status nor anyone's credit: closing is a Lead's call, and credit
     waits on a Lead's verification (:func:`verify_part`).
     """
+    now = timezone.now()
+    comment = (comment or "").strip()
     task_log.reviewed_by = reviewer
-    task_log.reviewed_at = timezone.now()
-    task_log.save(update_fields=["reviewed_by", "reviewed_at"])
+    task_log.reviewed_at = now
+    task_log.review_comment = comment
+    task_log.review_comment_updated_at = now if comment else None
+    task_log.save(
+        update_fields=[
+            "reviewed_by", "reviewed_at", "review_comment", "review_comment_updated_at",
+        ]
+    )
     _log_review_action(
-        AuditAction.TASK_REVIEWED, task_log=task_log, actor_member=reviewer
+        AuditAction.TASK_REVIEWED, task_log=task_log, actor_member=reviewer,
+        comment=comment,
     )
     _notify_submission_reviewed(task_log=task_log, reviewer=reviewer)
     return task_log
@@ -592,7 +612,14 @@ def clear_review(
         return task_log
     task_log.reviewed_by = None
     task_log.reviewed_at = None
-    task_log.save(update_fields=["reviewed_by", "reviewed_at"])
+    # The comment was left with the review, so it goes with it.
+    task_log.review_comment = ""
+    task_log.review_comment_updated_at = None
+    task_log.save(
+        update_fields=[
+            "reviewed_by", "reviewed_at", "review_comment", "review_comment_updated_at",
+        ]
+    )
     _log_review_action(
         AuditAction.TASK_REVIEW_CLEARED,
         task_log=task_log,
@@ -610,7 +637,13 @@ class VerifyScope:
 
 
 @transaction.atomic
-def verify_part(*, task_log: TaskLog, lead: ProjectMember, batch: str | None = None) -> TaskLog:
+def verify_part(
+    *,
+    task_log: TaskLog,
+    lead: ProjectMember,
+    batch: str | None = None,
+    comment: str = "",
+) -> TaskLog:
     """A Lead verifies one member's contribution, crediting them for it.
 
     This is the ledger event: on a project tracking contributions as CRediT
@@ -626,14 +659,23 @@ def verify_part(*, task_log: TaskLog, lead: ProjectMember, batch: str | None = N
     """
     if task_log.is_verified:
         return task_log
+    now = timezone.now()
+    comment = (comment or "").strip()
     task_log.verified_by = lead
-    task_log.verified_at = timezone.now()
-    task_log.save(update_fields=["verified_by", "verified_at"])
+    task_log.verified_at = now
+    task_log.verify_comment = comment
+    task_log.verify_comment_updated_at = now if comment else None
+    task_log.save(
+        update_fields=[
+            "verified_by", "verified_at", "verify_comment", "verify_comment_updated_at",
+        ]
+    )
     _log_verify_action(
         AuditAction.TASK_PART_VERIFIED,
         task_log=task_log,
         actor_member=lead,
         batch=batch,
+        comment=comment,
     )
     _record_member_contribution(task_log, verifier_user=lead.users.first())
     return task_log
@@ -650,11 +692,53 @@ def unverify_part(*, task_log: TaskLog, actor: ProjectMember | None) -> TaskLog:
         return task_log
     task_log.verified_by = None
     task_log.verified_at = None
-    task_log.save(update_fields=["verified_by", "verified_at"])
+    # The comment was left with the verification, so it goes with it.
+    task_log.verify_comment = ""
+    task_log.verify_comment_updated_at = None
+    task_log.save(
+        update_fields=[
+            "verified_by", "verified_at", "verify_comment", "verify_comment_updated_at",
+        ]
+    )
     _log_verify_action(
         AuditAction.TASK_PART_UNVERIFIED, task_log=task_log, actor_member=actor
     )
     _withdraw_member_contributions(task_log.task, task_log.assigned_to)
+    return task_log
+
+
+@transaction.atomic
+def set_verdict_comment(
+    *, task_log: TaskLog, kind: str, comment: str, actor: ProjectMember | None
+) -> TaskLog:
+    """Change the comments left with a review (``kind="review"``) or a
+    verification (``kind="verify"``), while that verdict stands. Callers check
+    who may (``views.TaskLogCommentView``): the reviewer who signed it off or
+    a Lead for a review, a Lead for a verification. A no-op when nothing
+    changes; otherwise audited.
+    """
+    assert kind in ("review", "verify")
+    field = f"{kind}_comment"
+    comment = (comment or "").strip()
+    if getattr(task_log, field) == comment:
+        return task_log
+    setattr(task_log, field, comment)
+    setattr(task_log, f"{field}_updated_at", timezone.now() if comment else None)
+    task_log.save(update_fields=[field, f"{field}_updated_at"])
+    task = task_log.task
+    log_action(
+        AuditAction.TASK_REVIEW_COMMENT_SET if kind == "review"
+        else AuditAction.TASK_VERIFY_COMMENT_SET,
+        actor=actor.users.first() if actor is not None else None,
+        entity=task,
+        project=task.project,
+        metadata={
+            "task_name": task.name,
+            "assignee_member_id": task_log.assigned_to_id,
+            "task_log_id": task_log.pk,
+            "comment": comment,
+        },
+    )
     return task_log
 
 
@@ -711,6 +795,7 @@ def _log_verify_action(
     task_log: TaskLog,
     actor_member: ProjectMember | None,
     reason: str | None = None,
+    comment: str = "",
     batch: str | None = None,
 ) -> None:
     """Append an audit row for a verification set or withdrawn on ``task_log``."""
@@ -723,6 +808,8 @@ def _log_verify_action(
     }
     if reason:
         metadata["reason"] = reason
+    if comment:
+        metadata["comment"] = comment
     if batch:
         metadata["batch"] = batch
     log_action(
@@ -740,6 +827,7 @@ def _log_review_action(
     task_log: TaskLog,
     actor_member: ProjectMember | None,
     reason: str | None = None,
+    comment: str = "",
 ) -> None:
     """Append an audit row for a review event on ``task_log``."""
     task = task_log.task
@@ -750,6 +838,8 @@ def _log_review_action(
     }
     if reason:
         metadata["reason"] = reason
+    if comment:
+        metadata["comment"] = comment
     log_action(
         action,
         actor=actor_member.users.first() if actor_member is not None else None,
@@ -1548,7 +1638,10 @@ def _notify_submission_reviewed(*, task_log: TaskLog, reviewer: ProjectMember) -
     create_notification(
         users=list(user_ids),
         title=f"Submission reviewed: {task.name}",
-        body=f"{reviewer.display_name} marked your part reviewed.",
+        body=(
+            f"{reviewer.display_name} marked your part reviewed"
+            + (" and left comments: " + task_log.review_comment if task_log.review_comment else ".")
+        ),
         project=task.project,
         route="tasks:detail",
         route_kwargs={"project_pk": task.project_id, "pk": task.pk},

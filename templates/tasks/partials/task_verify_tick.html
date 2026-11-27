@@ -25,11 +25,12 @@
            aria-label="{{ s.member.display_name }}: verified">
   {% endif %}
 {% elif s.can_verify and s.log %}
+  {# Ticking opens the comments dialog (task_comments_modal.html), which verifies it. #}
+  {{ s.verify_mark|json_script }}
   <input type="checkbox" class="completion-tick completion-tick-verify"
-         hx-post="{% url 'tasks:verify_log' pk=task.pk log_pk=s.log.pk %}"
-         hx-vals='{"verified": "1", "pane_mode": "1"}'
-         hx-target="#task-status-block"
-         hx-swap="outerHTML"
+         @click.prevent="$dispatch('open-comments', JSON.parse($el.previousElementSibling.textContent))"
+         aria-haspopup="dialog"
+         data-open-comments="verify"
          aria-label="Verify {% if s.is_viewer %}your{% else %}{{ s.member.display_name }}'s{% endif %} contribution"
          title="Tick to verify">
 {% else %}

@@ -96,6 +96,7 @@ from apps.tasks.services import (
     close_task,
     mark_own_done,
     mark_reviewed,
+    set_verdict_comment,
     set_attachments,
     move_task,
     notify_new_assignees,
@@ -1387,6 +1388,87 @@ def _marks_locked(task) -> bool:
     return task.status == TaskStatus.COMPLETED
 
 
+def _comment_state(
+    *, task, log, member, is_viewer, sees, project_member, is_project_manager,
+    locked_review, needs_review, can_review, can_verify,
+) -> dict:
+    """One row's comments, and what the comments dialog
+    (task_comments_modal.html) is handed for each action on them:
+
+    - ``review_mark`` / ``verify_mark``: ticking Reviewed / Verified opens the
+      dialog to mark it with optional comments;
+    - ``review_view`` / ``verify_view``: View comments opens it to read them,
+      with Edit for whoever may change them.
+    """
+    from django.urls import reverse
+
+    whose = "your" if is_viewer else f"{member.display_name}'s"
+    state = {
+        "review_comment": "", "verify_comment": "",
+        "review_mark": None, "verify_mark": None,
+        "review_view": None, "verify_view": None,
+    }
+    if log is None:
+        return state
+    review_url = reverse("tasks:review_log", kwargs={"pk": task.pk, "log_pk": log.pk})
+    verify_url = reverse("tasks:verify_log", kwargs={"pk": task.pk, "log_pk": log.pk})
+    comment_url = reverse("tasks:log_comment", kwargs={"pk": task.pk, "log_pk": log.pk})
+    if can_review and log.is_reviewable and not log.is_reviewed:
+        state["review_mark"] = {
+            "mode": "mark",
+            "title": f"Mark {whose} part reviewed",
+            "confirm": "Mark reviewed",
+            "url": review_url,
+            "vals": {"reviewed": "1", "pane_mode": "1"},
+        }
+    if can_verify:
+        state["verify_mark"] = {
+            "mode": "mark",
+            "title": f"Verify {whose} contribution",
+            "confirm": "Verify",
+            "url": verify_url,
+            "vals": {"verified": "1", "pane_mode": "1"},
+        }
+
+    def name_of(m):
+        return m.display_name if m is not None else "a former member"
+
+    if sees and log.review_comment:
+        state["review_comment"] = log.review_comment
+        state["review_view"] = {
+            "mode": "view",
+            "title": f"Review comments on {whose} part",
+            "author": name_of(log.reviewed_by),
+            "when": f"{log.review_comment_updated_at:%b %-d, %Y}" if log.review_comment_updated_at else "",
+            "comment": log.review_comment,
+            "canEdit": bool(
+                needs_review
+                and not locked_review
+                and (
+                    is_project_manager
+                    or (project_member is not None and log.reviewed_by_id == project_member.pk)
+                )
+            ),
+            "confirm": "Save comments",
+            "url": comment_url,
+            "vals": {"kind": "review", "pane_mode": "1"},
+        }
+    if sees and log.verify_comment:
+        state["verify_comment"] = log.verify_comment
+        state["verify_view"] = {
+            "mode": "view",
+            "title": f"Verification comments on {whose} contribution",
+            "author": name_of(log.verified_by),
+            "when": f"{log.verify_comment_updated_at:%b %-d, %Y}" if log.verify_comment_updated_at else "",
+            "comment": log.verify_comment,
+            "canEdit": bool(is_project_manager),
+            "confirm": "Save comments",
+            "url": comment_url,
+            "vals": {"kind": "verify", "pane_mode": "1"},
+        }
+    return state
+
+
 def _withdraw_prompts(
     *,
     member,
@@ -1773,6 +1855,22 @@ def _task_status_context(task, *, project_member, is_project_manager):
                     effective_type, effective_type
                 ),
                 "can_set_type": can_set_type,
+                # The comments left with the review and the verification,
+                # for the viewers who may see them (the assignee, the task's
+                # reviewers, Leads); empty for everyone else.
+                **_comment_state(
+                    task=task,
+                    log=log,
+                    member=member,
+                    is_viewer=is_viewer,
+                    sees=bool(log is not None and (viewer_sees_all_attachments or is_viewer)),
+                    project_member=project_member,
+                    is_project_manager=is_project_manager,
+                    locked_review=locked_review,
+                    needs_review=needs_review,
+                    can_review=viewer_reviews and not closed_review,
+                    can_verify=is_project_manager and done and not verified,
+                ),
                 # What the confirmation before each untick says.
                 "withdraw": _withdraw_prompts(
                     member=member,
@@ -1786,6 +1884,8 @@ def _task_status_context(task, *, project_member, is_project_manager):
                     tracks_credit=tracks_credit,
                     type_label=type_labels.get(effective_type, effective_type),
                     has_attachments=bool(own_attachments["links"] or own_attachments["note"]),
+                    review_comment=bool(log is not None and log.review_comment),
+                    verify_comment=bool(log is not None and log.verify_comment),
                 ),
             }
         )
@@ -2165,6 +2265,69 @@ class TaskMemberDoneView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         )
 
 
+MAX_VERDICT_COMMENT = 2000
+
+
+def _posted_comment(request):
+    """The ``comment`` posted with a review or verification, and an error
+    response when it is too long."""
+    comment = (request.POST.get("comment") or "").strip()
+    if len(comment) > MAX_VERDICT_COMMENT:
+        return comment, HttpResponseBadRequest(
+            f"Keep comments to {MAX_VERDICT_COMMENT} characters or fewer."
+        )
+    return comment, None
+
+
+class TaskLogCommentView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """Change the comments left with a review or a verification, while the
+    verdict stands.
+
+    POST ``kind=review`` or ``kind=verify`` with ``comment`` (empty clears it).
+    A review's comments are the reviewer's who signed it off, or a Lead's; a
+    review locked on a closed task keeps its comments as they are. A
+    verification's comments are a Lead's.
+    """
+
+    def post(self, request, *args, **kwargs):
+        log = get_object_or_404(
+            TaskLog.objects.filter(task=self.task), pk=kwargs["log_pk"]
+        )
+        kind = request.POST.get("kind")
+        if kind == "review":
+            if not log.is_reviewed:
+                return HttpResponseBadRequest("That part has not been reviewed.")
+            if not self.is_project_manager and not (
+                self.project_member is not None
+                and log.reviewed_by_id == self.project_member.pk
+            ):
+                return HttpResponseForbidden(
+                    "Only the reviewer who signed this off, or a Lead, can change "
+                    "its comments."
+                )
+            if review_locked(self.task, log):
+                return HttpResponseForbidden(_REVIEW_LOCKED_MESSAGE)
+        elif kind == "verify":
+            if not self.is_project_manager:
+                return HttpResponseForbidden(
+                    "Only a Lead can change a verification's comments."
+                )
+            if not log.is_verified:
+                return HttpResponseBadRequest("That part has not been verified.")
+        else:
+            return HttpResponseBadRequest("Choose the review or the verification.")
+        comment, error = _posted_comment(request)
+        if error:
+            return error
+        actor = self.project_member or _fallback_member(request.user, self.project)
+        set_verdict_comment(task_log=log, kind=kind, comment=comment, actor=actor)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
 class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     """A task reviewer marks one assignee's submission reviewed, or undoes it.
 
@@ -2225,10 +2388,13 @@ class TaskLogReviewView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                 return HttpResponseBadRequest(
                     "That member is no longer assigned to this task."
                 )
+            comment, error = _posted_comment(request)
+            if error:
+                return error
             reviewer = self.project_member or _fallback_member(
                 request.user, self.project
             )
-            mark_reviewed(task_log=log, reviewer=reviewer)
+            mark_reviewed(task_log=log, reviewer=reviewer, comment=comment)
 
         return _respond_status_block(
             request, self.task,
@@ -2280,7 +2446,10 @@ class TaskLogVerifyView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                 return HttpResponseBadRequest(
                     "That entry is no longer the member's current one."
                 )
-            verify_part(task_log=log, lead=actor)
+            comment, error = _posted_comment(request)
+            if error:
+                return error
+            verify_part(task_log=log, lead=actor, comment=comment)
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,

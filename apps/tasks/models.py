@@ -752,6 +752,14 @@ class TaskLog(models.Model):
             "if they mark it done again."
         ),
     )
+    # Comments left with a verdict: the reviewer's with their review, the
+    # Lead's with their verification. Each belongs to its verdict and goes
+    # when it is withdrawn (or when the done mark under it is undone). Shown
+    # only to the assignee, the task's reviewers and the project's Leads.
+    review_comment = models.TextField(max_length=2000, blank=True, default="")
+    review_comment_updated_at = models.DateTimeField(null=True, blank=True)
+    verify_comment = models.TextField(max_length=2000, blank=True, default="")
+    verify_comment_updated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

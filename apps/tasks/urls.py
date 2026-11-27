@@ -151,6 +151,11 @@ urlpatterns = [
         name="verify_log",
     ),
     path(
+        "tasks/<int:pk>/logs/<int:log_pk>/comment/",
+        views.TaskLogCommentView.as_view(),
+        name="log_comment",
+    ),
+    path(
         "tasks/<int:pk>/verify/",
         views.TaskVerifyBatchView.as_view(),
         name="verify_batch",

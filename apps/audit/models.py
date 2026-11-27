@@ -82,6 +82,8 @@ class AuditAction(models.TextChoices):
     TASK_PART_UNDONE = "task.part_undone", "Task part done mark undone"
     TASK_PART_VERIFIED = "task.part_verified", "Task contribution verified"
     TASK_PART_UNVERIFIED = "task.part_unverified", "Task contribution verification withdrawn"
+    TASK_REVIEW_COMMENT_SET = "task.review_comment_set", "Task review comments changed"
+    TASK_VERIFY_COMMENT_SET = "task.verify_comment_set", "Task verification comments changed"
     TASK_ATTACHMENTS_SET = "task.attachments_set", "Task part attachments set"
     TASK_DEADLINE_SET = "task.deadline_set", "Individual task dates set"
     TASK_DEADLINE_CLEARED = "task.deadline_cleared", "Individual task dates removed"
