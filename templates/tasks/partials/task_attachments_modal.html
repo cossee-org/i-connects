@@ -14,12 +14,13 @@
            own       whether it is the viewer's own part
            canEdit   whether the viewer may change it now (their own part,
                      done, not yet reviewed or verified)
+         When it last changed is the first line under the header.
          Each row of the table numbers a link, shows it in full so the
          reader sees where it really goes, and has its own Open (a new tab,
          without the opener or the referrer). A link to another host gets an
-         External tag, and when any has one the dialog carries the same
-         notice as the site's "Leaving i-CONNECTS" dialog (base.html),
-         judged the same way: a different host from this page is leaving, the
+         External tag, and when any has one an (i) beside the Links heading
+         opens the same notice as the site's "Leaving i-CONNECTS" dialog
+         (base.html). External is judged the same way as there: a different host from this page is leaving, the
          same host is not. Open is a plain link rather than one marked
          data-external-link: this dialog already gave the warning, so it is
          not asked a second time.
@@ -109,6 +110,8 @@
     {# ---- View ---- #}
     <div x-show="mode === 'view'" data-attachments-view>
       <div class="px-6 py-5 text-brand-text max-h-[60vh] overflow-y-auto">
+        {# When they last changed, first thing under the header. #}
+        <p x-show="updated" class="-mt-1 mb-4 text-xs text-brand-text/60" data-attachments-updated>Last updated <span x-text="updated"></span></p>
         <section x-show="note" data-attachments-view-note-section>
           <h3 class="text-sm font-medium text-brand-text/70">Note</h3>
           <p class="mt-1 rounded-lg bg-brand-lighter/60 px-3 py-2 text-sm text-brand-text whitespace-pre-line break-words"
@@ -116,16 +119,36 @@
         </section>
 
         <section x-show="links.length" :class="note && 'mt-5'" data-attachments-view-links>
-          <h3 class="text-sm font-medium text-brand-text/70">Links</h3>
-          <p x-show="externalCount" class="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-attachments-external>
-            {# arrow-top-right-on-square #}
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-            </svg>
-            <span x-text="externalCount > 1
-                           ? 'Links marked External go outside i-CONNECTS. Opening one will take you away from i-CONNECTS. We are not responsible for the content of external websites.'
-                           : 'The link marked External goes outside i-CONNECTS. Opening it will take you away from i-CONNECTS. We are not responsible for the content of external websites.'"></span>
-          </p>
+          {% comment %}
+            The (i) beside the heading carries the site's leaving notice, shown
+            only when a link here goes to another host (tagged External in
+            the table). The id sits on the inner element, not on the one
+            x-show hides, as with the Completion card's (i).
+          {% endcomment %}
+          <div class="relative flex items-center gap-1.5"
+               x-data="{ info: false }"
+               @view-attachments.window="info = false"
+               @click.outside="info = false"
+               @keydown.escape="if (info) { info = false; $event.preventDefault() }">
+            <h3 class="text-sm font-medium text-brand-text/70">Links</h3>
+            <button type="button" x-show="externalCount" @click="info = !info"
+                    aria-label="About external links"
+                    :aria-expanded="info"
+                    aria-controls="attachments-external-info-{{ task.pk }}"
+                    class="inline-flex items-center justify-center w-5 h-5 rounded-full text-brand-text/50 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors"
+                    data-attachments-external-info>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4" aria-hidden="true">
+                <path fill-rule="evenodd" d="M18 10A8 8 0 1 1 2 10a8 8 0 0 1 16 0ZM9 9a1 1 0 0 1 2 0v4a1 1 0 1 1-2 0V9Zm1-3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
+              </svg>
+            </button>
+            <div x-cloak x-show="info"
+                 x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+                 x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95"
+                 class="absolute left-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 p-3 z-30 text-sm text-brand-text/80"
+                 style="width: min(22rem, calc(100vw - 4rem))">
+              <p id="attachments-external-info-{{ task.pk }}" data-attachments-external>Links marked External go outside i-CONNECTS. Opening one will take you away from i-CONNECTS. We are not responsible for the content of external websites.</p>
+            </div>
+          </div>
           <div class="mt-2 rounded-lg border border-brand-light/60 overflow-hidden">
             <table class="table table-sm" data-attachments-view-table>
               <thead class="bg-brand-lighter text-brand-navy">
@@ -160,7 +183,6 @@
         <p x-show="!note && !links.length" class="text-sm text-brand-text/70" data-attachments-view-empty>
           You haven't added any attachments for your part yet. Only this task's reviewers and the project's Leads will see them.
         </p>
-        <p x-show="updated" class="mt-4 text-xs text-brand-text/60">Last updated <span x-text="updated"></span></p>
         <p x-show="own && !canEdit && (note || links.length)" class="mt-4 text-xs text-brand-text/60" data-attachments-view-locked>
           Your part has been reviewed or verified, so these attachments are locked. To change them, untick Done (that clears the review and verification) and mark it done again.
         </p>

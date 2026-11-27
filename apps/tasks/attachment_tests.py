@@ -510,8 +510,19 @@ def test_the_dialog_shows_the_note_above_a_table_of_links(client, setup):
     view = view[view.index("data-attachments-view>") :]
     assert view.index("data-attachments-view-note") < view.index("data-attachments-view-table")
     assert 'x-for="(url, i) in links"' in view and "data-attachments-view-row" in view
-    assert "data-attachments-external-tag" in view and 'x-show="externalCount"' in view
-    assert "We are not responsible for the content of external websites." in view
+    assert "data-attachments-external-tag" in view
+    # The leaving notice sits behind an (i) beside the Links heading, offered
+    # only when a link is external.
+    links = view[view.index("data-attachments-view-links") :]
+    info = links[links.index("data-attachments-external-info") - 400 : links.index("data-attachments-view-table")]
+    assert 'x-show="externalCount"' in info and 'aria-label="About external links"' in info
+    assert (
+        "Links marked External go outside i-CONNECTS. Opening one will take you away "
+        "from i-CONNECTS. We are not responsible for the content of external websites."
+    ) in info
+    assert links.index(">Links</h3>") < links.index("data-attachments-external-info")
+    # Last updated is the first line under the header.
+    assert view.index("data-attachments-updated") < view.index("data-attachments-view-note")
     assert 'target="_blank" rel="noopener noreferrer nofollow"' in view
     assert "data-attachments-open" in view
 
