@@ -732,28 +732,13 @@ class TaskLog(models.Model):
             "when the assignee reverts their own done mark."
         ),
     )
-    evidence_url = models.URLField(
-        max_length=500,
-        blank=True,
-        default="",
-        help_text=(
-            "A link the assignee gave as evidence of their part (a document, "
-            "a folder, a pull request). Shown only to the assignee, the task's "
-            "reviewers and the project's Leads."
-        ),
-    )
-    evidence_note = models.TextField(
-        max_length=1000,
-        blank=True,
-        default="",
-        help_text="The assignee's short note on their evidence. Same audience.",
-    )
     evidence_updated_at = models.DateTimeField(
         null=True,
         blank=True,
         help_text=(
-            "When the assignee last set or changed their evidence. Kept "
-            "when they undo their done mark, so the evidence is still there "
+            "When the assignee last set or changed their evidence (the "
+            "``evidence_items`` list). Kept when they undo their done mark, "
+            "as the items are, so the evidence is still there "
             "if they mark it done again."
         ),
     )
@@ -794,6 +779,49 @@ class TaskLog(models.Model):
     def is_reviewable(self) -> bool:
         """True when there is a submission here for a reviewer to act on."""
         return self.status == TaskStatus.COMPLETED
+
+
+MAX_EVIDENCE_ITEMS = 10
+
+
+class TaskEvidence(models.Model):
+    """One item of the evidence an assignee gave for their part: a link, a
+    note, or both.
+
+    Belongs to the assignee's TaskLog (their submission), in the order they
+    gave it. The list is replaced whole each time they save it
+    (``services.set_evidence``). Shown only to the assignee, the task's
+    reviewers and the project's Leads.
+    """
+
+    task_log = models.ForeignKey(
+        TaskLog,
+        on_delete=models.CASCADE,
+        related_name="evidence_items",
+    )
+    url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="A link to the work (a document, a folder, a pull request).",
+    )
+    note = models.TextField(
+        max_length=1000,
+        blank=True,
+        default="",
+        help_text="The assignee's note on this item.",
+    )
+    position = models.PositiveSmallIntegerField(
+        help_text="Where the assignee put this item in their list, from 0."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["position", "id"]
+        indexes = [models.Index(fields=["task_log"])]
+
+    def __str__(self) -> str:
+        return f"Evidence #{self.pk} for TaskLog {self.task_log_id}"
 
 
 class AssigneeDeadline(models.Model):

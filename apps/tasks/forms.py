@@ -15,7 +15,7 @@ from apps.core.enums import (
     credit_role_choices,
 )
 from apps.projects.models import ProjectMember
-from apps.tasks.models import KanbanBoard, Milestone, Task, TaskLog
+from apps.tasks.models import MAX_EVIDENCE_ITEMS, KanbanBoard, Milestone, Task, TaskLog
 from apps.tasks.timezones import (
     DEFAULT_DUE_TIME,
     DEFAULT_START_TIME,
@@ -847,9 +847,9 @@ class AssigneeDatesForm(forms.Form):
 
 
 class EvidenceForm(forms.Form):
-    """An assignee's evidence for their part: one link and a short note.
+    """One evidence item: a link and a short note.
 
-    Both optional. The link must be ``http`` or ``https`` — it is rendered as
+    Both optional here; :class:`EvidenceListForm` drops a row with neither. The link must be ``http`` or ``https`` — it is rendered as
     a clickable link for the task's reviewers and Leads, so ``javascript:``,
     ``data:`` and the like are refused outright.
     """
@@ -885,3 +885,54 @@ class EvidenceForm(forms.Form):
         return " ".join(
             str(message) for errors in self.errors.values() for message in errors
         )
+
+
+class EvidenceListForm:
+    """An assignee's whole evidence list, as the evidence dialog posts it.
+
+    The dialog sends one ``evidence_url`` and one ``evidence_note`` per row,
+    in the assignee's order, so the two lists pair up by position. Each row
+    is checked by :class:`EvidenceForm`; a row with neither a link nor a note
+    is dropped. At most ``MAX_EVIDENCE_ITEMS`` rows may hold anything. Errors
+    name the row they are on ("Item 2: …"), counted as the dialog shows them.
+
+    Not a Django form: a list of rows has no fixed fields, and the dialog's
+    rows come and go in the browser without a formset's management form.
+    """
+
+    def __init__(self, data):
+        urls = data.getlist("evidence_url")
+        notes = data.getlist("evidence_note")
+        size = max(len(urls), len(notes))
+        urls += [""] * (size - len(urls))
+        notes += [""] * (size - len(notes))
+        self.rows = list(zip(urls, notes))
+        self.errors: list[str] = []
+        self.items: list[tuple[str, str]] = []
+
+    @staticmethod
+    def present(data) -> bool:
+        """Whether ``data`` carries an evidence list at all. The dialog marks
+        its post with ``evidence_list``, so a list whose rows were all removed
+        (which sends no row fields) still counts, and clears the evidence."""
+        return any(key in data for key in ("evidence_list", "evidence_url", "evidence_note"))
+
+    def is_valid(self) -> bool:
+        self.errors, self.items = [], []
+        for number, (url, note) in enumerate(self.rows, start=1):
+            row = EvidenceForm({"evidence_url": url, "evidence_note": note})
+            if not row.is_valid():
+                self.errors.append(f"Item {number}: {row.error_text()}")
+                continue
+            item_url, item_note = row.evidence()
+            if item_url or item_note:
+                self.items.append((item_url, item_note))
+        if len(self.items) > MAX_EVIDENCE_ITEMS:
+            self.errors.append(
+                f"You can add at most {MAX_EVIDENCE_ITEMS} evidence items."
+            )
+        return not self.errors
+
+    def error_text(self) -> str:
+        """Every error on one line, as the dialog shows a refusal's text."""
+        return " ".join(self.errors)

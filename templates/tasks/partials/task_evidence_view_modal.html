@@ -1,29 +1,30 @@
 {% comment %}
-  The evidence viewer: what an assignee attached to their done part, shown
-  before anyone follows it. One dialog serves the whole Completion block; it
-  opens on a ``view-evidence`` window event (from View evidence in a Done
-  cell, task_evidence_line.html) whose detail fills it in:
+  The evidence viewer: the list of items an assignee attached to their done
+  part, shown before anyone follows a link. One dialog serves the whole
+  Completion block; it opens on a ``view-evidence`` window event (from View
+  evidence in a Done cell, task_evidence_line.html) whose detail fills it in:
 
     name     whose part, for the title ("Bob", or "your part")
-    url      the evidence link, "" when there is only a note
-    note     the assignee's note, "" when there is none
-    updated  when the evidence was last set, as display text, or ""
+    items    the evidence, a list of {url, note} in the assignee's order;
+             either may be "" (an item has a link, a note, or both)
+    updated  when the evidence was last changed, as display text, or ""
     own      whether it is the viewer's own part
     canEdit  whether the viewer may change it now (their own part, done,
              not yet reviewed or verified)
+
+  Each item is numbered, its link shown in full so the reader sees where it
+  really goes, with its own Open link (a new tab, without the opener or the
+  referrer) and its note under it. A link to another host gets an External
+  tag, and when any item has one the dialog opens with the same notice as
+  the site's "Leaving i-CONNECTS" dialog (base.html), judged the same way: a
+  different host from this page is leaving, the same host is not. The Open
+  links are plain links rather than ones marked data-external-link: this
+  dialog already gave the warning, so it is not asked a second time.
 
   On the viewer's own part it is also where they change their evidence:
   Add evidence / Edit evidence closes this dialog and opens the evidence
   dialog (task_evidence_modal.html). Once the part is reviewed or verified
   it says instead that unticking Done is the way to change it.
-
-  The link is shown in full, so the reader sees where it really goes. A link
-  to another host gets the same notice as the site's "Leaving i-CONNECTS"
-  dialog (base.html), judged the same way: a different host from this page
-  is leaving, the same host is not. Open link opens it in a new tab, without
-  passing the opener or the referrer. It is a plain link rather than one
-  marked data-external-link: this dialog already gave the warning, so it is
-  not asked a second time.
 
   Who sees it is decided before this point: the button that opens the
   dialog is only drawn for the assignee, the task's reviewers and its Leads.
@@ -31,13 +32,14 @@
 <dialog id="evidence-view-modal-{{ task.pk }}" class="modal"
         aria-labelledby="evidence-view-title-{{ task.pk }}"
         data-evidence-view-modal
-        x-data="{ name: '', url: '', note: '', updated: '', own: false, canEdit: false,
-                  get external() {
-                    if (!this.url) return false
-                    try { return new URL(this.url, location.href).host !== location.host }
+        x-data="{ name: '', items: [], updated: '', own: false, canEdit: false,
+                  isExternal(url) {
+                    if (!url) return false
+                    try { return new URL(url, location.href).host !== location.host }
                     catch (e) { return true }
-                  } }"
-        @view-evidence.window="Object.assign($data, { name: '', url: '', note: '', updated: '', own: false, canEdit: false }, $event.detail); $el.showModal(); $nextTick(() => $refs.close.focus())"
+                  },
+                  get anyExternal() { return this.items.some(item => this.isExternal(item.url)) } }"
+        @view-evidence.window="Object.assign($data, { name: '', items: [], updated: '', own: false, canEdit: false }, $event.detail); $el.showModal(); $nextTick(() => $refs.close.focus())"
         @keydown.escape.stop>
   <div class="modal-box max-w-lg bg-base-100 border border-brand-light/60 p-0">
     <div class="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-brand-light/60">
@@ -48,32 +50,54 @@
         <button class="btn btn-sm btn-circle btn-ghost -mr-2 -mt-1" aria-label="Close">&times;</button>
       </form>
     </div>
-    <div class="px-6 py-5 text-brand-text">
-      <template x-if="url">
-        <div>
-          <p x-show="external" class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-evidence-external>
-            {# arrow-top-right-on-square #}
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-            </svg>
-            <span>This is an external link. Opening it will take you away from i-CONNECTS. We are not responsible for the content of external websites.</span>
-          </p>
-          <p class="text-sm text-brand-text/70" :class="external && 'mt-3'">This link goes to:</p>
-          <p class="mt-1 rounded-lg bg-brand-lighter px-3 py-2 text-sm text-brand-navy break-all"
-             x-text="url" data-evidence-view-url></p>
-        </div>
-      </template>
-      <template x-if="note">
-        <div :class="url && 'mt-4'">
-          <p class="text-sm text-brand-text/70">Note</p>
-          <p class="mt-1 text-sm text-brand-text whitespace-pre-line break-words" x-text="note" data-evidence-view-note></p>
-        </div>
-      </template>
-      <p x-show="!url && !note" class="text-sm text-brand-text/70" data-evidence-view-empty>
+    <div class="px-6 py-5 text-brand-text max-h-[60vh] overflow-y-auto">
+      <p x-show="anyExternal" class="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-evidence-external>
+        {# arrow-top-right-on-square #}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+        </svg>
+        <span x-text="items.filter(item => isExternal(item.url)).length > 1
+                       ? 'Links marked External go outside i-CONNECTS. Opening one will take you away from i-CONNECTS. We are not responsible for the content of external websites.'
+                       : 'The link marked External goes outside i-CONNECTS. Opening it will take you away from i-CONNECTS. We are not responsible for the content of external websites.'"></span>
+      </p>
+      <ol class="flex flex-col gap-4" x-show="items.length" data-evidence-view-items>
+        <template x-for="(item, i) in items" :key="i">
+          <li class="flex gap-3" data-evidence-view-item>
+            <span class="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-lighter text-xs font-semibold text-brand-navy"
+                  x-text="i + 1" aria-hidden="true"></span>
+            <div class="min-w-0 flex-1">
+              <template x-if="item.url">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm text-brand-text/70">Link</span>
+                    <span x-show="isExternal(item.url)"
+                          class="inline-flex items-center rounded px-1.5 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-semibold uppercase tracking-wide leading-none"
+                          data-evidence-external-tag>External</span>
+                  </div>
+                  <div class="mt-1 flex items-start gap-2">
+                    <p class="min-w-0 flex-1 rounded-lg bg-brand-lighter px-3 py-2 text-sm text-brand-navy break-all"
+                       x-text="item.url" data-evidence-view-url></p>
+                    <a :href="item.url" target="_blank" rel="noopener noreferrer nofollow"
+                       class="btn btn-sm btn-primary shrink-0"
+                       data-evidence-open>Open<span class="sr-only"> link <span x-text="i + 1"></span> (opens in a new tab)</span></a>
+                  </div>
+                </div>
+              </template>
+              <template x-if="item.note">
+                <div :class="item.url && 'mt-2'">
+                  <p class="text-sm text-brand-text/70">Note</p>
+                  <p class="mt-1 text-sm text-brand-text whitespace-pre-line break-words" x-text="item.note" data-evidence-view-note></p>
+                </div>
+              </template>
+            </div>
+          </li>
+        </template>
+      </ol>
+      <p x-show="!items.length" class="text-sm text-brand-text/70" data-evidence-view-empty>
         You haven't added any evidence for your part yet. Only this task's reviewers and the project's Leads will see it.
       </p>
       <p x-show="updated" class="mt-4 text-xs text-brand-text/60">Last updated <span x-text="updated"></span></p>
-      <p x-show="own && !canEdit && (url || note)" class="mt-4 text-xs text-brand-text/60" data-evidence-view-locked>
+      <p x-show="own && !canEdit && items.length" class="mt-4 text-xs text-brand-text/60" data-evidence-view-locked>
         Your part has been reviewed or verified, so this evidence is locked. To change it, untick Done (that clears the review and verification) and mark it done again.
       </p>
     </div>
@@ -83,16 +107,10 @@
               @click="$el.closest('dialog').close(); $dispatch('open-evidence')"
               aria-haspopup="dialog"
               data-edit-evidence
-              x-text="url || note ? 'Edit evidence' : 'Add evidence'">Edit evidence</button>
+              x-text="items.length ? 'Edit evidence' : 'Add evidence'">Edit evidence</button>
       <button type="button" x-ref="close"
               class="btn bg-base-100 border-brand-light text-brand-text hover:bg-brand-lighter hover:border-brand-light"
               @click="$el.closest('dialog').close()">Close</button>
-      <template x-if="url">
-        <a :href="url" target="_blank" rel="noopener noreferrer nofollow"
-           class="btn btn-primary"
-           @click="$el.closest('dialog').close()"
-           data-evidence-open>Open link<span class="sr-only"> (opens in a new tab)</span></a>
-      </template>
     </div>
   </div>
   <form method="dialog" class="modal-backdrop"><button>close</button></form>

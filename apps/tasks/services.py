@@ -19,9 +19,11 @@ from apps.tasks.models import (
     ActivityEvent,
     AssigneeContributionType,
     AssigneeDeadline,
+    MAX_EVIDENCE_ITEMS,
     KanbanBoard,
     Task,
     TaskActivity,
+    TaskEvidence,
     TaskLog,
 )
 
@@ -241,38 +243,64 @@ def evidence_editable(log: TaskLog | None) -> bool:
     )
 
 
-def _apply_evidence(log: TaskLog, *, url: str, note: str) -> bool:
-    """Write the evidence onto ``log`` (unsaved). True when it changed."""
-    url = (url or "").strip()
-    note = (note or "").strip()
-    if url == log.evidence_url and note == log.evidence_note:
+EvidenceItems = list[tuple[str, str]]
+
+
+def _clean_items(items: Iterable[tuple[str, str]]) -> EvidenceItems:
+    """``items`` stripped, with rows holding neither a link nor a note
+    dropped."""
+    cleaned = []
+    for url, note in items:
+        url, note = (url or "").strip(), (note or "").strip()
+        if url or note:
+            cleaned.append((url, note))
+    return cleaned
+
+
+def _replace_evidence(log: TaskLog, items: Iterable[tuple[str, str]]) -> bool:
+    """Make ``log``'s evidence exactly ``items``, in order. True if it changed.
+
+    The list is replaced whole: what the assignee saves is the list. Nothing
+    is written when it is the same as what is there, so saving the dialog
+    unchanged leaves no audit row and no new timestamp. ``log`` must be saved.
+    """
+    if len(items := _clean_items(items)) > MAX_EVIDENCE_ITEMS:
+        raise ValueError(f"At most {MAX_EVIDENCE_ITEMS} evidence items.")
+    current = list(log.evidence_items.order_by("position", "id").values_list("url", "note"))
+    if current == items:
         return False
-    log.evidence_url = url
-    log.evidence_note = note
+    log.evidence_items.all().delete()
+    TaskEvidence.objects.bulk_create(
+        TaskEvidence(task_log=log, url=url, note=note, position=i)
+        for i, (url, note) in enumerate(items)
+    )
     log.evidence_updated_at = timezone.now()
+    log.save(update_fields=["evidence_updated_at"])
     return True
 
 
 @transaction.atomic
 def set_evidence(
-    *, task_log: TaskLog, url: str, note: str, actor: ProjectMember | None = None
+    *,
+    task_log: TaskLog,
+    items: Iterable[tuple[str, str]],
+    actor: ProjectMember | None = None,
 ) -> TaskLog:
-    """Set or change the evidence on an assignee's done part.
+    """Replace the evidence on an assignee's done part with ``items``.
 
-    Refused with :class:`EvidenceLocked` unless :func:`evidence_editable`.
-    Empty ``url`` and ``note`` clear it. Writes an audit row when anything
-    changed; the URL goes in it, which is fine because the project's
-    activity log is Lead-only.
+    ``items`` is the whole list, as ``(url, note)`` pairs in the assignee's
+    order; rows with neither are dropped, and an empty list clears it. At
+    most ``MAX_EVIDENCE_ITEMS``. Refused with :class:`EvidenceLocked` unless
+    :func:`evidence_editable`. Writes an audit row when anything changed; the
+    links go in it, which is fine because the project's activity log is
+    Lead-only.
     """
     if not evidence_editable(task_log):
         raise EvidenceLocked(
             "Evidence can be changed only on a part marked done and not yet "
             "reviewed or verified. Untick Done to change it."
         )
-    if _apply_evidence(task_log, url=url, note=note):
-        task_log.save(
-            update_fields=["evidence_url", "evidence_note", "evidence_updated_at"]
-        )
+    if _replace_evidence(task_log, items):
         _log_evidence_action(task_log=task_log, actor_member=actor or task_log.assigned_to)
     return task_log
 
@@ -281,10 +309,11 @@ def _log_evidence_action(*, task_log: TaskLog, actor_member: ProjectMember | Non
     """Append an audit row for evidence set, changed or cleared on ``task_log``.
 
     Not announced to Zulip or Discord: ``TASK_EVIDENCE_SET`` has no message
-    builder there, and must not get one, since the link is for the task's
+    builder there, and must not get one, since the evidence is for the task's
     reviewers and Leads only.
     """
     task = task_log.task
+    urls = [url for url in task_log.evidence_items.values_list("url", flat=True) if url]
     log_action(
         AuditAction.TASK_EVIDENCE_SET,
         actor=actor_member.users.first() if actor_member is not None else None,
@@ -294,7 +323,8 @@ def _log_evidence_action(*, task_log: TaskLog, actor_member: ProjectMember | Non
             "task_name": task.name,
             "assignee_member_id": task_log.assigned_to_id,
             "task_log_id": task_log.pk,
-            "evidence_url": task_log.evidence_url,
+            "evidence_count": task_log.evidence_items.count(),
+            "evidence_urls": urls,
         },
     )
 
@@ -305,7 +335,7 @@ def mark_own_done(
     task: Task,
     member: ProjectMember,
     actor: ProjectMember | None = None,
-    evidence: tuple[str, str] | None = None,
+    evidence: Iterable[tuple[str, str]] | None = None,
 ) -> TaskLog:
     """Mark a single assignee's part of an INDIVIDUAL-mode task done.
 
@@ -326,8 +356,8 @@ def mark_own_done(
     Every change of the mark writes an audit row, so who marked whose part
     done, and when, survives the TaskLog being updated in place.
 
-    ``evidence`` is the assignee's ``(url, note)`` from the mark-done dialog,
-    written with the mark. ``None`` leaves whatever evidence the entry already
+    ``evidence`` is the assignee's list of ``(url, note)`` items from the
+    mark-done dialog, written with the mark (see :func:`set_evidence`). ``None`` leaves whatever evidence the entry already
     holds untouched, which is what a Lead marking someone else done passes:
     the evidence is the assignee's to give. On a part already done and since
     reviewed or verified the evidence is frozen (:func:`evidence_editable`),
@@ -344,12 +374,10 @@ def mark_own_done(
     log.completed_by = actor or member
     log.completed_as = CompletedAs.INDIVIDUAL
     log.completed_at = timezone.now()
-    evidence_changed = (
-        evidence is not None
-        and not frozen
-        and _apply_evidence(log, url=evidence[0], note=evidence[1])
-    )
     log.save()
+    evidence_changed = (
+        evidence is not None and not frozen and _replace_evidence(log, evidence)
+    )
     if not was_done:
         _log_mark_action(
             AuditAction.TASK_PART_DONE, task_log=log, actor_member=actor or member
@@ -378,7 +406,7 @@ def reopen_own(
     Like marking, undoing stays open on a closed task, and never reopens it:
     the task's completion is the Lead's call, not a sum of the marks.
 
-    The evidence stays on the entry: it is only shown on a part marked done,
+    The evidence items stay on the entry: they are only shown on a part marked done,
     and keeping it means the mark-done dialog comes back filled in if the
     assignee marks the part done again.
     """
