@@ -1147,3 +1147,23 @@ def test_other_timezone_pickers_keep_the_note_on_show(client, pm_user, zoned):
 
     assert "data-timezone-note" in content
     assert "data-info-popover" not in content
+
+
+@pytest.mark.django_db
+def test_set_dates_for_all_keeps_its_notes_behind_info_buttons(client, pm_user, zoned):
+    _project, task, _lead, _ari, _bo = zoned
+    client.force_login(pm_user)
+    content = client.get(
+        reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
+    ).content.decode()
+
+    modal = content[content.index("data-dates-modal") :]
+    modal = modal[: modal.index("</dialog>")]
+    panels = modal.split("data-info-popover-panel")[1:]
+    assert len(panels) == 2
+    assert "Each member below gets the dates you change" in panels[0]
+    assert "Members already done are left alone." in panels[0]
+    assert 'x-text="note" data-timezone-note>Timezone used:' in panels[1]
+    assert "it applies only to dates set here." in panels[1]
+    assert modal.count("Members already done are left alone.") == 1
+    assert modal.count("Timezone used:") == 1

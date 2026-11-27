@@ -49,22 +49,14 @@
         x-data="memberDatesDialog({ taskZone: '{{ task.timezone|escapejs }}', taskStart: {% if task.start_date %}{{ task.start_date|date:'U' }}000{% else %}null{% endif %}, taskDue: {% if task.deadline %}{{ task.deadline|date:'U' }}000{% else %}null{% endif %} })"
         @open-dates.window="open($event.detail); $el.showModal()">
   <div class="modal-box">
-    <h3 id="dates-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
-      <span x-show="scope === 'member'">Dates for <span x-text="name"></span></span>
-      <span x-show="scope === 'pending'" x-cloak>Set dates for everyone not done</span>
-    </h3>
-    <p class="mt-3 text-sm text-brand-text">
-      {% if task.start_date or task.deadline %}
-        The task
-        {% if task.start_date %}starts <span class="font-semibold text-brand-navy">{{ task.start_date|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>{% if task.deadline %} and {% endif %}{% endif %}
-        {% if task.deadline %}is due <span class="font-semibold text-brand-navy">{{ task.deadline|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>{% endif %},
-        and that still holds for the task.
-      {% else %}
-        The task has no dates of its own.
-      {% endif %}
-      <span x-show="scope === 'member'">A date this member has not been given starts on the task's; change it to give them their own, earlier or later. One left at the task's (or emptied) follows the task.</span>
-      <span x-show="scope === 'pending'" x-cloak>The dates start on the task's. Each member below gets the dates you change, earlier or later than the task's; one left at the task's (or emptied) keeps each member's as it is. Members already done are left alone.</span>
-    </p>
+    {# What the dialog does, behind an (i) beside the title. #}
+    <div class="relative flex items-center gap-1.5">
+      <h3 id="dates-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
+        <span x-show="scope === 'member'">Dates for <span x-text="name"></span></span>
+        <span x-show="scope === 'pending'" x-cloak>Set dates for everyone not done</span>
+      </h3>
+      {% infobox "About these dates" %}{% if task.start_date or task.deadline %}The task {% if task.start_date %}starts <span class="font-semibold text-brand-navy">{{ task.start_date|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>{% if task.deadline %} and {% endif %}{% endif %}{% if task.deadline %}is due <span class="font-semibold text-brand-navy">{{ task.deadline|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>{% endif %}, and that still holds for the task.{% else %}The task has no dates of its own.{% endif %} <span x-show="scope === 'member'">A date this member has not been given starts on the task's; change it to give them their own, earlier or later. One left at the task's (or emptied) follows the task.</span><span x-show="scope === 'pending'" x-cloak>The dates start on the task's. Each member below gets the dates you change, earlier or later than the task's; one left at the task's (or emptied) keeps each member's as it is. Members already done are left alone.</span>{% endinfobox %}
+    </div>
     <ul class="mt-3 flex flex-col gap-1 text-sm text-brand-navy" x-show="scope === 'pending'" x-cloak data-dates-modal-members>
       {% for s in assignee_states %}
         {% if not s.done %}
@@ -113,7 +105,7 @@
         </div>
       </div>
       {% with task_zone_label="Same as task ("|add:task.timezone|add:")" pk_s=task.pk|stringformat:"s" %}
-        {% include "_components/timezone_select.html" with name="timezone" id="dates-timezone-"|add:pk_s managed=True inherit_label=task_zone_label inherit_zone=task.timezone help="The dates above are in this timezone; it applies only to dates set here." %}
+        {% include "_components/timezone_select.html" with name="timezone" id="dates-timezone-"|add:pk_s managed=True note_in_info=True inherit_label=task_zone_label inherit_zone=task.timezone help="The dates above are in this timezone; it applies only to dates set here." %}
       {% endwith %}
       <label class="flex flex-col gap-1 text-sm">
         <span class="font-medium text-brand-navy">Reason <span class="font-normal text-brand-text/60">(optional)</span></span>
