@@ -1608,6 +1608,9 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 # The zone saved with each own date ("" follows the task's),
                 # or None when they have no own date of that kind — the
                 # dialog then starts on the Lead's system timezone.
+                # Why each own date was given ("" when no reason).
+                "start_reason": individual.start_reason if own_start else "",
+                "deadline_reason": individual.deadline_reason if own_deadline else "",
                 "own_start_timezone": individual.start_timezone if own_start else None,
                 "own_deadline_timezone": (
                     individual.deadline_timezone if own_deadline else None
@@ -2302,8 +2305,11 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
         zone_field = AssigneeDeadline.ZONE_FIELDS[field]
         set_member_dates(
             task=self.task, member=member, lead=lead,
-            **{field: form.cleaned_data["date"], zone_field: form.cleaned_data["timezone"]},
-            reason=form.cleaned_data["reason"],
+            **{
+                field: form.cleaned_data["date"],
+                zone_field: form.cleaned_data["timezone"],
+                AssigneeDeadline.REASON_FIELDS[field]: form.cleaned_data["reason"],
+            },
         )
         return _respond_status_block(
             request, self.task,

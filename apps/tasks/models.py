@@ -874,7 +874,10 @@ class AssigneeDeadline(models.Model):
             "follows the task's zone."
         ),
     )
-    reason = models.CharField(max_length=500, blank=True, default="")
+    # Why each own date was given, shown beside it in the completion
+    # table's details row. Like a zone, a reason goes with its date.
+    start_reason = models.CharField(max_length=500, blank=True, default="")
+    deadline_reason = models.CharField(max_length=500, blank=True, default="")
     set_by = models.ForeignKey(
         "projects.ProjectMember",
         on_delete=models.SET_NULL,
@@ -898,6 +901,7 @@ class AssigneeDeadline(models.Model):
         return f"Individual dates for member {self.member_id} on task {self.task_id}"
 
     ZONE_FIELDS = {"start_date": "start_timezone", "deadline": "deadline_timezone"}
+    REASON_FIELDS = {"start_date": "start_reason", "deadline": "deadline_reason"}
 
     def zone_name(self, date_field: str) -> str:
         """The zone name governing this member's own ``date_field``

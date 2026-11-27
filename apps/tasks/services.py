@@ -855,6 +855,8 @@ def set_member_dates(
     start_timezone=UNSET,
     deadline_timezone=UNSET,
     reason: str | None = None,
+    start_reason: str | None = None,
+    deadline_reason: str | None = None,
     batch: str | None = None,
 ) -> AssigneeDeadline | None:
     """A Lead sets one assignee's own dates on ``task``.
@@ -870,8 +872,10 @@ def set_member_dates(
     Each of ``start_date`` and ``deadline`` replaces the task's date for that
     member alone, and may be earlier or later than it; None removes the
     member's own date, so they follow the task's again; ``UNSET`` (the
-    default) leaves it as it is. ``reason`` replaces the note, or with None
-    keeps it. When neither date is left the entry is deleted
+    default) leaves it as it is. ``start_reason`` and ``deadline_reason``
+    replace the note on each own date, or with None keep it; ``reason`` sets
+    both at once, a reason given for one date on its own winning over it.
+    Like a zone, a reason goes with its date. When neither date is left the entry is deleted
     (:func:`clear_member_dates`) and None returned. Callers check that
     ``lead`` is a Lead and ``member`` is assigned (``views.TaskMemberDatesView``).
 
@@ -901,16 +905,31 @@ def set_member_dates(
         new_start_zone = ""
     if new_deadline is None:
         new_deadline_zone = ""
-    new_reason = (
-        (existing.reason if existing else "") if reason is None else reason.strip()
+    old_start_reason = existing.start_reason if existing else ""
+    old_deadline_reason = existing.deadline_reason if existing else ""
+    if start_reason is None:
+        start_reason = reason
+    if deadline_reason is None:
+        deadline_reason = reason
+    new_start_reason = (
+        old_start_reason if start_reason is None else start_reason.strip()
     )
+    new_deadline_reason = (
+        old_deadline_reason if deadline_reason is None else deadline_reason.strip()
+    )
+    if new_start is None:
+        new_start_reason = ""
+    if new_deadline is None:
+        new_deadline_reason = ""
     if new_start is None and new_deadline is None:
         clear_member_dates(task=task, member=member, actor=lead, batch=batch)
         return None
     if existing and (
-        new_start, new_deadline, new_start_zone, new_deadline_zone, new_reason
+        new_start, new_deadline, new_start_zone, new_deadline_zone,
+        new_start_reason, new_deadline_reason,
     ) == (
-        old_start, old_deadline, old_start_zone, old_deadline_zone, existing.reason
+        old_start, old_deadline, old_start_zone, old_deadline_zone,
+        old_start_reason, old_deadline_reason,
     ):
         return existing
     entry = existing or AssigneeDeadline(task=task, member=member)
@@ -918,7 +937,8 @@ def set_member_dates(
     entry.deadline = new_deadline
     entry.start_timezone = new_start_zone
     entry.deadline_timezone = new_deadline_zone
-    entry.reason = new_reason
+    entry.start_reason = new_start_reason
+    entry.deadline_reason = new_deadline_reason
     entry.set_by = lead
     entry.save()
     _log_dates_action(
@@ -934,7 +954,8 @@ def set_member_dates(
         previous_start_timezone=old_start_zone if existing else None,
         deadline_timezone=new_deadline_zone,
         previous_deadline_timezone=old_deadline_zone if existing else None,
-        reason=new_reason,
+        start_reason=new_start_reason,
+        deadline_reason=new_deadline_reason,
         batch=batch,
     )
     _notify_member_dates(task=task, member=member, entry=entry, lead=lead)
@@ -954,7 +975,8 @@ def set_pending_dates(
     """Give every assignee not yet done the same own start date and/or
     deadline, and the same zone for their own dates. A date passed as
     ``UNSET`` is left as each member has it (the same moment, shown in the
-    new zone), and a None ``reason`` keeps each member's note.
+    new zone), and a None ``reason`` keeps each member's notes; one given
+    goes on both dates.
 
     Members who have marked their part done are left as they are. Returns
     the members it covered.
@@ -1252,7 +1274,8 @@ def _log_dates_action(
     previous_start_timezone: str | None = None,
     deadline_timezone: str | None = None,
     previous_deadline_timezone: str | None = None,
-    reason: str = "",
+    start_reason: str = "",
+    deadline_reason: str = "",
     batch: str | None = None,
 ) -> None:
     """Append an audit row for a member's own dates set or removed.
@@ -1275,8 +1298,10 @@ def _log_dates_action(
         "task_deadline": _iso(task.deadline),
         "task_timezone": task.timezone,
     }
-    if reason:
-        metadata["reason"] = reason
+    if start_reason:
+        metadata["start_reason"] = start_reason
+    if deadline_reason:
+        metadata["deadline_reason"] = deadline_reason
     if batch:
         metadata["batch"] = batch
     log_action(

@@ -222,8 +222,9 @@
         The details row lists, always in this order: Done (with View
         attachments under it), Reviewed, Verified, Custom start date, Custom
         due date and Custom task type (on CRediT projects). A custom date
-        shows its full date, time and zone; a Lead gets Change start date /
-        Change due date / Change type under the value, or, when it is not
+        shows its full date, time and zone, and the reason it was given; a
+        Lead gets Change start date / Change due date / Change type under the
+        value, or, when it is not
         set, Set custom start date / Set custom due date / Set custom task
         type in its place. Each date link opens its own dialog
         (task_member_date_modal.html) — one for the start date, one for the
@@ -540,11 +541,11 @@
                   <dt class="text-brand-text/60 font-medium">Custom start date</dt>
                   <dd data-member-start="{% if s.own_start %}own{% elif s.start_date %}task{% else %}none{% endif %}">
                     {% if s.own_start %}
-                      <span data-own-start>{{ s.own_start|in_zone:s.start_tz|date:"M j, Y g:i A T" }} &middot; <span data-member-timezone="start">{{ s.start_zone_label }}</span></span>
+                      <span data-own-start>{{ s.own_start|in_zone:s.start_tz|date:"M j, Y g:i A T" }} &middot; <span data-member-timezone="start">{{ s.start_zone_label }}</span>{% if s.start_reason %} &middot; <span data-date-reason="start">{{ s.start_reason }}</span>{% endif %}</span>
                     {% endif %}
                     {% if s.can_set_dates %}
                       <button type="button" class="text-xs font-medium text-brand-navy hover:text-brand-coral"
-                              @click="$dispatch('open-start-date', { member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', value: '{{ s.own_start_input }}', reason: '{{ s.individual.reason|default:''|escapejs }}', hasOwn: {% if s.own_start %}true{% else %}false{% endif %}, timezone: {% if s.own_start_timezone is None %}null{% else %}'{{ s.own_start_timezone|escapejs }}'{% endif %} })"
+                              @click="$dispatch('open-start-date', { member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', value: '{{ s.own_start_input }}', reason: '{{ s.start_reason|escapejs }}', hasOwn: {% if s.own_start %}true{% else %}false{% endif %}, timezone: {% if s.own_start_timezone is None %}null{% else %}'{{ s.own_start_timezone|escapejs }}'{% endif %} })"
                               aria-haspopup="dialog"
                               data-set-start-date="{{ s.member.pk }}">{% if s.own_start %}Change start date{% else %}Set custom start date{% endif %}<span class="sr-only"> for {{ s.member.display_name }}</span></button>
                     {% endif %}
@@ -553,13 +554,13 @@
                   <dd data-member-deadline="{% if s.own_deadline %}own{% elif s.deadline %}task{% else %}none{% endif %}">
                     {% if s.own_deadline %}
                       <span class="flex flex-wrap items-center gap-x-1.5" data-own-deadline>
-                        <span class="{% if s.overdue %}text-error font-medium{% endif %}">{{ s.own_deadline|in_zone:s.deadline_tz|date:"M j, Y g:i A T" }} &middot; <span data-member-timezone="deadline">{{ s.deadline_zone_label }}</span></span>
+                        <span class="{% if s.overdue %}text-error font-medium{% endif %}">{{ s.own_deadline|in_zone:s.deadline_tz|date:"M j, Y g:i A T" }} &middot; <span data-member-timezone="deadline">{{ s.deadline_zone_label }}</span>{% if s.deadline_reason %} &middot; <span data-date-reason="deadline">{{ s.deadline_reason }}</span>{% endif %}</span>
                         {% if s.overdue %}<span class="inline-flex items-center rounded px-1 py-0.5 bg-error/10 text-error text-[10px] font-semibold leading-none">Overdue</span>{% endif %}
                       </span>
                     {% endif %}
                     {% if s.can_set_dates %}
                       <button type="button" class="text-xs font-medium text-brand-navy hover:text-brand-coral"
-                              @click="$dispatch('open-due-date', { member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', value: '{{ s.own_deadline_input }}', reason: '{{ s.individual.reason|default:''|escapejs }}', hasOwn: {% if s.own_deadline %}true{% else %}false{% endif %}, timezone: {% if s.own_deadline_timezone is None %}null{% else %}'{{ s.own_deadline_timezone|escapejs }}'{% endif %} })"
+                              @click="$dispatch('open-due-date', { member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', value: '{{ s.own_deadline_input }}', reason: '{{ s.deadline_reason|escapejs }}', hasOwn: {% if s.own_deadline %}true{% else %}false{% endif %}, timezone: {% if s.own_deadline_timezone is None %}null{% else %}'{{ s.own_deadline_timezone|escapejs }}'{% endif %} })"
                               aria-haspopup="dialog"
                               data-set-dates="{{ s.member.pk }}">{% if s.own_deadline %}Change due date{% else %}Set custom due date{% endif %}<span class="sr-only"> for {{ s.member.display_name }}</span></button>
                     {% endif %}

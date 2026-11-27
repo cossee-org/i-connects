@@ -93,7 +93,9 @@ def test_lead_sets_an_individual_deadline_later_than_the_task(client, pm_user, o
 
     assert response.status_code == 200
     entry = AssigneeDeadline.objects.get(task=task, member=bob)
-    assert entry.reason == "Conference"
+    assert entry.deadline_reason == "Conference"
+    # No start of their own, so no reason for one.
+    assert entry.start_reason == ""
     assert abs(entry.deadline - later) < timedelta(minutes=1)
     # The task deadline is untouched: it still holds for the task.
     task.refresh_from_db()
@@ -216,7 +218,7 @@ def test_setting_and_removing_write_audit_rows_and_tell_the_member(pm_user, othe
         AuditAction.TASK_DEADLINE_CLEARED,
     ]
     assert rows[0].metadata["previous_deadline"] is None
-    assert rows[0].metadata["reason"] == "Ill"
+    assert rows[0].metadata["deadline_reason"] == "Ill"
     assert rows[1].metadata["previous_deadline"] == first.isoformat()
     assert rows[2].metadata["previous_deadline"] == second.isoformat()
     assert rows[0].actor == pm_user
@@ -582,7 +584,7 @@ def test_shifting_moves_individual_deadlines_by_the_same_amount(client, pm_user,
     own.refresh_from_db()
     assert task.deadline == new_deadline
     assert own.deadline == old_own + timedelta(days=13)
-    assert own.reason == "Conference"
+    assert own.deadline_reason == "Conference"
     row = AuditLog.objects.filter(action=AuditAction.TASK_DEADLINE_SET).latest("id")
     assert row.metadata["batch"] == "task_deadline_shift"
     assert row.metadata["previous_deadline"] == old_own.isoformat()
@@ -802,7 +804,7 @@ def test_set_dates_for_all_not_done_leaves_empty_dates_as_they_are(
     bo_entry = AssigneeDeadline.objects.get(member=bo)
     assert ari_entry.deadline is None and ari_entry.start_date is not None
     assert bo_entry.deadline == bo_deadline and bo_entry.start_date is not None
-    assert bo_entry.reason == "Ill"
+    assert bo_entry.deadline_reason == "Ill"
 
 
 @pytest.mark.django_db

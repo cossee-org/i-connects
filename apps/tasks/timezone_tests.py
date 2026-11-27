@@ -1067,3 +1067,51 @@ def test_lead_only_gets_the_date_links(client, pm_user, other_user, zoned):
     content = client.get(url).content.decode()
     assert f'data-member-details="{ari.pk}"' in content
     assert "Set custom start date" not in content and "Set custom due date" not in content
+
+
+@pytest.mark.django_db
+def test_each_date_keeps_its_own_reason(client, pm_user, zoned):
+    """Each dialog saves the reason for its own date, shown after the date
+    and zone in the details row; removing a date removes its reason."""
+    _project, task, _lead, ari, _bo = zoned
+    client.force_login(pm_user)
+
+    _post(
+        client, task, member=ari.pk, field="deadline", timezone="Asia/Tokyo",
+        date="2027-01-20T09:00", reason="Away at a conference",
+    )
+    response = _post(
+        client, task, member=ari.pk, field="start_date", timezone="",
+        date="2027-01-10T09:00", reason="Starts after onboarding",
+    )
+
+    own = AssigneeDeadline.objects.get(member=ari)
+    assert (own.start_reason, own.deadline_reason) == (
+        "Starts after onboarding", "Away at a conference"
+    )
+    content = response.content.decode()
+    assert (
+        'Tokyo (UTC+9)</span> &middot; <span data-date-reason="deadline">'
+        "Away at a conference</span>"
+    ) in content
+    assert '<span data-date-reason="start">Starts after onboarding</span>' in content
+    assert "reason: 'Away at a conference'" in content
+
+    _post(client, task, member=ari.pk, field="deadline", action="clear")
+    own.refresh_from_db()
+    assert (own.deadline, own.deadline_reason) == (None, "")
+    assert own.start_reason == "Starts after onboarding"
+
+
+@pytest.mark.django_db
+def test_set_dates_for_all_gives_both_dates_the_reason(pm_user, zoned):
+    from apps.tasks.services import set_pending_dates
+
+    _project, task, lead, ari, _bo = zoned
+    set_pending_dates(
+        task=task, lead=lead, start_date=_at(DENVER, 2027, 1, 10, 9, 0),
+        deadline=_at(DENVER, 2027, 1, 20, 9, 0), reason="Holidays",
+    )
+
+    own = AssigneeDeadline.objects.get(member=ari)
+    assert (own.start_reason, own.deadline_reason) == ("Holidays", "Holidays")
