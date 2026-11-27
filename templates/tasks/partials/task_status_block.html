@@ -198,11 +198,11 @@
         person's details row under it.
 
         The Assignee cell names them and, under the name, only what is custom
-        for them: "Due Dec 10" when a Lead gave them their own deadline at
-        another moment than the task's (red, with Overdue, once it has passed
-        and their part is not done), and their own task type when it is
-        another than the task's, on the line below. Someone with neither
-        shows just their name.
+        for them, one line each: "Starts Nov 18" and "Due Dec 10" when a Lead
+        gave them their own start date or deadline at another moment than the
+        task's (the deadline red, with Overdue, once it has passed and their
+        part is not done), then their own task type when it is another than
+        the task's. Someone with none of these shows just their name.
 
         The Done, Reviewed and Verified cells each hold a tick box and,
         beside it, when and by whom ("Oct 14 · by …"), in plain text — the
@@ -384,9 +384,12 @@
                   <span class="text-sm font-medium text-brand-navy break-words min-w-0" data-assignee-name>{{ s.member.display_name }}</span>
                   {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
                 </div>
-                {# Under the name, only what is custom for them: their own deadline, then their own type. #}
-                {% if s.deadline_differs or s.tracks_credit and s.type_differs %}
+                {# Under the name, only what is custom for them: their own start, their own deadline, their own type. #}
+                {% if s.start_differs or s.deadline_differs or s.tracks_credit and s.type_differs %}
                   <div class="completion-under">
+                    {% if s.start_differs %}
+                      <div class="text-brand-text/70" data-member-start-line>Starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}</div>
+                    {% endif %}
                     {% if s.deadline_differs %}
                       <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5" data-member-dates>
                         <span class="{% if s.overdue %}text-error font-medium{% else %}text-brand-text/70{% endif %}">Due {{ s.own_deadline|in_zone:s.deadline_tz|date:"M j" }}</span>

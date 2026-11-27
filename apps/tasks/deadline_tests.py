@@ -702,8 +702,8 @@ def test_lead_sets_only_an_individual_start_date(client, pm_user, other_user):
     assert task.deadline_for(bob) == task.deadline
     content = response.content.decode()
     assert 'data-member-start="own"' in content
-    # A custom start alone writes nothing under the name: only a custom
-    # deadline or task type does. It shows in the details row.
+    # Under the name, only the start: their deadline is the task's.
+    assert f">Starts {timezone.localtime(entry.start_date):%b %-d}</div>" in content
     assert "data-member-dates" not in content
     assert f"{timezone.localtime(entry.start_date):%b %-d, %Y}" in content
     assert "Change start date" in content
