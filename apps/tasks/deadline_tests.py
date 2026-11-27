@@ -495,13 +495,20 @@ def test_lead_sees_deadline_controls_and_member_does_not(client, pm_user, other_
     assert f'data-set-dates="{bob.pk}"' in content
     assert "data-dates-all" in content
     assert "data-dates-modal" in content
-    # Bob's part is late on the task deadline.
-    assert "data-member-overdue" in content
+    # Each own date has its own link and its own dialog.
+    assert f'data-set-start-date="{bob.pk}"' in content
+    assert 'data-member-date-modal="start_date"' in content
+    assert 'data-member-date-modal="deadline"' in content
+    # Bob's part is late on the task's deadline, but he has no deadline of his
+    # own, so nothing is written under his name.
+    assert "data-member-overdue" not in content
 
     client.force_login(other_user)
     content = client.get(url).content.decode()
     assert "data-set-dates" not in content
     assert "data-dates-modal" not in content
+    assert "data-set-start-date" not in content
+    assert "data-member-date-modal" not in content
 
 
 # ---------------------------------------------------------------------------
@@ -695,9 +702,12 @@ def test_lead_sets_only_an_individual_start_date(client, pm_user, other_user):
     assert task.deadline_for(bob) == task.deadline
     content = response.content.decode()
     assert 'data-member-start="own"' in content
-    assert 'data-member-deadline="task"' in content
-    # Only their start differs from the task's, so only it is shown.
-    assert f">Starts {timezone.localtime(entry.start_date):%b %-d}</span>" in content
+    # A custom start alone writes nothing under the name: only a custom
+    # deadline or task type does. It shows in the details row.
+    assert "data-member-dates" not in content
+    assert f"{timezone.localtime(entry.start_date):%b %-d, %Y}" in content
+    assert "Change start date" in content
+    assert "Set custom due date" in content
 
 
 @pytest.mark.django_db

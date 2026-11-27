@@ -15,7 +15,14 @@ from apps.core.enums import (
     credit_role_choices,
 )
 from apps.projects.models import ProjectMember
-from apps.tasks.models import MAX_ATTACHMENTS, KanbanBoard, Milestone, Task, TaskLog
+from apps.tasks.models import (
+    MAX_ATTACHMENTS,
+    AssigneeDeadline,
+    KanbanBoard,
+    Milestone,
+    Task,
+    TaskLog,
+)
 from apps.tasks.timezones import (
     DEFAULT_DUE_TIME,
     DEFAULT_START_TIME,
@@ -402,10 +409,10 @@ class TaskForm(forms.ModelForm):
                     (
                         e.member,
                         getattr(e, date_field),
-                        e.timezone or self.original_zone_name,
+                        getattr(e, AssigneeDeadline.ZONE_FIELDS[date_field]) or self.original_zone_name,
                         picker_value(
                             getattr(e, date_field),
-                            e.timezone or self.original_zone_name,
+                            getattr(e, AssigneeDeadline.ZONE_FIELDS[date_field]) or self.original_zone_name,
                         ),
                     )
                     for e in entries
@@ -463,7 +470,7 @@ class TaskForm(forms.ModelForm):
         moved = choice_field in self.fields and self.date_changed(date_field)
         return carried_own_date(
             getattr(entry, date_field),
-            own_zone=entry.timezone,
+            own_zone=getattr(entry, AssigneeDeadline.ZONE_FIELDS[date_field]),
             old_task_zone=self.original_zone_name or self.new_zone_name,
             new_task_zone=self.new_zone_name,
             old_value=self.original_dates[date_field],
@@ -529,9 +536,17 @@ class TaskForm(forms.ModelForm):
             if own_start is None:
                 continue  # follows the task's start: nothing to check
             own_deadline = self._resulting_own_date(entry, "deadline", deadline)
-            own_zone = entry.timezone or self.new_zone_name
-            # Both shown in the zone the member's own dates are in.
-            rows.append((entry.member, own_start, own_deadline or deadline, own_zone, own_zone))
+            # Each shown in the zone that governs it: the own date's zone,
+            # else the task's.
+            start_zone = entry.start_timezone or self.new_zone_name
+            deadline_zone = (
+                entry.deadline_timezone or self.new_zone_name
+                if own_deadline is not None
+                else self.new_zone_name
+            )
+            rows.append(
+                (entry.member, own_start, own_deadline or deadline, start_zone, deadline_zone)
+            )
         problems = start_after_deadline_problems(rows)
         if not problems:
             return
@@ -844,6 +859,103 @@ class AssigneeDatesForm(forms.Form):
                 )
         return cleaned
 
+
+
+class AssigneeDateForm(forms.Form):
+    """A Lead's own start date, or own deadline, for one assignee
+    (``views.TaskMemberDatesView`` with ``field``) — the Change start date
+    and Change due date dialogs, one date each.
+
+    ``field`` is "start_date" or "deadline". The date is read in the
+    ``timezone`` sent with it, which becomes that date's own zone (empty is
+    "Same as task"); the member's other own date, and its zone, are left as
+    they are. The dialog starts a date the member has no own value for on
+    the task's, so a date sent back at the task's moment, or emptied,
+    follows the task's — removing the member's own date of that kind.
+
+    The one rule, as in :class:`AssigneeDatesForm`: a start of the member's
+    own must not fall after the deadline they end up with (their own, else
+    the task's). The two are compared as moments, so dates in different
+    zones compare correctly, and each is reported in its own zone.
+    """
+
+    LABELS = {"start_date": "start date", "deadline": "due date"}
+
+    date = ZonedDateTimeField(
+        required=False, input_formats=_DATE_INPUT_FORMATS,
+        widget=DateTimeSplitWidget(DEFAULT_START_TIME),
+    )
+    timezone = TimezoneField()
+    reason = forms.CharField(required=False, max_length=500)
+
+    def __init__(self, *args, task, field, current=None, member=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert field in self.LABELS
+        self.task = task
+        self.field = field
+        self.current = current  # the member's AssigneeDeadline, if any
+        self.member = member
+        if field == "deadline":
+            self.fields["date"].widget = DateTimeSplitWidget(DEFAULT_DUE_TIME)
+        submitted = canonical(self.data.get(self.add_prefix("timezone")))
+        self.zone_name = submitted or task.timezone
+        self.fields["date"].zone = get_zone(self.zone_name)
+
+    @staticmethod
+    def _minute(value):
+        return value.replace(second=0, microsecond=0) if value else None
+
+    def _other(self):
+        """The member's own value of the other date, and the zone it is
+        shown in — None when they follow the task's."""
+        other = "deadline" if self.field == "start_date" else "start_date"
+        value = getattr(self.current, other, None) if self.current else None
+        if value is not None:
+            return value, self.current.zone_name(other)
+        return None, self.task.timezone
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.errors:
+            return cleaned
+        value = cleaned.get("date")
+        task_value = getattr(self.task, self.field)
+        if (
+            value is not None
+            and task_value is not None
+            and self._minute(value) == self._minute(task_value)
+        ):
+            value = cleaned["date"] = None
+        label = self.LABELS[self.field]
+        has_own = bool(self.current and getattr(self.current, self.field) is not None)
+        if value is None and not has_own and cleaned.get("timezone"):
+            name = self.member.display_name if self.member is not None else "this member"
+            raise forms.ValidationError(
+                f"Change the {label} for {name} first \u2014 a timezone applies "
+                f"to their own {label}."
+            )
+        if value is None:
+            return cleaned
+        other, other_zone = self._other()
+        if self.field == "start_date":
+            deadline = other if other is not None else self.task.deadline
+            if deadline is not None and value > deadline:
+                self.add_error(
+                    "date",
+                    "The start date (" + _when(value, self.zone_name)
+                    + ") must be on or before the deadline ("
+                    + _when(deadline, other_zone) + ").",
+                )
+        elif other is not None and other > value:
+            # Only a start of their own is checked: a member who follows the
+            # task's start may have a deadline before it.
+            self.add_error(
+                "date",
+                "The deadline (" + _when(value, self.zone_name)
+                + ") must be on or after their start date ("
+                + _when(other, other_zone) + ").",
+            )
+        return cleaned
 
 
 class AttachmentLinkForm(forms.Form):

@@ -361,7 +361,7 @@ def test_lead_sets_a_members_type_from_the_status_block(client, pm_user, user):
     assert 'data-member-type="own"' in content
     # Another type than the task's, so it is shown under their name.
     assert "data-member-type-line" in content
-    assert "Task type: Visualization</div>" in content
+    assert "data-member-type-line>Visualization</div>" in content
     assert "data-member-type-modal" in content
 
 

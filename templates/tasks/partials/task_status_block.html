@@ -8,8 +8,9 @@
   verified, verified_by, verified_at, awaiting_verification,
   can_mark_done, can_review, can_unreview, can_verify, can_unverify,
   individual, own_start, own_deadline, start_date, deadline, start_tz,
-  deadline_tz, own_timezone, start_differs, deadline_differs, zone_differs,
-  zone_short, dates_differ, type_differs, overdue,
+  deadline_tz, own_start_timezone, own_deadline_timezone, start_zone_label,
+  deadline_zone_label, start_differs, deadline_differs, dates_differ,
+  type_differs, overdue,
   can_set_dates, own_start_input, own_deadline_input, tracks_credit,
   own_type, contribution_type, contribution_type_label, can_set_type),
   pending_dates_count, can_set_dates, can_set_type, own_type_count,
@@ -192,47 +193,71 @@
       {% endif %}
 
       {% comment %}
-        One table row per assignee, under Assignee / Done / Reviewed (only on
-        a task under review) / Verified, one line each. The Assignee cell
-        names them. The Done and Reviewed cells each hold a tick box and,
+        One table body per assignee, under Assignee / Done / Reviewed (only on
+        a task under review) / Verified, and a chevron that opens the
+        person's details row under it.
+
+        The Assignee cell names them and, under the name, only what is custom
+        for them: "Due Dec 10" when a Lead gave them their own deadline at
+        another moment than the task's (red, with Overdue, once it has passed
+        and their part is not done), and their own task type when it is
+        another than the task's, on the line below. Someone with neither
+        shows just their name.
+
+        The Done, Reviewed and Verified cells each hold a tick box and,
         beside it, when and by whom ("Oct 14 · by …"), in plain text — the
-        round boxes carry the colour, green for Done and purple for Reviewed;
-        otherwise "Not done yet", "Awaiting review" or
-        a dash. The boxes — tick to mark, untick to undo — are live only for
-        whoever may make that change (task_done_tick.html,
-        task_review_tick.html), and read-only for everyone else. Each tick
-        cell carries its state as
-        ``data-mark`` (yes / no for Done; yes / pending / none for Reviewed
-        and Verified).
-        Rows come from the task's current
-        assignees, so the table follows people being added to or taken off
-        the task without any extra bookkeeping.
+        round boxes carry the colour, green for Done, purple for Reviewed
+        and blue for Verified; otherwise "Not done yet", "Awaiting review",
+        "Awaiting verification" or a dash. Under the Done note sits a
+        paperclip with the number of attachments, which opens the
+        attachments dialog. The boxes — tick to mark, untick to undo — are
+        live only for whoever may make that change (task_done_tick.html,
+        task_review_tick.html, task_verify_tick.html), and read-only for
+        everyone else. Each tick cell carries its state as ``data-mark``
+        (yes / no for Done; yes / pending / none for Reviewed and Verified).
 
-        Past the third row the rest wait behind See more: a task with a dozen
-        assignees would otherwise be a wall of names above the comments.
-        Which rows those are is left to CSS (tr:nth-child), so it follows
-        the rows wherever a sort puts them.
+        The details row lists, always in this order: Done (with View
+        attachments under it), Reviewed, Verified, Custom start date, Custom
+        due date and Custom task type (on CRediT projects). A custom date
+        shows its full date, time and zone; a Lead gets Change start date /
+        Change due date / Change type under the value, or, when it is not
+        set, Set custom start date / Set custom due date / Set custom task
+        type in its place. Each date link opens its own dialog
+        (task_member_date_modal.html) — one for the start date, one for the
+        due date, each with a zone of its own. Everyone else sees the values
+        without the links, and nothing for an item that is not set.
 
-        Each header sorts the rows in the browser, ascending first; clicking
-        the active header flips the direction. Assignee sorts by name; Done
-        puts parts done first, earliest first, then the rest; Reviewed puts
-        parts reviewed first, earliest first, then those awaiting review,
-        then the rest. Ties keep the server's order (data-order), which is
-        also the order before any header is clicked.
+        Rows come from the task's current assignees, so the table follows
+        people being added to or taken off the task without any extra
+        bookkeeping. Past the third person the rest wait behind See more: a
+        task with a dozen assignees would otherwise be a wall of names above
+        the comments. Which people those are is left to CSS
+        (tbody:nth-of-type), so it follows them wherever a sort puts them.
 
-        ``rowsExpanded``, ``sortKey`` and ``sortDesc`` come from an x-data
+        Each header sorts the people in the browser, ascending first;
+        clicking the active header flips the direction. Assignee sorts by
+        name; Done puts parts done first, earliest first, then the rest;
+        Reviewed puts parts reviewed first, earliest first, then those
+        awaiting review, then the rest. Ties keep the server's order
+        (data-order), which is also the order before any header is clicked.
+        Each person is a <tbody> of their own, so their details row moves
+        with them.
+
+        ``rowsExpanded``, ``sortKey``, ``sortDesc`` and ``openDetails`` (the
+        people whose details are open, by member id) come from an x-data
         wrapper *outside* this block, which the surrounding template owns —
         this element is an HTMX swap target, so state kept inside it would
-        snap back on every mark and review: the rows would collapse, taking
-        the row you had just acted on with them, and fall out of their sort.
-        The table re-applies the sort each time it is swapped in.
+        snap back on every mark and review: the rows would collapse, the
+        details you were working in would close, and the rows would fall out
+        of their sort. The table re-applies the sort each time it is swapped
+        in.
 
         The table wears the Tasks tab's Table view look (tasks/task_table_view.html):
         a daisyUI table-sm in a card, with a lavender header row in navy and
-        rules between rows only. What is its own — the column widths and the
-        tick boxes — is set here rather than in the compiled stylesheet: it
-        is drawn by this block alone, which both the pane and the full task
-        page render.
+        rules between rows only. What is its own — the column widths, the
+        tick boxes and the details row — is set here rather than in the
+        compiled stylesheet: it is drawn by this block alone, which both the
+        pane and the full task page render.
       {% endcomment %}
       <style>
         /* Four columns need room: below this the card scrolls sideways
@@ -240,10 +265,12 @@
            a letter per line on a phone. */
         .completion-table { table-layout: fixed; min-width: 34rem; }
         .completion-table th, .completion-table td { vertical-align: middle; }
-        .completion-table:not(.rows-expanded) tbody tr:nth-child(n+4) { display: none; }
+        .completion-table:not(.rows-expanded) tbody:nth-of-type(n+4) { display: none; }
         .completion-table col.completion-name-col { width: 28%; }
         .completion-table.no-review col.completion-name-col { width: 34%; }
+        .completion-table col.completion-chevron-col { width: 2.75rem; }
         .completion-mark { display: flex; align-items: center; gap: 0.625rem; min-width: 0; }
+        .completion-mark-body { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; min-width: 0; }
         .completion-mark-note { font-size: 0.8125rem; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
         .completion-tick { appearance: none; -webkit-appearance: none; margin: 0; width: 22px; height: 22px; border-radius: 999px; border: 2px solid #9aa3c7; background: #fff; position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0; }
         .completion-tick:checked::after { content: ""; position: absolute; left: 6px; top: 2px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
@@ -256,6 +283,11 @@
         .completion-tick[aria-disabled="true"]:not(:checked) { opacity: 0.45; }
         .completion-locked-notice { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
         .completion-tick:focus-visible { outline: 2px solid #f03d30; outline-offset: 2px; }
+        .completion-under { margin-top: 0.3rem; padding-left: 2rem; display: flex; flex-direction: column; gap: 0.1rem; font-size: 0.75rem; line-height: 1.3; }
+        .completion-details > td { background: #eaeff8; padding: 0.75rem 0.9rem 0.9rem; }
+        .completion-details dl { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 0.4rem 0.9rem; font-size: 0.8125rem; margin: 0; }
+        .completion-details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; }
+        tbody.completion-person + tbody.completion-person > tr:first-child > td { border-top: 1px solid rgb(189 203 232 / 0.6); }
       </style>
       <div class="brand-card overflow-x-auto mt-3">
       <table class="table table-sm completion-table{% if not show_review %} no-review{% endif %}" data-assignee-rows
@@ -266,10 +298,10 @@
                  this.sortRows()
                },
                sortRows() {
-                 const body = this.$refs.rows
+                 const table = this.$el
                  const field = { name: 'sortName', done: 'sortDone', reviewed: 'sortReviewed', verified: 'sortVerified' }[sortKey]
                  const dir = sortDesc ? -1 : 1
-                 const rows = [...body.rows].sort((a, b) => {
+                 const people = [...table.tBodies].sort((a, b) => {
                    if (field) {
                      const x = a.dataset[field], y = b.dataset[field]
                      const c = field === 'sortName' ? x.localeCompare(y) : Number(x) - Number(y)
@@ -277,9 +309,10 @@
                    }
                    return Number(a.dataset.order) - Number(b.dataset.order)
                  })
-                 rows.forEach(r => body.appendChild(r))
+                 people.forEach(p => table.appendChild(p))
                },
                ariaSort(key) { return sortKey === key ? (sortDesc ? 'descending' : 'ascending') : null },
+               toggleDetails(pk) { openDetails = { ...openDetails, [pk]: !openDetails[pk] } },
              }"
              x-init="if (sortKey) $nextTick(() => sortRows())">
         <colgroup>
@@ -287,6 +320,7 @@
           <col>
           {% if show_review %}<col>{% endif %}
           <col>
+          <col class="completion-chevron-col">
         </colgroup>
         <thead class="bg-brand-lighter text-brand-navy">
           <tr>
@@ -328,78 +362,41 @@
                 </svg>
               </button>
             </th>
+            <th scope="col"><span class="sr-only">Details</span></th>
           </tr>
         </thead>
-        <tbody x-ref="rows">
-          {% for s in assignee_states %}
-            {% comment %}
-              The sort keys: a done or reviewed part sorts by when (epoch
-              seconds, 0 for an older record with no time on it); the rest
-              sort after every timestamp, awaiting review before not done.
-            {% endcomment %}
-            <tr data-assignee-row="{{ s.member.pk }}"
-                data-order="{{ forloop.counter0 }}"
-                data-sort-name="{{ s.member.display_name|lower }}"
-                data-sort-done="{% if s.done %}{% if s.done_at %}{{ s.done_at|date:'U' }}{% else %}0{% endif %}{% else %}100000000000{% endif %}"
-                data-sort-reviewed="{% if s.reviewed %}{% if s.reviewed_at %}{{ s.reviewed_at|date:'U' }}{% else %}0{% endif %}{% elif s.done %}100000000000{% else %}200000000000{% endif %}"
-                data-sort-verified="{% if s.verified %}{% if s.verified_at %}{{ s.verified_at|date:'U' }}{% else %}0{% endif %}{% elif s.done %}100000000000{% else %}200000000000{% endif %}">
+        {% for s in assignee_states %}
+          {% comment %}
+            The sort keys: a done or reviewed part sorts by when (epoch
+            seconds, 0 for an older record with no time on it); the rest
+            sort after every timestamp, awaiting review before not done.
+          {% endcomment %}
+          <tbody class="completion-person" data-assignee-person="{{ s.member.pk }}"
+                 data-order="{{ forloop.counter0 }}"
+                 data-sort-name="{{ s.member.display_name|lower }}"
+                 data-sort-done="{% if s.done %}{% if s.done_at %}{{ s.done_at|date:'U' }}{% else %}0{% endif %}{% else %}100000000000{% endif %}"
+                 data-sort-reviewed="{% if s.reviewed %}{% if s.reviewed_at %}{{ s.reviewed_at|date:'U' }}{% else %}0{% endif %}{% elif s.done %}100000000000{% else %}200000000000{% endif %}"
+                 data-sort-verified="{% if s.verified %}{% if s.verified_at %}{{ s.verified_at|date:'U' }}{% else %}0{% endif %}{% elif s.done %}100000000000{% else %}200000000000{% endif %}">
+            <tr data-assignee-row="{{ s.member.pk }}">
               <td>
                 <div class="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                   <span class="w-6 h-6 rounded-full bg-brand-navy/80 text-white text-[11px] font-semibold inline-flex items-center justify-center shrink-0" aria-hidden="true">{{ s.member.display_name|slice:":1"|upper }}</span>
                   <span class="text-sm font-medium text-brand-navy break-words min-w-0" data-assignee-name>{{ s.member.display_name }}</span>
                   {% if s.is_viewer %}<span class="text-xs text-brand-text/60 shrink-0">(you)</span>{% endif %}
                 </div>
-                {% comment %}
-                  Under the member's name, only what differs from the task:
-                  their own start date and/or deadline when at another
-                  moment than the task's, and their own timezone when
-                  another than the task's ("Tokyo (UTC+9)"), on one line;
-                  their own contribution type when another than the task's.
-                  A member who follows the task shows nothing here. The dates
-                  line turns red, with an Overdue pill, once their deadline
-                  (own or the task's) has passed and their part is not done;
-                  the pill shows even when the date itself is the task's. The
-                  tooltip names who set the dates, the task's dates and the
-                  reason. A Lead gets Set dates / Change dates and Set type /
-                  Change type on a line of their own, which open the dates
-                  dialog and the type dialog (task_member_type_modal.html).
-                {% endcomment %}
-                {% if s.dates_differ or s.overdue or s.tracks_credit and s.type_differs or s.can_set_dates or s.can_set_type %}
-                  <div class="mt-1 flex flex-col gap-0.5 text-xs"
-                       data-member-deadline="{% if s.own_deadline %}own{% elif s.deadline %}task{% else %}none{% endif %}"
-                       data-member-start="{% if s.own_start %}own{% elif s.start_date %}task{% else %}none{% endif %}"
-                       {% if s.tracks_credit %}data-member-type="{% if s.own_type %}own{% else %}task{% endif %}"
-                       data-member-type-value="{{ s.contribution_type }}"{% endif %}>
-                    {% if s.dates_differ or s.overdue %}
+                {# Under the name, only what is custom for them: their own deadline, then their own type. #}
+                {% if s.deadline_differs or s.tracks_credit and s.type_differs %}
+                  <div class="completion-under">
+                    {% if s.deadline_differs %}
                       <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5" data-member-dates>
-                        {% if s.dates_differ %}
-                          <span class="{% if s.overdue %}text-error font-medium{% else %}text-brand-text/70{% endif %}"
-                                title="Individual dates{% if s.individual.set_by %} set by {{ s.individual.set_by.display_name }}{% endif %}{% if task.start_date or task.deadline %} (task: {% if task.start_date %}starts {{ task.start_date|in_zone:task.timezone|date:"M j, Y g:i A T" }}{% if task.deadline %}, {% endif %}{% endif %}{% if task.deadline %}due {{ task.deadline|in_zone:task.timezone|date:"M j, Y g:i A T" }}{% endif %}){% endif %}{% if s.individual.reason %}: {{ s.individual.reason }}{% endif %}">{% if s.start_differs %}Starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}{% endif %}{% if s.start_differs and s.deadline_differs %} &middot; {% endif %}{% if s.deadline_differs %}Due {{ s.own_deadline|in_zone:s.deadline_tz|date:"M j" }}{% endif %}{% if s.zone_differs %}{% if s.start_differs or s.deadline_differs %} &middot; {% endif %}<span data-member-timezone>{{ s.zone_short }}</span>{% endif %}</span>
-                        {% endif %}
+                        <span class="{% if s.overdue %}text-error font-medium{% else %}text-brand-text/70{% endif %}">Due {{ s.own_deadline|in_zone:s.deadline_tz|date:"M j" }}</span>
                         {% if s.overdue %}
                           <span class="inline-flex items-center rounded px-1 py-0.5 bg-error/10 text-error text-[10px] font-semibold leading-none" data-member-overdue>Overdue</span>
                         {% endif %}
                       </div>
                     {% endif %}
                     {% if s.tracks_credit and s.type_differs %}
-                      <div class="text-brand-text/70" data-member-type-line
-                           title="Individual contribution type{% if s.own_type.set_by %} set by {{ s.own_type.set_by.display_name }}{% endif %} (task: {{ task.get_contribution_type_display }})">Task type: {{ s.contribution_type_label }}</div>
-                    {% endif %}
-                    {% if s.can_set_dates or s.can_set_type %}
-                      <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                        {% if s.can_set_dates %}
-                      <button type="button" class="text-brand-navy font-medium hover:underline"
-                              @click="$dispatch('open-dates', { scope: 'member', member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', start: '{{ s.own_start_input }}', value: '{{ s.own_deadline_input }}', reason: '{{ s.individual.reason|default:''|escapejs }}', hasPersonal: {% if s.individual %}true{% else %}false{% endif %}, timezone: {% if s.own_timezone is None %}null{% else %}'{{ s.own_timezone|escapejs }}'{% endif %} })"
-                              aria-haspopup="dialog"
-                              data-set-dates="{{ s.member.pk }}">{% if s.individual %}Change dates<span class="sr-only"> for {{ s.member.display_name }}</span>{% else %}Set dates<span class="sr-only"> for {{ s.member.display_name }}</span>{% endif %}</button>
-                        {% endif %}
-                        {% if s.can_set_type %}
-                      <button type="button" class="text-brand-navy font-medium hover:underline"
-                              @click="$dispatch('open-member-type', { member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', value: '{% if s.own_type %}{{ s.own_type.contribution_type }}{% endif %}', hasOwn: {% if s.own_type %}true{% else %}false{% endif %} })"
-                              aria-haspopup="dialog"
-                              data-set-type="{{ s.member.pk }}">{% if s.own_type %}Change type<span class="sr-only"> for {{ s.member.display_name }}</span>{% else %}Set type<span class="sr-only"> for {{ s.member.display_name }}</span>{% endif %}</button>
-                        {% endif %}
-                      </div>
+                      <div class="text-brand-text/70 break-words" data-member-type-line>{{ s.contribution_type_label }}</div>
                     {% endif %}
                   </div>
                 {% endif %}
@@ -408,9 +405,9 @@
                 <div class="completion-mark">
                   {% include "tasks/partials/task_done_tick.html" with s=s task=task %}
                   {% if s.done %}
-                    <div class="flex flex-col gap-0.5 min-w-0">
-                    <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
-                    {% include "tasks/partials/task_attachments_line.html" with s=s %}
+                    <div class="completion-mark-body">
+                      <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
+                      {% include "tasks/partials/task_attachments_line.html" with s=s compact=True %}
                     </div>
                   {% else %}
                     <span class="completion-mark-note text-brand-text/60">Not done yet</span>
@@ -445,13 +442,110 @@
                   {% endif %}
                 </div>
               </td>
+              <td class="px-1 text-center">
+                <button type="button"
+                        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-brand-text/60 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors"
+                        @click="toggleDetails('{{ s.member.pk }}')"
+                        :aria-expanded="openDetails['{{ s.member.pk }}'] ? 'true' : 'false'"
+                        aria-expanded="false"
+                        aria-controls="completion-details-{{ task.pk }}-{{ s.member.pk }}"
+                        data-details-toggle="{{ s.member.pk }}">
+                  <span class="sr-only">Details for {{ s.member.display_name }}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 transition-transform" aria-hidden="true"
+                       :class="{ 'rotate-180': openDetails['{{ s.member.pk }}'] }">
+                    <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              </td>
             </tr>
-          {% endfor %}
-        </tbody>
+            <tr class="completion-details" id="completion-details-{{ task.pk }}-{{ s.member.pk }}"
+                x-show="openDetails['{{ s.member.pk }}']" x-cloak
+                data-member-details="{{ s.member.pk }}">
+              <td colspan="{% if show_review %}5{% else %}4{% endif %}">
+                <dl>
+                  <dt class="text-brand-text/60 font-medium">Done</dt>
+                  <dd>
+                    {% if s.done %}
+                      <span>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
+                      {% include "tasks/partials/task_attachments_line.html" with s=s details=True %}
+                    {% else %}
+                      <span class="text-brand-text/60">Not done yet</span>
+                    {% endif %}
+                  </dd>
+                  {% if show_review %}
+                    <dt class="text-brand-text/60 font-medium">Reviewed</dt>
+                    <dd>
+                      {% if s.reviewed %}
+                        <span>{% if s.reviewed_at %}{{ s.reviewed_at|date:"M j" }} &middot; {% endif %}by {% if s.reviewed_by %}{{ s.reviewed_by.display_name }}{% else %}a former member{% endif %}</span>
+                      {% elif s.review_closed %}
+                        <span class="text-brand-text/60">Not reviewed</span>
+                      {% elif s.done %}
+                        <span class="text-brand-text/60">Awaiting review</span>
+                      {% else %}
+                        <span class="text-brand-text/60">&mdash;</span>
+                      {% endif %}
+                    </dd>
+                  {% endif %}
+                  <dt class="text-brand-text/60 font-medium">Verified</dt>
+                  <dd>
+                    {% if s.verified %}
+                      <span>{% if s.verified_at %}{{ s.verified_at|date:"M j" }} &middot; {% endif %}by {% if s.verified_by %}{{ s.verified_by.display_name }}{% else %}a former member{% endif %}</span>
+                    {% elif s.done %}
+                      <span class="text-brand-text/60">Awaiting verification</span>
+                    {% else %}
+                      <span class="text-brand-text/60">&mdash;</span>
+                    {% endif %}
+                  </dd>
+                  <dt class="text-brand-text/60 font-medium">Custom start date</dt>
+                  <dd data-member-start="{% if s.own_start %}own{% elif s.start_date %}task{% else %}none{% endif %}">
+                    {% if s.own_start %}
+                      <span data-own-start>{{ s.own_start|in_zone:s.start_tz|date:"M j, Y g:i A T" }} &middot; <span data-member-timezone="start">{{ s.start_zone_label }}</span></span>
+                    {% endif %}
+                    {% if s.can_set_dates %}
+                      <button type="button" class="text-xs font-medium text-brand-navy hover:text-brand-coral"
+                              @click="$dispatch('open-start-date', { member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', value: '{{ s.own_start_input }}', reason: '{{ s.individual.reason|default:''|escapejs }}', hasOwn: {% if s.own_start %}true{% else %}false{% endif %}, timezone: {% if s.own_start_timezone is None %}null{% else %}'{{ s.own_start_timezone|escapejs }}'{% endif %} })"
+                              aria-haspopup="dialog"
+                              data-set-start-date="{{ s.member.pk }}">{% if s.own_start %}Change start date{% else %}Set custom start date{% endif %}<span class="sr-only"> for {{ s.member.display_name }}</span></button>
+                    {% endif %}
+                  </dd>
+                  <dt class="text-brand-text/60 font-medium">Custom due date</dt>
+                  <dd data-member-deadline="{% if s.own_deadline %}own{% elif s.deadline %}task{% else %}none{% endif %}">
+                    {% if s.own_deadline %}
+                      <span class="flex flex-wrap items-center gap-x-1.5" data-own-deadline>
+                        <span class="{% if s.overdue %}text-error font-medium{% endif %}">{{ s.own_deadline|in_zone:s.deadline_tz|date:"M j, Y g:i A T" }} &middot; <span data-member-timezone="deadline">{{ s.deadline_zone_label }}</span></span>
+                        {% if s.overdue %}<span class="inline-flex items-center rounded px-1 py-0.5 bg-error/10 text-error text-[10px] font-semibold leading-none">Overdue</span>{% endif %}
+                      </span>
+                    {% endif %}
+                    {% if s.can_set_dates %}
+                      <button type="button" class="text-xs font-medium text-brand-navy hover:text-brand-coral"
+                              @click="$dispatch('open-due-date', { member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', value: '{{ s.own_deadline_input }}', reason: '{{ s.individual.reason|default:''|escapejs }}', hasOwn: {% if s.own_deadline %}true{% else %}false{% endif %}, timezone: {% if s.own_deadline_timezone is None %}null{% else %}'{{ s.own_deadline_timezone|escapejs }}'{% endif %} })"
+                              aria-haspopup="dialog"
+                              data-set-dates="{{ s.member.pk }}">{% if s.own_deadline %}Change due date{% else %}Set custom due date{% endif %}<span class="sr-only"> for {{ s.member.display_name }}</span></button>
+                    {% endif %}
+                  </dd>
+                  {% if s.tracks_credit %}
+                    <dt class="text-brand-text/60 font-medium">Custom task type</dt>
+                    <dd data-member-type="{% if s.own_type %}own{% else %}task{% endif %}" data-member-type-value="{{ s.contribution_type }}">
+                      {% if s.own_type %}<span>{{ s.contribution_type_label }}</span>{% endif %}
+                      {% if s.can_set_type %}
+                        <button type="button" class="text-xs font-medium text-brand-navy hover:text-brand-coral"
+                                @click="$dispatch('open-member-type', { member: '{{ s.member.pk }}', name: '{{ s.member.display_name|escapejs }}', value: '{% if s.own_type %}{{ s.own_type.contribution_type }}{% endif %}', hasOwn: {% if s.own_type %}true{% else %}false{% endif %} })"
+                                aria-haspopup="dialog"
+                                data-set-type="{{ s.member.pk }}">{% if s.own_type %}Change type{% else %}Set custom task type{% endif %}<span class="sr-only"> for {{ s.member.display_name }}</span></button>
+                      {% endif %}
+                    </dd>
+                  {% endif %}
+                </dl>
+              </td>
+            </tr>
+          </tbody>
+        {% endfor %}
       </table>
       </div>
       {% if can_set_dates %}
         {% include "tasks/partials/task_dates_modal.html" with task=task assignee_states=assignee_states %}
+        {% include "tasks/partials/task_member_date_modal.html" with task=task field="start_date" %}
+        {% include "tasks/partials/task_member_date_modal.html" with task=task field="deadline" %}
       {% endif %}
       {% if can_set_type %}
         {% include "tasks/partials/task_member_type_modal.html" with task=task choices=contribution_type_choices %}
@@ -523,8 +617,8 @@
               <span class="text-xs text-brand-text/60" data-member-type="own">&middot; {{ s.contribution_type_label }}</span>
             {% endif %}
             {% if s.done %}{% include "tasks/partials/task_attachments_line.html" with s=s inline=True %}{% endif %}
-            {% if s.dates_differ %}
-              <span class="text-xs {% if s.overdue %}text-error{% else %}text-brand-text/60{% endif %}">&middot; {% if s.start_differs %}starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}{% endif %}{% if s.start_differs and s.deadline_differs %}, {% endif %}{% if s.deadline_differs %}due {{ s.own_deadline|in_zone:s.deadline_tz|date:"M j" }}{% endif %}{% if s.zone_differs %}{% if s.start_differs or s.deadline_differs %}, {% endif %}{{ s.zone_short }}{% endif %}</span>
+            {% if s.start_differs or s.deadline_differs %}
+              <span class="text-xs {% if s.overdue %}text-error{% else %}text-brand-text/60{% endif %}">&middot; {% if s.start_differs %}starts {{ s.own_start|in_zone:s.start_tz|date:"M j" }}{% endif %}{% if s.start_differs and s.deadline_differs %}, {% endif %}{% if s.deadline_differs %}due {{ s.own_deadline|in_zone:s.deadline_tz|date:"M j" }}{% endif %}</span>
             {% endif %}
           </li>
         {% endfor %}

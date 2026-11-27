@@ -4,7 +4,7 @@ A task's start and due dates are stored as instants (UTC, ``USE_TZ``), and
 each task names the IANA timezone that governs them (``Task.timezone``): the
 Lead's typed clock time is read in it, and the dates are shown in it, with
 the zone's abbreviation, wherever they appear. A Lead can give an assignee
-their own zone along with their own dates (``AssigneeDeadline.timezone``);
+a zone of their own with each of their own dates (``AssigneeDeadline.start_timezone`` / ``deadline_timezone``);
 it governs that member's own dates, and a date they follow from the task
 stays in the task's zone.
 

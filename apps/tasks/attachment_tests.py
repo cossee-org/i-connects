@@ -451,7 +451,9 @@ def test_view_evidence_is_the_only_evidence_control_in_the_table(client, setup):
     _set(client, s["task"], **_form(LINKS, NOTE))
     pane = _pane(client, s)
     row = _row_for(pane, s["bob"])
-    assert row.count("<button") == 1 and "<a " not in row and "<details" not in row
+    # The paperclip, and the chevron that opens the person's details row.
+    assert row.count("<button") == 2 and "data-details-toggle" in row
+    assert "<a " not in row and "<details" not in row
     assert "data-can-edit-attachments" in row
     # The dialog is where it is both read and edited.
     modal = _modal(pane)

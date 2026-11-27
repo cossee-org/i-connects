@@ -1,0 +1,110 @@
+{% comment %}
+  One of the Lead's two dialogs for a member's own dates, in the app's
+  standard modal (the same shape as task_dates_modal.html): ``field``
+  "start_date" draws the start date dialog, "deadline" the due date dialog.
+  Each edits its one date and that date's own zone; the member's other own
+  date, and its zone, are left as they are. So a member can start on one
+  clock and be due on another.
+
+  It opens on its own window event — ``open-start-date`` or
+  ``open-due-date`` — dispatched by Set custom start date / Change start
+  date and Set custom due date / Change due date in the completion table's
+  details row. The event's detail fills it in:
+    member    the assignee's ProjectMember id
+    name      their display name, for the title
+    value     their own date (YYYY-MM-DDTHH:MM, in its zone), or ""
+    reason    the note on their own dates (one note, shared by both)
+    hasOwn    whether they have this own date, which offers Remove
+    timezone  the zone saved with this date: "" for "Same as task", or null
+              when they have no own date of this kind — the picker then
+              starts on the Lead's system timezone
+  A date they have no own value for starts on the task's, as the same
+  moment in the zone the dialog opens on (memberDateDialog in base.html).
+  Picking another timezone leaves the date and time as they are: they are
+  saved as that clock time in the new zone. A date sent back at the task's
+  moment, or emptied, follows the task's.
+
+  Saving posts to tasks:member_dates with ``field`` and swaps
+  #task-status-block, which this dialog sits inside, so the swap closes it.
+  A refusal (a start after the deadline) comes back as a 400 whose text is
+  shown above the buttons. Remove posts the same form with action=clear,
+  which removes this date alone.
+
+  Expects ``task`` and ``field``.
+{% endcomment %}
+{% load task_tags %}
+{% if field == "start_date" %}
+  {% firstof "open-start-date" as event %}{% firstof "start-date" as slug %}{% firstof "Start date" as date_label %}{% firstof "start date" as noun %}
+{% else %}
+  {% firstof "open-due-date" as event %}{% firstof "due-date" as slug %}{% firstof "Due date" as date_label %}{% firstof "due date" as noun %}
+{% endif %}
+<dialog id="{{ slug }}-modal-{{ task.pk }}" class="modal"
+        aria-labelledby="{{ slug }}-modal-title-{{ task.pk }}"
+        data-member-date-modal="{{ field }}"
+        x-data="memberDateDialog({ field: '{{ field }}', taskZone: '{{ task.timezone|escapejs }}', taskValue: {% if field == 'start_date' %}{% if task.start_date %}{{ task.start_date|date:'U' }}000{% else %}null{% endif %}{% else %}{% if task.deadline %}{{ task.deadline|date:'U' }}000{% else %}null{% endif %}{% endif %} })"
+        @{{ event }}.window="open($event.detail); $el.showModal()">
+  <div class="modal-box">
+    <h3 id="{{ slug }}-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
+      {{ date_label }} for <span x-text="name"></span>
+    </h3>
+    <p class="mt-3 text-sm text-brand-text">
+      {% if field == "start_date" %}
+        {% if task.start_date %}The task starts <span class="font-semibold text-brand-navy">{{ task.start_date|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>.{% else %}The task has no start date.{% endif %}
+      {% else %}
+        {% if task.deadline %}The task is due <span class="font-semibold text-brand-navy">{{ task.deadline|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>.{% else %}The task has no due date.{% endif %}
+      {% endif %}
+      Change the date to give <span x-text="name"></span> their own {{ noun }}, earlier or later. One left at the task's, or emptied, follows the task.
+    </p>
+    <form method="post"
+          action="{% url 'tasks:member_dates' pk=task.pk %}"
+          hx-post="{% url 'tasks:member_dates' pk=task.pk %}"
+          hx-vals='{"pane_mode": "1", "field": "{{ field }}"}'
+          hx-target="#task-status-block"
+          hx-swap="outerHTML"
+          @htmx:response-error.camel="error = $event.detail.xhr.responseText"
+          class="mt-4 flex flex-col gap-3">
+      {% csrf_token %}
+      <input type="hidden" name="member" :value="member">
+      <div class="flex flex-col gap-1 text-sm">
+        <label for="{{ slug }}-day-{{ task.pk }}" class="font-medium text-brand-navy">{{ date_label }}</label>
+        <div class="grid grid-cols-[minmax(0,1fr)_8.5rem] gap-2">
+          <input type="date" name="date_0" id="{{ slug }}-day-{{ task.pk }}"
+                 class="input input-bordered w-full px-3"
+                 x-model="day" @input="dayChanged()" @change="dayChanged()" data-date-input>
+          <input type="time" name="date_1" aria-label="{{ date_label }} time"
+                 class="input input-bordered w-full px-3"
+                 x-model="time" @input="follows = false" data-time-input>
+        </div>
+      </div>
+      {% with task_zone_label="Same as task ("|add:task.timezone|add:")" pk_s=task.pk|stringformat:"s" %}
+        {% if field == "start_date" %}
+          {% include "_components/timezone_select.html" with name="timezone" id="start-date-timezone-"|add:pk_s managed=True managed_event="open-start-date" inherit_label=task_zone_label inherit_zone=task.timezone help="The start date is in this timezone. The due date keeps its own." %}
+        {% else %}
+          {% include "_components/timezone_select.html" with name="timezone" id="due-date-timezone-"|add:pk_s managed=True managed_event="open-due-date" inherit_label=task_zone_label inherit_zone=task.timezone help="The due date is in this timezone. The start date keeps its own." %}
+        {% endif %}
+      {% endwith %}
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="font-medium text-brand-navy">Reason <span class="font-normal text-brand-text/60">(optional)</span></span>
+        <input type="text" name="reason" maxlength="500"
+               class="input input-bordered w-full"
+               x-model="reason" placeholder="e.g. Away at a conference">
+      </label>
+      <p class="text-sm text-error" role="alert" x-show="error" x-text="error" x-cloak data-date-error></p>
+      <div class="flex flex-wrap gap-2 justify-end mt-2">
+        <button type="button" class="btn btn-ghost mr-auto text-error"
+                x-show="hasOwn" x-cloak
+                hx-post="{% url 'tasks:member_dates' pk=task.pk %}"
+                hx-vals='{"pane_mode": "1", "action": "clear", "field": "{{ field }}"}'
+                hx-target="#task-status-block"
+                hx-swap="outerHTML"
+                data-date-clear>Remove custom {{ noun }}</button>
+        <button type="button" class="btn btn-ghost"
+                @click="$el.closest('dialog').close()">Cancel</button>
+        <button type="submit" class="btn bg-brand-coral hover:bg-brand-coral/90 text-white border-0">Save {{ noun }}</button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>

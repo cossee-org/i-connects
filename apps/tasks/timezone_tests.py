@@ -2,7 +2,7 @@
 
 A Lead sets the timezone that governs a task's start and due dates
 (``Task.timezone``), and may give an assignee their own zone with their own
-dates (``AssigneeDeadline.timezone``). Dates are stored as instants; the
+dates (``AssigneeDeadline.start_timezone`` / ``deadline_timezone``). Dates are stored as instants; the
 zone decides how the Lead's clock time is read and how dates are shown.
 Every picker starts on the user's system timezone unless a zone is saved.
 """
@@ -271,7 +271,7 @@ def test_changing_the_zone_carries_members_following_it(client, pm_user, zoned):
     ari_own.refresh_from_db()
     bo_own.refresh_from_db()
     assert ari_own.deadline == _at(ZoneInfo("America/Toronto"), 2027, 1, 20, 9, 0)
-    assert ari_own.timezone == ""
+    assert ari_own.deadline_timezone == ""
     assert bo_own.deadline == _at(TOKYO, 2027, 1, 22, 9, 0)
     row = AuditLog.objects.filter(
         action=AuditAction.TASK_DEADLINE_SET, metadata__batch="task_timezone"
@@ -360,11 +360,13 @@ def test_member_dates_are_read_in_their_own_zone(client, pm_user, zoned):
 
     assert response.status_code == 200
     own = AssigneeDeadline.objects.get(member=ari)
-    assert own.timezone == "Asia/Tokyo"
+    assert own.deadline_timezone == "Asia/Tokyo"
+    # No start of their own, so no zone for one.
+    assert own.start_timezone == ""
     assert own.deadline == _at(TOKYO, 2027, 1, 20, 9, 0)
     row = AuditLog.objects.get(action=AuditAction.TASK_DEADLINE_SET)
-    assert row.metadata["timezone"] == "Asia/Tokyo"
-    assert row.metadata["previous_timezone"] is None
+    assert row.metadata["deadline_timezone"] == "Asia/Tokyo"
+    assert row.metadata["previous_deadline_timezone"] is None
     assert row.metadata["task_timezone"] == "America/Denver"
     note = Notification.objects.for_user(ari.users.first()).latest("id")
     assert "Jan 20, 2027 9:00 AM JST" in note.message
@@ -378,7 +380,7 @@ def test_same_as_task_saves_no_zone_of_their_own(client, pm_user, zoned):
     _post(client, task, member=ari.pk, timezone="", deadline="2027-01-20T09:00")
 
     own = AssigneeDeadline.objects.get(member=ari)
-    assert own.timezone == ""
+    assert own.deadline_timezone == ""
     assert own.deadline == _at(DENVER, 2027, 1, 20, 9, 0)
 
 
@@ -477,7 +479,7 @@ def test_changing_only_the_members_zone_is_saved(pm_user, zoned):
     set_member_dates(task=task, member=ari, lead=lead, deadline=when, timezone="Asia/Tokyo")
     set_member_dates(task=task, member=ari, lead=lead, deadline=when, timezone="Europe/Paris")
 
-    assert AssigneeDeadline.objects.get(member=ari).timezone == "Europe/Paris"
+    assert AssigneeDeadline.objects.get(member=ari).deadline_timezone == "Europe/Paris"
     assert AuditLog.objects.filter(action=AuditAction.TASK_DEADLINE_SET).count() == 2
 
 
@@ -508,7 +510,7 @@ def test_removing_own_dates_removes_their_zone(client, pm_user, zoned):
 
     assert not AssigneeDeadline.objects.exists()
     row = AuditLog.objects.get(action=AuditAction.TASK_DEADLINE_CLEARED)
-    assert row.metadata["previous_timezone"] == "Asia/Tokyo"
+    assert row.metadata["previous_deadline_timezone"] == "Asia/Tokyo"
 
 
 @pytest.mark.django_db
@@ -593,7 +595,7 @@ def test_set_dates_for_all_gives_everyone_the_zone(client, pm_user, zoned):
 
     _post(client, task, scope="pending", timezone="Asia/Tokyo", deadline="2027-01-20T09:00")
 
-    assert set(AssigneeDeadline.objects.values_list("timezone", flat=True)) == {"Asia/Tokyo"}
+    assert set(AssigneeDeadline.objects.values_list("deadline_timezone", flat=True)) == {"Asia/Tokyo"}
     assert {d.deadline for d in AssigneeDeadline.objects.all()} == {_at(TOKYO, 2027, 1, 20, 9, 0)}
 
 
@@ -610,11 +612,12 @@ def test_dialog_starts_on_the_system_zone_unless_one_is_saved(client, pm_user, z
         reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
     ).content.decode()
 
-    # Ari's own dates are shown and prefilled in Tokyo time…
-    assert "start: '', value: '2027-01-20T09:00'" in content
+    # Ari's own deadline is shown and prefilled in Tokyo time…
+    assert "value: '2027-01-20T09:00'" in content
     assert "timezone: 'Asia/Tokyo'" in content
-    assert "<span data-member-timezone>Tokyo (UTC+9)</span>" in content
-    # …Bo has none, so the dialog starts on the Lead's system timezone.
+    assert '<span data-member-timezone="deadline">Tokyo (UTC+9)</span>' in content
+    # …she has no own start, and Bo has neither, so those dialogs start on
+    # the Lead's system timezone.
     assert "timezone: null" in content
     assert "Same as task (America/Denver)" in content
     assert "is due <span class=\"font-semibold text-brand-navy\">Jan 15, 2027 5:00 PM MST</span>" in content
@@ -633,10 +636,15 @@ def test_completion_table_names_each_members_timezone(client, pm_user, zoned):
         reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
     ).content.decode()
 
-    # Only what differs from the task: Ari's own deadline and zone, on one
-    # line, the zone shortened; Bo follows the task, so nothing is shown.
-    assert "Due Jan 20 &middot; <span data-member-timezone>Tokyo (UTC+9)</span></span>" in content
+    # Under the name, only what is custom: Ari's own deadline, as a date;
+    # Bo follows the task, so nothing is shown. The details row names the
+    # zone, shortened.
+    assert ">Due Jan 20</span>" in content
     assert content.count("data-member-dates") == 1
+    assert (
+        'Jan 20, 2027 9:00 AM JST &middot; <span data-member-timezone="deadline">'
+        "Tokyo (UTC+9)</span>"
+    ) in content
 
 
 @pytest.mark.django_db
@@ -666,7 +674,7 @@ def test_nothing_shown_when_own_values_match_the_task(client, pm_user, zoned):
     assert "data-member-type-line" not in content
     # A Lead still gets the controls.
     assert f'data-set-dates="{ari.pk}"' in content
-    assert ">Change dates<" in content
+    assert ">Change due date<" in content
 
 
 @pytest.mark.django_db
@@ -682,7 +690,12 @@ def test_an_own_start_shows_with_its_zone(client, pm_user, zoned):
         reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
     ).content.decode()
 
-    assert "Starts Jan 10 &middot; <span data-member-timezone>Tokyo (UTC+9)</span>" in content
+    assert (
+        'Jan 10, 2027 9:00 AM JST &middot; <span data-member-timezone="start">'
+        "Tokyo (UTC+9)</span>"
+    ) in content
+    # A custom start alone writes nothing under the name.
+    assert "data-member-dates" not in content
 
 
 def test_short_zone_label():
@@ -849,3 +862,207 @@ def test_canonical_maps_old_names():
     assert canonical("America/Denver") == "America/Denver"
     assert canonical("Etc/Unknown") is None
     assert canonical("") is None
+
+
+# ---------------------------------------------------------------------------
+# A zone for each own date: the start date and due date dialogs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_start_and_due_date_each_keep_their_own_zone(client, pm_user, zoned):
+    """The start date dialog and the due date dialog each save one date in
+    the zone sent with it; the other date, and its zone, stay as they are."""
+    _project, task, _lead, ari, _bo = zoned
+    client.force_login(pm_user)
+
+    due = _post(
+        client, task, member=ari.pk, field="deadline", timezone="Asia/Tokyo",
+        date="2027-01-20T09:00",
+    )
+    start = _post(
+        client, task, member=ari.pk, field="start_date", timezone="America/Toronto",
+        date="2027-01-10T09:00",
+    )
+
+    assert (due.status_code, start.status_code) == (200, 200)
+    own = AssigneeDeadline.objects.get(member=ari)
+    assert own.deadline == _at(TOKYO, 2027, 1, 20, 9, 0)
+    assert own.deadline_timezone == "Asia/Tokyo"
+    assert own.start_date == _at(ZoneInfo("America/Toronto"), 2027, 1, 10, 9, 0)
+    assert own.start_timezone == "America/Toronto"
+    task = Task.objects.prefetch_related("assignee_deadlines").get(pk=task.pk)
+    assert task.start_zone_for(ari) == ZoneInfo("America/Toronto")
+    assert task.deadline_zone_for(ari) == TOKYO
+    row = AuditLog.objects.filter(action=AuditAction.TASK_DEADLINE_SET).latest("id")
+    assert row.metadata["start_timezone"] == "America/Toronto"
+    assert row.metadata["deadline_timezone"] == "Asia/Tokyo"
+    assert row.metadata["previous_start_timezone"] == ""
+    # The details row shows each in its own zone.
+    content = start.content.decode()
+    assert "Jan 10, 2027 9:00 AM EST" in content
+    assert "Jan 20, 2027 9:00 AM JST" in content
+    assert "Change start date" in content and "Change due date" in content
+
+
+@pytest.mark.django_db
+def test_same_as_task_for_one_date_leaves_the_others_zone(client, pm_user, zoned):
+    _project, task, lead, ari, _bo = zoned
+    set_member_dates(
+        task=task, member=ari, lead=lead, deadline_timezone="Asia/Tokyo",
+        deadline=_at(TOKYO, 2027, 1, 20, 9, 0),
+    )
+    client.force_login(pm_user)
+
+    _post(client, task, member=ari.pk, field="start_date", timezone="", date="2027-01-10T09:00")
+
+    own = AssigneeDeadline.objects.get(member=ari)
+    assert (own.start_timezone, own.start_date) == ("", _at(DENVER, 2027, 1, 10, 9, 0))
+    assert own.deadline_timezone == "Asia/Tokyo"
+
+
+@pytest.mark.django_db
+def test_removing_one_date_keeps_the_other(client, pm_user, zoned):
+    _project, task, lead, ari, _bo = zoned
+    set_member_dates(
+        task=task, member=ari, lead=lead,
+        start_date=_at(DENVER, 2027, 1, 10, 9, 0),
+        deadline=_at(TOKYO, 2027, 1, 20, 9, 0), deadline_timezone="Asia/Tokyo",
+    )
+    client.force_login(pm_user)
+
+    response = _post(client, task, member=ari.pk, field="deadline", action="clear")
+
+    assert response.status_code == 200
+    own = AssigneeDeadline.objects.get(member=ari)
+    assert own.deadline is None and own.deadline_timezone == ""
+    assert own.start_date == _at(DENVER, 2027, 1, 10, 9, 0)
+    content = response.content.decode()
+    assert "Set custom due date" in content and "Change start date" in content
+
+    # Removing the last one removes the entry.
+    _post(client, task, member=ari.pk, field="start_date", action="clear")
+    assert not AssigneeDeadline.objects.exists()
+
+
+@pytest.mark.django_db
+def test_one_date_sent_back_at_the_tasks_moment_follows_the_task(client, pm_user, zoned):
+    _project, task, lead, ari, _bo = zoned
+    set_member_dates(
+        task=task, member=ari, lead=lead,
+        start_date=_at(DENVER, 2027, 1, 10, 9, 0),
+        deadline=_at(DENVER, 2027, 1, 20, 9, 0),
+    )
+    client.force_login(pm_user)
+
+    # The task's own due date, read in Denver: not a date of her own.
+    _post(client, task, member=ari.pk, field="deadline", timezone="", date="2027-01-15T17:00")
+
+    own = AssigneeDeadline.objects.get(member=ari)
+    assert own.deadline is None
+    assert own.start_date == _at(DENVER, 2027, 1, 10, 9, 0)
+
+
+@pytest.mark.django_db
+def test_split_dates_compare_as_moments_across_zones(client, pm_user, zoned):
+    """Ari's own deadline is Jan 16 9:00 AM in Tokyo (Jan 15 5:00 PM in
+    Denver). A start at 4:00 PM Denver time is an hour before it; 6:00 PM is
+    an hour after. Each date is reported in its own zone."""
+    _project, task, lead, ari, _bo = zoned
+    set_member_dates(
+        task=task, member=ari, lead=lead, deadline_timezone="Asia/Tokyo",
+        deadline=_at(TOKYO, 2027, 1, 16, 9, 0),
+    )
+    client.force_login(pm_user)
+
+    ok = _post(
+        client, task, member=ari.pk, field="start_date", timezone="America/Denver",
+        date="2027-01-15T16:00",
+    )
+    assert ok.status_code == 200
+
+    refused = _post(
+        client, task, member=ari.pk, field="start_date", timezone="America/Denver",
+        date="2027-01-15T18:00",
+    )
+    assert refused.status_code == 400
+    assert (
+        "The start date (Jan 15, 2027 6:00 PM MST) must be on or before the "
+        "deadline (Jan 16, 2027 9:00 AM JST)."
+    ) in refused.content.decode()
+
+    # And from the other side: a deadline before her own start.
+    refused = _post(
+        client, task, member=ari.pk, field="deadline", timezone="Asia/Tokyo",
+        date="2027-01-16T07:00",
+    )
+    assert refused.status_code == 400
+    assert (
+        "The deadline (Jan 16, 2027 7:00 AM JST) must be on or after their start "
+        "date (Jan 15, 2027 4:00 PM MST)."
+    ) in refused.content.decode()
+
+
+@pytest.mark.django_db
+def test_a_zone_alone_for_one_date_is_refused(client, pm_user, zoned):
+    _project, task, _lead, ari, _bo = zoned
+    client.force_login(pm_user)
+
+    response = _post(client, task, member=ari.pk, field="start_date", timezone="Asia/Tokyo", date="")
+
+    assert response.status_code == 400
+    assert f"Change the start date for {ari.display_name} first" in response.content.decode()
+    assert not AssigneeDeadline.objects.exists()
+
+
+@pytest.mark.django_db
+def test_an_unknown_field_is_refused(client, pm_user, zoned):
+    _project, task, _lead, ari, _bo = zoned
+    client.force_login(pm_user)
+
+    response = _post(client, task, member=ari.pk, field="timezone", date="2027-01-10T09:00")
+
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_changing_the_task_zone_moves_only_the_dates_following_it(client, pm_user, zoned):
+    """Ari's own start follows the task's zone and keeps its clock time in
+    the new one; her own deadline is in Tokyo time and stays put."""
+    project, task, lead, ari, bo = zoned
+    own = set_member_dates(
+        task=task, member=ari, lead=lead,
+        start_date=_at(DENVER, 2027, 1, 10, 9, 0),
+        deadline=_at(TOKYO, 2027, 1, 20, 9, 0), deadline_timezone="Asia/Tokyo",
+    )
+    client.force_login(pm_user)
+
+    response = _edit(
+        client, project, task, [ari, bo],
+        deadline="2027-01-15T17:00", timezone="America/Toronto",
+        individual_deadlines="keep", individual_start_dates="keep",
+    )
+
+    assert response.status_code == 302
+    own.refresh_from_db()
+    assert own.start_date == _at(ZoneInfo("America/Toronto"), 2027, 1, 10, 9, 0)
+    assert own.deadline == _at(TOKYO, 2027, 1, 20, 9, 0)
+    assert (own.start_timezone, own.deadline_timezone) == ("", "Asia/Tokyo")
+
+
+@pytest.mark.django_db
+def test_lead_only_gets_the_date_links(client, pm_user, other_user, zoned):
+    """Everyone sees the details row; only a Lead gets Set custom … links,
+    and someone else sees nothing for a date that is not set."""
+    _project, task, _lead, ari, _bo = zoned
+    url = reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
+
+    client.force_login(pm_user)
+    content = client.get(url).content.decode()
+    assert "Set custom start date" in content and "Set custom due date" in content
+    assert f'data-member-details="{ari.pk}"' in content
+
+    client.force_login(other_user)
+    content = client.get(url).content.decode()
+    assert f'data-member-details="{ari.pk}"' in content
+    assert "Set custom start date" not in content and "Set custom due date" not in content

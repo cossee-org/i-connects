@@ -22,18 +22,30 @@
   nothing here is drawn — not even a sign that there are any.
 
   Expects ``s`` (one assignee state). ``inline`` lays it out for the plain
-  layout's list rather than the table's Done cell.
+  layout's list rather than the table's Done cell. ``compact`` draws it as a
+  paperclip with the number of links, for the table's Done cell; the details
+  row under it (``details``) keeps the words. Only the Done cell's button
+  carries ``data-view-attachments``, so there is one per part to find.
 {% endcomment %}
 {% if s.has_attachments or s.can_edit_attachments or s.is_viewer and s.done %}
-  <div class="{% if inline %}inline-flex{% else %}flex{% endif %} items-center text-xs" data-attachments="{{ s.member.pk }}">
+  <div class="{% if inline %}inline-flex{% else %}flex{% endif %} items-center text-xs"{% if not details %} data-attachments="{{ s.member.pk }}"{% endif %}>
     {# Read by the button below as its previous sibling: keep them together. #}
     {{ s.attachments|json_script }}
     <button type="button" x-data
-            class="font-medium text-brand-navy hover:text-brand-coral"
+            class="{% if compact %}inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 bg-brand-lighter text-[11px] font-semibold text-brand-navy hover:text-brand-coral{% else %}font-medium text-brand-navy hover:text-brand-coral{% endif %}"
+            {% if compact %}title="View attachments"{% endif %}
             @click="$dispatch('view-attachments', { name: '{% if s.is_viewer %}your part{% else %}{{ s.member.display_name|escapejs }}{% endif %}', attachments: JSON.parse($el.previousElementSibling.textContent), updated: '{% if s.attachments_updated_at %}{{ s.attachments_updated_at|date:"M j, Y"|escapejs }}{% endif %}', own: {% if s.is_viewer %}true{% else %}false{% endif %}, canEdit: {% if s.can_edit_attachments %}true{% else %}false{% endif %} })"
             aria-haspopup="dialog"
-            data-view-attachments{% if s.can_edit_attachments %} data-can-edit-attachments{% endif %}>
-      View attachments{% if s.attachment_count > 1 %} ({{ s.attachment_count }}){% endif %}<span class="sr-only"> for {% if s.is_viewer %}your part{% else %}{{ s.member.display_name }}'s part{% endif %}</span>
+            {% if details %}data-details-attachments{% else %}data-view-attachments{% if s.can_edit_attachments %} data-can-edit-attachments{% endif %}{% endif %}>
+      {% if compact %}
+        {# paper-clip #}
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+        </svg>
+        {% if s.attachment_count %}<span aria-hidden="true">{{ s.attachment_count }}</span>{% endif %}<span class="sr-only">View attachments{% if s.attachment_count > 1 %} ({{ s.attachment_count }}){% endif %} for {% if s.is_viewer %}your part{% else %}{{ s.member.display_name }}'s part{% endif %}</span>
+      {% else %}
+        View attachments{% if s.attachment_count > 1 %} ({{ s.attachment_count }}){% endif %}<span class="sr-only"> for {% if s.is_viewer %}your part{% else %}{{ s.member.display_name }}'s part{% endif %}</span>
+      {% endif %}
     </button>
   </div>
 {% endif %}

@@ -852,14 +852,20 @@ def set_member_dates(
     start_date=UNSET,
     deadline=UNSET,
     timezone=UNSET,
+    start_timezone=UNSET,
+    deadline_timezone=UNSET,
     reason: str | None = None,
     batch: str | None = None,
 ) -> AssigneeDeadline | None:
     """A Lead sets one assignee's own dates on ``task``.
 
-    ``timezone`` is the IANA zone governing the member's own dates; "" (or
-    None) makes them follow the task's zone, and ``UNSET`` keeps the one
-    they have.
+    Each own date has a zone of its own: ``start_timezone`` governs the
+    member's own start date and ``deadline_timezone`` their own deadline.
+    "" (or None) makes that date follow the task's zone, and ``UNSET`` keeps
+    the one it has. ``timezone`` sets both at once (the "everyone not done"
+    dialog, and moves that keep both dates on one clock); a zone given for
+    one date on its own wins over it. A zone is only kept while its date
+    is: removing a date clears its zone.
 
     Each of ``start_date`` and ``deadline`` replaces the task's date for that
     member alone, and may be earlier or later than it; None removes the
@@ -876,24 +882,42 @@ def set_member_dates(
     existing = AssigneeDeadline.objects.filter(task=task, member=member).first()
     old_start = existing.start_date if existing else None
     old_deadline = existing.deadline if existing else None
-    old_zone = existing.timezone if existing else ""
+    old_start_zone = existing.start_timezone if existing else ""
+    old_deadline_zone = existing.deadline_timezone if existing else ""
     new_start = old_start if start_date is UNSET else start_date
     new_deadline = old_deadline if deadline is UNSET else deadline
-    new_zone = old_zone if timezone is UNSET else (timezone or "")
+    if start_timezone is UNSET:
+        start_timezone = timezone
+    if deadline_timezone is UNSET:
+        deadline_timezone = timezone
+    new_start_zone = (
+        old_start_zone if start_timezone is UNSET else (start_timezone or "")
+    )
+    new_deadline_zone = (
+        old_deadline_zone if deadline_timezone is UNSET else (deadline_timezone or "")
+    )
+    # A zone governs its own date alone, so it goes with it.
+    if new_start is None:
+        new_start_zone = ""
+    if new_deadline is None:
+        new_deadline_zone = ""
     new_reason = (
         (existing.reason if existing else "") if reason is None else reason.strip()
     )
     if new_start is None and new_deadline is None:
         clear_member_dates(task=task, member=member, actor=lead, batch=batch)
         return None
-    if existing and (new_start, new_deadline, new_zone, new_reason) == (
-        old_start, old_deadline, old_zone, existing.reason
+    if existing and (
+        new_start, new_deadline, new_start_zone, new_deadline_zone, new_reason
+    ) == (
+        old_start, old_deadline, old_start_zone, old_deadline_zone, existing.reason
     ):
         return existing
     entry = existing or AssigneeDeadline(task=task, member=member)
     entry.start_date = new_start
     entry.deadline = new_deadline
-    entry.timezone = new_zone
+    entry.start_timezone = new_start_zone
+    entry.deadline_timezone = new_deadline_zone
     entry.reason = new_reason
     entry.set_by = lead
     entry.save()
@@ -906,8 +930,10 @@ def set_member_dates(
         previous_start_date=old_start,
         deadline=new_deadline,
         previous=old_deadline,
-        timezone=new_zone,
-        previous_timezone=old_zone if existing else None,
+        start_timezone=new_start_zone,
+        previous_start_timezone=old_start_zone if existing else None,
+        deadline_timezone=new_deadline_zone,
+        previous_deadline_timezone=old_deadline_zone if existing else None,
         reason=new_reason,
         batch=batch,
     )
@@ -965,8 +991,10 @@ def clear_member_dates(
         previous_start_date=existing.start_date,
         deadline=None,
         previous=existing.deadline,
-        timezone=None,
-        previous_timezone=existing.timezone,
+        start_timezone=None,
+        previous_start_timezone=existing.start_timezone,
+        deadline_timezone=None,
+        previous_deadline_timezone=existing.deadline_timezone,
         batch=batch,
     )
     _notify_member_dates(task=task, member=member, entry=None, lead=actor)
@@ -1108,9 +1136,16 @@ def rezone_following_members(
     if canonical(old_zone) == canonical(new_zone):
         return []
     changed = []
-    for entry in task.assignee_deadlines.select_related("member").filter(timezone=""):
-        start = rezone(entry.start_date, old_zone, new_zone)
-        deadline = rezone(entry.deadline, old_zone, new_zone)
+    for entry in task.assignee_deadlines.select_related("member"):
+        # Each own date follows the task's zone, or not, on its own.
+        start = (
+            rezone(entry.start_date, old_zone, new_zone)
+            if not entry.start_timezone else entry.start_date
+        )
+        deadline = (
+            rezone(entry.deadline, old_zone, new_zone)
+            if not entry.deadline_timezone else entry.deadline
+        )
         if (start, deadline) == (entry.start_date, entry.deadline):
             continue
         set_member_dates(
@@ -1163,7 +1198,7 @@ def apply_task_date_change(
         for entry in entries:
             shifted = carried_own_date(
                 getattr(entry, field),
-                own_zone=entry.timezone,
+                own_zone=getattr(entry, AssigneeDeadline.ZONE_FIELDS[field]),
                 # Already moved into the new zone, when the zone changed.
                 old_task_zone=task.timezone,
                 new_task_zone=task.timezone,
@@ -1213,16 +1248,18 @@ def _log_dates_action(
     previous_start_date,
     deadline,
     previous,
-    timezone: str | None = None,
-    previous_timezone: str | None = None,
+    start_timezone: str | None = None,
+    previous_start_timezone: str | None = None,
+    deadline_timezone: str | None = None,
+    previous_deadline_timezone: str | None = None,
     reason: str = "",
     batch: str | None = None,
 ) -> None:
     """Append an audit row for a member's own dates set or removed.
 
-    ``timezone`` / ``previous_timezone`` are the member's own zone after and
-    before ("" when their dates follow the task's zone, None when they had
-    no own dates at all)."""
+    ``start_timezone`` / ``deadline_timezone`` and their ``previous_`` pair
+    are the zones of the member's own dates after and before ("" when a
+    date follows the task's zone, None when they had no own dates at all)."""
     metadata = {
         "task_name": task.name,
         "assignee_member_id": member.pk,
@@ -1230,8 +1267,10 @@ def _log_dates_action(
         "previous_start_date": _iso(previous_start_date),
         "deadline": _iso(deadline),
         "previous_deadline": _iso(previous),
-        "timezone": timezone,
-        "previous_timezone": previous_timezone,
+        "start_timezone": start_timezone,
+        "previous_start_timezone": previous_start_timezone,
+        "deadline_timezone": deadline_timezone,
+        "previous_deadline_timezone": previous_deadline_timezone,
         "task_start_date": _iso(task.start_date),
         "task_deadline": _iso(task.deadline),
         "task_timezone": task.timezone,
@@ -1277,16 +1316,15 @@ def _notify_member_dates(
         return
     own_start = entry.start_date if entry else None
     own_deadline = entry.deadline if entry else None
-    own_zone = (entry.timezone if entry else "") or task.timezone
     start = own_start or task.start_date
     deadline = own_deadline or task.deadline
     parts = []
     if start:
-        parts.append(f"starts {_when(start, own_zone if own_start else task.timezone)}")
+        zone = entry.zone_name("start_date") if own_start else task.timezone
+        parts.append(f"starts {_when(start, zone)}")
     if deadline:
-        parts.append(
-            f"is due {_when(deadline, own_zone if own_deadline else task.timezone)}"
-        )
+        zone = entry.zone_name("deadline") if own_deadline else task.timezone
+        parts.append(f"is due {_when(deadline, zone)}")
     dates = " and ".join(parts)
     if entry is not None:
         title = f"Your dates changed: {task.name}"

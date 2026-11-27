@@ -3060,17 +3060,18 @@ def test_the_matrix_hides_its_later_rows_and_keeps_them_open_across_a_swap(
         TaskLog.objects.create(task=task, assigned_to=m)
     client.force_login(user)
 
-    # Rows past the third are hidden by position (CSS nth-child), so the
-    # hidden ones follow a header sort; the table opens them all when
-    # rowsExpanded is on.
-    hide_rule = ".completion-table:not(.rows-expanded) tbody tr:nth-child(n+4) { display: none; }"
+    # People past the third are hidden by position (CSS nth-of-type over
+    # each person's own tbody), so the hidden ones follow a header sort; the
+    # table opens them all when rowsExpanded is on.
+    hide_rule = ".completion-table:not(.rows-expanded) tbody:nth-of-type(n+4) { display: none; }"
     for name, url in _task_surfaces(project, task).items():
         html = client.get(url).content.decode()
         assert html.count("data-assignee-row=") == 5, f"{name} dropped a row"
         assert hide_rule in html, f"{name} hid no rows"
         assert ":class=\"{ 'rows-expanded': rowsExpanded }\"" in html
         assert (
-            "x-data=\"{ rowsExpanded: false, sortKey: '', sortDesc: false }\"" in html
+            "x-data=\"{ rowsExpanded: false, sortKey: '', sortDesc: false, openDetails: {} }\""
+            in html
         ), f"{name} has nowhere to keep it"
 
     # The swap response carries the rows but not the state — that stayed put.
@@ -3082,6 +3083,7 @@ def test_the_matrix_hides_its_later_rows_and_keeps_them_open_across_a_swap(
     assert "'rows-expanded': rowsExpanded" in swapped
     assert "rowsExpanded: false" not in swapped, "the swap would reset the toggle"
     assert "sortKey: ''" not in swapped, "the swap would reset the sort"
+    assert "openDetails: {}" not in swapped, "the swap would close open details"
 
 
 @pytest.mark.django_db
@@ -3104,12 +3106,13 @@ def test_the_matrix_headers_sort_its_rows(client, user, other_user):
         html = client.get(url).content.decode()
         for key in ("name", "done", "reviewed"):
             assert f"@click=\"sortBy('{key}')\"" in html, f"{name} cannot sort by {key}"
-        lead_row = html[html.index(f'data-assignee-row="{lead.pk}"') :]
+        # The keys sit on each person's tbody, so their details row sorts with them.
+        lead_row = html[html.index(f'data-assignee-person="{lead.pk}"') :]
         lead_row = lead_row[: lead_row.index(">")]
         assert f'data-sort-name="{lead.display_name.lower()}"' in lead_row
         assert f'data-sort-done="{int(when.timestamp())}"' in lead_row
         assert 'data-sort-reviewed="100000000000"' in lead_row, f"{name}: awaiting review"
-        contrib_row = html[html.index(f'data-assignee-row="{contrib.pk}"') :]
+        contrib_row = html[html.index(f'data-assignee-person="{contrib.pk}"') :]
         contrib_row = contrib_row[: contrib_row.index(">")]
         assert 'data-sort-done="100000000000"' in contrib_row
         assert 'data-sort-reviewed="200000000000"' in contrib_row

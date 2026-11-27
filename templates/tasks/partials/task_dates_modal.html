@@ -30,8 +30,10 @@
   done the pickers start empty, and a date left empty is left as each
   member has it.
 
-  Each row's Set dates / Change button and the "Set dates for all not done"
-  button in task_status_block.html dispatch it. Saving posts to
+  The "Set dates for all not done" button in task_status_block.html
+  dispatches it. One member's dates are set one at a time instead, in the
+  start date and due date dialogs (task_member_date_modal.html), each with
+  a zone of its own; "member" scope stays for callers that set both. Saving posts to
   tasks:member_dates and swaps #task-status-block, which this dialog sits
   inside, so the swap closes it. A refusal (a deadline in the past, a start
   after the deadline) comes back as a 400 whose text is shown above the

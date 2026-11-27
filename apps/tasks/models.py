@@ -233,7 +233,7 @@ class TaskQuerySet(models.QuerySet):
                 Subquery(personal.values("deadline")[:1]), F("deadline")
             ),
             my_deadline_tz=Coalesce(
-                NullIf(Subquery(personal.values("timezone")[:1]), Value("")),
+                NullIf(Subquery(personal.values("deadline_timezone")[:1]), Value("")),
                 F("timezone"),
             ),
         )
@@ -289,7 +289,7 @@ class Task(models.Model):
             "IANA timezone governing the task's start and due dates: the "
             "Lead's clock time is read in it, and the dates are shown in it. "
             "An assignee's own dates may carry a zone of their own "
-            "(``AssigneeDeadline.timezone``)."
+            "(``AssigneeDeadline.start_timezone`` / ``deadline_timezone``)."
         ),
     )
     name = models.CharField(max_length=255)
@@ -532,19 +532,19 @@ class Task(models.Model):
         return None
 
     def start_zone_for(self, member):
-        """The zone governing ``member``'s start date: their own zone when
-        they have their own start date, else the task's."""
+        """The zone governing ``member``'s start date: the zone of their own
+        start date when they have one, else the task's."""
         entry = self._own_entry(member)
         if entry is not None and entry.start_date is not None:
-            return entry.tz
+            return entry.start_tz
         return self.tz
 
     def deadline_zone_for(self, member):
-        """The zone governing ``member``'s deadline: their own zone when they
-        have their own deadline, else the task's."""
+        """The zone governing ``member``'s deadline: the zone of their own
+        deadline when they have one, else the task's."""
         entry = self._own_entry(member)
         if entry is not None and entry.deadline is not None:
-            return entry.tz
+            return entry.deadline_tz
         return self.tz
 
     def start_date_for(self, member):
@@ -850,15 +850,28 @@ class AssigneeDeadline(models.Model):
     )
     start_date = models.DateTimeField(null=True, blank=True)
     deadline = models.DateTimeField(null=True, blank=True)
-    timezone = models.CharField(
+    # Each own date carries its own zone, so a member can start on one
+    # clock and be due on another. Empty follows the task's zone; a zone is
+    # only kept while its date is (``services.set_member_dates``). A date
+    # the member follows from the task stays in the task's zone.
+    start_timezone = models.CharField(
         max_length=64,
         blank=True,
         default="",
         validators=[validate_timezone],
         help_text=(
-            "IANA timezone governing this member's own dates. Empty follows "
-            "the task's zone. A date the member follows from the task stays "
-            "in the task's zone."
+            "IANA timezone governing this member's own start date. Empty "
+            "follows the task's zone."
+        ),
+    )
+    deadline_timezone = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        validators=[validate_timezone],
+        help_text=(
+            "IANA timezone governing this member's own deadline. Empty "
+            "follows the task's zone."
         ),
     )
     reason = models.CharField(max_length=500, blank=True, default="")
@@ -884,11 +897,22 @@ class AssigneeDeadline(models.Model):
     def __str__(self) -> str:
         return f"Individual dates for member {self.member_id} on task {self.task_id}"
 
+    ZONE_FIELDS = {"start_date": "start_timezone", "deadline": "deadline_timezone"}
+
+    def zone_name(self, date_field: str) -> str:
+        """The zone name governing this member's own ``date_field``
+        ("start_date" or "deadline"): its own zone, else the task's."""
+        return getattr(self, self.ZONE_FIELDS[date_field]) or self.task.timezone
+
     @property
-    def tz(self):
-        """The ``ZoneInfo`` governing this member's own dates: their own
-        zone, else the task's."""
-        return get_zone(self.timezone or self.task.timezone)
+    def start_tz(self):
+        """The ``ZoneInfo`` governing this member's own start date."""
+        return get_zone(self.zone_name("start_date"))
+
+    @property
+    def deadline_tz(self):
+        """The ``ZoneInfo`` governing this member's own deadline."""
+        return get_zone(self.zone_name("deadline"))
 
 
 class AssigneeContributionType(models.Model):

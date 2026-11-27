@@ -23,6 +23,9 @@
                    window event and reads ``timezone`` off its detail —
                    null (or missing) for "nothing saved", which starts on
                    the system timezone, "" for "Same as task", else a zone.
+    managed_event  the window event a managed picker listens for instead of
+                   ``open-dates`` (the start date and due date dialogs each
+                   have their own)
 
   The native <select> underneath is what the form submits and what other
   scripts listen to (the task form's individual-dates panel watches its
@@ -42,7 +45,7 @@
 {% default_timezone_name as server_zone %}
 <div class="form-control w-full mb-3"
      x-data="timezoneSelect({% if managed %}undefined{% elif saved %}'{{ saved|escapejs }}'{% else %}null{% endif %})"
-     {% if managed %}@open-dates.window="apply($event.detail.timezone === undefined ? null : $event.detail.timezone)"{% endif %}
+     {% if managed %}@{{ managed_event|default:"open-dates" }}.window="apply($event.detail.timezone === undefined ? null : $event.detail.timezone)"{% endif %}
      @keydown.escape="if (open) { $event.preventDefault(); $event.stopPropagation(); close() }"
      @click.outside="close()"
      data-timezone-picker>

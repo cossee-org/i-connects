@@ -561,6 +561,64 @@
   </script>
 
   {% comment %}
+    The start date and due date dialogs (tasks/partials/task_member_date_modal.html):
+    one date each, with its own zone. Like memberDatesDialog above, a date
+    the member has no own value for starts on the task's, read in the zone
+    the dialog opens on; after that a change of zone keeps the clock time.
+  {% endcomment %}
+  <script>
+    window.memberDateDialog = function (cfg) {
+      var wall = function (ms, zone) {
+        try {
+          var parts = {};
+          new Intl.DateTimeFormat("en-CA", {
+            timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+          }).formatToParts(new Date(ms)).forEach(function (p) { parts[p.type] = p.value; });
+          return [parts.year + "-" + parts.month + "-" + parts.day, parts.hour + ":" + parts.minute];
+        } catch (e) {
+          return ["", ""];
+        }
+      };
+      var fallback = cfg.field === "start_date" ? "09:00" : "17:00";
+      return {
+        member: "", name: "", reason: "", hasOwn: false, error: "",
+        day: "", time: "", follows: false,
+        open: function (detail) {
+          this.member = detail.member || "";
+          this.name = detail.name || "";
+          this.reason = detail.reason || "";
+          this.hasOwn = !!detail.hasOwn;
+          this.error = "";
+          var value = detail.value || "";
+          this.day = value.slice(0, 10);
+          this.time = value ? (value.slice(11, 16) || fallback) : "";
+          this.follows = !value && cfg.taskValue != null;
+          // The timezone picker applies its zone on the same event, so the
+          // task's date is read in it once it has.
+          var self = this;
+          this.$nextTick(function () { self.refill(); self.follows = false; });
+        },
+        zone: function () {
+          var select = this.$root.querySelector("select[name=timezone]");
+          return (select && select.value) || cfg.taskZone || "UTC";
+        },
+        // A day picked fills in the default time; a day cleared clears it.
+        dayChanged: function () {
+          this.follows = false;
+          if (!this.day) this.time = "";
+          else if (!this.time) this.time = fallback;
+        },
+        refill: function () {
+          if (!this.follows) return;
+          var p = wall(cfg.taskValue, this.zone());
+          this.day = p[0]; this.time = p[1];
+        },
+      };
+    };
+  </script>
+
+  {% comment %}
     Header sort for a plain table, in the browser: x-data="sortableRows()" on
     the <table>, x-ref="rows" on its <tbody>, a _components/sortable_header.html
     per sortable column, and on each row data-order (the server's order) and

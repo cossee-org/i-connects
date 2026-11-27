@@ -59,6 +59,7 @@ from apps.tasks.calendar import (
     shift_date,
 )
 from apps.tasks.forms import (
+    AssigneeDateForm,
     AssigneeDatesForm,
     AttachmentsForm,
     KanbanBoardForm,
@@ -82,7 +83,7 @@ from apps.tasks.mixins import (
     ProjectManagerRequiredMixin,
     TaskMemberAccessMixin,
 )
-from apps.tasks.models import MAX_ATTACHMENTS, ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskAttachment, TaskLog, TaskQuerySet
+from apps.tasks.models import MAX_ATTACHMENTS, ActivityEvent, AssigneeDeadline, KanbanBoard, Milestone, Task, TaskActivity, TaskAttachment, TaskLog, TaskQuerySet
 from apps.tasks.services import (
     UNSET,
     AttachmentsLocked,
@@ -1481,8 +1482,11 @@ def _task_status_context(task, *, project_member, is_project_manager):
         own_start = individual.start_date if individual else None
         own_deadline = individual.deadline if individual else None
         effective_deadline = own_deadline or task.deadline
-        # The zone governing the member's own dates: theirs, else the task's.
-        own_zone = (individual.timezone if individual else "") or task.timezone
+        # The zone governing each date: the own date's zone, else the task's.
+        start_zone = individual.zone_name("start_date") if own_start else task.timezone
+        deadline_zone = (
+            individual.zone_name("deadline") if own_deadline else task.timezone
+        )
         reviewed = log is not None and log.is_reviewed
         verified = log is not None and log.is_verified
         # A review given before the task was completed stays as it was, and
@@ -1593,36 +1597,36 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 "deadline": effective_deadline,
                 # The zone each of those is shown in: the member's own for
                 # an own date, the task's for one they follow.
-                "start_tz": own_zone if own_start else task.timezone,
-                "deadline_tz": own_zone if own_deadline else task.timezone,
-                # The zone saved with their own dates ("" follows the
-                # task's), or None when they have no own dates — the dialog
-                # then starts on the Lead's system timezone.
-                "own_timezone": individual.timezone if individual else None,
-                # What under their name differs from the task — only that
-                # is shown there: an own start or deadline at another
-                # moment than the task's, an own zone other than the
-                # task's (as "Tokyo (UTC+9)"), an own type other than the
-                # task's.
+                "start_tz": start_zone,
+                "deadline_tz": deadline_zone,
+                # The zone saved with each own date ("" follows the task's),
+                # or None when they have no own date of that kind — the
+                # dialog then starts on the Lead's system timezone.
+                "own_start_timezone": individual.start_timezone if own_start else None,
+                "own_deadline_timezone": (
+                    individual.deadline_timezone if own_deadline else None
+                ),
+                # Each own date's zone, as "Tokyo (UTC+9)", for the details
+                # row.
+                "start_zone_label": short_zone_label(start_zone, own_start or task.start_date),
+                "deadline_zone_label": short_zone_label(deadline_zone, effective_deadline),
                 "start_differs": own_start is not None and own_start != task.start_date,
                 "deadline_differs": (
                     own_deadline is not None and own_deadline != task.deadline
-                ),
-                "zone_differs": bool(
-                    individual
-                    and individual.timezone
-                    and canonical(individual.timezone) != canonical(task.timezone)
-                ),
-                "zone_short": short_zone_label(
-                    own_zone, own_deadline or own_start or task.deadline
                 ),
                 "dates_differ": bool(
                     (own_start is not None and own_start != task.start_date)
                     or (own_deadline is not None and own_deadline != task.deadline)
                     or (
-                        individual
-                        and individual.timezone
-                        and canonical(individual.timezone) != canonical(task.timezone)
+                        own_start is not None
+                        and individual.start_timezone
+                        and canonical(individual.start_timezone) != canonical(task.timezone)
+                    )
+                    or (
+                        own_deadline is not None
+                        and individual.deadline_timezone
+                        and canonical(individual.deadline_timezone)
+                        != canonical(task.timezone)
                     )
                 ),
                 "type_differs": bool(
@@ -1639,8 +1643,8 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 "can_set_dates": can_set_dates,
                 # Pre-fill the Lead's dialog with the member's own dates
                 # only: a date left empty there follows the task's.
-                "own_start_input": picker(own_start, own_zone),
-                "own_deadline_input": picker(own_deadline, own_zone),
+                "own_start_input": picker(own_start, start_zone),
+                "own_deadline_input": picker(own_deadline, deadline_zone),
                 # The type their credit is filed under: their own, when a
                 # Lead set one (``AssigneeContributionType``), else the
                 # task's. ``own_type`` is the entry, None when they follow
@@ -2189,6 +2193,12 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
     as each member has it. Each date may be earlier or later than the
     task's, which still holds for the task and everyone else.
 
+    POST ``member=<id>`` with ``field=start_date`` or ``field=deadline`` is
+    the start date or due date dialog: one ``date`` with its own
+    ``timezone`` (``forms.AssigneeDateForm``), leaving the member's other own
+    date and its zone as they are. With ``action=clear`` it removes that one
+    date.
+
     Refused on a completed task: there are no dates left to keep.
     """
 
@@ -2213,14 +2223,25 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                 return HttpResponseBadRequest(
                     "That member is not assigned to this task."
                 )
+            field = request.POST.get("field") or ""
+            if field and field not in AssigneeDateForm.LABELS:
+                return HttpResponseBadRequest("Choose the start date or the deadline.")
             if request.POST.get("action") == "clear":
-                clear_member_dates(task=self.task, member=member, actor=lead)
+                if field:
+                    # Remove one own date; the other, and its zone, stay.
+                    set_member_dates(
+                        task=self.task, member=member, lead=lead, **{field: None}
+                    )
+                else:
+                    clear_member_dates(task=self.task, member=member, actor=lead)
                 return _respond_status_block(
                     request, self.task,
                     project_member=self.project_member,
                     is_project_manager=self.is_project_manager,
                 )
             current = self.task.assignee_deadlines.filter(member=member).first()
+            if field:
+                return self._set_one_date(request, member, current, field, lead)
         pending = ()
         if scope == "pending":
             own = {d.member_id: d for d in self.task.assignee_deadlines.all()}
@@ -2255,6 +2276,29 @@ class TaskMemberDatesView(LoginRequiredMixin, TaskMemberAccessMixin, View):
                 start_date=start_date, deadline=deadline, timezone=zone,
                 reason=reason,
             )
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
+    def _set_one_date(self, request, member, current, field, lead):
+        """The Change start date / Change due date dialogs: one own date,
+        with a zone of its own (``forms.AssigneeDateForm``)."""
+        form = AssigneeDateForm(
+            request.POST, task=self.task, field=field, current=current, member=member
+        )
+        if not form.is_valid():
+            return HttpResponseBadRequest(
+                " ".join(str(e) for errors in form.errors.values() for e in errors)
+            )
+        zone_field = AssigneeDeadline.ZONE_FIELDS[field]
+        set_member_dates(
+            task=self.task, member=member, lead=lead,
+            **{field: form.cleaned_data["date"], zone_field: form.cleaned_data["timezone"]},
+            reason=form.cleaned_data["reason"],
+        )
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,
