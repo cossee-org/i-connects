@@ -1387,6 +1387,114 @@ def _marks_locked(task) -> bool:
     return task.status == TaskStatus.COMPLETED
 
 
+def _withdraw_prompts(
+    *,
+    member,
+    is_viewer: bool,
+    project_member,
+    done: bool,
+    reviewed: bool,
+    reviewed_by,
+    verified: bool,
+    verified_by,
+    tracks_credit: bool,
+    type_label: str,
+    has_attachments: bool,
+    review_comment: bool = False,
+    verify_comment: bool = False,
+) -> dict:
+    """What the confirmation before unticking Done, Reviewed or Verified says,
+    for one row (task_withdraw_confirm_modal.html): a title, the button's
+    label, and one sentence for each thing the untick would undo — only what
+    applies to this part.
+
+    Undoing a done mark clears its review and verification and the credit
+    the verification wrote (``services.reopen_own``); withdrawing a review
+    leaves the mark and any verification (``services.clear_review``);
+    withdrawing a verification removes its credit and leaves the rest
+    (``services.unverify_part``). A comment goes with the verdict it was
+    left on.
+    """
+    def name_of(m):
+        if m is None:
+            return "a former member"
+        if project_member is not None and m.pk == project_member.pk:
+            return "you"
+        return m.display_name
+
+    whose = "your" if is_viewer else f"{member.display_name}'s"
+    them = "you" if is_viewer else member.display_name
+    credited = (
+        f"the credit it gave {them} as {type_label} comes off Contribution "
+        "Tracking until the part is verified again"
+    )
+
+    done_lines = []
+    if reviewed:
+        done_lines.append(
+            f"The review by {name_of(reviewed_by)} is cleared"
+            + (", along with its comments." if review_comment else ".")
+        )
+    if verified:
+        done_lines.append(
+            f"The verification by {name_of(verified_by)} is cleared"
+            + (", along with its comments" if verify_comment else "")
+            + (f", and {credited}." if tracks_credit else ".")
+        )
+    if has_attachments:
+        done_lines.append(
+            "Your attachments stay, and you can change them again."
+            if is_viewer
+            else "Their attachments stay."
+        )
+    done_lines.append(
+        "You can mark it done again at any time."
+        if is_viewer
+        else "It can be marked done again at any time."
+    )
+
+    if reviewed_by is not None and project_member is not None and reviewed_by.pk == project_member.pk:
+        review_title = f"Withdraw your review of {whose} part?"
+    else:
+        review_title = f"Withdraw {name_of(reviewed_by)}'s review of {whose} part?"
+    review_lines = []
+    if review_comment:
+        review_lines.append("The review's comments go with it.")
+    review_lines.append(
+        "The Done mark and any verification stay, and the part can be "
+        "reviewed again."
+    )
+
+    verify_lines = [
+        (credited[0].upper() + credited[1:] + ".")
+        if tracks_credit
+        else "This project doesn't track CRediT, so only the sign-off is removed."
+    ]
+    if verify_comment:
+        verify_lines.append("The verification's comments go with it.")
+    verify_lines.append(
+        "The Done mark and any review stay, and the part can be verified again."
+    )
+
+    return {
+        "done": {
+            "title": f"Mark {whose} part not done?",
+            "confirm": "Mark not done",
+            "lines": done_lines,
+        } if done else None,
+        "review": {
+            "title": review_title.replace("you's", "your"),
+            "confirm": "Withdraw review",
+            "lines": review_lines,
+        } if reviewed else None,
+        "verify": {
+            "title": f"Withdraw the verification of {whose} contribution?",
+            "confirm": "Withdraw verification",
+            "lines": verify_lines,
+        } if verified else None,
+    }
+
+
 def _task_status_context(task, *, project_member, is_project_manager):
     """Context for the completion status block (per-assignee done state).
 
@@ -1665,6 +1773,20 @@ def _task_status_context(task, *, project_member, is_project_manager):
                     effective_type, effective_type
                 ),
                 "can_set_type": can_set_type,
+                # What the confirmation before each untick says.
+                "withdraw": _withdraw_prompts(
+                    member=member,
+                    is_viewer=is_viewer,
+                    project_member=project_member,
+                    done=done,
+                    reviewed=reviewed,
+                    reviewed_by=log.reviewed_by if log is not None else None,
+                    verified=verified,
+                    verified_by=log.verified_by if log is not None else None,
+                    tracks_credit=tracks_credit,
+                    type_label=type_labels.get(effective_type, effective_type),
+                    has_attachments=bool(own_attachments["links"] or own_attachments["note"]),
+                ),
             }
         )
     my_state = next(

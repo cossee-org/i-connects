@@ -1,0 +1,53 @@
+{% comment %}
+  The confirmation before unticking Done, Reviewed or Verified, in the app's
+  standard modal. One dialog serves the whole completion table: a ticked box
+  that may be unticked does not post on click but dispatches
+  ``confirm-withdraw`` with
+
+    prompt   {title, confirm, lines} — what the dialog says, built per row
+             by views._withdraw_prompts: one sentence for each thing the
+             untick undoes (the review and verification a Done mark takes
+             with it, the credit a verification gave, comments), only those
+             that apply
+    url      the endpoint the untick posts to (unchanged)
+    vals     the values it posts
+
+  Cancel closes it and leaves the box ticked. Confirming posts exactly what
+  the untick used to, through htmx, and swaps #task-status-block — which
+  this dialog sits inside, so the swap closes it. The request takes the
+  page's CSRF header from <body>'s hx-headers, through ``source``.
+  A refusal comes back as a 400 or 403 whose text is shown above the
+  buttons.
+
+  Expects ``task``.
+{% endcomment %}
+<dialog id="withdraw-modal-{{ task.pk }}" class="modal"
+        aria-labelledby="withdraw-modal-title-{{ task.pk }}"
+        data-withdraw-modal
+        x-data="{ title: '', confirm: '', lines: [], url: '', vals: {}, error: '', busy: false,
+                  send() {
+                    this.busy = true; this.error = '';
+                    htmx.ajax('POST', this.url, { source: this.$refs.form, target: '#task-status-block', swap: 'outerHTML', values: this.vals })
+                      .finally(() => { this.busy = false });
+                  } }"
+        @confirm-withdraw.window="Object.assign($data, $event.detail.prompt, { url: $event.detail.url, vals: $event.detail.vals || {}, error: '', busy: false }); $el.showModal()"
+        @htmx:response-error.camel="error = $event.detail.xhr.responseText">
+  <div class="modal-box">
+    <h3 id="withdraw-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy" x-text="title"></h3>
+    <ul class="mt-3 flex flex-col gap-2 text-sm text-brand-text" data-withdraw-lines>
+      <template x-for="line in lines">
+        <li x-text="line"></li>
+      </template>
+    </ul>
+    <form x-ref="form" @submit.prevent="send()" class="mt-4">
+      <p class="text-sm text-error" role="alert" x-show="error" x-text="error" x-cloak data-withdraw-error></p>
+      <div class="flex flex-wrap gap-2 justify-end mt-2">
+        <button type="button" class="btn btn-ghost" @click="$el.closest('dialog').close()">Cancel</button>
+        <button type="submit" class="btn btn-outline btn-error" :disabled="busy" x-text="confirm" data-withdraw-confirm>Confirm</button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>

@@ -12,11 +12,12 @@
 {% endcomment %}
 {% if s.verified %}
   {% if s.can_unverify %}
+    {# Unticking asks first (task_withdraw_confirm_modal.html), saying what it undoes. #}
+    {{ s.withdraw.verify|json_script }}
     <input type="checkbox" class="completion-tick completion-tick-verify" checked
-           hx-post="{% url 'tasks:verify_log' pk=task.pk log_pk=s.log.pk %}"
-           hx-vals='{"verified": "0", "pane_mode": "1"}'
-           hx-target="#task-status-block"
-           hx-swap="outerHTML"
+           @click.prevent="$dispatch('confirm-withdraw', { prompt: JSON.parse($el.previousElementSibling.textContent), url: '{% url 'tasks:verify_log' pk=task.pk log_pk=s.log.pk %}', vals: { verified: '0', pane_mode: '1' } })"
+           aria-haspopup="dialog"
+           data-confirm-withdraw="verify"
            aria-label="Withdraw the verification of {% if s.is_viewer %}your{% else %}{{ s.member.display_name }}'s{% endif %} contribution"
            title="Untick to withdraw">
   {% else %}

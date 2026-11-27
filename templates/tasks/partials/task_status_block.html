@@ -99,10 +99,11 @@
     {% if not pane_mode and is_assignee %}
       <div class="flex items-center gap-2">
         {% if my_done %}
-          <button class="btn btn-ghost btn-sm"
-                  hx-post="{% url 'tasks:undo' pk=task.pk %}"
-                  hx-target="#task-status-block"
-                  hx-swap="outerHTML">Undo my mark</button>
+          {{ my_state.withdraw.done|json_script }}
+          <button type="button" x-data class="btn btn-ghost btn-sm"
+                  @click="$dispatch('confirm-withdraw', { prompt: JSON.parse($el.previousElementSibling.textContent), url: '{% url 'tasks:undo' pk=task.pk %}', vals: {} })"
+                  aria-haspopup="dialog"
+                  data-confirm-withdraw="done">Undo my mark</button>
         {% else %}
           <button type="button" x-data class="btn btn-sm bg-brand-coral hover:bg-brand-coral/90 text-white border-0"
                   @click="$dispatch('open-attachments')"
@@ -676,6 +677,7 @@
   {% endcomment %}
   {% if assignee_states %}
     {% include "tasks/partials/task_attachments_modal.html" with task=task my_state=my_state my_done=my_done pane_mode=pane_mode %}
+    {% include "tasks/partials/task_withdraw_confirm_modal.html" with task=task %}
   {% endif %}
 </div>
 
