@@ -820,3 +820,25 @@ def test_mark_done_dialog_keeps_its_note_behind_an_info_button(client, setup):
     assert "Optionally add a note and links to your work" in panel
     assert "Only this task's reviewers and the project's Leads can see them." in panel
     assert modal.count("Optionally add a note and links") == 1
+
+
+@pytest.mark.django_db
+def test_add_attachment_is_switched_off_once_signed_off(client, setup):
+    """On the assignee's own done part with nothing attached, Add attachment
+    opens the form until the part is reviewed or verified; after that it
+    stays, switched off, with an (i) saying why."""
+    s = setup
+    client.force_login(s["users"]["bob"])
+    _complete(client, s["task"])
+    row = _row_for(_pane(client, s), s["bob"])
+    assert "data-add-attachments" in row and "data-add-attachments-disabled" not in row
+
+    mark_reviewed(task_log=_log(s["task"], s["bob"]), reviewer=s["carol"])
+    row = _row_for(_pane(client, s), s["bob"])
+    assert "data-add-attachments-disabled" in row
+    assert "open-attachments" not in row
+    assert "Untick Done to add them" in row
+    # Someone else sees no link on an empty part.
+    client.force_login(s["users"]["alice"])
+    row = _row_for(_pane(client, s), s["bob"])
+    assert "data-add-attachments" not in row

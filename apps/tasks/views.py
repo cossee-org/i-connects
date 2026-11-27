@@ -1730,15 +1730,12 @@ def _task_status_context(task, *, project_member, is_project_manager):
                     log.attachments_updated_at if shown_attachments else None
                 ),
                 "has_attachments": bool(shown["links"] or shown["note"]),
-                # Whether the row offers View attachments: a part marked done
+                # Whether the row offers View attachment: a part marked done
                 # with attachments this viewer may see — or Add attachment on
-                # the viewer's own done part that can still take some.
+                # the viewer's own done part (switched off once it is signed
+                # off).
                 "shows_attachments_link": bool(
-                    done
-                    and (
-                        shown["links"] or shown["note"]
-                        or (is_viewer and attachments_editable(log))
-                    )
+                    done and (shown["links"] or shown["note"] or is_viewer)
                 ),
                 # The assignee's own: what pre-fills their attachments dialog,
                 # kept from an earlier mark they have since undone.

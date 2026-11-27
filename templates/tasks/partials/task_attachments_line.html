@@ -10,8 +10,9 @@
 
   On the viewer's own done part with nothing added yet it reads Add
   attachment instead, and opens the dialog straight on its form — as long as
-  the part can still take attachments (not yet reviewed or verified); once
-  it cannot, an empty part shows no link.
+  the part can still take attachments (not yet reviewed or verified). Once
+  it cannot, Add attachment stays, switched off, with a short line saying
+  why (an (i) box would be clipped by the table's scrolling card).
 
   The attachments ({links, note}) reach the dialog as JSON from Django's
   ``json_script``, which escapes it for a <script> element, rather than as
@@ -28,9 +29,17 @@
   the table's row (``details``) it is drawn again; only the Done cell's
   button carries ``data-view-attachments``, so there is one per part to find.
 {% endcomment %}
-{% if s.has_attachments or s.can_edit_attachments %}
+{% if s.has_attachments or s.can_edit_attachments or s.is_viewer and s.done %}
   <div class="{% if inline %}inline-flex{% else %}flex{% endif %} items-center text-xs"{% if not details %} data-attachments="{{ s.member.pk }}"{% endif %}>
-    {% if not s.has_attachments %}
+    {% if not s.has_attachments and not s.can_edit_attachments %}
+      {# Signed off with nothing attached: the link stays, switched off, with why. #}
+      <span class="flex flex-col"
+            title="Attachments can't be added once your part is reviewed or verified. Untick Done to add them."
+            {% if details %}data-details-attachments{% else %}data-add-attachments-disabled{% endif %}>
+        <span class="font-medium text-brand-text/40 cursor-not-allowed" aria-disabled="true">Add attachment</span>
+        <span class="text-[11px] leading-snug text-brand-text/50">Locked once reviewed or verified. Untick Done to add them.</span>
+      </span>
+    {% elif not s.has_attachments %}
       {# Nothing added yet: Add attachment opens the dialog straight on its form. #}
       <button type="button" x-data
               class="font-medium text-left text-brand-navy no-underline hover:text-brand-coral"
