@@ -5,10 +5,14 @@
   assignee_states) and ``task``; it swaps #task-status-block, the target every
   completion action uses.
 
-  Who may tick it is who could before: a Lead, for anyone (``s.can_mark_done``,
-  posting by member so a row with no entry yet still works), and an assignee
-  for their own part (``s.is_viewer``, through the self-mark endpoints).
-  Everyone else sees it read-only.
+  Who may tick it is who could before: an assignee for their own part
+  (``s.is_viewer``, through the self-mark endpoints), and a Lead for anyone
+  else (``s.can_mark_done``, posting by member so a row with no entry yet
+  still works). Everyone else sees it read-only. An assignee ticking their
+  own part opens the attachments dialog (task_attachments_modal.html), which does
+  the marking, so they can attach a link as they do; unticking undoes it
+  straight away. A Lead ticking for someone else adds no attachments: those
+  are the assignee's to give.
 
   Once the task is marked completed, the marks a Lead sets for others
   freeze; an assignee's own box stays live, so whoever had not ticked when
@@ -20,22 +24,32 @@
   task_status_block.html) instead, saying the task has to be marked not
   complete first.
 {% endcomment %}
-{% if s.can_mark_done %}
+{% if s.is_viewer %}
+  {% if s.done %}
+    <input type="checkbox" class="completion-tick completion-tick-done" checked
+           hx-post="{% url 'tasks:undo' pk=task.pk %}"
+           hx-vals='{"pane_mode": "1"}'
+           hx-target="#task-status-block"
+           hx-swap="outerHTML"
+           aria-label="Mark your part not done"
+           title="Untick to undo">
+  {% else %}
+    {# Opens the attachments dialog (task_attachments_modal.html), which marks it. #}
+    <input type="checkbox" class="completion-tick completion-tick-done"
+           @click.prevent="$dispatch('open-attachments')"
+           aria-haspopup="dialog"
+           aria-label="Mark your part done"
+           title="Tick to mark your part done"
+           data-open-attachments>
+  {% endif %}
+{% elif s.can_mark_done %}
   <input type="checkbox" class="completion-tick completion-tick-done"{% if s.done %} checked{% endif %}
          hx-post="{% url 'tasks:member_done' pk=task.pk member_pk=s.member.pk %}"
          hx-vals='{"done": "{% if s.done %}0{% else %}1{% endif %}", "pane_mode": "1"}'
          hx-target="#task-status-block"
          hx-swap="outerHTML"
-         aria-label="Mark {% if s.is_viewer %}your{% else %}{{ s.member.display_name }}'s{% endif %} part {% if s.done %}not done{% else %}done{% endif %}"
+         aria-label="Mark {{ s.member.display_name }}'s part {% if s.done %}not done{% else %}done{% endif %}"
          title="{% if s.done %}Untick to undo{% else %}Tick to mark done{% endif %}">
-{% elif s.is_viewer %}
-  <input type="checkbox" class="completion-tick completion-tick-done"{% if s.done %} checked{% endif %}
-         hx-post="{% if s.done %}{% url 'tasks:undo' pk=task.pk %}{% else %}{% url 'tasks:complete' pk=task.pk %}{% endif %}"
-         hx-vals='{"pane_mode": "1"}'
-         hx-target="#task-status-block"
-         hx-swap="outerHTML"
-         aria-label="{% if s.done %}Mark your part not done{% else %}Mark your part done{% endif %}"
-         title="{% if s.done %}Untick to undo{% else %}Tick to mark your part done{% endif %}">
 {% elif marks_locked %}
   <input type="checkbox" class="completion-tick completion-tick-done"{% if s.done %} checked{% endif %}
          aria-disabled="true" data-locked

@@ -91,6 +91,11 @@ urlpatterns = [
         name="complete",
     ),
     path(
+        "tasks/<int:pk>/attachments/",
+        views.TaskAttachmentsView.as_view(),
+        name="attachments",
+    ),
+    path(
         "tasks/<int:pk>/undo/",
         views.TaskUndoOwnView.as_view(),
         name="undo",

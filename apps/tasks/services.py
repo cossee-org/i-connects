@@ -7,7 +7,7 @@ focused on request/response handling and concentrate the mutation logic
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, NamedTuple
 
 from django.db import transaction
 from django.utils import timezone
@@ -19,9 +19,11 @@ from apps.tasks.models import (
     ActivityEvent,
     AssigneeContributionType,
     AssigneeDeadline,
+    MAX_ATTACHMENTS,
     KanbanBoard,
     Task,
     TaskActivity,
+    TaskAttachment,
     TaskLog,
 )
 
@@ -220,9 +222,124 @@ def _current_log_for(task: Task, member: ProjectMember) -> TaskLog | None:
     )
 
 
+class AttachmentsLocked(Exception):
+    """Raised when attachments are changed under a review or verification."""
+
+
+def attachments_editable(log: TaskLog | None) -> bool:
+    """True when the assignee may set or change the attachments on ``log``.
+
+    Attachments belong to a submission: they can be added once the part is marked
+    done, and changed until a reviewer or a Lead signs that submission off.
+    After that the review or verification stands on what was there, so the
+    attachments freeze with it; the assignee undoes their done mark (which
+    clears both) to change them.
+    """
+    return (
+        log is not None
+        and log.status == TaskStatus.COMPLETED
+        and not log.is_reviewed
+        and not log.is_verified
+    )
+
+
+class Attachments(NamedTuple):
+    """An assignee's attachments for their part: their links, in order, and one
+    note covering all of them. Either may be empty."""
+
+    urls: list[str]
+    note: str = ""
+
+
+def _clean(attachments: Attachments) -> Attachments:
+    """``attachments`` stripped, with blank links dropped."""
+    urls = [url.strip() for url in attachments.urls if url and url.strip()]
+    return Attachments(urls, (attachments.note or "").strip())
+
+
+def _replace_attachments(log: TaskLog, attachments: Attachments) -> bool:
+    """Make ``log``'s attachments exactly ``attachments``. True if it changed.
+
+    Replaced whole: what the assignee saves are their attachments. Nothing is
+    written when it is the same as what is there, so saving the dialog
+    unchanged leaves no audit row and no new timestamp. ``log`` must be saved.
+    """
+    attachments = _clean(attachments)
+    if len(attachments.urls) > MAX_ATTACHMENTS:
+        raise ValueError(f"At most {MAX_ATTACHMENTS} attachment links.")
+    current = list(log.attachments.order_by("position", "id").values_list("url", flat=True))
+    if current == attachments.urls and log.attachment_note == attachments.note:
+        return False
+    if current != attachments.urls:
+        log.attachments.all().delete()
+        TaskAttachment.objects.bulk_create(
+            TaskAttachment(task_log=log, url=url, position=i)
+            for i, url in enumerate(attachments.urls)
+        )
+    log.attachment_note = attachments.note
+    log.attachments_updated_at = timezone.now()
+    log.save(update_fields=["attachment_note", "attachments_updated_at"])
+    return True
+
+
+@transaction.atomic
+def set_attachments(
+    *,
+    task_log: TaskLog,
+    attachments: Attachments,
+    actor: ProjectMember | None = None,
+) -> TaskLog:
+    """Replace the attachments on an assignee's done part with ``attachments``.
+
+    ``attachments.urls`` is the whole list of links in the assignee's order
+    (blank ones are dropped; at most ``MAX_ATTACHMENTS``), and
+    ``attachments.note`` the one note on them; empty both clears it. Refused
+    with :class:`AttachmentsLocked` unless :func:`attachments_editable`. Writes an
+    audit row when anything changed; the links go in it, which is fine
+    because the project's activity log is Lead-only.
+    """
+    if not attachments_editable(task_log):
+        raise AttachmentsLocked(
+            "Attachments can be changed only on a part marked done and not yet "
+            "reviewed or verified. Untick Done to change it."
+        )
+    if _replace_attachments(task_log, attachments):
+        _log_attachments_action(task_log=task_log, actor_member=actor or task_log.assigned_to)
+    return task_log
+
+
+def _log_attachments_action(*, task_log: TaskLog, actor_member: ProjectMember | None) -> None:
+    """Append an audit row for attachments set, changed or cleared on ``task_log``.
+
+    Not announced to Zulip or Discord: ``TASK_ATTACHMENTS_SET`` has no message
+    builder there, and must not get one, since the attachments are for the task's
+    reviewers and Leads only.
+    """
+    task = task_log.task
+    urls = list(task_log.attachments.values_list("url", flat=True))
+    log_action(
+        AuditAction.TASK_ATTACHMENTS_SET,
+        actor=actor_member.users.first() if actor_member is not None else None,
+        entity=task,
+        project=task.project,
+        metadata={
+            "task_name": task.name,
+            "assignee_member_id": task_log.assigned_to_id,
+            "task_log_id": task_log.pk,
+            "attachment_count": len(urls),
+            "attachment_urls": urls,
+            "has_note": bool(task_log.attachment_note),
+        },
+    )
+
+
 @transaction.atomic
 def mark_own_done(
-    *, task: Task, member: ProjectMember, actor: ProjectMember | None = None
+    *,
+    task: Task,
+    member: ProjectMember,
+    actor: ProjectMember | None = None,
+    attachments: Attachments | None = None,
 ) -> TaskLog:
     """Mark a single assignee's part of an INDIVIDUAL-mode task done.
 
@@ -242,6 +359,13 @@ def mark_own_done(
 
     Every change of the mark writes an audit row, so who marked whose part
     done, and when, survives the TaskLog being updated in place.
+
+    ``attachments`` is the assignee's :class:`Attachments` (links and a note) from
+    the mark-done dialog, written with the mark (see :func:`set_attachments`). ``None`` leaves whatever attachments the entry already
+    holds untouched, which is what a Lead marking someone else done passes:
+    the attachments are the assignee's to give. On a part already done and since
+    reviewed or verified the attachments are frozen (:func:`attachments_editable`),
+    so a repeated mark leaves them as they were.
     """
     log = _current_log_for(task, member)
     if log is None:
@@ -249,15 +373,21 @@ def mark_own_done(
             task=task, assigned_to=member, completed_as=CompletedAs.INDIVIDUAL
         )
     was_done = log.pk is not None and log.status == TaskStatus.COMPLETED
+    frozen = was_done and not attachments_editable(log)
     log.status = TaskStatus.COMPLETED
     log.completed_by = actor or member
     log.completed_as = CompletedAs.INDIVIDUAL
     log.completed_at = timezone.now()
     log.save()
+    attachments_changed = (
+        attachments is not None and not frozen and _replace_attachments(log, attachments)
+    )
     if not was_done:
         _log_mark_action(
             AuditAction.TASK_PART_DONE, task_log=log, actor_member=actor or member
         )
+    if attachments_changed:
+        _log_attachments_action(task_log=log, actor_member=actor or member)
     return log
 
 
@@ -279,6 +409,10 @@ def reopen_own(
 
     Like marking, undoing stays open on a closed task, and never reopens it:
     the task's completion is the Lead's call, not a sum of the marks.
+
+    The attachments stay on the entry: they are only shown on a part marked done,
+    and keeping it means the mark-done dialog comes back filled in if the
+    assignee marks the part done again.
     """
     log = _current_log_for(task, member)
     if log is None:

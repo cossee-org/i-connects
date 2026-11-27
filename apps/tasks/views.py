@@ -60,6 +60,7 @@ from apps.tasks.calendar import (
 )
 from apps.tasks.forms import (
     AssigneeDatesForm,
+    AttachmentsForm,
     KanbanBoardForm,
     MilestoneForm,
     TaskAssignForm,
@@ -81,10 +82,12 @@ from apps.tasks.mixins import (
     ProjectManagerRequiredMixin,
     TaskMemberAccessMixin,
 )
-from apps.tasks.models import ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskLog, TaskQuerySet
+from apps.tasks.models import MAX_ATTACHMENTS, ActivityEvent, KanbanBoard, Milestone, Task, TaskActivity, TaskAttachment, TaskLog, TaskQuerySet
 from apps.tasks.services import (
     UNSET,
+    AttachmentsLocked,
     apply_task_date_change,
+    attachments_editable,
     rezone_following_members,
     approve_completion,
     clear_member_dates,
@@ -92,6 +95,7 @@ from apps.tasks.services import (
     close_task,
     mark_own_done,
     mark_reviewed,
+    set_attachments,
     move_task,
     notify_new_assignees,
     notify_new_reviewers,
@@ -1401,6 +1405,13 @@ def _task_status_context(task, *, project_member, is_project_manager):
     current = {}
     for log in task.task_logs.all():  # newest-first; first seen is current
         current.setdefault(log.assigned_to_id, log)
+    # Every current entry's attachment links, in one query rather than one per
+    # row; who gets to see them is decided per row below.
+    links_by_log: dict[int, list[str]] = {}
+    for log_id, url in TaskAttachment.objects.filter(
+        task_log_id__in=[log.pk for log in current.values()]
+    ).order_by("task_log_id", "position", "id").values_list("task_log_id", "url"):
+        links_by_log.setdefault(log_id, []).append(url)
     assignees = list(task.assigned_members.all())
     # A Lead can review as well as the task's named reviewers, and a Lead can
     # also set or clear anyone's done mark — the two per-member actions they
@@ -1411,6 +1422,15 @@ def _task_status_context(task, *, project_member, is_project_manager):
     needs_review = task.needs_review
     viewer_reviews = bool(
         needs_review and (is_project_manager or task.is_reviewer(project_member))
+    )
+    # Who sees the attachments assignees add to their parts: the task's Leads
+    # and its current reviewers, on every row, and each assignee on their own.
+    # Read from the live reviewer set, so a reviewer taken off the task stops
+    # seeing it on the next render. Independent of needs_review: a reviewer
+    # on a task that asks for no review is still someone the Lead named to
+    # look at the work.
+    viewer_sees_all_attachments = bool(
+        is_project_manager or task.is_reviewer(project_member)
     )
     locked = _marks_locked(task)
     individual_dates = {d.member_id: d for d in task.assignee_deadlines.all()}
@@ -1440,6 +1460,19 @@ def _task_status_context(task, *, project_member, is_project_manager):
     for member in assignees:
         log = current.get(member.id)
         done = log is not None and log.status == TaskStatus.COMPLETED
+        is_viewer = bool(project_member and member.id == project_member.id)
+        # Attachments are shown on a part marked done, and only to its audience;
+        # everyone else gets empty strings, so the markup has nothing of it
+        # to give away — not even that there is any.
+        sees_attachments = bool(log is not None and (viewer_sees_all_attachments or is_viewer))
+        shown_attachments = sees_attachments and done
+        # The part's attachments as the attachments dialog takes them (JSON): its
+        # links in order and its one note.
+        own_attachments = {
+            "links": links_by_log.get(log.pk, []) if log is not None else [],
+            "note": log.attachment_note if log is not None else "",
+        }
+        shown = own_attachments if shown_attachments else {"links": [], "note": ""}
         individual = individual_dates.get(member.id)
         own_type = own_types.get(member.id)
         effective_type = (
@@ -1498,7 +1531,25 @@ def _task_status_context(task, *, project_member, is_project_manager):
                 "can_unverify": is_project_manager and verified,
                 # The viewer's own row: they tick their own part done (and
                 # untick it) from it, even once the task is completed.
-                "is_viewer": bool(project_member and member.id == project_member.id),
+                "is_viewer": is_viewer,
+                # The assignee's attachments for their part, for the viewers
+                # allowed to see them (see viewer_sees_all_attachments above).
+                # {links, note}: empty for everyone else, so nothing of it
+                # reaches their page.
+                "attachments": shown,
+                "attachment_count": len(shown["links"]),
+                "attachments_updated_at": (
+                    log.attachments_updated_at if shown_attachments else None
+                ),
+                "has_attachments": bool(shown["links"] or shown["note"]),
+                # The assignee's own: what pre-fills their attachments dialog,
+                # kept from an earlier mark they have since undone.
+                "own_attachments": own_attachments if is_viewer else {"links": [], "note": ""},
+                # How many items the dialog lets them add.
+                "attachment_limit": MAX_ATTACHMENTS,
+                # Whether the viewer may change it: their own part, done, and
+                # not yet reviewed or verified (services.attachments_editable).
+                "can_edit_attachments": is_viewer and attachments_editable(log),
                 # The entry the review buttons act on. None until the member
                 # has one seeded, in which case there is nothing to review.
                 "log": log,
@@ -1638,6 +1689,8 @@ def _task_status_context(task, *, project_member, is_project_manager):
         ),
         "is_assignee": my_state is not None,
         "my_done": bool(my_state and my_state["done"]),
+        # The viewer's own row, for the mark-done dialog's pre-fill.
+        "my_state": my_state,
         # Whether the viewer reviews on this task at all. The per-row
         # ``can_review`` above is what actually gates the buttons.
         "viewer_reviews": viewer_reviews,
@@ -1719,7 +1772,50 @@ class TaskCompleteView(LoginRequiredMixin, TaskMemberAccessMixin, View):
             return HttpResponseBadRequest("No project membership.")
         if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
             return HttpResponseForbidden("Only an assignee can mark their part done.")
-        mark_own_done(task=self.task, member=self.project_member)
+        # The mark-done dialog sends the attachments fields; a post without them
+        # (an older page, a script) marks done and leaves the attachments alone.
+        attachments = None
+        if AttachmentsForm.present(request.POST):
+            form = AttachmentsForm(request.POST)
+            if not form.is_valid():
+                return HttpResponseBadRequest(form.error_text())
+            attachments = form.attachments
+        mark_own_done(task=self.task, member=self.project_member, attachments=attachments)
+        return _respond_status_block(
+            request, self.task,
+            project_member=self.project_member,
+            is_project_manager=self.is_project_manager,
+        )
+
+
+class TaskAttachmentsView(LoginRequiredMixin, TaskMemberAccessMixin, View):
+    """An assignee sets, changes or clears the attachments on their done part.
+
+    Only on their own part, once it is marked done and until it is reviewed
+    or verified (``services.attachments_editable``); after that the assignee
+    unticks Done to change it. The post is the whole list
+    (``AttachmentsForm``), which replaces what was there; an empty one
+    clears it. Like marking, it stays open on a completed task.
+
+    The attachments are shown to the task's reviewers and Leads — see
+    ``_task_status_context`` — and to the assignee themselves.
+    """
+
+    def post(self, request, *args, **kwargs):
+        if self.project_member is None:
+            return HttpResponseBadRequest("No project membership.")
+        if not self.task.assigned_members.filter(pk=self.project_member.pk).exists():
+            return HttpResponseForbidden("Only the assignee can add attachments for their part.")
+        form = AttachmentsForm(request.POST)
+        if not form.is_valid():
+            return HttpResponseBadRequest(form.error_text())
+        log = self.task.task_logs.filter(
+            assigned_to=self.project_member
+        ).order_by("-created_at").first()
+        try:
+            set_attachments(task_log=log, attachments=form.attachments, actor=self.project_member)
+        except AttachmentsLocked as exc:
+            return HttpResponseBadRequest(str(exc))
         return _respond_status_block(
             request, self.task,
             project_member=self.project_member,
