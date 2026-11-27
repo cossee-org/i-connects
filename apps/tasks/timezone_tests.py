@@ -1115,3 +1115,35 @@ def test_set_dates_for_all_gives_both_dates_the_reason(pm_user, zoned):
 
     own = AssigneeDeadline.objects.get(member=ari)
     assert (own.start_reason, own.deadline_reason) == ("Holidays", "Holidays")
+
+
+@pytest.mark.django_db
+def test_date_dialogs_keep_their_notes_behind_info_buttons(client, pm_user, zoned):
+    """The date dialogs' explanation and the timezone note sit in (i) boxes,
+    not in the dialog body; the note still follows the picker (x-text)."""
+    _project, task, _lead, _ari, _bo = zoned
+    client.force_login(pm_user)
+    content = client.get(
+        reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
+    ).content.decode()
+
+    modal = content[content.index('data-member-date-modal="deadline"') :]
+    modal = modal[: modal.index("</dialog>")]
+    panels = modal.split("data-info-popover-panel")[1:]
+    assert len(panels) == 2
+    assert "The task is due" in panels[0] and "follows the task" in panels[0]
+    assert 'x-text="note" data-timezone-note>Timezone used:' in panels[1]
+    assert "The due date is in this timezone. The start date keeps its own." in panels[1]
+    # Nothing of either is left in the dialog body.
+    assert modal.count("The task is due") == 1
+    assert modal.count("Timezone used:") == 1
+
+
+@pytest.mark.django_db
+def test_other_timezone_pickers_keep_the_note_on_show(client, pm_user, zoned):
+    project, task, _lead, _ari, _bo = zoned
+    client.force_login(pm_user)
+    content = client.get(_update_url(project, task)).content.decode()
+
+    assert "data-timezone-note" in content
+    assert "data-info-popover" not in content

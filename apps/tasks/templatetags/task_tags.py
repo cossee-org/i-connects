@@ -170,3 +170,45 @@ def _days_left(deadline, zone) -> str:
     if days <= 0:
         return "Due today"
     return f"{days} day{'' if days == 1 else 's'} left"
+
+
+class _InfoBoxNode(template.Node):
+    def __init__(self, nodelist, label):
+        self.nodelist = nodelist
+        self.label = label
+
+    def render(self, context):
+        from django.template.loader import render_to_string
+        from django.utils.safestring import mark_safe
+
+        return render_to_string(
+            "_components/info_popover.html",
+            {
+                "content": mark_safe(self.nodelist.render(context)),
+                "label": self.label.resolve(context),
+            },
+        )
+
+
+@register.tag("infobox")
+def do_infobox(parser, token):
+    """An (i) button that opens a small box holding what the tag wraps —
+    ``_components/info_popover.html``::
+
+        <div class="relative flex items-center gap-1.5">
+          <h3>Start date for …</h3>
+          {% infobox "About the start date" %}The task has no start date. …{% endinfobox %}
+        </div>
+
+    The argument is the button's accessible name. The box opens below the
+    button, positioned from the nearest ``relative`` ancestor — give the row
+    holding the button ``relative``, so the box spans the row and fits a
+    phone. The content is rendered in place, so Alpine bindings in it (a
+    dialog's ``x-text="name"``) read the surrounding component.
+    """
+    bits = token.split_contents()
+    if len(bits) != 2:
+        raise template.TemplateSyntaxError("infobox takes one argument: the button's label")
+    nodelist = parser.parse(("endinfobox",))
+    parser.delete_first_token()
+    return _InfoBoxNode(nodelist, parser.compile_filter(bits[1]))

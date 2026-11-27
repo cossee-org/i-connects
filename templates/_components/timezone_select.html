@@ -23,6 +23,9 @@
                    window event and reads ``timezone`` off its detail —
                    null (or missing) for "nothing saved", which starts on
                    the system timezone, "" for "Same as task", else a zone.
+    note_in_info   set to put the note naming the timezone in use (and
+                   ``help``) behind an (i) beside the label instead of under
+                   the picker (the start date and due date dialogs)
     managed_event  the window event a managed picker listens for instead of
                    ``open-dates`` (the start date and due date dialogs each
                    have their own)
@@ -49,9 +52,19 @@
      @keydown.escape="if (open) { $event.preventDefault(); $event.stopPropagation(); close() }"
      @click.outside="close()"
      data-timezone-picker>
+  {% if note_in_info %}
+    {# The note behind an (i) beside the label — outside the <label>, so clicking it does not open the picker. #}
+    <div class="relative flex items-center gap-1 py-0.5 pb-1">
+      <label for="{{ id }}" class="label p-0">
+        <span class="label-text text-sm text-brand-navy font-medium">{{ label|default:"Timezone" }}</span>
+      </label>
+      {% infobox "About the timezone" %}<span x-text="note" data-timezone-note>Timezone used: {% if current %}{{ current.display }}{% elif inherit_label %}the task's, {{ inherit_zone }}{% else %}the server's, {{ server_zone }}{% endif %}.</span>{% if help %} {{ help }}{% endif %}{% endinfobox %}
+    </div>
+  {% else %}
   <label for="{{ id }}" class="label py-0.5 pb-1">
     <span class="label-text text-sm text-brand-navy font-medium">{{ label|default:"Timezone" }}</span>
   </label>
+  {% endif %}
   {% comment %}
     No id on purpose: when htmx swaps new HTML in (the completion table
     after every action, the pop-up editor after a refused save) it restores
@@ -121,12 +134,14 @@
     </div>
   </div>
 
+  {% if not note_in_info %}
   <label class="label pt-1">
     <span class="label-text-alt text-brand-text/60">
       {# Which timezone is in use, and why: the system's, the server's, the task's, or one picked. #}
       <span x-text="note" data-timezone-note>Timezone used: {% if current %}{{ current.display }}{% elif inherit_label %}the task's, {{ inherit_zone }}{% else %}the server's, {{ server_zone }}{% endif %}.</span>{% if help %} {{ help }}{% endif %}
     </span>
   </label>
+  {% endif %}
   {% if errors %}
     <label class="label pt-1"><span class="label-text-alt text-error">{{ errors|join:" " }}</span></label>
   {% endif %}

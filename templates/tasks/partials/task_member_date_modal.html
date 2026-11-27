@@ -44,17 +44,13 @@
         x-data="memberDateDialog({ field: '{{ field }}', taskZone: '{{ task.timezone|escapejs }}', taskValue: {% if field == 'start_date' %}{% if task.start_date %}{{ task.start_date|date:'U' }}000{% else %}null{% endif %}{% else %}{% if task.deadline %}{{ task.deadline|date:'U' }}000{% else %}null{% endif %}{% endif %} })"
         @{{ event }}.window="open($event.detail); $el.showModal()">
   <div class="modal-box">
-    <h3 id="{{ slug }}-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
-      {{ date_label }} for <span x-text="name"></span>
-    </h3>
-    <p class="mt-3 text-sm text-brand-text">
-      {% if field == "start_date" %}
-        {% if task.start_date %}The task starts <span class="font-semibold text-brand-navy">{{ task.start_date|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>.{% else %}The task has no start date.{% endif %}
-      {% else %}
-        {% if task.deadline %}The task is due <span class="font-semibold text-brand-navy">{{ task.deadline|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>.{% else %}The task has no due date.{% endif %}
-      {% endif %}
-      Change the date to give <span x-text="name"></span> their own {{ noun }}, earlier or later. One left at the task's, or emptied, follows the task.
-    </p>
+    {# What a member's own date does, behind the (i) beside the title. #}
+    <div class="relative flex items-center gap-1.5">
+      <h3 id="{{ slug }}-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
+        {{ date_label }} for <span x-text="name"></span>
+      </h3>
+      {% infobox "About this date" %}{% if field == "start_date" %}{% if task.start_date %}The task starts <span class="font-semibold text-brand-navy">{{ task.start_date|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>.{% else %}The task has no start date.{% endif %}{% else %}{% if task.deadline %}The task is due <span class="font-semibold text-brand-navy">{{ task.deadline|in_zone:task.timezone|date:"M j, Y g:i A T" }}</span>.{% else %}The task has no due date.{% endif %}{% endif %} Change the date to give <span x-text="name"></span> their own {{ noun }}, earlier or later. One left at the task's, or emptied, follows the task.{% endinfobox %}
+    </div>
     <form method="post"
           action="{% url 'tasks:member_dates' pk=task.pk %}"
           hx-post="{% url 'tasks:member_dates' pk=task.pk %}"
@@ -78,9 +74,9 @@
       </div>
       {% with task_zone_label="Same as task ("|add:task.timezone|add:")" pk_s=task.pk|stringformat:"s" %}
         {% if field == "start_date" %}
-          {% include "_components/timezone_select.html" with name="timezone" id="start-date-timezone-"|add:pk_s managed=True managed_event="open-start-date" inherit_label=task_zone_label inherit_zone=task.timezone help="The start date is in this timezone. The due date keeps its own." %}
+          {% include "_components/timezone_select.html" with name="timezone" id="start-date-timezone-"|add:pk_s managed=True managed_event="open-start-date" note_in_info=True inherit_label=task_zone_label inherit_zone=task.timezone help="The start date is in this timezone. The due date keeps its own." %}
         {% else %}
-          {% include "_components/timezone_select.html" with name="timezone" id="due-date-timezone-"|add:pk_s managed=True managed_event="open-due-date" inherit_label=task_zone_label inherit_zone=task.timezone help="The due date is in this timezone. The start date keeps its own." %}
+          {% include "_components/timezone_select.html" with name="timezone" id="due-date-timezone-"|add:pk_s managed=True managed_event="open-due-date" note_in_info=True inherit_label=task_zone_label inherit_zone=task.timezone help="The due date is in this timezone. The start date keeps its own." %}
         {% endif %}
       {% endwith %}
       <label class="flex flex-col gap-1 text-sm">

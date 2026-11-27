@@ -490,3 +490,19 @@ def test_first_render_carries_the_type_dialog(client, pm_user, user, route):
     assert f'data-set-type="{alice.pk}"' in content
     assert "data-member-type-modal" in content
     assert "Software" in content
+
+
+@pytest.mark.django_db
+def test_type_dialog_explains_itself_behind_an_info_button(client, pm_user, user):
+    _p, task, _lead, [_alice] = _setup(pm_user, user)
+    client.force_login(pm_user)
+    content = client.get(
+        reverse("tasks:status_block", kwargs={"pk": task.pk}) + "?pane=1"
+    ).content.decode()
+
+    modal = content[content.index("data-member-type-modal") :]
+    modal = modal[: modal.index("</dialog>")]
+    panel = modal[modal.index("data-info-popover-panel") :]
+    assert "The task's type is" in panel
+    assert "replaces it for this member only" in panel
+    assert modal.count("The task's type is") == 1

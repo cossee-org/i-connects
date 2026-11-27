@@ -18,22 +18,20 @@
 
   Expects ``task`` and ``choices`` ((value, label) pairs).
 {% endcomment %}
+{% load task_tags %}
 <dialog id="member-type-modal-{{ task.pk }}" class="modal"
         aria-labelledby="member-type-modal-title-{{ task.pk }}"
         data-member-type-modal
         x-data="{ member: '', name: '', value: '', hasOwn: false, error: '' }"
         @open-member-type.window="Object.assign($data, $event.detail, { error: '' }); $el.showModal()">
   <div class="modal-box">
-    <h3 id="member-type-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
-      Contribution type for <span x-text="name"></span>
-    </h3>
-    <p class="mt-3 text-sm text-brand-text">
-      The task's type is <span class="font-semibold text-brand-navy">{{ task.get_contribution_type_display }}</span>,
-      and that still holds for the task and every other assignee. A type set
-      here replaces it for this member only: their contribution is credited
-      under it when their part is verified, and credit already verified for
-      them moves with it.
-    </p>
+    {# What a member's own type does, behind the (i) beside the title. #}
+    <div class="relative flex items-center gap-1.5">
+      <h3 id="member-type-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
+        Contribution type for <span x-text="name"></span>
+      </h3>
+      {% infobox "About a member's contribution type" %}The task's type is <span class="font-semibold text-brand-navy">{{ task.get_contribution_type_display }}</span>, and that still holds for the task and every other assignee. A type set here replaces it for this member only: their contribution is credited under it when their part is verified, and credit already verified for them moves with it.{% endinfobox %}
+    </div>
     <form method="post"
           action="{% url 'tasks:member_type' pk=task.pk %}"
           hx-post="{% url 'tasks:member_type' pk=task.pk %}"
