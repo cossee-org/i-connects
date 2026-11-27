@@ -31,7 +31,7 @@
     {# Read by the button below as its previous sibling: keep them together. #}
     {{ s.attachments|json_script }}
     <button type="button" x-data
-            class="font-medium text-brand-navy no-underline hover:text-brand-coral"
+            class="font-medium text-left text-brand-navy no-underline hover:text-brand-coral"
             @click="$dispatch('view-attachments', { name: '{% if s.is_viewer %}your part{% else %}{{ s.member.display_name|escapejs }}{% endif %}', attachments: JSON.parse($el.previousElementSibling.textContent), updated: '{% if s.attachments_updated_at %}{{ s.attachments_updated_at|date:"M j, Y"|escapejs }}{% endif %}', own: {% if s.is_viewer %}true{% else %}false{% endif %}, canEdit: {% if s.can_edit_attachments %}true{% else %}false{% endif %} })"
             aria-haspopup="dialog"
             {% if details %}data-details-attachments{% else %}data-view-attachments{% if s.can_edit_attachments %} data-can-edit-attachments{% endif %}{% endif %}>

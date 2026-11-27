@@ -10,7 +10,7 @@
   {# Read by the button below as its previous sibling: keep them together. #}
   {{ view|json_script }}
   <button type="button" x-data
-          class="font-medium text-brand-navy no-underline hover:text-brand-coral"
+          class="font-medium text-left text-brand-navy no-underline hover:text-brand-coral"
           @click="$dispatch('open-comments', JSON.parse($el.previousElementSibling.textContent))"
           aria-haspopup="dialog"
           {% if details %}data-details-comments="{{ kind }}"{% else %}data-view-comments="{{ kind }}"{% endif %}>

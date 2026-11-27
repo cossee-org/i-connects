@@ -210,3 +210,17 @@ def test_waiting_cells_carry_short_and_long_words(client, pm_user, user):
     row = html[html.index(f'data-assignee-row="{bob.pk}"') :]
     row = row[: row.index("</tr>")]
     assert '<span class="cs-short">Awaiting</span><span class="cs-long">Awaiting verification</span>' in row
+
+
+@pytest.mark.django_db
+def test_verify_all_explains_itself_behind_an_info_button(client, pm_user, user):
+    _project, task, _lead, [bob] = _setup(pm_user, user, deadline_days=10)
+    mark_own_done(task=task, member=bob)
+    client.force_login(pm_user)
+    html = _block(client, task)
+
+    modal = html[html.index('data-verify-modal="done"') :]
+    modal = modal[: modal.index("</dialog>")]
+    panel = modal[modal.index("data-info-popover-panel") :]
+    assert "Verify the contribution of every part marked done that isn't verified yet?" in panel
+    assert modal.count("Verify the contribution") == 1

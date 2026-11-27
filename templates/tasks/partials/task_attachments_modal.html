@@ -60,6 +60,7 @@
   Expects ``task``, ``my_state`` (the viewer's own assignee state, or None),
   ``my_done`` and ``pane_mode``.
 {% endcomment %}
+{% load task_tags %}
 <dialog id="attachments-modal-{{ task.pk }}" class="modal"
         aria-labelledby="attachments-modal-title-{{ task.pk }}"
         data-attachments-modal{% if my_state %}="{% if my_done %}edit{% else %}done{% endif %}"{% endif %}
@@ -97,12 +98,18 @@
   <div class="modal-box max-w-2xl bg-base-100 border border-brand-light/60 p-0">
     <div class="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-brand-light/60">
       <div class="min-w-0">
-        <h2 id="attachments-modal-title-{{ task.pk }}" class="text-xl font-semibold text-brand-navy">
-          <span x-show="mode === 'view'">Attachments for <span x-text="name"></span></span>
+        {# Who sees what is added, behind an (i) beside the title while editing. #}
+        <div class="relative flex items-center gap-1.5">
+          <h2 id="attachments-modal-title-{{ task.pk }}" class="text-xl font-semibold text-brand-navy">
+            <span x-show="mode === 'view'">Attachments for <span x-text="name"></span></span>
+            {% if my_state %}
+              <span x-show="mode === 'edit'" x-cloak>{% if my_done %}Attachments for your part{% else %}Mark your part done{% endif %}</span>
+            {% endif %}
+          </h2>
           {% if my_state %}
-            <span x-show="mode === 'edit'" x-cloak>{% if my_done %}Attachments for your part{% else %}Mark your part done{% endif %}</span>
+            <span x-show="mode === 'edit'" x-cloak class="inline-flex" data-attachments-info>{% infobox "About attachments" %}Optionally add a note and links to your work, such as documents, shared folders or pull requests. Only this task's reviewers and the project's Leads can see them.{% endinfobox %}</span>
           {% endif %}
-        </h2>
+        </div>
         {# When they last changed, under the title, above the header's rule. #}
         <p x-show="mode === 'view' && updated" class="mt-1 text-xs text-brand-text/60" data-attachments-updated>Last updated <span x-text="updated"></span></p>
       </div>
@@ -192,12 +199,7 @@
         {% csrf_token %}
         <input type="hidden" name="attachment_list" value="1">
         <div class="px-6 py-5 text-brand-text max-h-[60vh] overflow-y-auto">
-          <p class="text-sm text-brand-text/80">
-            Optionally add a note and links to your work, such as documents,
-            shared folders or pull requests.
-            Only this task's reviewers and the project's Leads can see them.
-          </p>
-          <label class="mt-4 flex flex-col gap-1 text-sm">
+          <label class="flex flex-col gap-1 text-sm">
             <span class="font-medium text-brand-navy">Note <span class="font-normal text-brand-text/60">(optional)</span></span>
             <textarea name="attachment_note" maxlength="1000" rows="3"
                       class="textarea textarea-bordered w-full"

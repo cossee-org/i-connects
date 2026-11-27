@@ -14,18 +14,18 @@
   contribution under the task's CRediT role; elsewhere it records the
   Lead's sign-off and credits nothing.
 {% endcomment %}
+{% load task_tags %}
 <dialog id="verify-{{ scope }}-modal-{{ task.pk }}" class="modal"
         aria-labelledby="verify-{{ scope }}-modal-title-{{ task.pk }}"
         data-verify-modal="{{ scope }}">
   <div class="modal-box">
-    <h3 id="verify-{{ scope }}-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
-      {% if scope == "reviewed" %}Verify all marked reviewed{% else %}Verify all marked done{% endif %}
-    </h3>
-    <p class="mt-3 text-brand-text">
-      Verify the contribution{{ count|pluralize }} of
-      {% if scope == "reviewed" %}every part marked done and reviewed{% else %}every part marked done{% endif %}
-      that isn't verified yet?
-    </p>
+    {# What it covers, behind an (i) beside the title. #}
+    <div class="relative flex items-center gap-1.5">
+      <h3 id="verify-{{ scope }}-modal-title-{{ task.pk }}" class="text-lg font-semibold text-brand-navy">
+        {% if scope == "reviewed" %}Verify all marked reviewed{% else %}Verify all marked done{% endif %}
+      </h3>
+      {% infobox "About this verification" %}Verify the contribution{{ count|pluralize }} of {% if scope == "reviewed" %}every part marked done and reviewed{% else %}every part marked done{% endif %} that isn't verified yet?{% endinfobox %}
+    </div>
     <ul class="mt-3 flex flex-col gap-1 text-sm text-brand-navy" data-verify-modal-members>
       {% for s in assignee_states %}
         {% if s.done and not s.verified %}

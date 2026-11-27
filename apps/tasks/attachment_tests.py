@@ -804,3 +804,17 @@ def test_details_row_keeps_no_id_for_htmx_to_settle(client, setup):
     assert "id=" not in tr
     assert f'<dl id="completion-details-{s["task"].pk}-{s["bob"].pk}">' in pane
     assert f'aria-controls="completion-details-{s["task"].pk}-{s["bob"].pk}"' in pane
+
+
+@pytest.mark.django_db
+def test_mark_done_dialog_keeps_its_note_behind_an_info_button(client, setup):
+    s = setup
+    client.force_login(s["users"]["bob"])
+    pane = _pane(client, s)
+
+    modal = _modal(pane)
+    panel = modal[modal.index("data-attachments-info") :]
+    panel = panel[panel.index("data-info-popover-panel") :]
+    assert "Optionally add a note and links to your work" in panel
+    assert "Only this task's reviewers and the project's Leads can see them." in panel
+    assert modal.count("Optionally add a note and links") == 1
