@@ -208,9 +208,10 @@
         beside it, when and by whom ("Oct 14 · by …"), in plain text — the
         round boxes carry the colour, green for Done, purple for Reviewed
         and blue for Verified; otherwise "Not done yet", "Awaiting review",
-        "Awaiting verification" or a dash. Under the Done note sits a
-        paperclip with the number of attachments, which opens the
-        attachments dialog. The boxes — tick to mark, untick to undo — are
+        "Awaiting verification" or a dash. Under the Done note sits View
+        attachments, a link that opens the attachments dialog; the cells sit
+        at the top of the row, so it adds a line below without moving the
+        dates out of line with Reviewed and Verified. The boxes — tick to mark, untick to undo — are
         live only for whoever may make that change (task_done_tick.html,
         task_review_tick.html, task_verify_tick.html), and read-only for
         everyone else. Each tick cell carries its state as ``data-mark``
@@ -264,14 +265,20 @@
            (its wrapper is overflow-x-auto) rather than breaking every note
            a letter per line on a phone. */
         .completion-table { table-layout: fixed; min-width: 34rem; }
-        .completion-table th, .completion-table td { vertical-align: middle; }
+        /* Header cells centre; body cells sit at the top, so each row's
+           first lines — the name, and each stage's tick and "date · by" —
+           share one line however much a cell holds under it (the custom
+           dates under the name, View attachments under Done). */
+        .completion-table th { vertical-align: middle; }
+        .completion-table td { vertical-align: top; }
         .completion-table:not(.rows-expanded) tbody:nth-of-type(n+4) { display: none; }
         .completion-table col.completion-name-col { width: 28%; }
         .completion-table.no-review col.completion-name-col { width: 34%; }
         .completion-table col.completion-chevron-col { width: 2.75rem; }
-        .completion-mark { display: flex; align-items: center; gap: 0.625rem; min-width: 0; }
+        .completion-mark { display: flex; align-items: flex-start; gap: 0.625rem; min-width: 0; padding-top: 1px; }
         .completion-mark-body { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; min-width: 0; }
-        .completion-mark-note { font-size: 0.8125rem; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
+        /* Padded so its first line centres on the 22px tick beside it. */
+        .completion-mark-note { font-size: 0.8125rem; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; padding-top: 3px; }
         .completion-tick { appearance: none; -webkit-appearance: none; margin: 0; width: 22px; height: 22px; border-radius: 999px; border: 2px solid #9aa3c7; background: #fff; position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0; }
         .completion-tick:checked::after { content: ""; position: absolute; left: 6px; top: 2px; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
         .completion-tick-done:checked { background: #16a34a; border-color: #16a34a; }
@@ -410,7 +417,7 @@
                   {% if s.done %}
                     <div class="completion-mark-body">
                       <span class="completion-mark-note text-brand-text/80" data-done-line>{% if s.done_at %}{{ s.done_at|date:"M j" }} &middot; {% endif %}by {% if s.done_by_self %}{{ s.member.display_name }}{% elif s.done_by %}{{ s.done_by.display_name }}{% else %}a former member{% endif %}</span>
-                      {% include "tasks/partials/task_attachments_line.html" with s=s compact=True %}
+                      {% include "tasks/partials/task_attachments_line.html" with s=s %}
                     </div>
                   {% else %}
                     <span class="completion-mark-note text-brand-text/60">Not done yet</span>
@@ -446,7 +453,7 @@
                 </div>
               </td>
               <td class="px-1 text-center">
-                <button type="button"
+                <button type="button" style="margin-top: -2px"
                         class="inline-flex items-center justify-center w-7 h-7 rounded-md text-brand-text/60 hover:text-brand-navy hover:bg-brand-navy/10 transition-colors"
                         @click="toggleDetails('{{ s.member.pk }}')"
                         :aria-expanded="openDetails['{{ s.member.pk }}'] ? 'true' : 'false'"
